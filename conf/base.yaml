@@ -60,6 +60,8 @@ preprocess:
   submit_delay: 0.
   pop_old_data: ${..pop_old_data} 
   buffer_size: 0
+agent:
+  max_prompt_length: 15000
 llm:
   parameters:
     # changed

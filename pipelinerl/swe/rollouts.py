@@ -254,7 +254,10 @@ async def generate_swe_rollout(
     from .swe_repair_agent import SWETask, SWERepairTape, SearchReplaceResponse, SWERepairAgent
     
     # Create agent
-    agent = SWERepairAgent.create(llm=llm)
+    agent = SWERepairAgent.create(
+        llm=llm,
+        max_prompt_length=cfg.agent.max_prompt_length
+    )
     
     # Create the task step
     task_step = SWETask(
