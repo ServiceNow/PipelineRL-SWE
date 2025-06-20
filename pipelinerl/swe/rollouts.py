@@ -300,6 +300,7 @@ async def generate_swe_rollout(
     
     if llm_call is None:
         raise ValueError("No LLM call found in the generated tape")
+        print("Predicted edits:", predicted_edits)
     
     # Convert to LLMCall object if it's a dict
     from tapeagents.core import LLMCall
