@@ -134,12 +134,12 @@ class SwePreprocessor:
             cfg: Hydra configuration containing all necessary parameters
         """
         self.cfg = cfg
-        self.repos_base_dir = Path(cfg.swe.repos_base_dir)
-        self.dataset_path = Path(cfg.swe.dataset_path)
-        self.min_token_threshold = cfg.swe.min_token_threshold
-        self.max_token_threshold = cfg.swe.max_token_threshold
-        self.num_map_processes = cfg.swe.num_map_processes
-        self.tokenizer_model = cfg.swe.tokenizer_model
+        self.repos_base_dir = Path(cfg.swe_preprocessor_args.repo_path)
+        self.dataset_path = Path(cfg.swe_preprocessor_args.dataset_path)
+        self.min_token_threshold = cfg.swe_preprocessor_args.min_token_threshold
+        self.max_token_threshold = cfg.swe_preprocessor_args.max_token_threshold
+        self.num_map_processes = cfg.swe_preprocessor_args.num_map_processes
+        self.tokenizer_model = cfg.swe_preprocessor_args.tokenizer_model
         
         # Initialize tokenizer
         self.tokenizer = None
@@ -224,12 +224,10 @@ class SwePreprocessor:
         # Check if any parent directory should be skipped
         for part in path.parts:
             if part.lower() in self.skip_directories:
-                logger.debug(f"DEBUG: Skipping {filepath} due to directory {part}")
                 return False
                 
         # Check extension
         if path.suffix.lower() in self.source_extensions:
-            logger.debug(f"DEBUG: Including {filepath} due to extension {path.suffix}")
             return True
             
         # Include files without extensions that might be source files
@@ -237,10 +235,8 @@ class SwePreprocessor:
             'makefile', 'dockerfile', 'readme', 'license', 'changelog',
             'requirements', 'pipfile', 'gemfile', 'rakefile'
         }:
-            logger.debug(f"DEBUG: Including {filepath} due to special name {path.name}")
             return True
         
-        logger.debug(f"DEBUG: Excluding {filepath} - no matching criteria")
         return False
 
     def _is_text_file(self, content_bytes: bytes) -> bool:
@@ -295,19 +291,18 @@ class SwePreprocessor:
             
             # Process each file
             processed_count = 0
-            source_files_found = []  # DEBUG: Track accepted files
-            python_files_found = []  # DEBUG: Track Python files specifically
+            skipped_non_source = 0
+            skipped_binary = 0
+            skipped_errors = 0
+            
             for filepath in all_files:
                 if not filepath:  # Skip empty lines
                     continue
                     
                 # Check if this is a source file we want to include
                 if not self._is_source_file(filepath):
+                    skipped_non_source += 1
                     continue
-                
-                source_files_found.append(filepath)  # DEBUG: Track this
-                if filepath.endswith('.py'):
-                    python_files_found.append(filepath)
                 
                 try:
                     # Get file content at the specific commit
@@ -317,10 +312,10 @@ class SwePreprocessor:
                     try:
                         content_bytes = content.encode('utf-8')
                         if not self._is_text_file(content_bytes):
-                            logger.debug(f"DEBUG: Skipping binary file {filepath}")
+                            skipped_binary += 1
                             continue
                     except UnicodeDecodeError:
-                        logger.debug(f"DEBUG: Skipping non-UTF8 file {filepath}")
+                        skipped_binary += 1
                         continue
                     
                     # Calculate statistics
@@ -333,19 +328,13 @@ class SwePreprocessor:
                     }
                     
                     processed_count += 1
-                    logger.debug(f"DEBUG: Successfully processed {filepath}, length={len(content)}")
-                    
-                    # Limit number of files per repo to avoid excessive processing
-                    if processed_count >= 1000:  # Configurable limit
-                        logger.debug(f"Reached file limit (1000) for repo {local_repo_path} at commit {commit_hash}")
-                        break
                         
                 except git.exc.GitCommandError as e:
                     # File might not exist at this commit or other git error
-                    logger.debug(f"DEBUG: Git error for {filepath}: {e}")
+                    skipped_errors += 1
                     continue
                 except Exception as e:
-                    logger.debug(f"Error processing file {filepath} at commit {commit_hash}: {e}")
+                    skipped_errors += 1
                     continue
                     
         except Exception as e:
@@ -353,13 +342,43 @@ class SwePreprocessor:
             
         # Cache the results
         self.file_stats_cache[cache_key] = file_stats
-        logger.info(f"DEBUG: Found {len(source_files_found)} source files, {len(python_files_found)} Python files, processed {len(file_stats)} files for {local_repo_path} at commit {commit_hash}")
-        if python_files_found:
-            logger.info(f"DEBUG: First 5 Python files: {python_files_found[:5]}")
-        elif source_files_found:
-            logger.info(f"DEBUG: First 5 source files: {source_files_found[:5]}")
+        logger.info(
+            f"Processed {processed_count} source files for {local_repo_path} at commit {commit_hash}. "
+            f"Skipped: {skipped_non_source} non-source, {skipped_binary} binary, {skipped_errors} errors"
+        )
         
         return file_stats
+
+    def _validate_gold_files_in_stats(self, gold_files: List[str], file_stats: Dict[str, Dict], repo_name: str):
+        """
+        Validate that gold files are present in the file statistics and warn if not.
+        
+        Args:
+            gold_files: List of gold file paths from the patch
+            file_stats: Dictionary of file statistics
+            repo_name: Repository name for logging
+        """
+        if not gold_files:
+            return
+            
+        missing_gold_files = []
+        for gold_file in gold_files:
+            if gold_file not in file_stats:
+                missing_gold_files.append(gold_file)
+                
+        if missing_gold_files:
+            logger.warning(
+                f"Repository {repo_name}: {len(missing_gold_files)}/{len(gold_files)} gold files missing from file stats: "
+                f"{missing_gold_files}"
+            )
+            # Also check if they would have been filtered by our source file check
+            filtered_gold_files = [gf for gf in missing_gold_files if not self._is_source_file(gf)]
+            if filtered_gold_files:
+                logger.info(f"  - Of these, {len(filtered_gold_files)} would be filtered as non-source files: {filtered_gold_files}")
+            
+            git_missing = [gf for gf in missing_gold_files if self._is_source_file(gf)]
+            if git_missing:
+                logger.warning(f"  - {len(git_missing)} source files missing due to git/preprocessing issues: {git_missing}")
 
     def _parse_patch(self, patch_string: str) -> List[str]:
         """
@@ -464,6 +483,9 @@ class SwePreprocessor:
         all_file_stats = self._get_all_file_stats(local_repo_path, base_commit)
         example['all_file_stats'] = json.dumps(all_file_stats)
         
+        # Validate that gold files are in the file stats (for debugging)
+        self._validate_gold_files_in_stats(gold_filepaths, all_file_stats, example.get('repo', 'unknown'))
+        
         return example
 
     def _filter_by_token_count(self, example: Dict) -> bool:
@@ -515,7 +537,7 @@ class SwePreprocessor:
             Set of unique repositories processed
         """
         # Check if processed data already exists
-        if os.path.exists(self.dataset_path) and not self.cfg.swe.force_reprocess:
+        if os.path.exists(self.dataset_path) and not self.cfg.swe_preprocessor_args.force_reprocess:
             logger.info(f"Found existing processed dataset at '{self.dataset_path}'. Attempting to load from disk.")
             try:
                 processed_dataset = load_from_disk(self.dataset_path)
@@ -528,7 +550,7 @@ class SwePreprocessor:
 
         # Load the original dataset from Hugging Face
         logger.info("Loading SWE-Gym dataset from Hugging Face...")
-        dataset = load_dataset(self.cfg.swe.hf_dataset_name, split=self.cfg.swe.hf_split_name)
+        dataset = load_dataset(self.cfg.swe_preprocessor_args.hf_dataset_name, split=self.cfg.swe_preprocessor_args.hf_split_name)
         logger.info("Dataset loaded.")
         logger.info(f"Original dataset size: {len(dataset)} examples")
 
@@ -575,6 +597,9 @@ class SwePreprocessor:
 
         # Calculate and display simplified statistics
         self._calculate_simplified_statistics(processed_dataset, original_size)
+        
+        # Validate gold file coverage across the entire dataset
+        self._validate_dataset_gold_file_coverage(processed_dataset)
         
         return unique_repos
 
@@ -629,8 +654,66 @@ class SwePreprocessor:
         logger.info(f"Total files processed across all examples: {total_files_across_examples}")
         logger.info("Statistics calculation completed.")
 
+    def _validate_dataset_gold_file_coverage(self, dataset):
+        """
+        Validate gold file coverage across the entire dataset and provide summary statistics.
+        
+        Args:
+            dataset: The processed dataset
+        """
+        logger.info("\n--- Gold File Coverage Analysis ---")
+        
+        total_examples = 0
+        total_gold_files = 0
+        missing_gold_files = 0
+        examples_with_missing_gold = 0
+        
+        for example in dataset:
+            try:
+                # Parse file stats and patch
+                all_file_stats = json.loads(example.get('all_file_stats', '{}'))
+                patch = example.get('patch', '')
+                gold_files = self._parse_patch(patch)
+                
+                if not gold_files:
+                    continue
+                    
+                total_examples += 1
+                total_gold_files += len(gold_files)
+                
+                # Check coverage
+                example_missing = 0
+                for gold_file in gold_files:
+                    if gold_file not in all_file_stats:
+                        example_missing += 1
+                        missing_gold_files += 1
+                        
+                if example_missing > 0:
+                    examples_with_missing_gold += 1
+                    
+            except Exception as e:
+                logger.warning(f"Error validating example: {e}")
+                continue
+                
+        coverage_rate = (total_gold_files - missing_gold_files) / total_gold_files * 100 if total_gold_files > 0 else 0
+        
+        logger.info(f"Dataset Gold File Coverage:")
+        logger.info(f"  Total examples with gold files: {total_examples}")
+        logger.info(f"  Total gold files: {total_gold_files}")
+        logger.info(f"  Gold files with stats: {total_gold_files - missing_gold_files}")
+        logger.info(f"  Gold files missing stats: {missing_gold_files}")
+        logger.info(f"  Coverage rate: {coverage_rate:.1f}%")
+        logger.info(f"  Examples with missing gold files: {examples_with_missing_gold}/{total_examples}")
+        
+        if missing_gold_files > 0:
+            logger.warning(f"⚠️  {missing_gold_files} gold files are missing from file stats!")
+            logger.warning(f"   This will impact localization training quality.")
+            logger.warning(f"   Consider investigating git/preprocessing issues or adjusting filtering.")
+        else:
+            logger.info(f"✅ All gold files have file statistics available!")
 
-@hydra.main(config_path="../../conf", config_name="swe/preprocessor", version_base="1.3.2")
+
+@hydra.main(config_path="../../conf", config_name="swe", version_base="1.3.2")
 def main(cfg: DictConfig):
     """
     Process the SWE-Gym dataset using Hydra configuration.
