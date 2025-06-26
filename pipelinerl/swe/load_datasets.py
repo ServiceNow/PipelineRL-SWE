@@ -50,6 +50,7 @@ def load_swegym_dataset(dataset_names, dataset_path) -> list[dict]:
                 "problem_statement": item.get("problem_statement"),
                 "patch": item.get("patch"),
                 "file_contents": file_contents,  # Pre-loaded file contents
+                "all_file_stats": item['all_file_stats']
             })
             
         logger.info(f"Processed {len(samples)} valid SWE-Gym samples")
@@ -90,5 +91,6 @@ def process_swebench_lite(dataset_names, dataset_path):
             "problem_statement": item["problem_statement"],
             "patch": item["patch"],
             "file_contents": file_contents,
+            "all_file_stats": item["all_file_stats"]
         })
     return samples

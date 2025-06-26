@@ -52,18 +52,12 @@ environment: null
 
 # SWE-specific dataset parameters
 train_dataset_params:
-  dataset_path: null  # Will be set by the dataset loader
+  dataset_path: /mnt/llmd/data/swegym/ds
 test_dataset_params:
-  dataset_path: null
+  dataset_path: /mnt/llmd/data/swegym/ds
 
 # Model path - use a coding-focused model if available
 model_path: Qwen/Qwen2.5-Coder-7B-Instruct
 
 # Evaluation settings
 eval_every_n_versions: 1000
-
-# World configuration
-world:
-  actor_fraction: 6
-  preprocessor_fraction: 0  # No preprocessor needed for localization
-  finetune_fraction: 2

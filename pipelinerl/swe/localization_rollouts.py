@@ -175,6 +175,7 @@ async def generate_localization_rollout(
             # No files to search - give zero reward
             reward = 0.0
             reward_metadata = {"error": "No file statistics available"}
+            logger.error("NO ALL FILE STATS.")
         else:
             # Create BM25 searcher and perform search
             searcher = BM25Searcher(all_file_stats)
