@@ -14,9 +14,7 @@ actor:
     rollout_policy: pipelinerl.swe.rollouts.generate_swe_rollout
 environment: null
 dataset_loader: pipelinerl.swe.load_datasets.load_swegym_dataset
-train_dataset_params:
-    dataset_path: /mnt/llmd/data/swegym/ds
-test_dataset_params:
+dataset_loader_params:
     dataset_path: /mnt/llmd/data/swegym/ds
 dataset_path: /mnt/llmd/data/swegym/ds
 train_dataset_names:
