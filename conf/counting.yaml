@@ -10,9 +10,9 @@ test_llm:
     parameters:
         max_tokens: 1000
 actor:
-    rollout_policy: pipelinerl.counting.counting.generate_counting_rollout
+    rollout_policy: pipelinerl.domains.counting.generate_counting_rollout
 environment: null
-dataset_loader: pipelinerl.counting.counting.load_problems
+dataset_loader: pipelinerl.domains.counting.load_problems
 train_dataset_names:
     - train_counting_problems
 test_dataset_names:
