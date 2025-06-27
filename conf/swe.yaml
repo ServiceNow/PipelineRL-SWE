@@ -2,7 +2,7 @@ defaults:
     - base
     - _self_
 finetune:
-    seq_length: 4000
+    seq_length: 16000
     gradient_accumulation_passes: 1024
 llm:
     parameters:
