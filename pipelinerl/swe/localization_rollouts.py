@@ -117,7 +117,10 @@ async def generate_localization_rollout(
     )
     
     # Create the localization task
-    task_step = LocalizationTask(problem_statement=problem["problem_statement"])
+    task_step = LocalizationTask(
+        problem_statement=problem["problem_statement"],
+        file_stats=problem['all_file_stats']
+    )
     
     # Create initial tape with just the task
     tape = LocalizationTape(steps=[task_step], context=None)

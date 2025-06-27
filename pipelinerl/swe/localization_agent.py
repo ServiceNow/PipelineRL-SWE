@@ -23,6 +23,7 @@ class LocalizationTask(Observation):
     """Task step containing the problem statement for file localization."""
     kind: Literal["localization_task"] = "localization_task"
     problem_statement: str = Field(description="The issue description to localize relevant files for")
+    file_stats: Dict[str, Dict] = Field(default_factory=dict) # file stats
     
     def llm_view(self, indent: int | None = 2) -> str:
         return f"Issue to localize: {self.problem_statement}"
@@ -82,6 +83,8 @@ class LocalizationNode(StandardNode):
         # The tape should contain just the localization task
         task = tape.steps[0]
         assert isinstance(task, LocalizationTask), f"Expected LocalizationTask, got {task.__class__.__name__}"
+        file_list = list(task.file_stats.keys())
+        files_text = "\n".join(file_list)
         
         system_message = {
             "role": "system",
@@ -99,6 +102,7 @@ class LocalizationNode(StandardNode):
         user_message = {
             "role": "user", 
             "content": (
+                f"Repository source files:\n{files_text}\n\n"
                 f"Generate a search query to find files relevant to this issue:\n\n"
                 f"{task.problem_statement}\n\n"
                 f"Search query:"
