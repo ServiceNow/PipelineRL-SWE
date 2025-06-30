@@ -8,6 +8,7 @@ from omegaconf import DictConfig
 from tapeagents.orchestrator import async_execute_agent
 
 from pipelinerl.rollouts import RolloutResult
+from pipelinerl.async_llm import make_training_text
 from tapeagents.llms.trainable import TrainableLLM
 from .localization_agent import LocalizationAgent, LocalizationTask, LocalizationTape, LocalizationQuery
 from .bm25_searcher import BM25Searcher
@@ -119,7 +120,7 @@ async def generate_localization_rollout(
     # Create the localization task
     task_step = LocalizationTask(
         problem_statement=problem["problem_statement"],
-        file_stats=problem['all_file_stats']
+        file_stats=json.loads(problem['all_file_stats'])
     )
     
     # Create initial tape with just the task
@@ -190,10 +191,10 @@ async def generate_localization_rollout(
             # Calculate MRR reward
             reward, reward_metadata = calculate_mrr_reward(gold_files, search_results)
             
-        # Create training text from the LLM call
-        training_text = agent.llm.make_training_text(llm_call.prompt, llm_call.output)
+        # Create training text using pipelinerl function
+        training_text = make_training_text(llm, llm_call)
         
-        # Set up input_ids and labels for training
+        # Set up additional training data fields if available
         if llm_call.logprobs:
             input_ids = [lp.token_id for lp in llm_call.logprobs]
             labels = [lp.token_id for lp in llm_call.logprobs if lp.generated]
@@ -211,7 +212,7 @@ async def generate_localization_rollout(
             
         # Check if the generation finished properly
         finished = 1 if (llm_call.logprobs and 
-                        llm_call.logprobs[-1].token_id == agent.llm.tokenizer.eos_token_id) else 0
+                        llm_call.logprobs[-1].token_id == llm.tokenizer.eos_token_id) else 0
         
         # Apply discount factor if configured
         if hasattr(cfg.actor, 'discount_factor'):
@@ -243,8 +244,25 @@ async def generate_localization_rollout(
         metrics.update({f"localization_{k}": v for k, v in reward_metadata.items() 
                        if isinstance(v, (int, float, bool))})
         
+        # Convert training_text to dict if needed for compatibility
+        training_texts = [training_text]
+        if hasattr(training_text, 'model_dump'):
+            try:
+                # Try with the object first
+                return RolloutResult(
+                    training_texts=training_texts,
+                    metrics=metrics,
+                    latency=latency,
+                    dataset_name=problem.get("dataset"),
+                    prompt_tokens=[llm_call.prompt_length_tokens],
+                    output_tokens=[llm_call.output_length_tokens],
+                )
+            except Exception:
+                # Fall back to dict version if object doesn't work
+                training_texts = [training_text.model_dump()]
+        
         return RolloutResult(
-            training_texts=[training_text],
+            training_texts=training_texts,
             metrics=metrics,
             latency=latency,
             dataset_name=problem.get("dataset"),
@@ -266,6 +284,7 @@ async def generate_localization_rollout(
                 "error": str(e),
                 "prompt_tokens": 0,
                 "output_tokens": 0,
+                "no_answer": True,
             },
             latency=latency,
             dataset_name=problem.get("dataset"),
