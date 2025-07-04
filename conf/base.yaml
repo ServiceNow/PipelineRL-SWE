@@ -41,13 +41,13 @@ finetune:
   pop_old_data: ${..pop_old_data}
 actor:
   log_each_n_secs: 0
-  llm_max_rollouts: 64
+  llm_max_rollouts: 32
   rollout_workers: 1
   discount_factor: 1
   problem_queue_size: 64
   result_queue_size: 64
   throughput_window_size: 50
-  shared_memory_entry_size: 10000000
+  shared_memory_entry_size: 50000000
 environment: null
 preprocess:
   input: actor

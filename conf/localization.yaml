@@ -22,11 +22,11 @@ test_dataset_names:
 
 # Localization-specific settings
 agent:
-  max_prompt_length: 12000
+  max_prompt_length: 15000
 
 # Finetune settings optimized for localization
 finetune:
-  seq_length: 14000  # Shorter sequences for query generation
+  seq_length: 17000  # Shorter sequences for query generation
   gradient_accumulation_passes: 512  # Adjust based on your setup
   learning_rate: 5e-6  # Slightly higher for localization learning
   rl:
@@ -39,12 +39,12 @@ finetune:
 # LLM settings for localization
 llm:
   parameters:
-    max_tokens: 4000  # Short outputs for search queries
+    max_tokens: 2000  # Short outputs for search queries
     temperature: 1.0
 
 test_llm:
   parameters:
-    max_tokens: 4000
+    max_tokens: 2000
     temperature: 0.8  # Slightly lower for more focused queries during eval
 
 # Environment is not needed for localization
