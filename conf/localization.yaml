@@ -39,12 +39,12 @@ finetune:
 # LLM settings for localization
 llm:
   parameters:
-    max_tokens: 100  # Short outputs for search queries
+    max_tokens: 4000  # Short outputs for search queries
     temperature: 1.0
 
 test_llm:
   parameters:
-    max_tokens: 100
+    max_tokens: 4000
     temperature: 0.8  # Slightly lower for more focused queries during eval
 
 # Environment is not needed for localization
