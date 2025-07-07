@@ -157,40 +157,51 @@ async def generate_localization_rollout(
             ):
                 llm_call = step.metadata.other["llm_call"]
         
+        # Critical failure: No LLM call means we can't generate training data
         if llm_call is None:
             raise ValueError("No LLM call found in the generated tape")
-            
-        if query is None:
-            raise ValueError("No localization query found in the generated tape")
             
         # Convert to LLMCall object if it's a dict
         from tapeagents.core import LLMCall
         if isinstance(llm_call, dict):
             llm_call = LLMCall(**llm_call)
-            
-        # Parse file statistics for BM25
-        try:
-            all_file_stats = json.loads(problem.get("all_file_stats", "{}"))
-        except (json.JSONDecodeError, TypeError):
-            logger.warning("Failed to parse all_file_stats, using empty dict")
-            all_file_stats = {}
-            
-        if not all_file_stats:
-            # No files to search - give zero reward
-            reward = 0.0
-            reward_metadata = {"error": "No file statistics available"}
-            logger.error("NO ALL FILE STATS.")
+        
+        # Determine reward based on whether we have a valid query
+        if query is None:
+            logger.warning("No localization query found - treating as format violation")
+            reward = -0.1  # Negative reward for format violation
+            reward_metadata = {"error": "No query found - format violation"}
+            search_results = []
+            format_violation = True
         else:
-            # Create BM25 searcher and perform search
-            searcher = BM25Searcher(all_file_stats)
-            search_results = searcher.search(query, top_k=100)  # Search top 100 files
+            # Normal case: we have a query, proceed with BM25 search
+            try:
+                all_file_stats = json.loads(problem.get("all_file_stats", "{}"))
+            except (json.JSONDecodeError, TypeError):
+                logger.warning("Failed to parse all_file_stats, using empty dict")
+                all_file_stats = {}
+                
+            if not all_file_stats:
+                # No files to search - give zero reward
+                reward = 0.0
+                reward_metadata = {"error": "No file statistics available"}
+                search_results = []
+                logger.error("NO ALL FILE STATS.")
+            else:
+                # Create BM25 searcher and perform search
+                searcher = BM25Searcher(all_file_stats)
+                search_results = searcher.search(query, top_k=100)
+                
+                # Extract gold files from patch and calculate MRR reward
+                gold_files = parse_patch_for_gold_files(problem.get("patch", ""))
+                reward, reward_metadata = calculate_mrr_reward(gold_files, search_results)
             
-            # Extract gold files from patch
-            gold_files = parse_patch_for_gold_files(problem.get("patch", ""))
+            format_violation = False
             
-            # Calculate MRR reward
-            reward, reward_metadata = calculate_mrr_reward(gold_files, search_results)
-            
+        # Apply discount factor if configured
+        if hasattr(cfg.actor, 'discount_factor'):
+            reward *= cfg.actor.discount_factor ** llm_call.output_length_tokens
+
         # Create training text using pipelinerl function
         training_text = make_training_text(llm, llm_call)
         
@@ -199,7 +210,6 @@ async def generate_localization_rollout(
             input_ids = [lp.token_id for lp in llm_call.logprobs]
             labels = [lp.token_id for lp in llm_call.logprobs if lp.generated]
             
-            # MASKED_TOKEN_ID is -100 and is the default "ignore_index" in nn.CrossEntropyLoss
             from pipelinerl.finetune.data import MASKED_TOKEN_ID
             labels = [MASKED_TOKEN_ID] * (len(input_ids) - len(labels)) + labels
             
@@ -207,48 +217,43 @@ async def generate_localization_rollout(
             training_text.labels = labels
             training_text.logprobs = [lp.logprob for lp in llm_call.logprobs if lp.generated]
         else:
-            # Fallback if no logprobs available
             logger.warning("No logprobs available for training text")
             
         # Check if the generation finished properly
         finished = 1 if (llm_call.logprobs and 
                         llm_call.logprobs[-1].token_id == llm.tokenizer.eos_token_id) else 0
         
-        # Apply discount factor if configured
-        if hasattr(cfg.actor, 'discount_factor'):
-            reward *= cfg.actor.discount_factor ** llm_call.output_length_tokens
-            
         training_text.reward = reward
         training_text.group_id = new_tape.metadata.parent_id if new_tape.metadata else None
         
         # Calculate success metric (any gold file found in top 10)
         top_10_files = [fp for fp, _ in search_results[:10]] if search_results else []
         gold_files = reward_metadata.get("gold_files", [])
-        success = any(gf in top_10_files for gf in gold_files)
+        success = any(gf in top_10_files for gf in gold_files) if not format_violation else False
         
         # Prepare metrics
         metrics = {
             "reward": reward,
-            "mrr": reward,  # MRR is our reward
+            "mrr": reward if not format_violation else -1,
             "success": success,
             "query_length": len(query.split()) if query else 0,
-            "no_answer": query is None or query.strip() == "",
-            "no_error": True,  # We'll set this to False if there were errors
+            "no_answer": query is None or (query and query.strip() == ""),
+            "no_error": True,
             "overflow": 0 if finished else 1,
-            "num_search_results": len(search_results) if search_results else 0,
+            "num_search_results": len(search_results),
             "prompt_tokens": llm_call.prompt_length_tokens,
             "output_tokens": llm_call.output_length_tokens,
+            "format_violation": format_violation,
         }
         
         # Add reward metadata to metrics
         metrics.update({f"localization_{k}": v for k, v in reward_metadata.items() 
                        if isinstance(v, (int, float, bool))})
         
-        # Convert training_text to dict if needed for compatibility
+        # Return training result
         training_texts = [training_text]
         if hasattr(training_text, 'model_dump'):
             try:
-                # Try with the object first
                 return RolloutResult(
                     training_texts=training_texts,
                     metrics=metrics,
@@ -258,7 +263,6 @@ async def generate_localization_rollout(
                     output_tokens=[llm_call.output_length_tokens],
                 )
             except Exception:
-                # Fall back to dict version if object doesn't work
                 training_texts = [training_text.model_dump()]
         
         return RolloutResult(
@@ -274,7 +278,7 @@ async def generate_localization_rollout(
         logger.error(f"Error in localization rollout: {e}")
         latency = time.time() - time_start
         
-        # Return failed rollout
+        # Return failed rollout (this catches the "No LLM call" error and other system errors)
         return RolloutResult(
             training_texts=[],
             metrics={
