@@ -230,12 +230,16 @@ async def generate_localization_rollout(
         top_10_files = [fp for fp, _ in search_results[:10]] if search_results else []
         gold_files = reward_metadata.get("gold_files", [])
         success = any(gf in top_10_files for gf in gold_files) if not format_violation else False
+        coverage = sum(1 for gf in all_gold_files if gf in top_10) / len(all_gold_files)
+        complete_success = sum(1 for case in cases if all(gf in top_10 for gf in case.gold_files)) / len(cases)
         
         # Prepare metrics
         metrics = {
             "reward": reward,
             "mrr": reward if not format_violation else -1,
             "success": success,
+            "coverage": coverage,
+            "complete_success": complete_success,
             "query_length": len(query.split()) if query else 0,
             "no_answer": query is None or (query and query.strip() == ""),
             "no_error": True,
