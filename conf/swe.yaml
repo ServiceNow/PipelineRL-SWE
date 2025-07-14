@@ -26,7 +26,7 @@ swe_preprocessor_args:
   repo_path: /mnt/llmd/data/swegym/repos
   min_token_threshold: 10
   max_token_threshold: 10000
-  num_map_processes: 4
+  num_map_processes: 8
   tokenizer_model: Qwen/Qwen2.5-Coder-7B-Instruct
   force_reprocess: false
   hf_dataset_name: SWE-Gym/SWE-Gym
