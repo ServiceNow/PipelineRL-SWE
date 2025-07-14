@@ -342,11 +342,106 @@ class SwePreprocessor:
             logger.error(f"Error getting file stats for {local_repo_path} at commit {commit_hash}: {e}")
             
         # Cache the results
+        # Add top terms while keeping original term_counts for BM25
+        file_stats = self._add_top_terms_to_stats(file_stats, top_k=15)
+
+        # Cache the results
         self.file_stats_cache[cache_key] = file_stats
         logger.info(
             f"Processed {processed_count} source files for {local_repo_path} at commit {commit_hash}. "
             f"Skipped: {skipped_non_source} non-source, {skipped_binary} binary, {skipped_errors} errors"
         )
+        
+        return file_stats
+    
+    def _is_meaningful_identifier(self, term: str) -> bool:
+        """Filter for meaningful identifiers (classes, methods, domain terms)."""
+        
+        # Skip very common programming terms
+        common_terms = {
+            'self', 'args', 'kwargs', 'data', 'result', 'value', 'item', 'obj',
+            'get', 'set', 'put', 'add', 'remove', 'delete', 'update', 'create',
+            'init', 'str', 'repr', 'len', 'int', 'float', 'bool', 'list', 'dict',
+            'true', 'false', 'none', 'null', 'undefined', 'var', 'let', 'const',
+            'function', 'method', 'class', 'object', 'type', 'new', 'this',
+            'super', 'return', 'yield', 'raise', 'throw', 'try', 'catch', 'finally',
+            'import', 'from', 'def', 'for', 'while', 'with', 'as', 'in', 'is',
+            'and', 'or', 'not', 'if', 'else', 'elif', 'pass', 'break', 'continue'
+        }
+        
+        if term.lower() in common_terms:
+            return False
+        
+        # Skip single letters and very short generic names
+        if len(term) <= 2 and term.lower() in {'i', 'j', 'k', 'x', 'y', 'z', 'id', 'ok'}:
+            return False
+        
+        # Skip temp/generic variable patterns
+        if re.match(r'^(temp|tmp|var|val)\d*$', term.lower()):
+            return False
+        
+        # Prefer longer, more descriptive identifiers
+        if len(term) >= 4:  # Longer terms are usually more meaningful
+            return True
+        
+        # For shorter terms, be more selective
+        # Keep if it looks like a meaningful abbreviation or domain term
+        if term.lower() in {'auth', 'user', 'api', 'url', 'http', 'json', 'xml', 'sql', 'db', 'css', 'html', 'app'}:
+            return True
+        
+        # Keep if it has mixed case (likely a class or method name)
+        if any(c.isupper() for c in term) and any(c.islower() for c in term):
+            return True
+        
+        return len(term) >= 3  # Default: keep if 3+ chars
+
+    def _add_top_terms_to_stats(self, file_stats: Dict[str, Dict], top_k: int = 15) -> Dict[str, Dict]:
+        """Add top important terms to each file's statistics while keeping original term_counts."""
+        
+        if not file_stats:
+            return file_stats
+        
+        # Build document frequencies
+        doc_freqs = Counter()
+        num_docs = len(file_stats)
+        
+        for stats in file_stats.values():
+            term_counts = stats.get('term_counts', {})
+            for term in term_counts.keys():
+                doc_freqs[term] += 1
+        
+        # For each file, compute top terms and ADD to existing stats
+        for filepath, stats in file_stats.items():
+            term_counts = stats.get('term_counts', {})
+            if not term_counts:
+                stats['top_terms'] = []
+                continue
+                
+            # Compute TF-IDF scores for meaningful terms only
+            total_terms = sum(term_counts.values())
+            scored_terms = []
+            
+            for term, tf in term_counts.items():
+                # Filter out noise BEFORE scoring
+                if not self._is_meaningful_identifier(term):
+                    continue
+                    
+                df = doc_freqs[term]
+                if df == 0:  # Shouldn't happen, but be safe
+                    continue
+                    
+                tf_normalized = tf / total_terms
+                idf = math.log(num_docs / df)
+                score = tf_normalized * idf
+                scored_terms.append((term, score))
+            
+            # Keep only top meaningful terms
+            scored_terms.sort(key=lambda x: x[1], reverse=True)
+            top_terms = [term for term, score in scored_terms[:top_k]]
+            
+            # ADD top_terms while KEEPING term_counts
+            stats['top_terms'] = top_terms
+            # DON'T delete term_counts - keep it for BM25!
         
         return file_stats
 
