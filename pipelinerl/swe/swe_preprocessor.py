@@ -13,6 +13,7 @@ This module provides functionality to preprocess the SWE-Gym dataset by:
 
 import os
 import re
+import math
 import json
 import logging
 import shutil

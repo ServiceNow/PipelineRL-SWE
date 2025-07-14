@@ -102,41 +102,27 @@ class LocalizationNode(StandardNode):
         file_list = list(task.file_stats.keys())
         
         # Group files by directory to compress representation
-        # Create interleaved representation: structure + inline key terms
         dir_groups = {}
-
-        for file_path in sorted(task.file_stats.keys()):
+        for file_path in file_list:
             if '/' in file_path:
                 dir_name = '/'.join(file_path.split('/')[:-1])
                 file_name = file_path.split('/')[-1]
             else:
-                dir_name = '.'
+                dir_name = '.'  # root directory
                 file_name = file_path
             
             if dir_name not in dir_groups:
                 dir_groups[dir_name] = []
-            
-            # Get key terms for this file
-            stats = task.file_stats[file_path]
-            top_terms = stats.get('top_terms', [])
-            
-            # Create file entry with optional terms
-            if top_terms:
-                terms_str = ', '.join(top_terms[:6])  # Limit to 6 terms to save tokens
-                file_entry = f"{file_name} ({terms_str})"
-            else:
-                file_entry = file_name
-            
-            dir_groups[dir_name].append(file_entry)
-
-        # Create final representation
+            dir_groups[dir_name].append(file_name)
+        
+        # Create compressed representation
         files_text_parts = []
         for dir_name, files in sorted(dir_groups.items()):
             if dir_name == '.':
-                files_text_parts.append(f"Root: {'; '.join(sorted(files))}")
+                files_text_parts.append(f"Root: {', '.join(sorted(files))}")
             else:
-                files_text_parts.append(f"{dir_name}/: {'; '.join(sorted(files))}")
-
+                files_text_parts.append(f"{dir_name}/: {', '.join(sorted(files))}")
+        
         files_text = "\n".join(files_text_parts)
         
         system_message = {
@@ -144,12 +130,10 @@ class LocalizationNode(StandardNode):
             "content": (
                 "You are an expert software engineer tasked with generating BM25 search queries to find "
                 "relevant files in a codebase for fixing a given issue.\n\n"
-                "You will be shown each file in the repository along with its most important/distinctive "
-                "terms (computed using TF-IDF). These terms represent the key concepts, classes, methods, "
-                "and domain-specific vocabulary in each file.\n\n"
                 "Your goal is to create a search query that will rank the most relevant files as highly "
-                "as possible using BM25 keyword matching. Focus on terms that appear in the issue "
-                "description and match the key terms of relevant files.\n\n"
+                "as possible using BM25 keyword matching. BM25 works by matching keywords.\n"
+                "Generate a focused BM25 search query designed to rank the gold standard files "
+                "as highly as possible.\n\n"
                 "Format your response as:\n"
                 "<thinking>[Your reasoning and analysis]</thinking>\n\n"
                 "<query>your BM25 search query here</query>"
@@ -159,12 +143,10 @@ class LocalizationNode(StandardNode):
         user_message = {
             "role": "user", 
             "content": (
-                f"Repository structure with key terms:\n{files_text}\n\n"
+                f"Repository structure (grouped by directory):\n{files_text}\n\n"
                 f"Issue to analyze and create a BM25 search query for:\n\n"
                 f"{task.problem_statement}\n\n"
-                f"Please analyze this issue and the key terms shown for each file. Create a BM25 search query "
-                f"that includes terms from the issue description that match the key terms of the most relevant files. "
-                f"Focus on domain-specific identifiers, class names, and technical concepts."
+                f"Please analyze this issue and provide a BM25 search query optimized to rank the most relevant files highly."
             )
         }
         
