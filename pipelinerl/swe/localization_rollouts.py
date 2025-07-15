@@ -229,15 +229,15 @@ async def generate_localization_rollout(
         # Calculate success metric (any gold file found in top 10)
         top_10_files = [fp for fp, _ in search_results[:10]] if search_results else []
         gold_files = reward_metadata.get("gold_files", [])
-        success = any(gf in top_10_files for gf in gold_files) if not format_violation else False
-        coverage = sum(1 for gf in gold_files if gf in top_10_files) / len(gold_files)
+        #success = any(gf in top_10_files for gf in gold_files) if not format_violation else False
+        success = sum(1 for gf in gold_files if gf in top_10_files) / len(gold_files)
+        success = success == 1 # if all gold files are found in top 10
         
         # Prepare metrics
         metrics = {
             "reward": reward,
             "mrr": reward if not format_violation else -1,
             "success": success,
-            "coverage": coverage,
             "query_length": len(query.split()) if query else 0,
             "no_answer": query is None or (query and query.strip() == ""),
             "no_error": True,
