@@ -16,13 +16,13 @@ from .bm25_searcher import BM25Searcher
 logger = logging.getLogger(__name__)
 
 
-def calculate_mrr_reward(gold_files: List[str], ranked_files: List[Tuple[str, float]]) -> Tuple[float, Dict]:
+def calculate_multi_query_mrr(gold_files: List[str], query_results: List[List[Tuple[str, float]]]) -> Tuple[float, Dict]:
     """
-    Calculate Mean Reciprocal Rank (MRR) reward for localization.
+    Calculate Mean Reciprocal Rank (MRR) using best rank across multiple queries.
     
     Args:
         gold_files: List of gold file paths that should be found
-        ranked_files: List of (filepath, score) tuples from BM25 search
+        query_results: List of query results, where each is a list of (filepath, score) tuples
         
     Returns:
         Tuple of (mrr_reward, metadata_dict)
@@ -30,40 +30,47 @@ def calculate_mrr_reward(gold_files: List[str], ranked_files: List[Tuple[str, fl
     if not gold_files:
         return 0.0, {"error": "No gold files provided"}
         
-    if not ranked_files:
-        return 0.0, {"gold_files": gold_files, "found_ranks": []}
-        
-    # Extract just the file paths from ranked results
-    ranked_paths = [filepath for filepath, _ in ranked_files]
+    if not query_results or not any(query_results):
+        return 0.0, {"gold_files": gold_files, "best_ranks": {}}
     
-    # Find ranks of gold files (1-indexed)
-    gold_ranks = []
+    # Find best rank for each gold file across all queries
+    best_ranks = {}
     found_files = []
     
     for gold_file in gold_files:
-        try:
-            rank = ranked_paths.index(gold_file) + 1  # 1-indexed
-            gold_ranks.append(rank)
+        best_rank = float('inf')
+        
+        for query_idx, ranked_files in enumerate(query_results):
+            if not ranked_files:
+                continue
+                
+            ranked_paths = [filepath for filepath, _ in ranked_files]
+            try:
+                rank = ranked_paths.index(gold_file) + 1  # 1-indexed
+                best_rank = min(best_rank, rank)
+            except ValueError:
+                continue  # File not found in this query
+        
+        if best_rank != float('inf'):
+            best_ranks[gold_file] = best_rank
             found_files.append(gold_file)
-        except ValueError:
-            # Gold file not found in results
-            gold_ranks.append(0)  # 0 means not found
-            
-    # Calculate reciprocal ranks (1/rank for found files, 0 for not found)
-    reciprocal_ranks = [1.0 / rank if rank > 0 else 0.0 for rank in gold_ranks]
+        else:
+            best_ranks[gold_file] = 0  # Not found in any query
     
-    # Average MRR across all gold files
+    # Calculate MRR from best ranks
+    reciprocal_ranks = [1.0 / rank if rank > 0 else 0.0 for rank in best_ranks.values()]
     mrr = sum(reciprocal_ranks) / len(gold_files)
     
     metadata = {
         "gold_files": gold_files,
         "found_files": found_files,
-        "gold_ranks": gold_ranks,
+        "best_ranks": best_ranks,
         "reciprocal_ranks": reciprocal_ranks,
         "num_gold_files": len(gold_files),
         "num_found": len(found_files),
-        "best_rank": min([r for r in gold_ranks if r > 0]) if any(r > 0 for r in gold_ranks) else 0,
-        "worst_rank": max(gold_ranks),
+        "best_rank": min([r for r in best_ranks.values() if r > 0]) if any(r > 0 for r in best_ranks.values()) else 0,
+        "worst_rank": max([r for r in best_ranks.values() if r > 0]) if any(r > 0 for r in best_ranks.values()) else 0,
+        "num_queries": len(query_results),
     }
     
     return mrr, metadata
@@ -96,7 +103,7 @@ async def generate_localization_rollout(
     session: aiohttp.ClientSession
 ) -> RolloutResult:
     """
-    Generate a single localization rollout.
+    Generate a single localization rollout with multi-query support.
     
     Args:
         cfg: Configuration
@@ -140,13 +147,15 @@ async def generate_localization_rollout(
         
         latency = time.time() - time_start
         
-        # Extract the query and LLM call from the response
-        query = None
+        # Extract the queries and LLM call from the response
+        queries = None
+        num_queries = 0
         llm_call = None
         
         for step in new_tape.steps:
             if isinstance(step, LocalizationQuery):
-                query = step.query
+                queries = step.queries
+                num_queries = step.num_queries
             # Get the LLM call for training data
             if (
                 hasattr(step, 'metadata') and 
@@ -166,15 +175,15 @@ async def generate_localization_rollout(
         if isinstance(llm_call, dict):
             llm_call = LLMCall(**llm_call)
         
-        # Determine reward based on whether we have a valid query
-        if query is None:
-            logger.warning("No localization query found - treating as format violation")
+        # Determine reward based on whether we have valid queries
+        if queries is None or not queries:
+            logger.warning("No localization queries found - treating as format violation")
             reward = -0.1  # Negative reward for format violation
-            reward_metadata = {"error": "No query found - format violation"}
-            search_results = []
+            reward_metadata = {"error": "No queries found - format violation"}
+            all_query_results = []
             format_violation = True
         else:
-            # Normal case: we have a query, proceed with BM25 search
+            # Normal case: we have queries, proceed with BM25 search
             try:
                 all_file_stats = json.loads(problem.get("all_file_stats", "{}"))
             except (json.JSONDecodeError, TypeError):
@@ -185,16 +194,29 @@ async def generate_localization_rollout(
                 # No files to search - give zero reward
                 reward = 0.0
                 reward_metadata = {"error": "No file statistics available"}
-                search_results = []
+                all_query_results = []
                 logger.error("NO ALL FILE STATS.")
             else:
-                # Create BM25 searcher and perform search
+                # Create BM25 searcher and perform search for each query
                 searcher = BM25Searcher(all_file_stats)
-                search_results = searcher.search(query, top_k=100)
                 
-                # Extract gold files from patch and calculate MRR reward
+                # Split budget among queries
+                budget_per_query = 100 // num_queries
+                
+                all_query_results = []
+                for query in queries:
+                    results = searcher.search(query, top_k=budget_per_query)
+                    all_query_results.append(results)
+                
+                # Extract gold files from patch and calculate multi-query MRR reward
                 gold_files = parse_patch_for_gold_files(problem.get("patch", ""))
-                reward, reward_metadata = calculate_mrr_reward(gold_files, search_results)
+                reward, reward_metadata = calculate_multi_query_mrr(gold_files, all_query_results)
+                
+                # Apply small penalty for using multiple queries
+                if num_queries > 1:
+                    query_penalty = 0.01 * (num_queries - 1)
+                    reward = max(0.0, reward - query_penalty)  # Don't go negative from penalty alone
+                    reward_metadata["query_penalty"] = query_penalty
             
             format_violation = False
             
@@ -226,23 +248,30 @@ async def generate_localization_rollout(
         training_text.reward = reward
         training_text.group_id = new_tape.metadata.parent_id if new_tape.metadata else None
         
-        # Calculate success metric (any gold file found in top 10)
-        top_10_files = [fp for fp, _ in search_results[:10]] if search_results else []
+        # Calculate success metric (all gold files found in top 10 across all queries)
+        top_10_files = set()
+        for query_results in all_query_results:
+            top_10_files.update([fp for fp, _ in query_results[:10]])
+        
         gold_files = reward_metadata.get("gold_files", [])
-        #success = any(gf in top_10_files for gf in gold_files) if not format_violation else False
-        success = sum(1 for gf in gold_files if gf in top_10_files) / len(gold_files)
-        success = success == 1 # if all gold files are found in top 10
+        if gold_files:
+            success = sum(1 for gf in gold_files if gf in top_10_files) / len(gold_files)
+            success = success == 1  # True if all gold files are found in top 10
+        else:
+            success = False
         
         # Prepare metrics
         metrics = {
             "reward": reward,
             "mrr": reward if not format_violation else -1,
             "success": success,
-            "query_length": len(query.split()) if query else 0,
-            "no_answer": query is None or (query and query.strip() == ""),
+            "num_queries": num_queries,
+            "total_query_length": sum(len(q.split()) for q in queries) if queries else 0,
+            "avg_query_length": sum(len(q.split()) for q in queries) / len(queries) if queries else 0,
+            "no_answer": queries is None or (queries and all(q.strip() == "" for q in queries)),
             "no_error": True,
             "overflow": 0 if finished else 1,
-            "num_search_results": len(search_results),
+            "num_search_results": sum(len(qr) for qr in all_query_results),
             "prompt_tokens": llm_call.prompt_length_tokens,
             "output_tokens": llm_call.output_length_tokens,
             "format_violation": format_violation,
@@ -291,6 +320,7 @@ async def generate_localization_rollout(
                 "prompt_tokens": 0,
                 "output_tokens": 0,
                 "no_answer": True,
+                "num_queries": 0,
             },
             latency=latency,
             dataset_name=problem.get("dataset"),
