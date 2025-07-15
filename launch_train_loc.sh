@@ -1,3 +1,3 @@
-JOB_NAME=localization_training_2
+JOB_NAME=localization_training_multi
 OUTPUT_DIR=/mnt/llmd/results/exps/aristides/reason/${JOB_NAME} 
-make job JOB_NAME=${JOB_NAME} ENV=prl CONDA_EXE=/opt/conda/bin/conda SNAPSHOT=1 NPROC=8 COMMAND="cd /home/toolkit/PipelineRL-SWE; python -m pipelinerl.launch --config-dir /home/toolkit/PipelineRL-SWE/conf --config-name localization output_dir=${OUTPUT_DIR} wandb.wandb_workspace_root=/mnt/llmd/results/exps wandb.wandb_project_name=dragonfruit"
+make job JOB_NAME=${JOB_NAME} ENV=prl CONDA_EXE=/opt/conda/bin/conda SNAPSHOT=1 NPROC=8 COMMAND="cd /home/toolkit/PipelineRL-SWE; python -m pipelinerl.launch --config-dir /home/toolkit/PipelineRL-SWE/conf --config-name localization output_dir=${OUTPUT_DIR} wandb.wandb_workspace_root=/mnt/llmd/results/exps wandb.wandb_project_name=starfruit"
