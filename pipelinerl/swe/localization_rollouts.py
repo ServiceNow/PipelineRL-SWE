@@ -1,6 +1,7 @@
 import json
 import time
 import logging
+import math
 from typing import Dict, List, Tuple
 
 import aiohttp
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 class LocalizationMetrics(BaseMetrics):
     mrr: float
+    ndcg_at_10: float
     num_queries: int
     total_query_length: int
     avg_query_length: float
@@ -91,6 +93,50 @@ def calculate_multi_query_mrr(gold_files: List[str], query_results: List[List[Tu
     }
     
     return mrr, metadata
+
+
+def calculate_ndcg_at_k(gold_files: List[str], query_results: List[List[Tuple[str, float]]], k: int = 10) -> float:
+    """
+    Calculate NDCG@k by concatenating and deduplicating results from multiple queries.
+    
+    Args:
+        gold_files: List of gold file paths that should be found
+        query_results: List of query results, where each is a list of (filepath, score) tuples  
+        k: Cutoff for NDCG calculation (default: 10)
+        
+    Returns:
+        NDCG@k score
+    """
+    if not gold_files:
+        return 0.0
+        
+    if not query_results or not any(query_results):
+        return 0.0
+    
+    # Combine all query results
+    all_results = []
+    for query_result in query_results:
+        all_results.extend(query_result)
+    
+    # Deduplicate, keeping best score per file
+    file_scores = {}
+    for filepath, score in all_results:
+        if filepath not in file_scores or score > file_scores[filepath]:
+            file_scores[filepath] = score
+    
+    # Sort by score and take top-k
+    sorted_files = sorted(file_scores.items(), key=lambda x: x[1], reverse=True)[:k]
+    
+    # Calculate DCG@k
+    dcg = 0
+    for i, (filepath, _) in enumerate(sorted_files):
+        relevance = 1 if filepath in gold_files else 0
+        dcg += relevance / math.log2(i + 2)  # i+2 because log2(1) = 0
+    
+    # Calculate ideal DCG@k (all relevant docs at top)
+    idcg = sum(1 / math.log2(i + 2) for i in range(min(len(gold_files), k)))
+    
+    return dcg / idcg if idcg > 0 else 0.0
 
 
 def parse_patch_for_gold_files(patch_string: str) -> List[str]:
@@ -217,8 +263,8 @@ async def generate_localization_rollout(
                 # Create BM25 searcher and perform search for each query
                 searcher = BM25Searcher(all_file_stats)
                 
-                # Split budget among queries
-                budget_per_query = 100 // num_queries
+                # Split budget among queries for MRR@10
+                budget_per_query = 10 // num_queries
                 
                 all_query_results = []
                 for query in queries:
@@ -265,17 +311,20 @@ async def generate_localization_rollout(
         training_text.reward = reward
         training_text.group_id = new_tape.metadata.parent_id if new_tape.metadata else None
         
-        # Calculate success metric (all gold files found in top 10 across all queries)
-        top_10_files = set()
+        # Calculate success metric (all gold files found in top results across all queries)
+        top_files = set()
         for query_results in all_query_results:
-            top_10_files.update([fp for fp, _ in query_results[:10]])
+            top_files.update([fp for fp, _ in query_results])
         
         gold_files = reward_metadata.get("gold_files", [])
         if gold_files:
-            success = sum(1 for gf in gold_files if gf in top_10_files) / len(gold_files)
-            success = success == 1  # True if all gold files are found in top 10
+            success = sum(1 for gf in gold_files if gf in top_files) / len(gold_files)
+            success = success == 1  # True if all gold files are found
         else:
             success = False
+        
+        # Calculate NDCG@10 for literature comparison
+        ndcg_at_10 = calculate_ndcg_at_k(gold_files, all_query_results, k=10)
         
         # Prepare metrics using the LocalizationMetrics class
         metrics = LocalizationMetrics(
@@ -284,6 +333,7 @@ async def generate_localization_rollout(
             no_error=True,
             no_answer=queries is None or (queries and all(q.strip() == "" for q in queries)),
             mrr=reward if not format_violation else -1,
+            ndcg_at_10=ndcg_at_10,
             num_queries=num_queries,
             total_query_length=sum(len(q.split()) for q in queries) if queries else 0,
             avg_query_length=sum(len(q.split()) for q in queries) / len(queries) if queries else 0,
@@ -334,6 +384,7 @@ async def generate_localization_rollout(
             no_error=False,
             no_answer=True,
             mrr=0.0,
+            ndcg_at_10=0.0,
             num_queries=0,
             total_query_length=0,
             avg_query_length=0.0,
