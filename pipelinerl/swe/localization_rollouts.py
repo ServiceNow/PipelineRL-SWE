@@ -7,13 +7,30 @@ import aiohttp
 from omegaconf import DictConfig
 from tapeagents.orchestrator import async_execute_agent
 
-from pipelinerl.rollouts import RolloutResult
+from pipelinerl.rollouts import RolloutResult, BaseMetrics
 from pipelinerl.async_llm import make_training_text
 from tapeagents.llms.trainable import TrainableLLM
 from .localization_agent import LocalizationAgent, LocalizationTask, LocalizationTape, LocalizationQuery
 from .bm25_searcher import BM25Searcher
 
 logger = logging.getLogger(__name__)
+
+
+class LocalizationMetrics(BaseMetrics):
+    mrr: float
+    num_queries: int
+    total_query_length: int
+    avg_query_length: float
+    num_search_results: int
+    prompt_tokens: int
+    output_tokens: int
+    format_violation: bool
+    overflow: int
+    localization_num_gold_files: int = 0
+    localization_num_found: int = 0
+    localization_best_rank: int = 0
+    localization_worst_rank: int = 0
+    localization_num_queries: int = 0
 
 
 def calculate_multi_query_mrr(gold_files: List[str], query_results: List[List[Tuple[str, float]]]) -> Tuple[float, Dict]:
@@ -260,26 +277,27 @@ async def generate_localization_rollout(
         else:
             success = False
         
-        # Prepare metrics
-        metrics = {
-            "reward": reward,
-            "mrr": reward if not format_violation else -1,
-            "success": success,
-            "num_queries": num_queries,
-            "total_query_length": sum(len(q.split()) for q in queries) if queries else 0,
-            "avg_query_length": sum(len(q.split()) for q in queries) / len(queries) if queries else 0,
-            "no_answer": queries is None or (queries and all(q.strip() == "" for q in queries)),
-            "no_error": True,
-            "overflow": 0 if finished else 1,
-            "num_search_results": sum(len(qr) for qr in all_query_results),
-            "prompt_tokens": llm_call.prompt_length_tokens,
-            "output_tokens": llm_call.output_length_tokens,
-            "format_violation": format_violation,
-        }
-        
-        # Add reward metadata to metrics
-        metrics.update({f"localization_{k}": v for k, v in reward_metadata.items() 
-                       if isinstance(v, (int, float, bool))})
+        # Prepare metrics using the LocalizationMetrics class
+        metrics = LocalizationMetrics(
+            reward=reward,
+            success=success,
+            no_error=True,
+            no_answer=queries is None or (queries and all(q.strip() == "" for q in queries)),
+            mrr=reward if not format_violation else -1,
+            num_queries=num_queries,
+            total_query_length=sum(len(q.split()) for q in queries) if queries else 0,
+            avg_query_length=sum(len(q.split()) for q in queries) / len(queries) if queries else 0,
+            overflow=0 if finished else 1,
+            num_search_results=sum(len(qr) for qr in all_query_results),
+            prompt_tokens=llm_call.prompt_length_tokens,
+            output_tokens=llm_call.output_length_tokens,
+            format_violation=format_violation,
+            localization_num_gold_files=reward_metadata.get("num_gold_files", 0),
+            localization_num_found=reward_metadata.get("num_found", 0),
+            localization_best_rank=reward_metadata.get("best_rank", 0),
+            localization_worst_rank=reward_metadata.get("worst_rank", 0),
+            localization_num_queries=reward_metadata.get("num_queries", 0),
+        )
         
         # Return training result
         training_texts = [training_text]
@@ -309,19 +327,26 @@ async def generate_localization_rollout(
         logger.error(f"Error in localization rollout: {e}")
         latency = time.time() - time_start
         
-        # Return failed rollout (this catches the "No LLM call" error and other system errors)
+        # Return failed rollout with proper metrics class
+        metrics = LocalizationMetrics(
+            reward=0.0,
+            success=False,
+            no_error=False,
+            no_answer=True,
+            mrr=0.0,
+            num_queries=0,
+            total_query_length=0,
+            avg_query_length=0.0,
+            overflow=0,
+            num_search_results=0,
+            prompt_tokens=0,
+            output_tokens=0,
+            format_violation=False,
+        )
+        
         return RolloutResult(
             training_texts=[],
-            metrics={
-                "reward": 0.0,
-                "success": False,
-                "no_error": False,
-                "error": str(e),
-                "prompt_tokens": 0,
-                "output_tokens": 0,
-                "no_answer": True,
-                "num_queries": 0,
-            },
+            metrics=metrics,
             latency=latency,
             dataset_name=problem.get("dataset"),
             prompt_tokens=[0],
