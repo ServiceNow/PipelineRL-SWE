@@ -14,11 +14,11 @@ actor:
   throughput_window_size: 50
 
 # Use SWE dataset loader
-dataset_loader: pipelinerl.swe.load_datasets.load_swegym_dataset
+dataset_loader: pipelinerl.swe.load_datasets.load_local_swe_dataset
 train_dataset_names:
   - swegym
 test_dataset_names:
-  - swegym
+  - swebench_lite
 
 # Localization-specific settings
 agent:
@@ -53,6 +53,7 @@ environment: null
 # SWE-specific dataset parameters
 dataset_loader_params:
   dataset_path: /mnt/llmd/data/swegym/ds
+  test_dataset_path: /mnt/llmd/data/swebench_lite/ds
 
 # Model path - use a coding-focused model if available
 model_path: Qwen/Qwen2.5-Coder-7B-Instruct

@@ -575,7 +575,12 @@ def run_actor_loop(cfg: DictConfig):
     dataset_loader_params = cfg.get('dataset_loader_params', {})
     # Use **dataset_loader_params to pass parameters only if they exist
     train_dataset = dataset_loader(cfg.train_dataset_names, **dataset_loader_params)
-    test_dataset = dataset_loader(cfg.test_dataset_names, **dataset_loader_params)
+    test_params = dict(dataset_loader_params)
+    if 'test_dataset_path' in dataset_loader_params:
+        test_params['dataset_path'] = dataset_loader_params['test_dataset_path']
+        test_params.pop('test_dataset_path')
+
+    test_dataset = dataset_loader(cfg.test_dataset_names, **test_params)
 
     if cfg.train_subset:
         train_dataset = train_dataset[cfg.train_subset.begin : cfg.train_subset.end]
