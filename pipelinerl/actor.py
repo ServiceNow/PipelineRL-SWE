@@ -574,7 +574,7 @@ def run_actor_loop(cfg: DictConfig):
     # Get dataset loader parameters if they exist in config, otherwise use empty dict
     dataset_loader_params = cfg.get('dataset_loader_params', {})
     # Use **dataset_loader_params to pass parameters only if they exist
-    train_dataset = dataset_loader(cfg.train_dataset_names, **dataset_loader_params)
+    train_dataset = dataset_loader(cfg.train_dataset_names, **{k:v for k,v in dataset_loader_params.items() if k != 'test_dataset_path'})
     test_params = dict(dataset_loader_params)
     if 'test_dataset_path' in dataset_loader_params:
         test_params['dataset_path'] = dataset_loader_params['test_dataset_path']
