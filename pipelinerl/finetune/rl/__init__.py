@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 RL_DATA_COLUMNS = [
     "overflow",
     "group_tokens",
+    "num_labels",
     "rewards",
     "advantages",
     "old_logprobs",
@@ -35,10 +36,10 @@ RL_DATA_COLUMNS = [
 
 
 class RLConfig(BaseModel):
-    algo: str = Field(
-        default="grpo",
-        description="Algorithm to use for RL",
-        choices=["grpo", "reinforce"],
+    policy_loss: str = Field(
+        default="ppo",
+        description="Policy Loss to use for RL",
+        choices=["ppo", "reinforce"],
     )
     use_advantages: bool = Field(
         default=True,
@@ -213,6 +214,7 @@ def rl_step(
     ref_logprobs = batch.ref_logprobs[:, 1:]
     old_logprobs = batch.old_logprobs[:, 1:]
     group_tokens = batch.group_tokens[:, 1:]
+    num_labels_in_seq = batch.num_labels[:, 1:] # sequence dependent normalization
     overflow = batch.overflow[:, 1:]
 
     if config.group_normalization:
@@ -239,6 +241,8 @@ def rl_step(
         value_predictions = outputs.value[:, :-1] # no target for the last token 
         # Compute value-based advantages: A(s,a) = MC_return - V(s)
         # where MC_return is the Monte Carlo return (rewards) and V(s) is the value prediction
+        #FIXME: if this works better it should be a config
+        #advantages = rewards - torch.clamp(value_predictions, 0, 1)
         advantages = rewards - value_predictions
     else:
         advantages = batch.advantages[:, 1:]
@@ -262,7 +266,7 @@ def rl_step(
     kl_coef = linear_decay_coef(current_step, max_step, config.kl_coef, config.final_kl_coef)
 
     # compute algorithm-specific losses
-    match config.algo:
+    match config.policy_loss:
         case "ppo":
             surr1 = ratio_new_old * log_p_weights
             clamped_ratio = torch.clamp(ratio_new_old, 1 - config.epsilon, 1 + config.epsilon)
@@ -276,7 +280,7 @@ def rl_step(
             ratio_new_old = torch.clamp(ratio_new_old, 0, 1 + config.epsilon)
             policy_loss = new_logprobs * log_p_weights * ratio_new_old.detach()
         case _:
-            raise ValueError(f"Unknown algorithm {config.algo}")
+            raise ValueError(f"Unknown algorithm {config.policy_loss}")
 
     # combine loss components
     loss = policy_loss - kl_coef * approx_kl + entropy_bonus_coef * entropy  # 1 x (BxL) x 1
@@ -287,7 +291,6 @@ def rl_step(
 
     policy_loss_total = -sum_sum(loss, masks_shifted, segments)
     
-    final_loss = policy_loss_total
     if has_value_head:
         # Get the value predictions
         values = outputs.value
@@ -302,7 +305,9 @@ def rl_step(
         value_loss = sum_sum(value_loss, masks_shifted, segments) 
         
         # Combine policy loss and value loss
-        final_loss = final_loss + config.value_loss_coef * value_loss
+        final_loss = policy_loss_total + config.value_loss_coef * value_loss
+    else:
+        final_loss = policy_loss_total
 
     # ensure loss is valid
     assert torch.isfinite(final_loss), f"Non-finite loss detected: {final_loss}"
@@ -313,42 +318,45 @@ def rl_step(
         }
         return final_loss, stats_no_labels
 
-    # All the stats are average then summed. They will be normalized by the number of sequences at the end of the step
+    # Metric aggregation behavior:
+    # 1. loss: pre-multiplied by token_weights, reported as sum
+    # 2. min/max values: computed across entire batch
+    # 3. other statistics: averaged per sequence, then averaged across batch
     stats = {
         "loss": final_loss.item(),
         "max_loss": final_loss.item(),
         "min_loss": final_loss.item(),
-        "reward": mean_sum(rewards, masks_shifted, segments).item(),
+        "reward": sum_sum(rewards / num_labels_in_seq, masks_shifted, segments).item(),
         "max_reward": rewards[masks_shifted].max().item(),
         "min_reward": rewards[masks_shifted].min().item(),
-        "entropy": mean_sum(entropy, masks_shifted, segments).item(),
-        "old_logprobs": mean_sum(old_logprobs, masks_shifted, segments).item(),
-        "new_logprobs": mean_sum(new_logprobs, masks_shifted, segments).item(),
-        "ref_logprobs": mean_sum(ref_logprobs, masks_shifted, segments).item(),
-        "advantage": mean_sum(advantages, masks_shifted, segments).item(),
+        "entropy": sum_sum(entropy / num_labels_in_seq, masks_shifted, segments).item(),
+        "old_logprobs": sum_sum(old_logprobs / num_labels_in_seq, masks_shifted, segments).item(),
+        "new_logprobs": sum_sum(new_logprobs / num_labels_in_seq, masks_shifted, segments).item(),
+        "ref_logprobs": sum_sum(ref_logprobs / num_labels_in_seq, masks_shifted, segments).item(),
+        "advantage": sum_sum(advantages / num_labels_in_seq, masks_shifted, segments).item(),
         "max_advantage": advantages[masks_shifted].max().item(),
         "min_advantage": advantages[masks_shifted].min().item(),
-        "kl": mean_sum(approx_kl, masks_shifted, segments).item(),
+        "kl": sum_sum(approx_kl / num_labels_in_seq, masks_shifted, segments).item(),
         "max_kl": approx_kl[masks_shifted].max().item(),
         "min_kl": approx_kl[masks_shifted].min().item(),
-        "policy_loss": mean_sum(policy_loss, masks_shifted, segments).item(),
-        "surr1": mean_sum(surr1, masks_shifted, segments).item(),
-        "surr2": mean_sum(surr2, masks_shifted, segments).item(),
-        "ratio_new_old": mean_sum(ratio_new_old, masks_shifted, segments).item(),
+        "policy_loss": sum_sum(policy_loss / num_labels_in_seq, masks_shifted, segments).item(),
+        "surr1": sum_sum(surr1 / num_labels_in_seq, masks_shifted, segments).item(),
+        "surr2": sum_sum(surr2 / num_labels_in_seq, masks_shifted, segments).item(),
+        "ratio_new_old": sum_sum(ratio_new_old / num_labels_in_seq, masks_shifted, segments).item(),
         "ratio_new_old_sum": sum_sum(ratio_new_old, masks_shifted, segments).item(),
         "ratio_new_old_squared_sum": sum_sum(  # useful to estimate the ESS
             ratio_new_old * ratio_new_old, masks_shifted, segments
         ).item(),
-        "ratio_ref_new": mean_sum(torch.exp(log_ratio_ref_new), masks_shifted, segments).item(),
-        "ratio_ref_old": mean_sum(torch.exp(ref_logprobs - old_logprobs), masks_shifted, segments).item(),
-        "clamp_log_ratio_ref_new_indicator": mean_sum(
-            clamp_log_ratio_ref_new_indicators, masks_shifted, segments
+        "ratio_ref_new": sum_sum(torch.exp(log_ratio_ref_new) / num_labels_in_seq, masks_shifted, segments).item(),
+        "ratio_ref_old": sum_sum(torch.exp(ref_logprobs - old_logprobs) / num_labels_in_seq, masks_shifted, segments).item(),
+        "clamp_log_ratio_ref_new_indicator": sum_sum(
+            clamp_log_ratio_ref_new_indicators / num_labels_in_seq, masks_shifted, segments
         ).item(),
-        "clamp_log_ratio_new_old_indicator": mean_sum(
-            clamp_log_ratio_new_old_indicators, masks_shifted, segments
+        "clamp_log_ratio_new_old_indicator": sum_sum(
+            clamp_log_ratio_new_old_indicators / num_labels_in_seq, masks_shifted, segments
         ).item(),
         "num_nans": torch.isnan(loss).sum().item(),
-        "token_weight": mean_sum(tokens_weights, masks_shifted, segments).item(),
+        "token_weight": sum_sum(tokens_weights / num_labels_in_seq, masks_shifted, segments).item(),
         "max_token_weight": tokens_weights[masks_shifted].max().item(),
         "min_token_weight": tokens_weights[masks_shifted].min().item(),
         "kl_coef": num_sequences * kl_coef,
@@ -358,14 +366,13 @@ def rl_step(
     }
 
     if has_value_head:
-        value_stats = {
-            "value_mean": mean_sum(value_predictions, masks_shifted, segments).item(),
-            "value_max": value_predictions[masks_shifted].max().item(),
-            "value_min": value_predictions[masks_shifted].min().item(),
-            "value_loss": value_loss.item(),
-        }
-        stats.update(value_stats)
-    
+        stats["value_mean"] = sum_sum(value_predictions / num_labels_in_seq, masks_shifted, segments).item()
+        stats["value_max"] = value_predictions[masks_shifted].max().item() if masks_shifted.any() else 0.0
+        stats["value_min"] = value_predictions[masks_shifted].min().item() if masks_shifted.any() else 0.0
+        stats["value_loss"] = value_loss.item()
+        stats["value_mse"] = sum_sum(
+            torch.square(value_predictions - value_labels) / num_labels_in_seq, masks_shifted, segments
+        ).item()
 
     return final_loss, stats
 
@@ -443,15 +450,18 @@ def populate_rl_data(dataset: list[dict[str, Any]], eos_token_id: int, config: R
         axis=1,
     )
     df["group_tokens"] = df.apply(lambda row: [row["group_tokens"]] * len(row["input_ids"]), axis=1)
+    df["num_labels"] = df.apply(lambda row: [sum(1 for label in row["labels"] if label != -100)] * len(row["input_ids"]), axis=1)
 
     # Step 5: move the results back to the dataset
     advantages_list = df["advantages"].tolist()
     group_tokens_list = df["group_tokens"].tolist()
     overflow_list = df["overflow"].tolist()
+    num_labels_list = df["num_labels"].tolist()
     for i, entry in enumerate(dataset):
         entry["advantages"] = advantages_list[i]
         entry["group_tokens"] = group_tokens_list[i]
         entry["overflow"] = overflow_list[i]
+        entry["num_labels"] = num_labels_list[i]
     return dataset
 
 
@@ -475,4 +485,5 @@ def prepare_rl_fields(
     encoding["ref_logprobs"] = [0] * (len(encoding["labels"]) - len(ref_logprobs)) + ref_logprobs
     encoding["overflow"] = [0] * len(encoding["labels"])  # place holder
     encoding["group_tokens"] = [0] * len(encoding["labels"])  # place holder
+    encoding["num_labels"] = [1 if label != -100 else 0 for label in encoding["labels"]]  # count only output tokens
     return encoding

@@ -15,13 +15,10 @@ from multiprocessing.managers import SharedMemoryManager
 from pathlib import Path
 from queue import Empty, Full
 from typing import List
-import random
-import math
 
 import datasets
 import transformers
 from litellm import BaseModel, Field
-from typing import Literal
 
 from pipelinerl.finetune.logging_ import flatten_dict_config
 from pipelinerl.shared_memory_array import SharedMemoryArray, SharedMemoryQueue
@@ -392,9 +389,15 @@ def run_preprocessing_loop(
     
     # Initialize TrainerState
     trainer_state = TrainerState(exp_root_dir)
-    if cfg.debug.mode:
+    if cfg.debug.mode == "preprocessor":
+        logger.info("Debug mode: preprocessor")
         trainer_state.debug_mode_init()
+    elif cfg.debug.mode == "finetune+preprocessor":
+        logger.info("Debug mode: finetune+preprocessor")
+        trainer_state.start_listening()
+        trainer_state.wait_for_processed_samples()
     else:
+        logger.info("Normal mode, waiting for finetune loop to start")
         trainer_state.start_listening()
         trainer_state.wait_for_model_version()
 
@@ -421,8 +424,7 @@ def run_preprocessing_loop(
 
     stats_aggregator = SlidingWindowAggregator(window_size=max(10, 1000 // cfg.preprocess.chunk_n_groups))
 
-    buffer = Queue()
-    # Queue for holding processed entries, with size based on batch_size * accumulation_steps
+    buffer = deque()
     
     # Sequence packing configuration
     num_trainers = world_map.total_finetune_gpus
@@ -438,12 +440,17 @@ def run_preprocessing_loop(
         idx: published_samples // num_trainers 
         for idx in range(0, num_trainers, cfg.finetune.seq_parallel)
     }
+
     max_model_version = None
+    time_to_write = False
+    current_batch = []
+    current_length = 0
     batch_boundary = published_samples + train_batch_size
     target_samples_per_lead = samples_per_trainer[0] + samples_per_lead_per_step
     
     # Per-trainer sample tracking (similar to finetune_loop.py)
     total_filtered_out = 0  # Track total filtered samples across all batches
+
     with write_to_streams(output_stream) as data_writer, write_to_streams(stats_streams) as stats_writer:
         with SharedMemoryManager() as smm:
             # Create shared memory queues without the manager parameter
@@ -514,28 +521,26 @@ def run_preprocessing_loop(
                             logger.error(f"Traceback: {dataset['traceback']}")
                             raise Exception(dataset['error'])
                         for entry in dataset:
-                            buffer.put(entry)
+                            buffer.append(entry)
                         processed_chunks += 1
-                        if buffer.qsize() < cfg.preprocess.dataset_buffer_size:
-                            continue
-                        if cfg.preprocess.dataset_buffer_size:
-                            # If buffer size is not set, no point in logging
-                            logger.info(f"Buffer is full with {buffer.qsize()} samples, start writing")
 
-                    while not buffer.empty():
-                        try:
-                            if len(processed_entries_queue) == processed_entries_queue.maxlen:
-                                if not pop_old_data:
-                                    break 
-                                else:
-                                    processed_entries_queue_popped_data += 1
-                                    if processed_entries_queue_popped_data % 100 == 0 and last_time_notice != processed_entries_queue_popped_data // 100:
-                                        logger.warning(f"Popped {processed_entries_queue_popped_data} old entries from processed entries queue")
-                                        last_time_notice = processed_entries_queue_popped_data // 100
-                            entry = buffer.get_nowait()
-                            processed_entries_queue.append(entry) # drop from the left if full
-                        except Empty:
-                            break
+                    if len(buffer) < cfg.preprocess.dataset_buffer_size:
+                        continue
+                    if cfg.preprocess.dataset_buffer_size:
+                        # If buffer size is not set, no point in logging
+                        logger.info(f"Buffer is full with {len(buffer)} samples, start writing")
+
+                    while len(buffer) > 0:
+                        if len(processed_entries_queue) == processed_entries_queue.maxlen:
+                            if not pop_old_data:
+                                break 
+                            else:
+                                processed_entries_queue_popped_data += 1
+                                if processed_entries_queue_popped_data % 100 == 0 and last_time_notice != processed_entries_queue_popped_data // 100:
+                                    logger.warning(f"Popped {processed_entries_queue_popped_data} old entries from processed entries queue")
+                                    last_time_notice = processed_entries_queue_popped_data // 100
+                        entry = buffer.popleft()
+                        processed_entries_queue.append(entry) # drop from the left if full
 
                         stats_aggregator.update([len(entry["input_ids"]) for entry in processed_entries_queue])
                         max_model_version = max([entry["model_version"] for entry in processed_entries_queue]) if processed_entries_queue else 0
@@ -549,7 +554,7 @@ def run_preprocessing_loop(
 
                     batch_done = False
                     start_writing = time.time()
-                    while len(processed_entries_queue) > 0 and not batch_done:
+                    while (len(processed_entries_queue) > 0 and not batch_done) or (cfg.preprocess.dataset_buffer_size and not batch_done):
                         logger.debug(f"[inner loop] trainer {trainer_id} has {samples_per_trainer[trainer_id]} samples, target is {target_samples_per_lead}")
                         if cfg.finetune.seq_packing:
                             if samples_per_trainer[trainer_id] == target_samples_per_lead:
@@ -560,15 +565,15 @@ def run_preprocessing_loop(
                                     model_version=max_model_version
                                 )
                                 write_micro_batch_slices(trainer_id, data_writer, sentinel_batch, cfg.finetune.seq_parallel)
+                                trainer_id = (trainer_id + cfg.finetune.seq_parallel) % num_trainers
                             else:
-                                current_batch = []
-                                current_length = 0
                                 
                                 while len(processed_entries_queue) > 0:
                                     entry = processed_entries_queue[0]  # Peek at next entry
                                     sample_length = len(entry["input_ids"])
 
                                     if current_length + sample_length > cfg.finetune.seq_length:
+                                        time_to_write = True
                                         break  # Current micro batch is full
                                     
                                     # Add sample to current micro batch
@@ -577,13 +582,20 @@ def run_preprocessing_loop(
                                     
                                     # Check if we've reached the sample limit per step
                                     if len(current_batch) + samples_per_trainer[trainer_id] == target_samples_per_lead:
+                                        time_to_write = True
                                         break
                             
-                                if current_batch:
+                                if time_to_write:
+                                    assert len(current_batch) > 0, "Current batch should not be empty when writing"
                                     batch_encoding = collate_packed(current_batch, tokenizer, cfg.finetune.seq_parallel)
                                     write_micro_batch_slices(trainer_id, data_writer, batch_encoding, cfg.finetune.seq_parallel)
                                     published_samples += len(current_batch)
                                     samples_per_trainer[trainer_id] += len(current_batch)
+                                    # Reset batch state for this trainer
+                                    trainer_id = (trainer_id + cfg.finetune.seq_parallel) % num_trainers
+                                    time_to_write = False
+                                    current_batch = []
+                                    current_length = 0
                                     logger.debug(f"[inner loop] Packed microbatch with {len(current_batch)} samples for trainer {trainer_id}")
                         else:
                             batch_entries = []
@@ -594,12 +606,16 @@ def run_preprocessing_loop(
                             published_samples += len(batch_entries)
                             samples_per_trainer[trainer_id] += len(batch_entries)
                             logger.debug(f"[inner loop] Packed microbatch with {len(batch_entries)} samples for trainer {trainer_id}")
+                            trainer_id = (trainer_id + cfg.finetune.seq_parallel) % num_trainers
 
-                        trainer_id = (trainer_id + cfg.finetune.seq_parallel) % num_trainers
                         batch_done = published_samples == batch_boundary and trainer_id == 0
                         if batch_done:
                             batch_boundary += train_batch_size
                             target_samples_per_lead += samples_per_lead_per_step
+                            if cfg.preprocess.dataset_buffer_size and len(processed_entries_queue) > 0:
+                                # There is enough data in the processed entries queue to write multiple batches
+                                batch_done = False
+                                
                         logger.debug(
                             f"[inner loop] wrote {published_samples} samples, "
                             f"trainer {trainer_id} is at {samples_per_trainer[trainer_id]} samples, "

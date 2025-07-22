@@ -1,5 +1,4 @@
 import asyncio
-import itertools
 import logging
 import math
 import multiprocessing as mp
@@ -555,7 +554,9 @@ class ActorLoop:
 def run_actor_loop(cfg: DictConfig):
     set_streams_backend(**cfg.streams)
 
-    random.seed(42)
+    # set seed for reproducibility (mostly intended for dataset loading)
+    random.seed(cfg.seed)
+
     exp_path = Path(cfg.output_dir)
     setup_logging(exp_path / "actor", "actor")
     logger.info(f"Current dir: {os.getcwd()}, experiment root dir: {cfg.output_dir}")

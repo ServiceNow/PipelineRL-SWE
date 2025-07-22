@@ -77,6 +77,7 @@ log_each_n_steps: 1
 also_save_steps: []
 use_safetensors: true
 save_final_training_state: True
+seq_parallel: 1
 objective: rl
 input: training_data
 send_weight_updates: true
@@ -84,11 +85,12 @@ queue_size: 32
 max_lag: ${..max_lag}
 weight_update_interval: 1
 pop_old_data: ${..pop_old_data}
+attempts: 1
 eval_callback:
   _target_: tapeagents.finetune.eval.dummy_eval_callback
   config_name: ""
 rl:
-  algo: reinforce
+  policy_loss: reinforce
   divide_advantage_by_std: false
   kl_coef: 0.0
   final_kl_coef: ${..rl.kl_coef} 

@@ -56,6 +56,16 @@ def validate_config(cfg: DictConfig):
         if cfg.finetune.train_batch_size > 1:
             raise ValueError("Vision language models cannot use batch size > 1 (train_batch_size must be 1)")
     
+    if cfg.finetune.seq_parallel > 1:
+        if not cfg.finetune.seq_packing:
+            raise ValueError("seq_parallel > 1 requires seq_packing to be true")
+    
+    if cfg.preprocess.dataset_buffer_size > 0:
+        if cfg.preprocess.dataset_buffer_size != cfg.preprocess.ring_buffer_size:
+            raise ValueError("dataset_buffer_size must be equal to ring_buffer_size")
+        if cfg.pop_old_data:
+            raise ValueError("Cannot use pop_old_data with preprocessor dataset_buffer_size > 0")
+
     # Check for value loss coefficient constraints
     if cfg.finetune.model_class == "causal-language-modeling-with-value-head":
         if not hasattr(cfg.finetune.rl, "value_loss_coef") or cfg.finetune.rl.value_loss_coef <= 0.0:
@@ -81,7 +91,7 @@ def run_ref_llm(cfg: DictConfig, preprocessor_llm_idx: int, local_idx: int, gpus
         "--host",
         "0.0.0.0",
         "--seed",
-        str(preprocessor_llm_idx),
+        str(cfg.seed + preprocessor_llm_idx),
     ]
 
     # Add vLLM kwargs as separate arguments
@@ -131,7 +141,7 @@ def run_actor_llm(
         "--port",
         str(8080 + local_idx),
         "--seed",
-        str(actor_llm_idx),
+        str(cfg.seed + actor_llm_idx),
         "--actor-llm-idx",
         str(actor_llm_idx),
         "--weight-update-group-init-method",

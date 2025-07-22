@@ -45,7 +45,7 @@ from pipelinerl.finetune.rl import (
     RLConfig,
     rl_step,
 )
-from pipelinerl.finetune.rl.utils import get_avg_rl_stats
+from pipelinerl.finetune.rl.utils import aggregate_rl_stats
 from pipelinerl.finetune.types import TrainingMetrics
 from pipelinerl.finetune.utils import create_sentinel_batch
 from pipelinerl.streams import (
@@ -767,7 +767,7 @@ def rl_finetuning_worker(
             gathered_rl_metrics = gather_rl_metrics(rl_metrics)
             time_waiting_for_data = 0.0
 
-            average_rl_metrics = get_avg_rl_stats(gathered_rl_metrics, samples_per_step)
+            average_rl_metrics = aggregate_rl_stats(gathered_rl_metrics, samples_per_step)
             ess = (
                 average_rl_metrics["rl/ratio_new_old_sum"] ** 2
                 / average_rl_metrics["rl/ratio_new_old_squared_sum"]

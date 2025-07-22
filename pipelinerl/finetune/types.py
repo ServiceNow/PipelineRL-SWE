@@ -4,6 +4,8 @@ from typing import Any, Dict, List, Literal, TypeAlias, Union
 import torch
 from pydantic import BaseModel, ConfigDict, field_validator
 
+import numpy as np
+
 ModelClass: TypeAlias = Literal["causal-language-modeling", "seq2seq-language-modeling", "vision2seq-language-modeling"]
 
 
@@ -57,6 +59,7 @@ class PipelineBatchEncoding(BaseModel):
     ref_logprobs: torch.FloatTensor
     old_logprobs: torch.FloatTensor
     group_tokens: torch.FloatTensor
+    num_labels: torch.FloatTensor 
     overflow: torch.FloatTensor
     
     model_version: int
@@ -92,7 +95,7 @@ class PipelineBatchEncoding(BaseModel):
         return torch.tensor(v, dtype=torch.int)
     
     # TODO: am i needed?
-    @field_validator('rewards', 'advantages', 'ref_logprobs', 'old_logprobs', 'group_tokens', 'overflow', 'pixel_values', mode='before')
+    @field_validator('rewards', 'advantages', 'ref_logprobs', 'old_logprobs', 'group_tokens', 'num_labels', 'overflow', 'pixel_values', mode='before')
     @classmethod
     def convert_to_float_tensor(cls, v: List[float] | torch.Tensor | None) -> torch.FloatTensor | None:
         """Handle initialization of float tensors from different types."""
@@ -160,6 +163,7 @@ class PipelineBatchEncoding(BaseModel):
                 "old_logprobs": self.old_logprobs[:, bs[i]:bs[i + 1]],
                 "group_tokens": self.group_tokens[:, bs[i]:bs[i + 1]],
                 "overflow": self.overflow[:, bs[i]:bs[i + 1]],
+                "num_labels": self.num_labels[:, bs[i]:bs[i + 1]],
                 # metadata
                 "model_version": self.model_version,
                 "sentinel": self.sentinel,
