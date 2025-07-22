@@ -22,11 +22,11 @@ test_dataset_names:
 
 # Localization-specific settings
 agent:
-  max_prompt_length: 12000
+  max_prompt_length: 120000
 
 # Finetune settings optimized for localization
 finetune:
-  seq_length: 14000  # Shorter sequences for query generation
+  seq_length: 128000  # Shorter sequences for query generation
   gradient_accumulation_passes: 512  # Adjust based on your setup
   learning_rate: 5e-6  # Slightly higher for localization learning
   rl:

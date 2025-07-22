@@ -128,27 +128,41 @@ class LocalizationNode(StandardNode):
         file_list = list(task.file_stats.keys())
         
         # Group files by directory to compress representation
+        # Create interleaved representation: structure + inline key terms
         dir_groups = {}
-        for file_path in file_list:
+
+        for file_path in sorted(task.file_stats.keys()):
             if '/' in file_path:
                 dir_name = '/'.join(file_path.split('/')[:-1])
                 file_name = file_path.split('/')[-1]
             else:
-                dir_name = '.'  # root directory
+                dir_name = '.'
                 file_name = file_path
             
             if dir_name not in dir_groups:
                 dir_groups[dir_name] = []
-            dir_groups[dir_name].append(file_name)
-        
-        # Create compressed representation
+            
+            # Get key terms for this file
+            stats = task.file_stats[file_path]
+            top_terms = stats.get('top_terms', [])
+            
+            # Create file entry with optional terms
+            if top_terms:
+                terms_str = ', '.join(top_terms[:6])  # Limit to 6 terms to save tokens
+                file_entry = f"{file_name} ({terms_str})"
+            else:
+                file_entry = file_name
+            
+            dir_groups[dir_name].append(file_entry)
+
+        # Create final representation
         files_text_parts = []
         for dir_name, files in sorted(dir_groups.items()):
             if dir_name == '.':
-                files_text_parts.append(f"Root: {', '.join(sorted(files))}")
+                files_text_parts.append(f"Root: {'; '.join(sorted(files))}")
             else:
-                files_text_parts.append(f"{dir_name}/: {', '.join(sorted(files))}")
-        
+                files_text_parts.append(f"{dir_name}/: {'; '.join(sorted(files))}")
+
         files_text = "\n".join(files_text_parts)
         
         system_message = {
@@ -156,13 +170,17 @@ class LocalizationNode(StandardNode):
             "content": (
                 "You are an expert software engineer tasked with generating BM25 search queries to find "
                 "relevant files in a codebase for fixing a given issue.\n\n"
+                "You will be shown each file in the repository along with its most important/distinctive "
+                "terms (computed using TF-IDF). These terms represent the key concepts, classes, methods, "
+                "and domain-specific vocabulary in each file.\n\n"
                 "Your goal is to create search queries that will rank the most relevant files as highly "
-                "as possible using BM25 keyword matching. BM25 works by matching keywords.\n\n"
+                "as possible using BM25 keyword matching. Focus on terms that appear in the issue "
+                "description and match the key terms of relevant files.\n\n"
                 "You can generate 1-3 queries:\n"
                 "- Use 1 query for simple, focused issues\n"
                 "- Use 2-3 queries for complex issues that might need files with different terminology\n"
                 "- Each additional query has a small cost, so only use multiple queries when beneficial\n\n"
-                "The total retrieval budget is 100 files, split among your queries.\n"
+                "The total retrieval budget is 10 files, split among your queries.\n"
                 "Generate focused BM25 search queries designed to rank the gold standard files "
                 "as highly as possible.\n\n"
                 "Format your response as:\n"
@@ -177,10 +195,12 @@ class LocalizationNode(StandardNode):
         user_message = {
             "role": "user", 
             "content": (
-                f"Repository structure (grouped by directory):\n{files_text}\n\n"
+                f"Repository structure with key terms:\n{files_text}\n\n"
                 f"Issue to analyze and create BM25 search queries for:\n\n"
                 f"{task.problem_statement}\n\n"
-                f"Please analyze this issue and provide optimized BM25 search queries to rank the most relevant files highly."
+                f"Please analyze this issue and the key terms shown for each file. Create optimized BM25 search queries "
+                f"that include terms from the issue description that match the key terms of the most relevant files. "
+                f"Focus on domain-specific identifiers, class names, and technical concepts."
             )
         }
         
