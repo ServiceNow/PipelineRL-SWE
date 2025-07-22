@@ -69,6 +69,8 @@ vllm_config:
     tensor-parallel-size: 1
     pipeline-parallel-size: 1
     generation-config: vllm
+    max-model-len: 131072
+    hf-overrides: '{"rope_scaling":{"factor":4,"original_max_position_embeddings":32768,"type":"yarn","rope_type":"yarn"}}'
 
 world:
   replicas: 1
