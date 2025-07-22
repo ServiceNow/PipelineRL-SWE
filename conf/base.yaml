@@ -11,6 +11,7 @@ finetune:
   output_dir: ${..output_dir}/finetune
   seq_length: 12000
   seq_packing: true
+  seq_parallel: 1
   rl:
     algo: reinforce
     divide_advantage_by_std: false
@@ -53,16 +54,24 @@ preprocess:
   input: actor
   output: training_data
   n_workers: 8
-  raw_queue_size: 8
-  input_queue_size: 32
-  output_queue_size: 32
   chunk_n_groups: 2
-  submit_delay: 0.
+  # queue for loaded raw groups
+  raw_queue_size: 8
+  # queue for processed chunks of multiple groups  
+  input_queue_size: 32
+  # queue for ready chunks for multiple groups
+  output_queue_size: 32
+  # queue for accumulating samples before further processing
+  dataset_buffer_size: 0
+  # ring buffer to replace old samples with new ones when training is slow
+  ring_buffer_size: 128
+  # "virtual" sample queue per lead trainer
+  max_ready_samples_per_lead: 64
   pop_old_data: ${..pop_old_data} 
-  buffer_size: 0
   shared_memory_entry_size: 100000000
 agent:
   max_prompt_length: 15000
+  log_every_n_samples: 128
 llm:
   parameters:
     # changed

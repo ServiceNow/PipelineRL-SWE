@@ -622,7 +622,7 @@ def run_actor_loop(cfg: DictConfig):
     wait_for_environments(cfg)
     trainer_state = TrainerState(exp_path)
     if cfg.debug.mode:
-        trainer_state.propagated_weight_version = 0
+        trainer_state.debug_mode_init()
     else:
         trainer_state.start_listening()
         trainer_state.wait_for_model_version()
