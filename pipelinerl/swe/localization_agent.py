@@ -148,7 +148,7 @@ class LocalizationNode(StandardNode):
             
             # Create file entry with optional terms
             if top_terms:
-                terms_str = ', '.join(top_terms[:6])  # Limit to 6 terms to save tokens
+                terms_str = ', '.join(top_terms[:3])  # Limit to 3 terms to save tokens
                 file_entry = f"{file_name} ({terms_str})"
             else:
                 file_entry = file_name
