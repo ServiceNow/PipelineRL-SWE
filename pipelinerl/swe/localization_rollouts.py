@@ -37,6 +37,10 @@ class LocalizationMetrics(BaseMetrics):
     localization_best_rank: int = 0
     localization_worst_rank: int = 0
     localization_num_queries: int = 0
+    # New recall and precision metrics
+    recall: float = 0.0              # Recall: found_files / gold_files
+    precision: float = 0.0           # Precision: relevant_retrieved / total_retrieved
+    f1_score: float = 0.0            # F1: harmonic mean of precision and recall
 
 
 def calculate_multi_query_mrr(gold_files: List[str], query_results: List[List[Tuple[str, float]]]) -> Tuple[float, Dict]:
@@ -97,6 +101,55 @@ def calculate_multi_query_mrr(gold_files: List[str], query_results: List[List[Tu
     }
     
     return mrr, metadata
+
+
+def calculate_recall_precision(gold_files: List[str], query_results: List[List[Tuple[str, float]]], k: int = 10) -> Tuple[float, float, float]:
+    """
+    Calculate recall, precision, and F1 score for the search results.
+    
+    Args:
+        gold_files: List of gold file paths that should be found
+        query_results: List of query results, where each is a list of (filepath, score) tuples
+        k: Cutoff for precision calculation (default: 10, considers top-k results)
+        
+    Returns:
+        Tuple of (recall, precision, f1_score)
+    """
+    if not gold_files:
+        return 0.0, 0.0, 0.0
+        
+    if not query_results or not any(query_results):
+        return 0.0, 0.0, 0.0
+    
+    # Combine all query results and deduplicate
+    all_results = []
+    for query_result in query_results:
+        all_results.extend(query_result)
+    
+    # Deduplicate, keeping best score per file
+    file_scores = {}
+    for filepath, score in all_results:
+        if filepath not in file_scores or score > file_scores[filepath]:
+            file_scores[filepath] = score
+    
+    # Sort by score and take top-k for precision calculation
+    sorted_files = sorted(file_scores.items(), key=lambda x: x[1], reverse=True)[:k]
+    retrieved_files = [filepath for filepath, _ in sorted_files]
+    
+    # Calculate recall: fraction of relevant items that were retrieved
+    relevant_retrieved = set(gold_files) & set(retrieved_files)
+    recall = len(relevant_retrieved) / len(gold_files) if gold_files else 0.0
+    
+    # Calculate precision: fraction of retrieved items that are relevant
+    precision = len(relevant_retrieved) / len(retrieved_files) if retrieved_files else 0.0
+    
+    # Calculate F1 score: harmonic mean of precision and recall
+    if precision + recall > 0:
+        f1_score = 2 * (precision * recall) / (precision + recall)
+    else:
+        f1_score = 0.0
+    
+    return recall, precision, f1_score
 
 
 def calculate_ndcg_at_k(gold_files: List[str], query_results: List[List[Tuple[str, float]]], k: int = 10) -> float:
@@ -364,6 +417,9 @@ async def generate_localization_rollout(
         # Calculate NDCG@10 for literature comparison
         ndcg_at_10 = calculate_ndcg_at_k(gold_files, all_query_results, k=10)
         
+        # Calculate recall, precision, and F1 score
+        recall, precision, f1_score = calculate_recall_precision(gold_files, all_query_results, k=10)
+        
         # Prepare metrics using the LocalizationMetrics class
         metrics = LocalizationMetrics(
             reward=reward,
@@ -388,6 +444,10 @@ async def generate_localization_rollout(
             localization_best_rank=reward_metadata.get("best_rank", 0),
             localization_worst_rank=reward_metadata.get("worst_rank", 0),
             localization_num_queries=reward_metadata.get("num_queries", 0),
+            # New metrics
+            recall=recall,
+            precision=precision,
+            f1_score=f1_score,
         )
         
         # Return training result
@@ -437,6 +497,9 @@ async def generate_localization_rollout(
             format_penalty=0.0,
             garbage_length=0,
             has_garbage_content=False,
+            recall=0.0,
+            precision=0.0,
+            f1_score=0.0,
         )
         
         return RolloutResult(
