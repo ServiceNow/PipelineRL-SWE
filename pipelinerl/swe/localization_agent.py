@@ -37,6 +37,8 @@ class LocalizationQuery(Action):
     num_queries: int = Field(description="Number of queries to generate (1-3)")
     queries: List[str] = Field(description="List of search queries for BM25")
     reasoning: str = Field(default="", description="The reasoning process used to generate the queries")
+    format_penalty: float = Field(default=0.0, description="Penalty for extra/garbage content in output")
+    garbage_content: str = Field(default="", description="The garbage content that was found")
 
 
 LocalizationStep: TypeAlias = Annotated[
@@ -106,7 +108,33 @@ class LocalizationNode(StandardNode):
             if '<num_queries>' in completion:
                 reasoning = completion.split('<num_queries>')[0].strip()
             
-            yield LocalizationQuery(num_queries=num_queries, queries=queries, reasoning=reasoning)
+            # NEW: Check for garbage content after the last expected tag
+            format_penalty = 0.0
+            garbage_content = ""
+            
+            # Find the position of the last expected tag
+            last_tag_pattern = f'</query_{num_queries}>'
+            last_tag_matches = list(re.finditer(re.escape(last_tag_pattern), completion))
+            
+            if last_tag_matches:
+                last_tag_pos = last_tag_matches[-1].end()
+                
+                # Check what comes after the last expected tag
+                content_after = completion[last_tag_pos:].strip()
+                
+                if content_after:
+                    garbage_content = content_after
+                    format_penalty = 0.5  # Apply -0.5 penalty for garbage content
+                    
+                    logger.info(f"Garbage content detected after last tag: {repr(content_after[:100])}")
+            
+            yield LocalizationQuery(
+                num_queries=num_queries, 
+                queries=queries, 
+                reasoning=reasoning,
+                format_penalty=format_penalty,
+                garbage_content=garbage_content
+            )
             
         except ValueError as e:
             yield LLMOutputParsingFailureAction(
@@ -148,7 +176,7 @@ class LocalizationNode(StandardNode):
             
             # Create file entry with optional terms
             if top_terms:
-                terms_str = ', '.join(top_terms[:3])  # Limit to 3 terms to save tokens
+                terms_str = ', '.join(top_terms[:2])  # Limit to 2 terms to save tokens
                 file_entry = f"{file_name} ({terms_str})"
             else:
                 file_entry = file_name
@@ -183,6 +211,8 @@ class LocalizationNode(StandardNode):
                 "The total retrieval budget is 10 files, split among your queries.\n"
                 "Generate focused BM25 search queries designed to rank the gold standard files "
                 "as highly as possible.\n\n"
+                "IMPORTANT: Your response must end immediately after the last </query_N> tag. "
+                "Any additional content after the final query tag will result in a penalty.\n\n"
                 "Format your response as:\n"
                 "<thinking>[Your reasoning and analysis]</thinking>\n\n"
                 "<num_queries>1, 2, or 3</num_queries>\n\n"
@@ -200,7 +230,8 @@ class LocalizationNode(StandardNode):
                 f"{task.problem_statement}\n\n"
                 f"Please analyze this issue and the key terms shown for each file. Create optimized BM25 search queries "
                 f"that include terms from the issue description that match the key terms of the most relevant files. "
-                f"Focus on domain-specific identifiers, class names, and technical concepts."
+                f"Focus on domain-specific identifiers, class names, and technical concepts. "
+                f"Remember to end your response immediately after the last query tag."
             )
         }
         

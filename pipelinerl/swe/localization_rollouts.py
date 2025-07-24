@@ -27,6 +27,9 @@ class LocalizationMetrics(BaseMetrics):
     prompt_tokens: int
     output_tokens: int
     format_violation: bool
+    format_penalty: float = 0.0      # Track format penalty applied
+    garbage_length: int = 0          # Length of garbage content
+    has_garbage_content: bool = False # Whether garbage content was found
     overflow: int
     localization_num_gold_files: int = 0
     localization_num_found: int = 0
@@ -210,15 +213,19 @@ async def generate_localization_rollout(
         
         latency = time.time() - time_start
         
-        # Extract the queries and LLM call from the response
+        # Extract the queries, format penalty, and LLM call from the response
         queries = None
         num_queries = 0
+        format_penalty = 0.0
+        garbage_content = ""
         llm_call = None
         
         for step in new_tape.steps:
             if isinstance(step, LocalizationQuery):
                 queries = step.queries
                 num_queries = step.num_queries
+                format_penalty = step.format_penalty
+                garbage_content = step.garbage_content
             # Get the LLM call for training data
             if (
                 hasattr(step, 'metadata') and 
@@ -240,9 +247,9 @@ async def generate_localization_rollout(
         
         # Determine reward based on whether we have valid queries
         if queries is None or not queries:
-            logger.warning("No localization queries found - treating as format violation")
-            reward = -0.1  # Negative reward for format violation
-            reward_metadata = {"error": "No queries found - format violation"}
+            logger.warning("No localization queries found - treating as complete format violation")
+            reward = -1.0  # Increased penalty for complete format violation
+            reward_metadata = {"error": "No queries found - complete format violation"}
             all_query_results = []
             format_violation = True
         else:
@@ -282,6 +289,16 @@ async def generate_localization_rollout(
                     reward_metadata["query_penalty"] = query_penalty
             
             format_violation = False
+            
+        # Apply format penalty for garbage content (even if queries were successfully extracted)
+        original_reward = reward
+        if format_penalty > 0:
+            reward = reward - format_penalty  # Apply -0.5 penalty for garbage
+            reward_metadata["format_penalty"] = format_penalty
+            reward_metadata["original_reward"] = original_reward
+            reward_metadata["garbage_content"] = garbage_content[:200]  # Truncate for logging
+            
+            logger.info(f"Applied format penalty: {format_penalty}, original reward: {original_reward}, final reward: {reward}")
             
         # Apply discount factor if configured
         if hasattr(cfg.actor, 'discount_factor'):
@@ -342,6 +359,9 @@ async def generate_localization_rollout(
             prompt_tokens=llm_call.prompt_length_tokens,
             output_tokens=llm_call.output_length_tokens,
             format_violation=format_violation,
+            format_penalty=format_penalty,
+            garbage_length=len(garbage_content),
+            has_garbage_content=len(garbage_content) > 0,
             localization_num_gold_files=reward_metadata.get("num_gold_files", 0),
             localization_num_found=reward_metadata.get("num_found", 0),
             localization_best_rank=reward_metadata.get("best_rank", 0),
@@ -393,6 +413,9 @@ async def generate_localization_rollout(
             prompt_tokens=0,
             output_tokens=0,
             format_violation=False,
+            format_penalty=0.0,
+            garbage_length=0,
+            has_garbage_content=False,
         )
         
         return RolloutResult(
