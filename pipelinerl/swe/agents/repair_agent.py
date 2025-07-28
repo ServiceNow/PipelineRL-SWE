@@ -19,8 +19,8 @@ from tapeagents.nodes import StandardNode
 logger = logging.getLogger(__name__)
 
 
-class SWETask(Observation):
-    kind: Literal["swe_task"] = "swe_task"
+class RepairTask(Observation):
+    kind: Literal["repair_task"] = "repair_task"
     problem_statement: str
     file_contents: dict[str, str]  # map of file path to content
     template: str = Field(
@@ -88,10 +88,10 @@ SWERepairStep: TypeAlias = Annotated[
     Field(discriminator="kind"),
 ]
 
-SWERepairTape = Tape[
+RepairTape = Tape[
     None,
     Union[
-        SWETask,
+        RepairTask,
         SearchReplaceResponse,
         LLMOutputParsingFailureAction,
     ],
@@ -232,7 +232,7 @@ class RepairNode(StandardNode):
 
 
 #### Agent and Environment ####
-class SWERepairAgent(Agent):
+class RepairAgent(Agent):
     @classmethod
     def create(cls, system_prompt: str = None, llm: LLM = None, max_prompt_length: int = 16000):
         # Handle the llm parameter correctly for the Agent base class

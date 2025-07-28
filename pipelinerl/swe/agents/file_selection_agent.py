@@ -1,0 +1,265 @@
+import ast
+import logging
+import re
+from typing import Annotated, Any, Generator, Literal, TypeAlias, Union, List, Dict, Optional
+
+from pydantic import Field
+
+from tapeagents.agent import Agent
+from tapeagents.core import (
+    LLMOutputParsingFailureAction,
+    Observation,
+    Prompt,
+    Step,
+    Tape,
+    Action,
+)
+from tapeagents.llms import LLM
+from tapeagents.nodes import StandardNode
+
+logger = logging.getLogger(__name__)
+
+
+class FileSelectionTask(Observation):
+    """Task step containing the problem statement and candidate files for selection."""
+    kind: Literal["file_selection_task"] = "file_selection_task"
+    problem_statement: str = Field(description="The issue description to select relevant files for")
+    candidate_files: Dict[str, Dict] = Field(description="Top-k files with enriched context")
+    
+    def llm_view(self, indent: int | None = 2) -> str:
+        files_text = f"Issue to analyze: {self.problem_statement}\n\n"
+        files_text += "Candidate files to choose from:\n\n"
+        
+        for i, (filepath, context) in enumerate(self.candidate_files.items(), 1):
+            files_text += f"{i}. **{filepath}**\n"
+            
+            # Add summary
+            summary = context.get('summary', '')
+            if summary:
+                files_text += f"   Summary: {summary}\n"
+            
+            # Add function signatures
+            functions = context.get('functions', [])
+            if functions:
+                func_list = ', '.join(functions[:5])  # Limit to 5 functions
+                if len(functions) > 5:
+                    func_list += f" (and {len(functions) - 5} more)"
+                files_text += f"   Functions: {func_list}\n"
+            
+            # Add class definitions
+            classes = context.get('classes', [])
+            if classes:
+                class_list = ', '.join(classes[:3])  # Limit to 3 classes
+                if len(classes) > 3:
+                    class_list += f" (and {len(classes) - 3} more)"
+                files_text += f"   Classes: {class_list}\n"
+            
+            # Add key imports
+            imports = context.get('imports', [])
+            if imports:
+                import_list = ', '.join(imports[:3])  # Limit to 3 imports
+                if len(imports) > 3:
+                    import_list += f" (and {len(imports) - 3} more)"
+                files_text += f"   Key imports: {import_list}\n"
+            
+            files_text += "\n"
+        
+        return files_text
+
+
+class FileSelectionResponse(Action):
+    """Action containing selected files and reasoning."""
+    kind: Literal["file_selection_response"] = "file_selection_response"
+    num_selected: int = Field(description="Number of files selected (1-3)")
+    selected_files: List[str] = Field(description="List of selected file paths")
+    reasoning: str = Field(default="", description="The reasoning process used for selection")
+    format_penalty: float = Field(default=0.0, description="Penalty for extra/garbage content in output")
+    garbage_content: str = Field(default="", description="The garbage content that was found")
+
+
+FileSelectionStep: TypeAlias = Annotated[
+    FileSelectionResponse,
+    Field(discriminator="kind"),
+]
+
+FileSelectionTape = Tape[
+    None,
+    Union[
+        FileSelectionTask,
+        FileSelectionResponse,
+        LLMOutputParsingFailureAction,
+    ],
+]
+
+
+class FileSelectionNode(StandardNode):
+    """Node that selects 1-3 most relevant files from candidates."""
+    
+    max_prompt_length: int = 16000  # Larger for file content analysis
+    
+    def parse_completion(self, completion: str) -> Generator[Step, None, None]:
+        """Parse the LLM completion to extract selected files."""
+        try:
+            # Look for num_selected
+            num_match = re.search(r'<num_selected>(\d+)</num_selected>', completion)
+            if not num_match:
+                yield LLMOutputParsingFailureAction(
+                    error="Missing <num_selected> tags", 
+                    llm_output=completion
+                )
+                return
+                
+            num_selected = int(num_match.group(1))
+            if num_selected < 1 or num_selected > 3:
+                yield LLMOutputParsingFailureAction(
+                    error=f"Invalid num_selected: {num_selected} (must be 1-3)", 
+                    llm_output=completion
+                )
+                return
+            
+            # Extract selected files
+            selected_files = []
+            for i in range(1, num_selected + 1):
+                file_pattern = f'<file_{i}>(.*?)</file_{i}>'
+                file_match = re.search(file_pattern, completion, re.DOTALL)
+                if not file_match:
+                    yield LLMOutputParsingFailureAction(
+                        error=f"Missing <file_{i}> tags", 
+                        llm_output=completion
+                    )
+                    return
+                
+                filepath = file_match.group(1).strip()
+                if not filepath:
+                    yield LLMOutputParsingFailureAction(
+                        error=f"Empty filepath found in file_{i} tags", 
+                        llm_output=completion
+                    )
+                    return
+                
+                selected_files.append(filepath)
+            
+            # Extract reasoning (everything before the num_selected tags)
+            reasoning = ""
+            if '<num_selected>' in completion:
+                reasoning = completion.split('<num_selected>')[0].strip()
+            
+            # Check for garbage content after the last expected tag
+            format_penalty = 0.0
+            garbage_content = ""
+            
+            last_tag_pattern = f'</file_{num_selected}>'
+            last_tag_matches = list(re.finditer(re.escape(last_tag_pattern), completion))
+            
+            if last_tag_matches:
+                last_tag_pos = last_tag_matches[-1].end()
+                content_after = completion[last_tag_pos:].strip()
+                
+                if content_after:
+                    garbage_content = content_after
+                    format_penalty = 0.5  # Apply -0.5 penalty for garbage content
+                    logger.info(f"Garbage content detected after last tag: {repr(content_after[:100])}")
+            
+            yield FileSelectionResponse(
+                num_selected=num_selected,
+                selected_files=selected_files,
+                reasoning=reasoning,
+                format_penalty=format_penalty,
+                garbage_content=garbage_content
+            )
+            
+        except ValueError as e:
+            yield LLMOutputParsingFailureAction(
+                error=f"Invalid number format in num_selected: {e}", 
+                llm_output=completion
+            )
+        except Exception as e:
+            logger.info(f"Failed to parse file selection response: {completion}\n\nError: {e}")
+            yield LLMOutputParsingFailureAction(
+                error=f"Failed to parse file selection response: {e}", 
+                llm_output=completion
+            )
+
+    def make_prompt(self, agent: Any, tape: Tape) -> Prompt:
+        """Create a prompt for the model to select relevant files."""
+        task = tape.steps[0]
+        assert isinstance(task, FileSelectionTask), f"Expected FileSelectionTask, got {task.__class__.__name__}"
+        
+        system_message = {
+            "role": "system",
+            "content": (
+                "You are an expert software engineer tasked with selecting the most relevant files "
+                "for fixing a given issue. You will be shown candidate files that were identified "
+                "through initial search, along with their key components (functions, classes, imports).\n\n"
+                "Your goal is to select 1-3 files that are most likely to contain the bug or need "
+                "modification to fix the issue. Consider:\n"
+                "- Which files contain the specific functionality mentioned in the issue\n"
+                "- Which files are most likely to contain the root cause of the problem\n"
+                "- Which files would need to be modified to implement the fix\n\n"
+                "Selection guidelines:\n"
+                "- Use 1 file for simple, localized issues\n"
+                "- Use 2-3 files for issues spanning multiple components or requiring coordination\n"
+                "- Prefer files that directly implement the problematic functionality\n"
+                "- Consider dependencies and relationships between files\n\n"
+                "IMPORTANT: Your response must end immediately after the last </file_N> tag. "
+                "Any additional content after the final file tag will result in a penalty.\n\n"
+                "Format your response as:\n"
+                "<thinking>[Your analysis of each candidate file and reasoning for selection]</thinking>\n\n"
+                "<num_selected>1, 2, or 3</num_selected>\n\n"
+                "<file_1>full/path/to/first/selected/file.py</file_1>\n"
+                "<file_2>full/path/to/second/selected/file.py (if num_selected > 1)</file_2>\n"
+                "<file_3>full/path/to/third/selected/file.py (if num_selected > 2)</file_3>"
+            )
+        }
+        
+        user_message = {
+            "role": "user", 
+            "content": task.llm_view()
+        }
+        
+        messages = [system_message, user_message]
+        
+        # Apply token limit if we have a tokenizer
+        prompt_token_ids = None
+        if hasattr(agent, 'llm') and hasattr(agent.llm, 'tokenizer') and agent.llm.tokenizer:
+            prompt_token_ids = agent.llm.tokenizer.apply_chat_template(
+                messages, add_special_tokens=True, add_generation_prompt=True
+            )
+            prompt_token_ids = prompt_token_ids[-self.max_prompt_length:]
+            
+        return Prompt(messages=messages, token_ids=prompt_token_ids)
+
+
+class FileSelectionAgent(Agent):
+    """Agent for selecting relevant files from candidates."""
+    
+    @classmethod
+    def create(cls, system_prompt: str = None, llm: LLM = None, max_prompt_length: int = 16000):
+        """Create a FileSelectionAgent.
+        
+        Args:
+            system_prompt: Optional system prompt override
+            llm: The LLM to use
+            max_prompt_length: Maximum prompt length in tokens
+        """
+        # Handle the llm parameter correctly for the Agent base class
+        llms = llm
+        if llm is not None and not isinstance(llm, dict):
+            llms = {"default": llm}
+            
+        agent = super().create(
+            llms=llms,
+            nodes=[
+                FileSelectionNode(
+                    name="file_selection",
+                    agent_step_cls=FileSelectionStep,
+                    system_prompt=system_prompt if system_prompt else "",
+                    max_prompt_length=max_prompt_length,
+                ),
+            ],
+            max_iterations=1,  # Single step agent
+        )
+        agent.store_llm_calls = True
+        if llm:
+            agent.llm.load_tokenizer()
+        return agent
