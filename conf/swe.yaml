@@ -1,34 +1,64 @@
 defaults:
-    - base
-    - _self_
-finetune:
-    seq_length: 16000
-    gradient_accumulation_passes: 1024
-llm:
-    parameters:
-        max_tokens: 1000
-test_llm:
-    parameters:
-        max_tokens: 1000
+  - base
+  - _self_
+
+# Override the rollout policy for localization
 actor:
-    rollout_policy: pipelinerl.swe.rollouts.generate_swe_rollout
-environment: null
+  rollout_policy: pipelinerl.swe.localization_rollouts.generate_unified_swe_rollout
+  log_each_n_secs: 10
+  llm_max_rollouts: 64
+  rollout_workers: 1
+  discount_factor: 1
+  task_template: "{task}"
+  throughput_window_size: 50
+
+# Use SWE dataset loader
 dataset_loader: pipelinerl.swe.load_datasets.load_local_swe_dataset
-dataset_loader_params:
-    dataset_path: /mnt/llmd/data/swegym/ds
-dataset_path: /mnt/llmd/data/swegym/ds
 train_dataset_names:
-    - swegym
+  - swegym
 test_dataset_names:
-    - swegym
-swe_preprocessor_args:
-  dataset_path: /mnt/llmd/data/swebench_lite/ds
-  repo_path: /mnt/llmd/data/swebench_lite/repos
-  min_token_threshold: 10
-  max_token_threshold: 10000
-  num_map_processes: 8
-  tokenizer_model: Qwen/Qwen2.5-Coder-7B-Instruct
-  force_reprocess: false
-  hf_dataset_name: princeton-nlp/SWE-bench_Lite
-  hf_split_name: test
+  - swebench_lite
+
+# Localization-specific settings
+localization_agent:
+  max_prompt_length: 48000
+selection_agent:
+  max_prompt_length: 48000
+repair_agent:
+  max_prompt_length: 48000
+
+# Finetune settings optimized for localization
+finetune:
+  seq_length: 50000  # Shorter sequences for query generation
+  gradient_accumulation_passes: 512  # Adjust based on your setup
+  rl:
+    algo: reinforce  # Simple REINFORCE for localization
+    use_advantages: true
+    kl_coef: 0.0
+    entropy_bonus: 0.0
+    temperature: ${...llm.parameters.temperature}
+
+# LLM settings for localization
+llm:
+  parameters:
+    max_tokens: 2000  # Short outputs for search queries
+    temperature: 1.0
+
+test_llm:
+  parameters:
+    max_tokens: 2000
+    temperature: 0.8  # Slightly lower for more focused queries during eval
+
+# Environment is not needed for localization
+environment: null
+
+# SWE-specific dataset parameters
+dataset_loader_params:
+  dataset_path: /mnt/llmd/data/swegym/ds
+  test_dataset_path: /mnt/llmd/data/swebench_lite/ds
+
+# Model path - use a coding-focused model if available
 model_path: Qwen/Qwen2.5-Coder-7B-Instruct
+
+# Evaluation settings
+eval_every_n_versions: 1000
