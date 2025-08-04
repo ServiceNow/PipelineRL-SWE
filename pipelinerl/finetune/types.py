@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Any, Dict, List, Literal, TypeAlias, Union
+import logging
 
 import torch
 from pydantic import BaseModel, ConfigDict, field_validator
@@ -8,6 +9,7 @@ import numpy as np
 
 ModelClass: TypeAlias = Literal["causal-language-modeling", "seq2seq-language-modeling", "vision2seq-language-modeling"]
 
+logger = logging.getLogger(__name__)
 
 class DataPartArgs(BaseModel):
     path: str
