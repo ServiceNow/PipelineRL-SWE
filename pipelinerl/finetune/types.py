@@ -97,15 +97,42 @@ class PipelineBatchEncoding(BaseModel):
     # TODO: am i needed?
     @field_validator('rewards', 'advantages', 'ref_logprobs', 'old_logprobs', 'group_tokens', 'num_labels', 'overflow', 'pixel_values', mode='before')
     @classmethod
-    def convert_to_float_tensor(cls, v: List[float] | torch.Tensor | None) -> torch.FloatTensor | None:
+    def convert_to_float_tensor(cls, v: List[float] | torch.Tensor | None, info) -> torch.FloatTensor | None:
         """Handle initialization of float tensors from different types."""
+        field_name = info.field_name if hasattr(info, 'field_name') else "unknown_field"
+        
+        # Debug logging
         if v is None:
+            logger.debug(f"Field '{field_name}': received None, returning None")
             return None
+        
+        logger.debug(f"Field '{field_name}': received type {type(v)}, value: {v}")
+        
         if isinstance(v, torch.Tensor):
+            logger.debug(f"Field '{field_name}': converting tensor to float")
             return v.float()
+        
         if isinstance(v, list) or isinstance(v, np.ndarray):
+            logger.debug(f"Field '{field_name}': converting {type(v)} with {len(v)} elements to tensor")
             return torch.tensor(v, dtype=torch.float)
-        raise ValueError(f"Unsupported type for float tensor: {type(v)}")
+        
+        # This is where the error is happening - log the problematic case
+        logger.error(f"Field '{field_name}': UNSUPPORTED TYPE {type(v)} with value: {repr(v)}")
+        logger.error(f"Field '{field_name}': Expected list/array/tensor, got single value of type {type(v)}")
+        
+        # You have a few options here:
+        
+        # Option 1: Raise the original error with more context
+        raise ValueError(f"Field '{field_name}': Unsupported type for float tensor: {type(v)}, value: {repr(v)}")
+        
+        # Option 2: Try to handle single values gracefully (if that makes sense for your use case)
+        # if isinstance(v, (int, float)):
+        #     logger.warning(f"Field '{field_name}': Converting single {type(v)} value to tensor: {v}")
+        #     return torch.tensor([v], dtype=torch.float)
+        
+        # Option 3: Return a default and log the issue
+        # logger.warning(f"Field '{field_name}': Using empty tensor as fallback for unsupported type {type(v)}")
+        # return torch.tensor([], dtype=torch.float)
     
     def to_device(self, device: Union[str, torch.device]) -> 'PipelineBatchEncoding':
         """Move all tensors to the specified device and return updated instance."""
