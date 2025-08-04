@@ -159,7 +159,7 @@ async def schedule_rollouts(
                 sample.metadata["model_version"] = model_version
                 sample.metadata["rollout_index"] = rollout_index
                 sample.metadata["step_index"] = step_index
-                sample.group_id = full_group_id
+                sample.group_id = f"{full_group_id}_{step_index}"
             group_rollouts[group_id].append(rollout_result)
             if len(group_rollouts[group_id]) == attempts:
                 # This is blocking call, but there's just one other thread reading from this queue.
