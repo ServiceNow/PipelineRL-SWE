@@ -219,7 +219,7 @@ async def run_localization_stage(
             training_text.labels = labels
             training_text.logprobs = [lp.logprob for lp in llm_call.logprobs if lp.generated]
         
-        training_text.reward = reward or 0.0
+        training_text.reward = reward if (reward is not None and not math.isnan(reward)) else 0.0
         base_parent_id = new_tape.metadata.parent_id if new_tape.metadata else "none"
         base_group_id = f"{base_parent_id}_{int(time.time() * 1000000)}_{id(new_tape)}"
         training_text.group_id = f"{base_group_id}_loc"
@@ -362,7 +362,7 @@ async def run_file_selection_stage(
             training_text.labels = labels
             training_text.logprobs = [lp.logprob for lp in llm_call.logprobs if lp.generated]
         
-        training_text.reward = reward or 0.0
+        training_text.reward = reward if (reward is not None and not math.isnan(reward)) else 0.0
         base_parent_id = new_tape.metadata.parent_id if new_tape.metadata else "none"
         base_group_id = f"{base_parent_id}_{int(time.time() * 1000000)}_{id(new_tape)}"
         training_text.group_id = f"{base_group_id}_sel"
@@ -486,7 +486,7 @@ async def run_repair_stage(
         
         training_text.input_ids = input_ids
         training_text.labels = labels
-        training_text.reward = reward or 0.0
+        training_text.reward = reward if (reward is not None and not math.isnan(reward)) else 0.0
         training_text.logprobs = [lp.logprob for lp in llm_call.logprobs if lp.generated]
         base_parent_id = new_tape.metadata.parent_id if new_tape.metadata else "none"
         base_group_id = f"{base_parent_id}_{int(time.time() * 1000000)}_{id(new_tape)}"
