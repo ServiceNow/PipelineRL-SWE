@@ -220,7 +220,7 @@ async def run_localization_stage(
             training_text.logprobs = [lp.logprob for lp in llm_call.logprobs if lp.generated]
         
         training_text.reward = reward
-        training_text.group_id = new_tape.metadata.parent_id if new_tape.metadata else None
+        # training_text.group_id = new_tape.metadata.parent_id if new_tape.metadata else None
         
         return {
             'training_text': training_text,
@@ -360,7 +360,7 @@ async def run_file_selection_stage(
             training_text.logprobs = [lp.logprob for lp in llm_call.logprobs if lp.generated]
         
         training_text.reward = reward
-        training_text.group_id = new_tape.metadata.parent_id if new_tape.metadata else None
+        # training_text.group_id = new_tape.metadata.parent_id if new_tape.metadata else None
         
         return {
             'training_text': training_text,
@@ -483,7 +483,7 @@ async def run_repair_stage(
         training_text.labels = labels
         training_text.reward = reward
         training_text.logprobs = [lp.logprob for lp in llm_call.logprobs if lp.generated]
-        training_text.group_id = new_tape.metadata.parent_id if new_tape.metadata else None
+        # training_text.group_id = new_tape.metadata.parent_id if new_tape.metadata else None
         
         # Calculate success metric
         success_threshold = getattr(cfg.actor, 'success_threshold', 0.8)
