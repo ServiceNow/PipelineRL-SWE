@@ -71,6 +71,7 @@ class FileContextEnricher:
             File content as string, or None if error
         """
         if not os.path.exists(repo_path) or not os.path.exists(os.path.join(repo_path, '.git')):
+            logger.error(f"Repository path {repo_path} does not exist or is not a git repository")
             return None
 
         try:

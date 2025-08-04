@@ -19,13 +19,14 @@ from pipelinerl.async_llm import make_training_text
 from tapeagents.llms.trainable import TrainableLLM
 from tapeagents.core import LLMCall
 
-from agents.localization_agent import LocalizationAgent, LocalizationTask, LocalizationTape, LocalizationQuery
-from agents.file_selection_agent import FileSelectionAgent, FileSelectionTask, FileSelectionTape, FileSelectionResponse
-from utils.file_context_enricher import FileContextEnricher
-from agents.repair_agent import RepairAgent, RepairTask, RepairTape, SearchReplaceResponse
-from utils.bm25_searcher import BM25Searcher
-from utils.repair_utils import calculate_precise_reward
-from metrics import UnifiedMetrics
+from pipelinerl.swe.agents.localization_agent import LocalizationAgent, LocalizationTask, LocalizationTape, LocalizationQuery
+from pipelinerl.swe.agents.file_selection_agent import FileSelectionAgent, FileSelectionTask, FileSelectionTape, FileSelectionResponse
+from pipelinerl.swe.utils.file_context_enricher import FileContextEnricher
+from pipelinerl.swe.agents.repair_agent import RepairAgent, RepairTask, RepairTape, SearchReplaceResponse
+from pipelinerl.swe.utils.bm25_searcher import BM25Searcher
+from pipelinerl.swe.utils.repair_utils import calculate_precise_reward
+from pipelinerl.swe.utils.localization_utils import parse_patch_for_gold_files, calculate_multi_query_mrr
+from pipelinerl.swe.metrics import UnifiedMetrics
 
 logger = logging.getLogger(__name__)
 
@@ -154,10 +155,38 @@ async def run_localization_stage(
             sorted_files = sorted(file_scores.items(), key=lambda x: x[1], reverse=True)
             top_files = [filepath for filepath, _ in sorted_files[:10]]
             
-            # Calculate reward (MRR) using gold files
-            from .localization_rollouts import parse_patch_for_gold_files, calculate_multi_query_mrr
+            # Get oracle files for injection and reward calculation
             gold_files = parse_patch_for_gold_files(problem.get("patch", ""))
+            
+            # Calculate reward (MRR) using gold files - based on original results
             reward, reward_metadata = calculate_multi_query_mrr(gold_files, all_query_results)
+            
+            # INJECT MISSING ORACLE FILES into top_files for downstream stages
+            # Prioritize oracle files to ensure they make it into the final top 10
+            top_files_set = set(top_files)
+            injected_files = []
+            for gold_file in gold_files:
+                if gold_file not in top_files_set and gold_file in file_stats:
+                    injected_files.append(gold_file)
+                    logger.info(f"Injected oracle file into top_files: {gold_file}")
+            
+            # Combine: oracle files first, then original results, then truncate to 10
+            if injected_files:
+                # Put injected oracle files at the beginning
+                remaining_slots = 10 - len(injected_files)
+                if remaining_slots > 0:
+                    # Fill remaining slots with original results (excluding any that are already oracle files)
+                    original_non_oracle = [f for f in top_files if f not in set(gold_files)]
+                    top_files = injected_files + original_non_oracle[:remaining_slots]
+                else:
+                    # If we have too many oracle files, just use the first 10 oracle files
+                    top_files = injected_files[:10]
+            # If no injected files, keep original top_files as is (already limited to 10)
+            
+            # Calculate localization recall for metrics
+            total_gold_files = len(gold_files)
+            found_gold_files = len(set(top_files) & set(gold_files))
+            localization_recall = found_gold_files / total_gold_files if total_gold_files > 0 else 1.0
             
             # Apply format penalty
             if format_penalty > 0:
@@ -165,6 +194,7 @@ async def run_localization_stage(
             
             metrics_dict = reward_metadata
             metrics_dict["mrr"] = reward
+            metrics_dict["localization_recall"] = localization_recall
             metrics_dict["format_penalty"] = format_penalty
             
         else:
@@ -235,7 +265,7 @@ async def run_file_selection_stage(
         session: HTTP session for async requests
     
     Returns:
-        Dictionary with training_text, metrics, selected_files, etc.
+        Dictionary with training_text, metrics, selected_files, files_for_repair, etc.
     """
     # Create file selection agent
     agent = FileSelectionAgent.create(
@@ -260,13 +290,11 @@ async def run_file_selection_stage(
         
         # Extract the selected files and format penalty from the response
         selected_files = []
-        num_selected = 0
         format_penalty = 0.0
         
         for step in new_tape.steps:
             if isinstance(step, FileSelectionResponse):
                 selected_files = step.selected_files
-                num_selected = step.num_selected
                 format_penalty = step.format_penalty
                 break
         
@@ -275,7 +303,6 @@ async def run_file_selection_stage(
             llm_call = LLMCall(**llm_call)
         
         # Calculate reward based on selection accuracy
-        from .localization_rollouts import parse_patch_for_gold_files
         gold_files = parse_patch_for_gold_files(problem.get("patch", ""))
         
         if not selected_files:
@@ -285,21 +312,13 @@ async def run_file_selection_stage(
             # Calculate selection metrics
             if gold_files:
                 relevant_selected = set(selected_files) & set(gold_files)
-                selection_accuracy = len(relevant_selected) / len(gold_files)
                 selection_precision = len(relevant_selected) / len(selected_files) if selected_files else 0
                 selection_recall = len(relevant_selected) / len(gold_files) if gold_files else 0
                 
-                if selection_precision + selection_recall > 0:
-                    selection_f1 = 2 * (selection_precision * selection_recall) / (selection_precision + selection_recall)
-                else:
-                    selection_f1 = 0.0
-                
-                reward = selection_accuracy
+                reward = selection_recall  # Use recall as the primary reward
                 metrics_dict = {
-                    "selection_accuracy": selection_accuracy,
                     "selection_precision": selection_precision,
                     "selection_recall": selection_recall,
-                    "selection_f1": selection_f1,
                     "gold_files": gold_files,
                     "selected_files": selected_files,
                 }
@@ -311,6 +330,16 @@ async def run_file_selection_stage(
         if format_penalty > 0:
             reward = reward - format_penalty
             metrics_dict["format_penalty"] = format_penalty
+        
+        # FORCE ORACLE FILES for repair if they weren't selected
+        selected_files_set = set(selected_files)
+        missing_gold = [f for f in gold_files if f not in selected_files_set]
+        
+        if missing_gold:
+            logger.info(f"Forcing oracle files for repair: {missing_gold}")
+            files_for_repair = selected_files + missing_gold
+        else:
+            files_for_repair = selected_files
         
         # Apply discount factor if configured
         if hasattr(cfg.actor, 'discount_factor'):
@@ -335,7 +364,8 @@ async def run_file_selection_stage(
         
         return {
             'training_text': training_text,
-            'selected_files': selected_files,
+            'selected_files': selected_files,  # Original selection for metrics
+            'files_for_repair': files_for_repair,  # What actually goes to repair
             'metrics': metrics_dict,
             'latency': latency,
             'prompt_tokens': llm_call.prompt_length_tokens,
@@ -350,6 +380,7 @@ async def run_file_selection_stage(
         return {
             'training_text': None,
             'selected_files': [],
+            'files_for_repair': [],
             'metrics': {"error": str(e)},
             'latency': latency,
             'prompt_tokens': 0,
@@ -432,7 +463,7 @@ async def run_repair_stage(
             )
         else:
             reward = -1.0
-            reward_metadata = {"format_error": "No edits found"}
+            reward_metadata = {"format_error": True}
         
         # Apply discount factor if configured
         if hasattr(cfg.actor, 'discount_factor'):
@@ -492,12 +523,11 @@ async def run_repair_stage(
 
 def get_oracle_files_from_patch(patch: str, max_files: int = 10) -> List[str]:
     """Get oracle files from patch, limited to max_files."""
-    from .localization_rollouts import parse_patch_for_gold_files
     oracle_files = parse_patch_for_gold_files(patch)
     return oracle_files[:max_files]
 
 
-async def unified_rollout(
+async def generate_unified_swe_rollout(
     cfg: DictConfig,
     llm: TrainableLLM,
     problem: dict,
@@ -530,23 +560,30 @@ async def unified_rollout(
     
     # Initialize file context enricher
     enricher = FileContextEnricher()
-    
+    dataset = problem['dataset']
+
+    if dataset == 'swegym':
+        base_repo_path = cfg.swe.get('repo_path_train', '/mnt/llmd/data/swegym/repos')
+    elif dataset == 'swebench_lite':
+        base_repo_path = cfg.swe.get('repo_path_test', '/mnt/llmd/data/swebench_lite/repos')
+
     try:
         # STEP 1: Coarse Localization (repo -> top 10 files)
         top_files = []
-        if cfg.training.get('enable_localization', False) or cfg.training.get('run_localization', False):
+        if cfg.swe.get('enable_localization', False) or cfg.swe.get('run_localization', False):
             logger.info("Running localization stage...")
             loc_result = await run_localization_stage(cfg, llm, problem, session)
             
-            if cfg.training.get('enable_localization', False) and loc_result['training_text']:
+            if cfg.swe.get('enable_localization', False) and loc_result['training_text']:
                 training_texts.append(loc_result['training_text'])
             
             # Copy localization metrics
             loc_metrics = loc_result['metrics']
-            metrics.localization_mrr = loc_metrics.get('mrr')
-            metrics.localization_num_queries = loc_metrics.get('num_queries')
+            metrics.localization_mrr = loc_metrics.get('mrr', 0.0)
+            metrics.localization_ndcg = loc_metrics.get('ndcg', 0.0)
+            metrics.localization_num_queries = loc_metrics.get('num_queries', 0)
             metrics.localization_format_penalty = loc_metrics.get('format_penalty', 0.0)
-            metrics.localization_format_violation = loc_metrics.get('format_penalty', 0.0) > 0
+            metrics.localization_recall = loc_metrics.get('localization_recall', 0.0)
             
             total_latency += loc_result['latency']
             all_prompt_tokens.append(loc_result['prompt_tokens'])
@@ -554,8 +591,8 @@ async def unified_rollout(
             
             top_files = loc_result['top_files']
             
-            if not top_files:  # Fallback if localization fails
-                logger.warning("Localization failed, using oracle files")
+            if not top_files:  # Fallback if localization fails completely
+                logger.warning("Localization failed completely, using oracle files")
                 top_files = get_oracle_files_from_patch(problem.get("patch", ""), max_files=10)
         else:
             logger.info("Skipping localization, using oracle files")
@@ -563,14 +600,17 @@ async def unified_rollout(
         
         # STEP 2: Fine Selection (top 10 -> 1-3 files)
         selected_files = []
+        files_for_repair = []
         enriched_context = {}
         
-        if cfg.training.get('enable_file_selection', False) or cfg.training.get('run_file_selection', False):
+        if cfg.swe.get('enable_file_selection', False) or cfg.swe.get('run_file_selection', False):
             logger.info("Running file selection stage...")
             
             if top_files:
+                logger.info(f"Top files for selection: {top_files}")
                 # Enrich the top files with detailed context
-                repo_path = Path(problem.get('repo_path', ''))
+                repo_path = Path(base_repo_path) / Path(problem.get('repo', '').replace("/", "_"))
+                logger.info(f"Enriching files in repo: {repo_path}")
                 base_commit = problem.get('base_commit', '')
                 
                 enriched_context = enricher.enrich_files_on_demand(
@@ -582,21 +622,19 @@ async def unified_rollout(
                         cfg, llm, problem, enriched_context, session
                     )
                     
-                    if cfg.training.get('enable_file_selection', False) and selection_result['training_text']:
+                    if cfg.swe.get('enable_file_selection', False) and selection_result['training_text']:
                         training_texts.append(selection_result['training_text'])
                     
-                    # Extract selection metrics
+                    # Extract selection metrics and files
                     selected_files = selection_result['selected_files']
-                    sel_metrics = selection_result['metrics']
+                    files_for_repair = selection_result.get('files_for_repair', selected_files)
+                    logger.info(f"Selected files: {selected_files}")
+                    logger.info(f"Files for repair: {files_for_repair}")
                     
-                    metrics.selection_num_candidates = len(enriched_context)
-                    metrics.selection_num_selected = len(selected_files)
-                    metrics.selection_accuracy = sel_metrics.get('selection_accuracy')
-                    metrics.selection_precision = sel_metrics.get('selection_precision')
-                    metrics.selection_recall = sel_metrics.get('selection_recall')
-                    metrics.selection_f1_score = sel_metrics.get('selection_f1')
+                    sel_metrics = selection_result['metrics']
+                    metrics.selection_precision = sel_metrics.get('selection_precision', 0.0)
+                    metrics.selection_recall = sel_metrics.get('selection_recall', 0.0)
                     metrics.selection_format_penalty = sel_metrics.get('format_penalty', 0.0)
-                    metrics.selection_format_violation = sel_metrics.get('format_penalty', 0.0) > 0
                     
                     total_latency += selection_result['latency']
                     all_prompt_tokens.append(selection_result['prompt_tokens'])
@@ -604,28 +642,31 @@ async def unified_rollout(
                 else:
                     logger.warning("Failed to enrich file context, using top 3 files")
                     selected_files = top_files[:3]
+                    files_for_repair = selected_files
             else:
                 logger.warning("No top files available for selection")
                 selected_files = []
+                files_for_repair = []
         else:
             logger.info("Skipping file selection, using top 3 files")
             selected_files = top_files[:3]
+            files_for_repair = selected_files
         
         # Ensure we have files for repair
-        if not selected_files:
-            logger.warning("No files selected, using all oracle files for repair")
-            selected_files = get_oracle_files_from_patch(problem.get("patch", ""))
+        if not files_for_repair:
+            logger.warning("No files for repair, using all oracle files")
+            files_for_repair = get_oracle_files_from_patch(problem.get("patch", ""))
         
-        # STEP 3: Repair (1-3 files -> patch)
-        if cfg.training.get('enable_repair', False) or cfg.training.get('run_repair', False):
+        # STEP 3: Repair (files_for_repair -> patch)
+        if cfg.swe.get('enable_repair', False) or cfg.swe.get('run_repair', False):
             logger.info("Running repair stage...")
             
-            # Prepare file contents for repair
+            # Prepare file contents for repair using files_for_repair
             if enriched_context:
                 # Use enriched context if available
                 selected_file_contents = {
                     filepath: enriched_context[filepath]['content'] 
-                    for filepath in selected_files 
+                    for filepath in files_for_repair 
                     if filepath in enriched_context
                 }
             else:
@@ -633,21 +674,20 @@ async def unified_rollout(
                 original_contents = problem.get('file_contents', {})
                 selected_file_contents = {
                     filepath: original_contents[filepath]
-                    for filepath in selected_files
+                    for filepath in files_for_repair
                     if filepath in original_contents
                 }
             
             if selected_file_contents:
                 repair_result = await run_repair_stage(cfg, llm, problem, selected_file_contents, session)
                 
-                if cfg.training.get('enable_repair', False) and repair_result['training_text']:
+                if cfg.swe.get('enable_repair', False) and repair_result['training_text']:
                     training_texts.append(repair_result['training_text'])
                 
                 # Copy repair metrics
                 rep_metrics = repair_result['metrics']
                 metrics.repair_reward = rep_metrics.get('reward')
                 metrics.repair_success = rep_metrics.get('success')
-                metrics.repair_no_edits = rep_metrics.get('no_edits')
                 metrics.repair_format_error = rep_metrics.get('format_error')
                 
                 total_latency += repair_result['latency']
@@ -658,7 +698,7 @@ async def unified_rollout(
                 metrics.repair_reward = -1.0
                 metrics.repair_format_error = True
         
-        # Compute derived metrics
+        # Compute derived metrics (including pipeline success metrics)
         metrics.compute_derived_metrics()
         
         return RolloutResult(
@@ -678,7 +718,8 @@ async def unified_rollout(
         metrics.reward = 0.0
         metrics.success = False
         metrics.no_error = False
-        metrics.pipeline_success = False
+        metrics.file_pipeline_success = False
+        metrics.total_pipeline_success = False
         
         return RolloutResult(
             training_texts=training_texts,  # Return any partial training texts

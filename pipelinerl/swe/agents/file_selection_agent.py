@@ -70,7 +70,6 @@ class FileSelectionTask(Observation):
 class FileSelectionResponse(Action):
     """Action containing selected files and reasoning."""
     kind: Literal["file_selection_response"] = "file_selection_response"
-    num_selected: int = Field(description="Number of files selected (1-3)")
     selected_files: List[str] = Field(description="List of selected file paths")
     reasoning: str = Field(default="", description="The reasoning process used for selection")
     format_penalty: float = Field(default=0.0, description="Penalty for extra/garbage content in output")
@@ -93,66 +92,62 @@ FileSelectionTape = Tape[
 
 
 class FileSelectionNode(StandardNode):
-    """Node that selects 1-3 most relevant files from candidates."""
+    """Node that selects relevant files from candidates."""
     
     max_prompt_length: int = 16000  # Larger for file content analysis
     
     def parse_completion(self, completion: str) -> Generator[Step, None, None]:
         """Parse the LLM completion to extract selected files."""
         try:
-            # Look for num_selected
-            num_match = re.search(r'<num_selected>(\d+)</num_selected>', completion)
-            if not num_match:
+            # Find all <file> tags
+            file_pattern = r'<file>(.*?)</file>'
+            file_matches = re.findall(file_pattern, completion, re.DOTALL)
+            
+            if not file_matches:
                 yield LLMOutputParsingFailureAction(
-                    error="Missing <num_selected> tags", 
-                    llm_output=completion
-                )
-                return
-                
-            num_selected = int(num_match.group(1))
-            if num_selected < 1 or num_selected > 3:
-                yield LLMOutputParsingFailureAction(
-                    error=f"Invalid num_selected: {num_selected} (must be 1-3)", 
+                    error="No <file> tags found in output", 
                     llm_output=completion
                 )
                 return
             
-            # Extract selected files
+            # Extract and validate file paths
             selected_files = []
-            for i in range(1, num_selected + 1):
-                file_pattern = f'<file_{i}>(.*?)</file_{i}>'
-                file_match = re.search(file_pattern, completion, re.DOTALL)
-                if not file_match:
-                    yield LLMOutputParsingFailureAction(
-                        error=f"Missing <file_{i}> tags", 
-                        llm_output=completion
-                    )
-                    return
-                
-                filepath = file_match.group(1).strip()
+            for filepath in file_matches:
+                filepath = filepath.strip()
                 if not filepath:
                     yield LLMOutputParsingFailureAction(
-                        error=f"Empty filepath found in file_{i} tags", 
+                        error="Empty filepath found in <file> tags", 
                         llm_output=completion
                     )
                     return
-                
                 selected_files.append(filepath)
             
-            # Extract reasoning (everything before the num_selected tags)
-            reasoning = ""
-            if '<num_selected>' in completion:
-                reasoning = completion.split('<num_selected>')[0].strip()
+            # Remove duplicates while preserving order
+            seen = set()
+            unique_files = []
+            for f in selected_files:
+                if f not in seen:
+                    seen.add(f)
+                    unique_files.append(f)
+            selected_files = unique_files
             
-            # Check for garbage content after the last expected tag
+            # Extract reasoning (everything before the first <file> tag)
+            reasoning = ""
+            if '<file>' in completion:
+                reasoning = completion.split('<file>')[0].strip()
+                # Remove thinking tags if present
+                if reasoning.startswith('<thinking>') and '</thinking>' in reasoning:
+                    thinking_match = re.search(r'<thinking>(.*?)</thinking>', reasoning, re.DOTALL)
+                    if thinking_match:
+                        reasoning = thinking_match.group(1).strip()
+            
+            # Check for garbage content after the last </file> tag
             format_penalty = 0.0
             garbage_content = ""
             
-            last_tag_pattern = f'</file_{num_selected}>'
-            last_tag_matches = list(re.finditer(re.escape(last_tag_pattern), completion))
-            
-            if last_tag_matches:
-                last_tag_pos = last_tag_matches[-1].end()
+            last_file_matches = list(re.finditer(r'</file>', completion))
+            if last_file_matches:
+                last_tag_pos = last_file_matches[-1].end()
                 content_after = completion[last_tag_pos:].strip()
                 
                 if content_after:
@@ -161,18 +156,12 @@ class FileSelectionNode(StandardNode):
                     logger.info(f"Garbage content detected after last tag: {repr(content_after[:100])}")
             
             yield FileSelectionResponse(
-                num_selected=num_selected,
                 selected_files=selected_files,
                 reasoning=reasoning,
                 format_penalty=format_penalty,
                 garbage_content=garbage_content
             )
             
-        except ValueError as e:
-            yield LLMOutputParsingFailureAction(
-                error=f"Invalid number format in num_selected: {e}", 
-                llm_output=completion
-            )
         except Exception as e:
             logger.info(f"Failed to parse file selection response: {completion}\n\nError: {e}")
             yield LLMOutputParsingFailureAction(
@@ -191,24 +180,29 @@ class FileSelectionNode(StandardNode):
                 "You are an expert software engineer tasked with selecting the most relevant files "
                 "for fixing a given issue. You will be shown candidate files that were identified "
                 "through initial search, along with their key components (functions, classes, imports).\n\n"
-                "Your goal is to select 1-3 files that are most likely to contain the bug or need "
-                "modification to fix the issue. Consider:\n"
+                "Your goal is to select the files that are most likely to contain the bug or need "
+                "modification to fix the issue. Select as many files as you think are necessary - "
+                "this could be 1 file for simple issues or several files for complex issues that "
+                "span multiple components.\n\n"
+                "Consider:\n"
                 "- Which files contain the specific functionality mentioned in the issue\n"
                 "- Which files are most likely to contain the root cause of the problem\n"
-                "- Which files would need to be modified to implement the fix\n\n"
+                "- Which files would need to be modified to implement the fix\n"
+                "- Dependencies and relationships between files\n\n"
                 "Selection guidelines:\n"
-                "- Use 1 file for simple, localized issues\n"
-                "- Use 2-3 files for issues spanning multiple components or requiring coordination\n"
-                "- Prefer files that directly implement the problematic functionality\n"
-                "- Consider dependencies and relationships between files\n\n"
-                "IMPORTANT: Your response must end immediately after the last </file_N> tag. "
+                "- Include files that directly implement the problematic functionality\n"
+                "- Include related files that might need coordinated changes\n"
+                "- Don't include files that are clearly unrelated to the issue\n"
+                "- You are selecting from among the provided candidate files ONLY.\n"
+                "- Prioritize quality over quantity - select only truly relevant files\n\n"
+                "IMPORTANT: Your response must end immediately after the last </file> tag. "
                 "Any additional content after the final file tag will result in a penalty.\n\n"
+                
                 "Format your response as:\n"
                 "<thinking>[Your analysis of each candidate file and reasoning for selection]</thinking>\n\n"
-                "<num_selected>1, 2, or 3</num_selected>\n\n"
-                "<file_1>full/path/to/first/selected/file.py</file_1>\n"
-                "<file_2>full/path/to/second/selected/file.py (if num_selected > 1)</file_2>\n"
-                "<file_3>full/path/to/third/selected/file.py (if num_selected > 2)</file_3>"
+                "<file>full/path/to/first/selected/file.py</file>\n"
+                "<file>full/path/to/second/selected/file.py</file>\n"
+                "<file>full/path/to/additional/files/as/needed.py</file>"
             )
         }
         

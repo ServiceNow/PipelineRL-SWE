@@ -4,7 +4,7 @@ defaults:
 
 # Override the rollout policy for localization
 actor:
-  rollout_policy: pipelinerl.swe.localization_rollouts.generate_unified_swe_rollout
+  rollout_policy: pipelinerl.swe.rollouts.generate_unified_swe_rollout
   log_each_n_secs: 10
   llm_max_rollouts: 64
   rollout_workers: 1
@@ -62,3 +62,10 @@ model_path: Qwen/Qwen2.5-Coder-7B-Instruct
 
 # Evaluation settings
 eval_every_n_versions: 1000
+
+swe:
+  enable_localization: true
+  enable_file_selection: true
+  enable_repair: true
+  repo_path_train: /mnt/llmd/data/swegym/repos
+  repo_path_test: /mnt/llmd/data/swebench_lite/repos

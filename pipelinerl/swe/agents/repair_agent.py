@@ -83,7 +83,7 @@ class SearchReplaceResponse(Thought):
     edits: list[dict] = Field(default_factory=list, description="parsed search/replace edits")
 
 
-SWERepairStep: TypeAlias = Annotated[
+RepairStep: TypeAlias = Annotated[
     SearchReplaceResponse,
     Field(discriminator="kind"),
 ]
@@ -199,7 +199,7 @@ class RepairNode(StandardNode):
     def make_prompt(self, agent: Any, tape: Tape) -> Prompt:
         # The tape is only one step long containing the task
         task = tape.steps[0]
-        assert isinstance(task, SWETask), f"Expected a SWETask, got {task.__class__.__name__}"
+        assert isinstance(task, RepairTask), f"Expected a RepairTask, got {task.__class__.__name__}"
         
         system_message = {
             "role": "system",
@@ -245,7 +245,7 @@ class RepairAgent(Agent):
             nodes=[
                 RepairNode(
                     name="repair",
-                    agent_step_cls=SWERepairStep,
+                    agent_step_cls=RepairStep,
                     system_prompt=system_prompt if system_prompt else "",
                     max_prompt_length=max_prompt_length,
                 ),

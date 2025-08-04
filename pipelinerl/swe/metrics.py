@@ -1,6 +1,5 @@
 """
-Unified metrics class for the SWE pipeline that combines localization, 
-file selection, and repair metrics.
+Streamlined unified metrics class for the SWE pipeline.
 """
 
 from typing import Optional
@@ -9,143 +8,78 @@ from pipelinerl.rollouts import BaseMetrics
 
 class UnifiedMetrics(BaseMetrics):
     """
-    Unified metrics that can track performance across all pipeline stages.
-    
-    Fields are optional and will only be populated based on which stages
-    are enabled in the configuration.
+    Streamlined metrics that track performance across pipeline stages.
+    Focuses on the most important metrics while reducing redundancy.
     """
     
-    # Localization metrics (from localization_rollouts.py)
-    localization_mrr: Optional[float] = None
-    localization_ndcg_at_10: Optional[float] = None
-    localization_num_queries: Optional[int] = None
-    localization_total_query_length: Optional[int] = None
-    localization_avg_query_length: Optional[float] = None
-    localization_num_search_results: Optional[int] = None
-    localization_format_violation: Optional[bool] = None
-    localization_format_penalty: Optional[float] = None
-    localization_garbage_length: Optional[int] = None
-    localization_has_garbage_content: Optional[bool] = None
-    localization_num_gold_files: Optional[int] = None
-    localization_num_found: Optional[int] = None
-    localization_best_rank: Optional[int] = None
-    localization_worst_rank: Optional[int] = None
-    localization_recall: Optional[float] = None
-    localization_precision: Optional[float] = None
-    localization_f1_score: Optional[float] = None
+    # === STAGE-SPECIFIC CORE METRICS ===
     
-    # File selection metrics (new)
-    selection_num_candidates: Optional[int] = None
-    selection_num_selected: Optional[int] = None
-    selection_accuracy: Optional[float] = None          # How many gold files were selected
-    selection_precision: Optional[float] = None        # Selected relevant / total selected
-    selection_recall: Optional[float] = None           # Selected relevant / total relevant
-    selection_f1_score: Optional[float] = None         # F1 of selection precision/recall
-    selection_format_violation: Optional[bool] = None
-    selection_format_penalty: Optional[float] = None
-    selection_garbage_length: Optional[int] = None
-    selection_has_garbage_content: Optional[bool] = None
+    # Localization metrics (core only)
+    localization_mrr: Optional[float] = 0.0
+    localization_ndcg: Optional[float] = 0.0       # For comparability with other systems
+    localization_num_queries: Optional[int] = 0
+    localization_format_penalty: Optional[float] = 0.0
+    localization_recall: Optional[float] = 0.0     # What % of gold files found
+
+    # File selection metrics 
+    selection_precision: Optional[float] = 0.0     # Selected relevant / total selected
+    selection_recall: Optional[float] = 0.0        # Selected relevant / total relevant  
+    selection_format_penalty: Optional[float] = 0.0
+
+    # Repair metrics
+    repair_reward: Optional[float] = 0.0           # Patch similarity score
+    repair_success: Optional[bool] = False         # Reward > threshold
+    repair_format_error: Optional[bool] = False    # Failed to parse edits
+
+    # === PIPELINE-WIDE METRICS ===
     
-    # Repair metrics (from swe_rollouts.py)
-    repair_reward: Optional[float] = None
-    repair_success: Optional[bool] = None               # Repair reward > threshold
-    repair_no_edits: Optional[bool] = None
-    repair_num_files_changed: Optional[int] = None
-    repair_format_error: Optional[bool] = None
-    repair_avg_similarity: Optional[float] = None      # Same as repair_reward
-    repair_oracle_files: Optional[int] = None
-    repair_predicted_files: Optional[int] = None
+    # Pipeline success metrics
+    file_pipeline_success: Optional[bool] = False       # Perfect recall at localization AND selection
+    total_pipeline_success: Optional[bool] = False      # File pipeline success AND repair success
+    total_prompt_tokens: Optional[int] = 0
+    total_output_tokens: Optional[int] = 0
     
-    # Pipeline-wide metrics
-    pipeline_success: Optional[bool] = None             # End-to-end success
-    pipeline_total_steps: Optional[int] = None          # Number of stages that ran
-    pipeline_completed_steps: Optional[int] = None     # Number of stages that succeeded
+    # Error tracking (per stage)
+    localization_format_error: Optional[bool] = False
+    selection_format_error: Optional[bool] = False
+    repair_format_error: Optional[bool] = False
     
-    # Token usage across all stages
-    total_prompt_tokens: Optional[int] = None
-    total_output_tokens: Optional[int] = None
-    
-    # Override the base class fields to make them optional for the unified case
-    reward: Optional[float] = None                      # Primary reward (usually repair_reward)
-    success: Optional[bool] = None                      # Primary success metric
-    no_error: Optional[bool] = None                     # No errors across any stage
-    no_answer: Optional[bool] = None                    # No valid output from any stage
-    overflow: Optional[int] = None                      # Any stage hit length limits
+    # Override base class required fields
+    reward: Optional[float] = 0.0                  # Primary reward (repair > localization)
+    success: Optional[bool] = False                # Primary success metric
+    no_error: Optional[bool] = True                # No errors across pipeline
+    no_answer: Optional[bool] = False              # No answer provided by agent
     
     def compute_derived_metrics(self):
         """Compute derived metrics after all stages have completed."""
         
-        # Set primary metrics based on repair if available, otherwise localization
+        # Primary metrics: repair takes precedence, then localization
         if self.repair_reward is not None:
             self.reward = self.repair_reward
             self.success = self.repair_success
         elif self.localization_mrr is not None:
             self.reward = self.localization_mrr
-            self.success = self.localization_mrr > 0.5  # Arbitrary threshold
+            self.success = self.localization_mrr > 0.3  # Reasonable threshold
         
-        # Compute pipeline success
-        if self.repair_success is not None:
-            self.pipeline_success = self.repair_success
-        elif self.selection_accuracy is not None and self.selection_accuracy > 0.5:
-            self.pipeline_success = True
-        elif self.localization_recall is not None and self.localization_recall > 0.5:
-            self.pipeline_success = True
-        else:
-            self.pipeline_success = False
+        # File pipeline success = perfect recall at both localization and selection
+        self.file_pipeline_success = (
+            (self.localization_recall or 0) == 1.0 and 
+            (self.selection_recall or 0) == 1.0
+        )
         
-        # Compute total tokens
-        prompt_tokens = 0
-        output_tokens = 0
+        # Total pipeline success = file pipeline success + repair success
+        self.total_pipeline_success = (
+            self.file_pipeline_success and 
+            (self.repair_success or False)
+        )
         
-        if hasattr(self, 'localization_prompt_tokens') and self.localization_prompt_tokens:
-            prompt_tokens += self.localization_prompt_tokens
-        if hasattr(self, 'localization_output_tokens') and self.localization_output_tokens:
-            output_tokens += self.localization_output_tokens
-            
-        if hasattr(self, 'selection_prompt_tokens') and self.selection_prompt_tokens:
-            prompt_tokens += self.selection_prompt_tokens
-        if hasattr(self, 'selection_output_tokens') and self.selection_output_tokens:
-            output_tokens += self.selection_output_tokens
-            
-        if hasattr(self, 'repair_prompt_tokens') and self.repair_prompt_tokens:
-            prompt_tokens += self.repair_prompt_tokens
-        if hasattr(self, 'repair_output_tokens') and self.repair_output_tokens:
-            output_tokens += self.repair_output_tokens
+        # Error tracking
+        self.localization_format_error = (self.localization_format_penalty or 0) > 0
+        self.selection_format_error = (self.selection_format_penalty or 0) > 0
+        # repair_format_error is set directly in repair stage
         
-        self.total_prompt_tokens = prompt_tokens if prompt_tokens > 0 else None
-        self.total_output_tokens = output_tokens if output_tokens > 0 else None
-        
-        # Compute error flags
         self.no_error = not any([
-            self.localization_format_violation,
-            self.selection_format_violation,
-            self.repair_format_error
+            self.localization_format_error,
+            self.selection_format_error, 
+            self.repair_format_error or False
         ])
-        
-        self.no_answer = any([
-            self.localization_mrr == -1 if self.localization_mrr is not None else False,
-            self.selection_accuracy == 0 if self.selection_accuracy is not None else False,
-            self.repair_no_edits if self.repair_no_edits is not None else False
-        ])
-        
-        # Compute pipeline step counts
-        total_steps = 0
-        completed_steps = 0
-        
-        if self.localization_mrr is not None:
-            total_steps += 1
-            if self.localization_mrr >= 0:  # -1 indicates failure
-                completed_steps += 1
-                
-        if self.selection_accuracy is not None:
-            total_steps += 1
-            if self.selection_accuracy > 0:
-                completed_steps += 1
-                
-        if self.repair_reward is not None:
-            total_steps += 1
-            if self.repair_reward >= 0:  # -1 indicates failure
-                completed_steps += 1
-        
-        self.pipeline_total_steps = total_steps if total_steps > 0 else None
-        self.pipeline_completed_steps = completed_steps if total_steps > 0 else None

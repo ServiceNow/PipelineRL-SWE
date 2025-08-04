@@ -223,7 +223,8 @@ def calculate_precise_reward(
         
     except FormatError as e:
         # Format errors get -1.0 reward
-        return -1.0, {"format_error": str(e)}
+        logger.warning(f"Format error calculating precise reward: {str(e)}")
+        return -1.0, {"format_error": True, "error_message": str(e)}
     except Exception as e:
         logger.error(f"Unexpected error calculating precise reward: {str(e)}")
         return -1.0, {"error": str(e)}
