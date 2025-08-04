@@ -337,7 +337,7 @@ async def run_file_selection_stage(
         
         if missing_gold:
             logger.info(f"Forcing oracle files for repair: {missing_gold}")
-            files_for_repair = selected_files + missing_gold
+            files_for_repair = missing_gold
         else:
             files_for_repair = selected_files
         

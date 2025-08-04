@@ -1,3 +1,3 @@
-JOB_NAME=test_train
+JOB_NAME=unified_train_pipeline
 OUTPUT_DIR=/mnt/llmd/results/exps/aristides/reason/${JOB_NAME} 
-make job JOB_NAME=${JOB_NAME} ENV=prl CONDA_EXE=/opt/conda/bin/conda SNAPSHOT=1 NPROC=8 COMMAND="cd /home/toolkit/PipelineRL-SWE; python -m pipelinerl.launch --config-dir /home/toolkit/PipelineRL-SWE/conf --config-name swe output_dir=${OUTPUT_DIR} finetune.wandb_workspace_root=/mnt/llmd/results/exps finetune.wandb_project_name=peach train_dataset_names=[swegym] test_dataset_names=[swegym] finetune.seq_length=16384 agent.max_prompt_length=15000 llm.parameters.max_tokens=5000 test_llm.parameters.max_tokens=5000"
+make job JOB_NAME=${JOB_NAME} ENV=prl CONDA_EXE=/opt/conda/bin/conda SNAPSHOT=1 NPROC=8 COMMAND="cd PipelineRL-SWE; python -m pipelinerl.launch --config-dir conf --config-name swe output_dir=${OUTPUT_DIR} wandb.wandb_workspace_root=/mnt/llmd/results/exps wandb.wandb_project_name=loot finetune.seq_parallel=4 finetune.seq_length=50000"
