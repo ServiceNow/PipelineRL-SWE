@@ -399,6 +399,13 @@ def populate_rl_data(dataset: list[dict[str, Any]], eos_token_id: int, config: R
     df_stats["num_tokens"] = df_init["input_ids"].apply(lambda x: len(x))
     # We assume that rewards for all tokens are the same
     df_stats["rollout_reward"] = df_init["rewards"].apply(lambda x: x[0])
+
+    logger.info("EMERGENCY DEBUG:")
+    logger.info(f"Unique group_ids: {df_stats['group_id'].nunique()}")
+    logger.info(f"Unique rollout_indexes: {df_stats['rollout_index'].nunique()}")
+    logger.info(f"Sample group_ids: {df_stats['group_id'].head().tolist()}")
+    logger.info(f"Sample rollout_indexes: {df_stats['rollout_index'].head().tolist()}")
+    logger.info(f"Sample rollout_rewards: {df_stats['rollout_reward'].head().tolist()}")
     # Check that the reward is the same for each step in the rollout
     assert df_stats.groupby(["group_id", "rollout_index"])["rollout_reward"].nunique().max() == 1
     # Only keep step_index == 0
