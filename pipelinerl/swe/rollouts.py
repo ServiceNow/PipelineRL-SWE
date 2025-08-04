@@ -333,13 +333,14 @@ async def run_file_selection_stage(
             reward = reward - format_penalty
             metrics_dict["format_penalty"] = format_penalty
         
-        # FORCE ORACLE FILES for repair if they weren't selected
+        # FORCE ORACLE FILES for repair if selection differs from oracle files
         selected_files_set = set(selected_files)
-        missing_gold = [f for f in gold_files if f not in selected_files_set]
-        
-        if missing_gold:
-            logger.info(f"Forcing oracle files for repair: {missing_gold}")
-            files_for_repair = missing_gold
+        gold_files_set = set(gold_files)
+
+        if selected_files_set != gold_files_set:
+            logger.info(f"Selected files differ from oracle, using oracle files for repair")
+            logger.info(f"Selected: {selected_files}, Oracle: {gold_files}")
+            files_for_repair = gold_files
         else:
             files_for_repair = selected_files
         
