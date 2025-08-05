@@ -39,7 +39,7 @@ async def execute_agent_with_retry(agent, tape, session):
     try:
         async for attempt in AsyncRetrying(stop=stop_after_attempt(5)):
             with attempt:
-                new_tape = await async_execute_agent(agent, tape, EmptyAsyncEnvironment(), session)
+                new_tape = await async_execute_agent(agent, tape, EmptyAsyncEnvironment(), session, max_loops=1)
                 
                 # Extract LLM call and validate it exists
                 llm_call = None
@@ -423,7 +423,7 @@ async def run_repair_stage(
     time_start = time.time()
     
     try:
-        new_tape = await async_execute_agent(agent, tape, EmptyAsyncEnvironment(), session)
+        new_tape = await async_execute_agent(agent, tape, EmptyAsyncEnvironment(), session, max_loops=1)
         latency = time.time() - time_start
         
         # Extract edits from the response step
