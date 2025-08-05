@@ -18,7 +18,9 @@ from tenacity import AsyncRetrying, RetryError, stop_after_attempt
 from pipelinerl.rollouts import RolloutResult
 from pipelinerl.async_llm import make_training_text
 from tapeagents.llms.trainable import TrainableLLM
-from tapeagents.core import LLMCall
+from tapeagents.core import LLMCall, Action, Observation
+from tapeagents.environment import AsyncEnvironment
+from tapeagents.agent import TapeType
 
 from pipelinerl.swe.agents.localization_agent import LocalizationAgent, LocalizationTask, LocalizationTape, LocalizationQuery
 from pipelinerl.swe.agents.file_selection_agent import FileSelectionAgent, FileSelectionTask, FileSelectionTape, FileSelectionResponse
@@ -37,7 +39,7 @@ async def execute_agent_with_retry(agent, tape, session):
     try:
         async for attempt in AsyncRetrying(stop=stop_after_attempt(5)):
             with attempt:
-                new_tape = await async_execute_agent(agent, tape, None, session)
+                new_tape = await async_execute_agent(agent, tape, EmptyAsyncEnvironment(), session)
                 
                 # Extract LLM call and validate it exists
                 llm_call = None
@@ -60,6 +62,21 @@ async def execute_agent_with_retry(agent, tape, session):
     except RetryError:
         raise ValueError("No LLM call found in the generated tape after 5 retry attempts")
 
+class EmptyAsyncEnvironment(AsyncEnvironment):
+    async def ainitialize(self):
+        pass
+
+    async def areact(self, tape: TapeType) -> TapeType:
+        return tape # no op
+
+    async def astep(self, action: Action) -> Observation:
+        raise NotImplementedError
+
+    async def areset(self) -> None:
+        pass
+
+    async def aclose(self) -> None:
+        pass
 
 async def run_localization_stage(
     cfg: DictConfig,
@@ -208,22 +225,7 @@ async def run_localization_stage(
 
         # Create training text
         training_text = make_training_text(llm, llm_call)
-        
-        if llm_call.logprobs:
-            input_ids = [lp.token_id for lp in llm_call.logprobs]
-            labels = [lp.token_id for lp in llm_call.logprobs if lp.generated]
-            
-            from pipelinerl.finetune.data import MASKED_TOKEN_ID
-            labels = [MASKED_TOKEN_ID] * (len(input_ids) - len(labels)) + labels
-            
-            training_text.input_ids = input_ids
-            training_text.labels = labels
-            training_text.logprobs = [lp.logprob for lp in llm_call.logprobs if lp.generated]
-        
         training_text.reward = reward if (reward is not None and not math.isnan(reward)) else 0.0
-        base_parent_id = new_tape.metadata.parent_id if new_tape.metadata else "none"
-        base_group_id = f"{base_parent_id}_{int(time.time() * 1000000)}_{id(new_tape)}"
-        training_text.group_id = f"{base_group_id}_loc"
         
         return {
             'training_text': training_text,
@@ -350,23 +352,8 @@ async def run_file_selection_stage(
             reward *= cfg.actor.discount_factor ** llm_call.output_length_tokens
 
         # Create training text
-        training_text = make_training_text(llm, llm_call)
-        
-        if llm_call.logprobs:
-            input_ids = [lp.token_id for lp in llm_call.logprobs]
-            labels = [lp.token_id for lp in llm_call.logprobs if lp.generated]
-            
-            from pipelinerl.finetune.data import MASKED_TOKEN_ID
-            labels = [MASKED_TOKEN_ID] * (len(input_ids) - len(labels)) + labels
-            
-            training_text.input_ids = input_ids
-            training_text.labels = labels
-            training_text.logprobs = [lp.logprob for lp in llm_call.logprobs if lp.generated]
-        
+        training_text = make_training_text(llm, llm_call)        
         training_text.reward = reward if (reward is not None and not math.isnan(reward)) else 0.0
-        base_parent_id = new_tape.metadata.parent_id if new_tape.metadata else "none"
-        base_group_id = f"{base_parent_id}_{int(time.time() * 1000000)}_{id(new_tape)}"
-        training_text.group_id = f"{base_group_id}_sel"
         
         return {
             'training_text': training_text,
@@ -433,7 +420,7 @@ async def run_repair_stage(
     time_start = time.time()
     
     try:
-        new_tape = await async_execute_agent(agent, tape, None, session)
+        new_tape = await async_execute_agent(agent, tape, EmptyAsyncEnvironment, session)
         latency = time.time() - time_start
         
         # Extract edits from the response step
@@ -477,21 +464,7 @@ async def run_repair_stage(
         
         # Create training text
         training_text = make_training_text(llm, llm_call)
-        
-        # Set up input_ids and labels for training
-        input_ids = [lp.token_id for lp in llm_call.logprobs]
-        labels = [lp.token_id for lp in llm_call.logprobs if lp.generated]
-        
-        from pipelinerl.finetune.data import MASKED_TOKEN_ID
-        labels = [MASKED_TOKEN_ID] * (len(input_ids) - len(labels)) + labels
-        
-        training_text.input_ids = input_ids
-        training_text.labels = labels
         training_text.reward = reward if (reward is not None and not math.isnan(reward)) else 0.0
-        training_text.logprobs = [lp.logprob for lp in llm_call.logprobs if lp.generated]
-        base_parent_id = new_tape.metadata.parent_id if new_tape.metadata else "none"
-        base_group_id = f"{base_parent_id}_{int(time.time() * 1000000)}_{id(new_tape)}"
-        training_text.group_id = f"{base_group_id}_rep"
         
         # Calculate success metric
         success_threshold = getattr(cfg.actor, 'success_threshold', 0.8)
