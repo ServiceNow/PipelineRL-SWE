@@ -420,7 +420,7 @@ async def run_repair_stage(
     time_start = time.time()
     
     try:
-        new_tape = await async_execute_agent(agent, tape, EmptyAsyncEnvironment, session)
+        new_tape = await async_execute_agent(agent, tape, EmptyAsyncEnvironment(), session)
         latency = time.time() - time_start
         
         # Extract edits from the response step
