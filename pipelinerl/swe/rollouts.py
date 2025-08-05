@@ -69,8 +69,8 @@ class EmptyAsyncEnvironment(AsyncEnvironment):
     async def areact(self, tape: TapeType) -> TapeType:
         return tape # no op
 
-    async def astep(self, action: Action) -> Observation:
-        raise NotImplementedError
+    async def astep(self, action: Action):
+        pass
 
     async def areset(self) -> None:
         pass
