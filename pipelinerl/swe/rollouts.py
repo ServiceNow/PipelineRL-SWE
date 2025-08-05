@@ -78,6 +78,9 @@ class EmptyAsyncEnvironment(AsyncEnvironment):
     async def aclose(self) -> None:
         pass
 
+    def react(self, tape: TapeType) -> TapeType:
+        return tape
+
 async def run_localization_stage(
     cfg: DictConfig,
     llm: TrainableLLM,
