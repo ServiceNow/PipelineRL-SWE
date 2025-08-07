@@ -33,6 +33,43 @@ from pipelinerl.swe.metrics import UnifiedMetrics
 
 logger = logging.getLogger(__name__)
 
+# Add this to generate_unified_swe_rollout, at the end before returning:
+
+def log_rollout_variance_info(training_texts, metrics, group_id=None):
+    """Log info to help debug why groups have identical rewards."""
+    
+    if not training_texts:
+        logger.warning(f"Group {group_id}: No training texts generated")
+        return
+    
+    rewards = [tt.reward for tt in training_texts]
+    unique_rewards = set(rewards)
+    
+    logger.info(f"Group {group_id}: Generated {len(training_texts)} training texts")
+    logger.info(f"  Rewards: {rewards}")
+    logger.info(f"  Unique rewards: {len(unique_rewards)}")
+    
+    if len(unique_rewards) == 1:
+        logger.warning(f"  ⚠️  All rewards identical: {list(unique_rewards)[0]}")
+        
+        # Log which stages contributed
+        stage_info = []
+        if hasattr(metrics, 'localization_mrr') and metrics.localization_mrr is not None:
+            stage_info.append(f"loc_mrr={metrics.localization_mrr:.3f}")
+        if hasattr(metrics, 'selection_recall') and metrics.selection_recall is not None:
+            stage_info.append(f"sel_recall={metrics.selection_recall:.3f}")
+        if hasattr(metrics, 'repair_reward') and metrics.repair_reward is not None:
+            stage_info.append(f"repair={metrics.repair_reward:.3f}")
+        
+        logger.warning(f"  Stage results: {', '.join(stage_info)}")
+    
+    # Log output token variance as a proxy for model variance
+    output_tokens = [tt.output_tokens for tt in training_texts]
+    if len(set(output_tokens)) == 1:
+        logger.warning(f"  ⚠️  All output lengths identical: {output_tokens[0]} tokens")
+    else:
+        logger.info(f"  Output lengths: {output_tokens}")
+
 
 async def execute_agent_with_retry(agent, tape, session):
     """Execute agent with retry logic to handle cases where llm_call is None."""
@@ -684,6 +721,8 @@ async def generate_unified_swe_rollout(
         
         # Compute derived metrics (including pipeline success metrics)
         metrics.compute_derived_metrics()
+
+        log_rollout_variance_info(training_texts, metrics, problem.get('id', 'unknown'))
         
         return RolloutResult(
             training_texts=training_texts,

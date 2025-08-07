@@ -96,50 +96,63 @@ class PipelineBatchEncoding(BaseModel):
             return v.int() # type: ignore
         return torch.tensor(v, dtype=torch.int)
     
-    # TODO: am i needed?
     @field_validator('rewards', 'advantages', 'ref_logprobs', 'old_logprobs', 'group_tokens', 'num_labels', 'overflow', 'pixel_values', mode='before')
     @classmethod
     def convert_to_float_tensor(cls, v: List[float] | torch.Tensor | None, info) -> torch.FloatTensor | None:
         """Handle initialization of float tensors from different types."""
         field_name = info.field_name if hasattr(info, 'field_name') else "unknown_field"
         
-        # Always log what we're processing
-        logger.error(f"VALIDATOR: Field '{field_name}': type={type(v)}, value={repr(v) if v is not None else 'None'}")
-        
         if v is None:
-            logger.error(f"VALIDATOR: Field '{field_name}': received None, returning None")
+            logger.debug(f"VALIDATOR: Field '{field_name}': received None, returning None")
             return None
         
         if isinstance(v, torch.Tensor):
-            logger.error(f"VALIDATOR: Field '{field_name}': converting tensor to float")
+            logger.debug(f"VALIDATOR: Field '{field_name}': converting tensor to float")
             return v.float()
         
-        if isinstance(v, list) or isinstance(v, np.ndarray):
-            logger.error(f"VALIDATOR: Field '{field_name}': converting {type(v)} to tensor")
+        if isinstance(v, (list, np.ndarray)):
             # Check for None values in the list
             if isinstance(v, list) and None in v:
-                logger.error(f"VALIDATOR: Field '{field_name}': LIST CONTAINS None VALUES: {v}")
-                # Option 1: Replace None with 0.0
+                none_count = v.count(None)
+                total_count = len(v)
+                logger.error(f"VALIDATOR: Field '{field_name}': LIST CONTAINS {none_count}/{total_count} None VALUES")
+                # Keep original behavior - replace None with 0.0
                 v = [x if x is not None else 0.0 for x in v]
-                logger.error(f"VALIDATOR: Field '{field_name}': After None replacement: {v}")
+            
+            # Smart logging based on content
+            if isinstance(v, list) and len(v) > 0:
+                unique_vals = set(v)
+                if len(unique_vals) == 1:
+                    logger.warning(f"VALIDATOR: Field '{field_name}': All {len(v)} values identical: {list(unique_vals)[0]}")
+                elif len(unique_vals) <= 5:
+                    # Show unique values when there are few
+                    logger.debug(f"VALIDATOR: Field '{field_name}': {len(v)} values, unique: {sorted(unique_vals)}")
+                else:
+                    # Show summary statistics for diverse data
+                    vals_array = np.array(v)
+                    logger.debug(f"VALIDATOR: Field '{field_name}': len={len(v)}, unique={len(unique_vals)}, "
+                            f"range=[{vals_array.min():.3f}, {vals_array.max():.3f}], mean={vals_array.mean():.3f}")
             
             try:
                 return torch.tensor(v, dtype=torch.float)
             except Exception as e:
                 logger.error(f"VALIDATOR: Field '{field_name}': FAILED to create tensor from {type(v)}: {e}")
-                logger.error(f"VALIDATOR: Field '{field_name}': Problematic value: {repr(v)}")
+                # Show sample instead of full array
+                if hasattr(v, '__len__') and len(v) > 5:
+                    sample_vals = v[:5]
+                    logger.error(f"VALIDATOR: Field '{field_name}': Sample values (first 5): {sample_vals}")
+                else:
+                    logger.error(f"VALIDATOR: Field '{field_name}': Problematic value: {repr(v)}")
                 raise
         
-        # This is where the error is happening
-        logger.error(f"VALIDATOR: Field '{field_name}': UNSUPPORTED TYPE {type(v)} with value: {repr(v)}")
-        
-        # Check if it's a single numeric value that got passed instead of a list
+        # Handle single numeric values
         if isinstance(v, (int, float)):
-            logger.error(f"VALIDATOR: Field '{field_name}': Got single {type(v)}, converting to list: [{v}]")
+            logger.debug(f"VALIDATOR: Field '{field_name}': Got single {type(v)}, converting to tensor")
             return torch.tensor([v], dtype=torch.float)
         
-        # The original error - but now with more context
-        raise ValueError(f"VALIDATOR: Field '{field_name}': Unsupported type for float tensor: {type(v)}, value: {repr(v)}")
+        # Unknown type - this is the error case
+        logger.error(f"VALIDATOR: Field '{field_name}': UNSUPPORTED TYPE {type(v)}")
+        raise ValueError(f"VALIDATOR: Field '{field_name}': Unsupported type for float tensor: {type(v)}")
 
     
     def to_device(self, device: Union[str, torch.device]) -> 'PipelineBatchEncoding':

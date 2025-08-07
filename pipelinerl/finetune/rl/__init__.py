@@ -463,6 +463,9 @@ def populate_rl_data(dataset: list[dict[str, Any]], eos_token_id: int, config: R
         entry["group_tokens"] = group_tokens_list[i]
         entry["overflow"] = overflow_list[i]
         entry["num_labels"] = num_labels_list[i]
+    logger.info(f"Group {group_id}: mean={df_grouped.loc[group_id, 'rollout_reward_mean']}, "
+           f"std={df_grouped.loc[group_id, 'rollout_reward_std']}, "
+           f"num_rollouts={len(group_rollouts[group_id])}")
     return dataset
 
 
