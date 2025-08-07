@@ -415,6 +415,39 @@ def populate_rl_data(dataset: list[dict[str, Any]], eos_token_id: int, config: R
     )
     assert df_grouped.columns.tolist() == ["group_id", "rollout_reward_mean", "rollout_reward_std", "group_tokens"]
 
+    # Debug group variance issues
+    logger.info(f"Processing {len(df_grouped)} groups for RL data")
+    
+    # Analyze variance distribution
+    zero_var_groups = df_grouped[df_grouped['rollout_reward_std'] < 1e-6]
+    low_var_groups = df_grouped[(df_grouped['rollout_reward_std'] >= 1e-6) & (df_grouped['rollout_reward_std'] < 0.1)]
+    high_var_groups = df_grouped[df_grouped['rollout_reward_std'] >= 0.1]
+    
+    logger.info(f"Group variance distribution:")
+    logger.info(f"  Zero variance: {len(zero_var_groups)}/{len(df_grouped)} ({len(zero_var_groups)/len(df_grouped)*100:.1f}%)")
+    logger.info(f"  Low variance: {len(low_var_groups)}/{len(df_grouped)} ({len(low_var_groups)/len(df_grouped)*100:.1f}%)")
+    logger.info(f"  High variance: {len(high_var_groups)}/{len(df_grouped)} ({len(high_var_groups)/len(df_grouped)*100:.1f}%)")
+    
+    # Sample problematic groups for detailed analysis
+    if len(zero_var_groups) > 0:
+        logger.warning(f"Found {len(zero_var_groups)} groups with zero variance!")
+        sample_zero_var = zero_var_groups.head(3)
+        for _, row in sample_zero_var.iterrows():
+            group_id = row['group_id']
+            # Get individual rollout rewards for this group
+            group_rewards = df_stats[df_stats['group_id'] == group_id]['rollout_reward'].tolist()
+            logger.warning(f"  Group {group_id}: mean={row['rollout_reward_mean']:.6f}, "
+                         f"std={row['rollout_reward_std']:.6f}, rewards={group_rewards}")
+    
+    # Show examples of healthy groups
+    if len(high_var_groups) > 0:
+        sample_good = high_var_groups.head(2)
+        for _, row in sample_good.iterrows():
+            group_id = row['group_id']
+            group_rewards = df_stats[df_stats['group_id'] == group_id]['rollout_reward'].tolist()
+            logger.info(f"  Good group {group_id}: mean={row['rollout_reward_mean']:.3f}, "
+                       f"std={row['rollout_reward_std']:.3f}, rewards={group_rewards}")
+
     # Step 2: calculate advantages for each sample
     df_advantages = pd.merge(
         df_init[["group_id", "rollout_index", "step_index", "rewards"]],
@@ -423,6 +456,7 @@ def populate_rl_data(dataset: list[dict[str, Any]], eos_token_id: int, config: R
         how="left"
     )
     assert len(df_advantages) == len(df_init)
+    
     def calculate_advantages(row):
         rewards = row["rewards"]
         mean = row["rollout_reward_mean"]
@@ -432,17 +466,14 @@ def populate_rl_data(dataset: list[dict[str, Any]], eos_token_id: int, config: R
         else:
             advantages = [(reward - mean) for reward in rewards]
         return advantages
-    df_advantages["advantages"] = df_advantages.apply(
-        calculate_advantages,
-        axis=1,
-    )
+    
+    df_advantages["advantages"] = df_advantages.apply(calculate_advantages, axis=1)
     df_advantages = df_advantages.drop(columns=["rewards", "rollout_reward_mean", "rollout_reward_std"])
     assert df_advantages.columns.tolist() == ["group_id", "rollout_index", "step_index", "group_tokens", "advantages"]
 
     # Step 3: bring advantages and group level stats back to the main df
     df = df_init.drop(columns=["advantages", "group_tokens"])
     df = pd.merge(df, df_advantages, on=["group_id", "rollout_index", "step_index"], how="left")
-    # Debug print lengths of all dataframes
     assert len(df) == len(df_init)
 
     # Step 4: make token-level overflow and mean group length information
@@ -458,14 +489,13 @@ def populate_rl_data(dataset: list[dict[str, Any]], eos_token_id: int, config: R
     group_tokens_list = df["group_tokens"].tolist()
     overflow_list = df["overflow"].tolist()
     num_labels_list = df["num_labels"].tolist()
+    
     for i, entry in enumerate(dataset):
         entry["advantages"] = advantages_list[i]
         entry["group_tokens"] = group_tokens_list[i]
         entry["overflow"] = overflow_list[i]
         entry["num_labels"] = num_labels_list[i]
-    logger.info(f"Group {group_id}: mean={df_grouped.loc[group_id, 'rollout_reward_mean']}, "
-           f"std={df_grouped.loc[group_id, 'rollout_reward_std']}, "
-           f"num_rollouts={len(group_rollouts[group_id])}")
+    
     return dataset
 
 
