@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 # Add this to generate_unified_swe_rollout, at the end before returning:
 
-def log_rollout_variance_info(training_texts, metrics, group_id=None):
+def log_rollout_variance_info(training_texts, metrics, group_id=""):
     """Log info to help debug why groups have identical rewards."""
     
     if not training_texts:
@@ -722,7 +722,7 @@ async def generate_unified_swe_rollout(
         # Compute derived metrics (including pipeline success metrics)
         metrics.compute_derived_metrics()
 
-        log_rollout_variance_info(training_texts, metrics, problem.get('id', 'unknown'))
+        log_rollout_variance_info(training_texts, metrics, group_id=problem.get('id', 'unknown'))
         
         return RolloutResult(
             training_texts=training_texts,
