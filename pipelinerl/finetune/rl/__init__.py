@@ -392,6 +392,7 @@ def populate_rl_data(dataset: list[dict[str, Any]], eos_token_id: int, config: R
     """
     # Convert to pandas for processing
     df_init = pd.DataFrame(dataset)
+    df_init["group_id"] = df_init["group_id"].astype(str) + "_" + df_init["step_index"].astype(str)
     assert isinstance(df_init, pd.DataFrame)
 
     # Step 1: calculate group-level statistics
@@ -403,7 +404,7 @@ def populate_rl_data(dataset: list[dict[str, Any]], eos_token_id: int, config: R
     # Check that the reward is the same for each step in the rollout
     assert df_stats.groupby(["group_id", "rollout_index"])["rollout_reward"].nunique().max() == 1
     # Only keep step_index == 0
-    df_stats = df_stats[df_stats["step_index"] == 0].drop(columns=["step_index"])
+    #df_stats = df_stats[df_stats["step_index"] == 0].drop(columns=["step_index"])
     df_grouped = (
         df_stats.groupby("group_id")
         .agg(
@@ -481,6 +482,7 @@ def populate_rl_data(dataset: list[dict[str, Any]], eos_token_id: int, config: R
         lambda row: [0.0] * len(row["overflow"]) if eos_token_id in row["input_ids"] else [1.0] * len(row["overflow"]),
         axis=1,
     )
+    #df["advantages"] = df.apply(lambda row: [row["advantages"]] * len(row["input_ids"]), axis=1)
     df["group_tokens"] = df.apply(lambda row: [row["group_tokens"]] * len(row["input_ids"]), axis=1)
     df["num_labels"] = df.apply(lambda row: [sum(1 for label in row["labels"] if label != -100)] * len(row["input_ids"]), axis=1)
 
