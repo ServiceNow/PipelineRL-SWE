@@ -572,6 +572,8 @@ def run_preprocessing_loop(
                                     entry = processed_entries_queue[0]  # Peek at next entry
                                     sample_length = len(entry["input_ids"])
 
+                                    logger.debug(f"[inner loop] trainer {trainer_id} processing entry with length {sample_length}")
+
                                     if current_length + sample_length > cfg.finetune.seq_length:
                                         time_to_write = True
                                         break  # Current micro batch is full
