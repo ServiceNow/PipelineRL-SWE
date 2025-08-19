@@ -4,11 +4,10 @@ SWE-Gym dataset preprocessing utility.
 This module provides functionality to preprocess the SWE-Gym dataset by:
 1. Cloning or updating the required GitHub repositories
 2. Extracting file contents at the specified commits
-3. Enriching the dataset with these file contents
-4. Computing file statistics for ALL files in repo for BM25 retrieval
+3. Filtering by token thresholds (min and max) BEFORE computing expensive file stats
+4. Computing file statistics for ALL files in repo for BM25 retrieval (only for valid examples)
 5. Filtering out examples where gold files are missing from file stats
-6. Filtering based on token thresholds (min and max)
-7. Saving the processed dataset for use with PipelineRL
+6. Saving the processed dataset for use with PipelineRL
 """
 
 import os
@@ -160,13 +159,14 @@ class SwePreprocessor:
             '.zsh', '.fish', '.pl', '.r', '.R', '.sql', '.html', '.css', '.scss', '.sass',
             '.less', '.vue', '.jsx', '.tsx', '.json', '.yaml', '.yml', '.xml', '.toml',
             '.ini', '.cfg', '.conf', '.properties', '.gradle', '.cmake', '.make',
-            '.dockerfile', '.md', '.rst', '.txt', '.lock', '.requirements'
+            '.dockerfile', '.md', '.rst', '.txt', '.lock', '.requirements', '.pyx', '.ipynb',
+            '.pxd', '.pyi', '.pxi.in'
         }
         
         # Define directories to skip
         self.skip_directories = {
             'test', 'tests', '__pycache__', '.git', '.svn', '.hg', 'node_modules',
-            '.pytest_cache', '.tox', 'venv', 'env', '.env', 'build', 'dist',
+            '.pytest_cache', '.tox', 'venv', '.env', 'dist',
             '.idea', '.vscode', 'target', 'out', 'bin', 'obj', '.gradle',
             'coverage', '.coverage', '.nyc_output', 'htmlcov'
         }
@@ -527,17 +527,17 @@ class SwePreprocessor:
             logger.error(f"An unexpected error occurred getting content for {filepath} at commit {commit_hash} in {local_repo_path}: {e}")
             return None
 
-    def _process_example(self, example: Dict, repo_paths: Dict[str, Path]) -> Dict:
+    def _extract_gold_file_contents_only(self, example: Dict, repo_paths: Dict[str, Path]) -> Dict:
         """
-        Processes a single dataset example to extract gold file contents and all file stats at the base_commit.
-        Marks examples as invalid if any gold files are missing from the file stats.
+        First-pass processing: extract only gold file contents for token filtering.
+        This is much faster than computing all file stats.
         
         Args:
             example: Dataset example
             repo_paths: Dictionary mapping repository names to local paths
             
         Returns:
-            Processed example with file contents and file stats added, or marked as invalid
+            Example with gold_file_contents added
         """
         repo_name = example.get('repo')
         base_commit = example.get('base_commit')
@@ -546,25 +546,17 @@ class SwePreprocessor:
         # Ensure we have the necessary data fields
         if not repo_name or not base_commit or not patch:
             example['gold_file_contents'] = json.dumps({})
-            example['all_file_stats'] = json.dumps({})
-            example['_invalid_example'] = True  # Mark for filtering
             return example
 
         # Get local repo path
         local_repo_path = repo_paths.get(repo_name)
         if not local_repo_path:
-            logger.debug(f"Repository {repo_name} not found in processed repos.")
             example['gold_file_contents'] = json.dumps({})
-            example['all_file_stats'] = json.dumps({})
-            example['_invalid_example'] = True  # Mark for filtering
             return example
 
         # Skip processing if the repo directory doesn't exist or isn't a valid git repo
         if not os.path.exists(local_repo_path) or not os.path.exists(os.path.join(local_repo_path, '.git')):
-            logger.debug(f"Local repository directory missing or invalid for {repo_name}. Skipping file content extraction for this example.")
             example['gold_file_contents'] = json.dumps({})
-            example['all_file_stats'] = json.dumps({})
-            example['_invalid_example'] = True  # Mark for filtering
             return example
 
         # Extract file paths from patch (gold files)
@@ -579,19 +571,66 @@ class SwePreprocessor:
 
         # Store gold file contents as JSON string
         example['gold_file_contents'] = json.dumps(file_contents_dict)
+        return example
+
+    def _add_file_stats_to_example(self, example: Dict, repo_paths: Dict[str, Path]) -> Dict:
+        """
+        Second-pass processing: add file statistics for examples that passed token filtering.
         
+        Args:
+            example: Dataset example (already has gold_file_contents)
+            repo_paths: Dictionary mapping repository names to local paths
+            
+        Returns:
+            Example with all_file_stats added and validation flags
+        """
+        repo_name = example.get('repo')
+        base_commit = example.get('base_commit')
+        patch = example.get('patch')
+
+        # Initialize with empty stats
+        example['all_file_stats'] = json.dumps({})
+        example['_invalid_example'] = True
+
+        # Ensure we have the necessary data fields
+        if not repo_name or not base_commit or not patch:
+            return example
+
+        # Get local repo path
+        local_repo_path = repo_paths.get(repo_name)
+        if not local_repo_path:
+            return example
+
+        # Skip processing if the repo directory doesn't exist or isn't a valid git repo
+        if not os.path.exists(local_repo_path) or not os.path.exists(os.path.join(local_repo_path, '.git')):
+            return example
+
+        # Parse gold files from patch
+        gold_filepaths = self._parse_patch(patch)
+        
+        # Check if any gold files were filtered out during source file selection
+        filtered_gold_files = []
+        for gold_file in gold_filepaths:
+            if not self._is_source_file(gold_file):
+                filtered_gold_files.append(gold_file)
+        
+        if filtered_gold_files:
+            logger.debug(f"Repository {repo_name}: {len(filtered_gold_files)}/{len(gold_filepaths)} gold files filtered as non-source files: {filtered_gold_files}. Marking example as invalid.")
+            example['_invalid_example'] = True  # Mark for filtering
+            return example
+
         # Get statistics for all files in the repository
         all_file_stats = self._get_all_file_stats(local_repo_path, base_commit)
         example['all_file_stats'] = json.dumps(all_file_stats)
         
-        # Check if any gold files are missing from file stats
+        # Check if any gold files are missing from file stats (git/processing issues)
         missing_gold_files = []
         for gold_file in gold_filepaths:
             if gold_file not in all_file_stats:
                 missing_gold_files.append(gold_file)
         
         if missing_gold_files:
-            logger.debug(f"Repository {repo_name}: {len(missing_gold_files)}/{len(gold_filepaths)} gold files missing from file stats. Marking example as invalid.")
+            logger.debug(f"Repository {repo_name}: {len(missing_gold_files)}/{len(gold_filepaths)} gold files missing from file stats due to git/processing issues: {missing_gold_files}. Marking example as invalid.")
             example['_invalid_example'] = True  # Mark for filtering
         else:
             example['_invalid_example'] = False  # Explicitly mark as valid
@@ -637,7 +676,6 @@ class SwePreprocessor:
             all_gold_text = " ".join(file_contents_dict.values())
             all_gold_text_w_pr_s = f"{all_gold_text} {example.get('problem_statement')}"
             tokens = self.tokenizer.encode(all_gold_text_w_pr_s, add_special_tokens=False)
-            tokens_without_ps = self.tokenizer.encode(all_gold_text, add_special_tokens=False)
             token_count = len(tokens)
             
             # Keep example if token count is between min and max thresholds
@@ -649,13 +687,13 @@ class SwePreprocessor:
 
     def process(self) -> Set[str]:
         """
-        Process the SWE-Gym dataset:
+        Process the SWE-Gym dataset with optimized filtering:
         1. Load dataset
         2. Clone/update repositories
-        3. Extract file contents for each example
-        4. Extract file statistics for all files in each repo
-        5. Filter out examples with missing gold files
-        6. Apply token count filtering
+        3. Extract gold file contents for each example (fast)
+        4. Apply token count filtering BEFORE expensive file stats computation
+        5. Extract file statistics for all files in each repo (only for token-filtered examples)
+        6. Filter out examples with missing gold files
         7. Calculate simplified statistics
         8. Save processed dataset
         
@@ -687,75 +725,90 @@ class SwePreprocessor:
         # Clone or update repositories
         repo_paths = self.repo_manager.clone_or_update_repos(list(unique_repos))
         
-        # Apply mapping function to extract file contents and file stats
-        logger.info("Starting dataset mapping to extract file contents and compute file statistics...")
-        processed_dataset = dataset.map(
-            lambda example: self._process_example(example, repo_paths),
-            batched=False,  # Process one example at a time
+        # FIRST PASS: Extract only gold file contents (fast operation)
+        logger.info("Starting first pass: extracting gold file contents for token filtering...")
+        dataset_with_contents = dataset.map(
+            lambda example: self._extract_gold_file_contents_only(example, repo_paths),
+            batched=False,
             num_proc=self.num_map_processes,
-            load_from_cache_file=False,  # Ensure the mapping function runs
-            desc="Extracting Gold File Contents and Computing File Stats"
+            load_from_cache_file=False,
+            desc="Extracting Gold File Contents"
         )
-        logger.info("Dataset mapping finished.")
+        logger.info("Gold file content extraction finished.")
         
-        # Filter out examples with missing gold files
-        original_size = len(processed_dataset)
-        logger.info("Filtering out examples with missing gold files...")
-        valid_dataset = processed_dataset.filter(
-            self._filter_valid_examples,
-            desc="Filtering Examples with Missing Gold Files"
-        )
-        
-        invalid_count = original_size - len(valid_dataset)
-        logger.info(f"Filtered out {invalid_count} examples with missing gold files ({len(valid_dataset)} remaining).")
-        
-        # Apply token count filtering
+        # Apply token count filtering EARLY (before expensive file stats computation)
+        original_size = len(dataset_with_contents)
         logger.info(f"Filtering dataset by token count (min: {self.min_token_threshold}, max: {self.max_token_threshold if self.max_token_threshold > 0 else 'unlimited'})...")
         
         # Only filter if we have a tokenizer
         if self.tokenizer:
-            filtered_dataset = valid_dataset.filter(
+            token_filtered_dataset = dataset_with_contents.filter(
                 self._filter_by_token_count,
                 desc="Filtering by Token Count"
             )
-            filtered_size = len(filtered_dataset)
-            token_filtered_out = len(valid_dataset) - filtered_size
+            token_filtered_size = len(token_filtered_dataset)
+            token_filtered_out = original_size - token_filtered_size
             
-            logger.info(f"Token filtering complete. {token_filtered_out} examples filtered out ({filtered_size} remaining).")
-            processed_dataset = filtered_dataset
+            logger.info(f"Token filtering complete. {token_filtered_out} examples filtered out ({token_filtered_size} remaining).")
         else:
             logger.warning("Tokenizer not available, skipping token-based filtering.")
-            processed_dataset = valid_dataset
+            token_filtered_dataset = dataset_with_contents
+            token_filtered_size = len(token_filtered_dataset)
+
+        # SECOND PASS: Compute expensive file statistics only for token-filtered examples
+        logger.info("Starting second pass: computing file statistics for token-filtered examples...")
+        processed_dataset = token_filtered_dataset.map(
+            lambda example: self._add_file_stats_to_example(example, repo_paths),
+            batched=False,
+            num_proc=self.num_map_processes,
+            load_from_cache_file=False,
+            desc="Computing File Stats for Token-Filtered Examples"
+        )
+        logger.info("File statistics computation finished.")
+        
+        # Filter out examples with missing gold files or filtered gold files
+        logger.info("Filtering out examples with missing or filtered gold files...")
+        valid_dataset = processed_dataset.filter(
+            self._filter_valid_examples,
+            desc="Filtering Examples with Missing/Filtered Gold Files"
+        )
+        
+        invalid_count = token_filtered_size - len(valid_dataset)
+        logger.info(f"Filtered out {invalid_count} examples with missing or filtered gold files ({len(valid_dataset)} remaining).")
 
         # Remove the temporary _invalid_example column before saving
-        processed_dataset = processed_dataset.remove_columns(['_invalid_example'])
+        final_dataset = valid_dataset.remove_columns(['_invalid_example'])
 
         # Save the processed dataset
         logger.info(f"Saving processed dataset to '{self.dataset_path}'...")
-        processed_dataset.save_to_disk(self.dataset_path)
+        final_dataset.save_to_disk(self.dataset_path)
         logger.info("Dataset saved successfully.")
 
         # Calculate and display simplified statistics
-        self._calculate_simplified_statistics(processed_dataset, original_size)
+        self._calculate_simplified_statistics(final_dataset, original_size, token_filtered_out if self.tokenizer else 0)
         
         # Validate gold file coverage across the entire dataset
-        self._validate_dataset_gold_file_coverage(processed_dataset)
+        self._validate_dataset_gold_file_coverage(final_dataset)
         
         return unique_repos
 
-    def _calculate_simplified_statistics(self, dataset, original_size):
+    def _calculate_simplified_statistics(self, dataset, original_size, token_filtered_out=0):
         """
         Calculate and log simplified statistics about the processed dataset,
         focusing on filtering results and file statistics.
         
         Args:
             dataset: The processed dataset
-            original_size: Size of the dataset before filtering
+            original_size: Size of the dataset before any filtering
+            token_filtered_out: Number of examples filtered out by token count
         """
         logger.info("\n--- Dataset Filtering Stats ---")
         logger.info(f"Original dataset size: {original_size} examples")
-        logger.info(f"Filtered dataset size: {len(dataset)} examples")
-        logger.info(f"Examples filtered out: {original_size - len(dataset)} examples")
+        if token_filtered_out > 0:
+            logger.info(f"Examples filtered by token count: {token_filtered_out} examples")
+            logger.info(f"Examples after token filtering: {original_size - token_filtered_out} examples")
+        logger.info(f"Final dataset size: {len(dataset)} examples")
+        logger.info(f"Total examples filtered out: {original_size - len(dataset)} examples")
         
         if self.tokenizer:
             logger.info(f"Token threshold criteria: min={self.min_token_threshold}, max={self.max_token_threshold if self.max_token_threshold > 0 else 'unlimited'}")
