@@ -39,6 +39,11 @@ class LocalizationQuery(Action):
     format_penalty: float = Field(default=0.0, description="Penalty for extra/garbage content in output")
     garbage_content: str = Field(default="", description="The garbage content that was found")
 
+    @property
+    def num_queries(self) -> int:
+        """Return the number of queries."""
+        return len(self.queries)
+
 
 LocalizationStep: TypeAlias = Annotated[
     LocalizationQuery,
