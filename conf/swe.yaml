@@ -1,6 +1,6 @@
 defaults:
   - base
-  - finetune: actor_critic
+  - finetune: grpo
   - _self_
 
 # Override the rollout policy for localization
