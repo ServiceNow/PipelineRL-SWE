@@ -32,7 +32,7 @@ valid_batch_size: 4
 # Value of weight decay.
 weight_decay: 0.01
 # Learning rate for training.
-learning_rate: 1e-6
+learning_rate: 5e-7
 # How much to clip the gradient (no clipping if null)
 gradient_clipping_threshold: 0.3
 # Learning rate scheduler type (indexed by completed_steps).
