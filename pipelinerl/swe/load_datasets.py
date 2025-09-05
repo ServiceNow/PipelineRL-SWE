@@ -1,11 +1,12 @@
 import json
 import logging
+import random
 from datasets import load_from_disk
 from typing import List, Dict
 
 logger = logging.getLogger(__name__)
 
-def load_local_swe_dataset(dataset_names: List[str], dataset_path: str) -> List[Dict]:
+def load_local_swe_dataset(dataset_names: List[str], dataset_path: str, shuffle: bool = True, seed: int = 42) -> List[Dict]:
     """
     Load preprocessed SWE datasets from filesystem path.
     Supports both SWE-Gym and SWE-Bench Lite datasets.
@@ -13,6 +14,8 @@ def load_local_swe_dataset(dataset_names: List[str], dataset_path: str) -> List[
     Args:
         dataset_names: List of dataset names (used to determine dataset type)
         dataset_path: Path to the dataset on disk
+        shuffle: Whether to shuffle the dataset
+        seed: Random seed for reproducible shuffling
         
     Returns:
         List of dictionaries containing SWE repair tasks
@@ -69,6 +72,12 @@ def load_local_swe_dataset(dataset_names: List[str], dataset_path: str) -> List[
             except Exception as e:
                 logger.warning(f"Error processing item: {e}")
                 continue
+        
+        # Shuffle the samples if requested
+        if shuffle:
+            random.seed(seed)
+            random.shuffle(samples)
+            logger.info(f"Shuffled {len(samples)} samples with seed {seed}")
             
         logger.info(f"Processed {len(samples)} valid {dataset_type} samples")
         return samples
