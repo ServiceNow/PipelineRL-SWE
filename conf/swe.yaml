@@ -55,7 +55,7 @@ dataset_loader_params:
   test_dataset_path: /mnt/llmd/data/swebench_lite/ds
 
 # Model path - use a coding-focused model if available
-model_path: deepseek-ai/deepseek-coder-6.7b-instruct
+model_path: Qwen/Qwen2.5-Coder-7B-Instruct
 
 # Evaluation settings
 eval_every_n_versions: 1000
