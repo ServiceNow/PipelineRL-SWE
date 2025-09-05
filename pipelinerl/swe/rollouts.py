@@ -256,7 +256,7 @@ async def run_localization_stage(
             metrics_dict["format_penalty"] = format_penalty
             
         else:
-            reward = -1.0
+            reward = 0
             metrics_dict = {"error": "No valid queries generated"}
         
         # Apply discount factor if configured
@@ -351,7 +351,7 @@ async def run_file_selection_stage(
         gold_files = parse_patch_for_gold_files(problem.get("patch", ""))
         
         if not selected_files:
-            reward = -1.0
+            reward = 0
             metrics_dict = {"error": "No files selected"}
         else:
             # Calculate selection metrics
@@ -495,7 +495,7 @@ async def run_repair_stage(
                 selected_file_contents, gold_patch, predicted_edits
             )
         else:
-            reward = -1.0
+            reward = 0
             reward_metadata = {"format_error": True}
         
         # Apply discount factor if configured
@@ -716,7 +716,7 @@ async def generate_unified_swe_rollout(
                 all_output_tokens.append(repair_result['output_tokens'])
             else:
                 logger.error("No file contents available for repair")
-                metrics.repair_reward = -1.0
+                metrics.repair_reward = 0
                 metrics.repair_format_error = True
         
         # Compute derived metrics (including pipeline success metrics)
