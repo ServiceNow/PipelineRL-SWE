@@ -25,20 +25,26 @@ class RepairTask(Observation):
     file_contents: dict[str, str]  # map of file path to content
     template: str = Field(
         default=(
-            "We are currently solving the following issue within our repository. Here is the issue text:\n"
-            "--- BEGIN ISSUE ---\n{problem_statement}\n--- END ISSUE ---\n\n"
-            "Below are some code segments, each from a relevant file. One or more of these files may "
-            "contain bugs.\n{file_contents}\n\n"
-            "Please first localize the bug based on the issue statement, and then generate *SEARCH/"
-            "REPLACE* edits to fix the issue.\n"
-            "Every *SEARCH/REPLACE* edit must use this format:\n"
-            "1. The file path\n"
-            "2. The start of search block: <<<<<<< SEARCH\n"
-            "3. A contiguous chunk of lines to search for in the existing source code\n"
-            "4. The dividing line: =======\n"
-            "5. The lines to replace into the source code\n"
-            "6. The end of the replace block: >>>>>>> REPLACE\n"
-            "Here is an example:\n"
+            "Analyze the following code to find and fix bugs. Use this format:\n\n"
+            "<think>\n"
+            "[Your analysis process - be as detailed as you want until you're confident in your solution]\n"
+            "</think>\n\n"
+            "<solution>\n"
+            "[Your SEARCH/REPLACE edits using this format:]\n\n"
+            "### filename.py\n"
+            "<<<<<<< SEARCH\n"
+            "[exact code to find]\n"
+            "=======\n"
+            "[replacement code]\n"
+            ">>>>>>> REPLACE\n"
+            "</solution>\n\n"
+            "IMPORTANT REQUIREMENTS:\n"
+            "- Every SEARCH/REPLACE edit must use the exact format above\n"
+            "- The SEARCH block must contain a contiguous chunk of lines that exist in the source code\n"
+            "- PROPER INDENTATION IS CRITICAL - if you want to add '    print(x)', you must include all those spaces\n"
+            "- Wrap each SEARCH/REPLACE edit in a code block\n"
+            "- Use separate code blocks for multiple edits\n\n"
+            "Example:\n"
             "```python\n"
             "### mathweb/flask/app.py\n"
             "<<<<<<< SEARCH\n"
@@ -47,12 +53,13 @@ class RepairTask(Observation):
             "import math\n"
             "from flask import Flask\n"
             ">>>>>>> REPLACE\n"
-            "```\n"
-            "Please note that the *SEARCH/REPLACE* edit REQUIRES PROPER INDENTATION. If you would like "
-            "to add the line ' print(x)', you must fully write that out, with all those "
-            "spaces before the code!\n"
-            "Wrap each *SEARCH/REPLACE* edit in a code block as shown in the example above. If you "
-            "have multiple *SEARCH/REPLACE* edits, use a separate code block for each one."
+            "```\n\n"
+            "Here is the issue:\n"
+            "--- BEGIN ISSUE ---\n"
+            "{problem_statement}\n"
+            "--- END ISSUE ---\n\n"
+            "Below are the code files that may contain bugs:\n"
+            "{file_contents}"
         )
     )
 
@@ -201,22 +208,13 @@ class RepairNode(StandardNode):
         task = tape.steps[0]
         assert isinstance(task, RepairTask), f"Expected a RepairTask, got {task.__class__.__name__}"
         
+        # Simplified system message following Option 1
         system_message = {
             "role": "system",
-            "content": (
-                "A user will ask you to solve a task. You should first draft your thinking process (inner "
-                "monologue). Then, generate the solution.\n\n"
-                "Your response format must follow the template below:\n"
-                "<think>\n"
-                "Your thoughts or/and draft, like working through an exercise on scratch paper. Be as "
-                "casual and as long as you want until you are confident to generate a correct solution.\n"
-                "</think>\n"
-                "<solution>\n"
-                "Final solution presented to the user.\n"
-                "</solution>"
-            )
+            "content": "You are a helpful coding assistant that analyzes code and fixes bugs."
         }
         
+        # All task-specific instructions now in the user message
         user_message = {
             "role": "user",
             "content": task.llm_view()
