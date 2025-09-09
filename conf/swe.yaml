@@ -66,6 +66,8 @@ swe:
   enable_repair: true
   repo_path_train: /mnt/llmd/data/swegym/repos
   repo_path_test: /mnt/llmd/data/swebench_lite/repos
+  enable_self_eval: true
+  run_self_eval: true
 
 swe_preprocessor_args:
   repo_path: /mnt/llmd/data/swegym/repos

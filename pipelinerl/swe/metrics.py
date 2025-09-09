@@ -31,6 +31,13 @@ class UnifiedMetrics(BaseMetrics):
     repair_success: Optional[bool] = False         # Reward > threshold
     repair_format_error: Optional[bool] = False    # Failed to parse edits
 
+    # Self-evaluation metrics
+    self_eval_predicted_score: Optional[float] = 0.0    # Predicted repair quality (0.0-1.0)
+    self_eval_prediction_error: Optional[float] = 1.0   # |predicted - actual|
+    self_eval_reward: Optional[float] = 0.0             # Reward for prediction accuracy
+    self_eval_success: Optional[bool] = False             # Prediction within threshold
+    self_eval_parsing_error: Optional[bool] = True       # Failed to parse score
+
     # === PIPELINE-WIDE METRICS ===
     
     # Pipeline success metrics
@@ -68,6 +75,7 @@ class UnifiedMetrics(BaseMetrics):
         )
         
         # Total pipeline success = file pipeline success + repair success
+        # Note: Self-eval success is NOT included in pipeline success since it's evaluative, not generative
         self.total_pipeline_success = (
             self.file_pipeline_success and 
             (self.repair_success or False)
@@ -76,10 +84,11 @@ class UnifiedMetrics(BaseMetrics):
         # Error tracking
         self.localization_format_error = (self.localization_format_penalty or 0) > 0
         self.selection_format_error = (self.selection_format_penalty or 0) > 0
-        # repair_format_error is set directly in repair stage
+        # repair_format_error and self_eval_parsing_error are set directly in their respective stages
         
         self.no_error = not any([
             self.localization_format_error,
             self.selection_format_error, 
-            self.repair_format_error or False
+            self.repair_format_error or False,
+            self.self_eval_parsing_error or False
         ])
