@@ -460,28 +460,17 @@ async def run_repair_stage(
     time_start = time.time()
     
     try:
-        new_tape = await async_execute_agent(agent, tape, EmptyAsyncEnvironment(), session, max_loops=1)
+        # Use the retry mechanism like other stages
+        new_tape, llm_call = await execute_agent_with_retry(agent, tape, session)
         latency = time.time() - time_start
         
         # Extract edits from the response step
         predicted_edits = []
-        llm_call = None
         
         for step in new_tape.steps:
             if isinstance(step, SearchReplaceResponse):
                 predicted_edits = step.edits
-            # Get the LLM call for training data
-            if (
-                hasattr(step, 'metadata') and 
-                step.metadata and 
-                hasattr(step.metadata, 'other') and
-                "llm_call" in step.metadata.other and
-                step.metadata.other["llm_call"] is not None
-            ):
-                llm_call = step.metadata.other["llm_call"]
-        
-        if llm_call is None:
-            raise ValueError("No LLM call found in the generated tape")
+                break
         
         # Convert to LLMCall object if it's a dict
         if isinstance(llm_call, dict):
@@ -540,7 +529,6 @@ async def run_repair_stage(
             'output_tokens': 0,
             'success': False
         }
-
 
 def get_oracle_files_from_patch(patch: str, max_files: int = 10) -> List[str]:
     """Get oracle files from patch, limited to max_files."""
