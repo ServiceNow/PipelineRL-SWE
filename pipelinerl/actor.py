@@ -365,6 +365,51 @@ class ActorLoop:
                 self.sliding_stats[k].append(v)
         
 
+    def compute_selective_stats(self):
+        """Compute abstention-adjusted metrics."""
+        selective_stats = {}
+        
+        # Only compute if we have self-eval data
+        repair_key = 'repair_reward'
+        eval_key = 'self_eval_predicted_score'
+        
+        if repair_key not in self.stats or eval_key not in self.stats:
+            return selective_stats
+        
+        thresholds = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+        
+        for threshold in thresholds:
+            all_pairs = []
+            
+            # Collect (reward, score) pairs across all datasets/groups
+            for dataset in self.stats[repair_key]:
+                for group in self.stats[repair_key][dataset]:
+                    rewards = self.stats[repair_key][dataset][group]
+                    scores = self.stats[eval_key].get(dataset, {}).get(group, [])
+                    
+                    # Match up rewards and scores
+                    for r, s in zip(rewards, scores):
+                        if r is not None and s is not None:
+                            all_pairs.append((r, s))
+            
+            if not all_pairs:
+                continue
+                
+            # Apply threshold filtering
+            attempted = [(r, s) for r, s in all_pairs if s >= threshold]
+            
+            if attempted:
+                attempted_rewards = [r for r, s in attempted]
+                coverage = len(attempted) / len(all_pairs)
+                
+                selective_stats.update({
+                    f'selective_reward_thresh_{threshold:.1f}': sum(attempted_rewards) / len(attempted_rewards),
+                    f'selective_success_thresh_{threshold:.1f}': sum(1 for r in attempted_rewards if r > 0.8) / len(attempted_rewards),
+                    f'coverage_thresh_{threshold:.1f}': coverage,
+                    f'abstention_rate_thresh_{threshold:.1f}': 1.0 - coverage,
+                })
+        
+        return selective_stats
 
     def run(self, dataset: list[tuple[str, dict]]):
         loop_start_time = time.time()
@@ -545,6 +590,9 @@ class ActorLoop:
         stats |= loop_stats
         for k, v in self.sliding_stats.items():
             stats[k] = sum(v) / len(v) if v else 0
+        
+        stats.update({f"{split_name}{k}": v for k, v in self.compute_selective_stats().items()})
+
         if self.cfg.wandb.use_wandb:
             wandb.log({f"actor/{k}": v for k, v in stats.items()})
         stats_writer.write(stats)
