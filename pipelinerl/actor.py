@@ -365,51 +365,91 @@ class ActorLoop:
                 self.sliding_stats[k].append(v)
         
 
-    def compute_selective_stats(self):
-        """Compute abstention-adjusted metrics."""
-        selective_stats = {}
+    def compute_abstention_stats(self):
+        """Compute abstention-adjusted metrics using config-fixed threshold."""
+        abstention_stats = {}
         
-        # Only compute if we have self-eval data
-        repair_key = 'repair_reward'
-        eval_key = 'self_eval_predicted_score'
+        # Get abstention threshold from config, default to 0.5 if not set
+        abstention_threshold = getattr(self.cfg.swe, 'abstention_threshold', 0.5)
         
-        if repair_key not in self.stats or eval_key not in self.stats:
-            return selective_stats
+        # Only compute if we have self-eval data for any stage
+        stages = ['localization', 'selection', 'repair']
         
-        thresholds = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
-        
-        for threshold in thresholds:
+        for stage in stages:
+            eval_key = f'{stage}_self_eval_predicted_score'
+            
+            # Use the correct reward key for each stage
+            if stage == 'localization':
+                reward_key = 'localization_mrr'
+            elif stage == 'selection':
+                reward_key = 'selection_recall'
+            elif stage == 'repair':
+                reward_key = 'repair_reward'
+            else:
+                continue  # Skip unknown stages
+            
+            if eval_key not in self.stats or reward_key not in self.stats:
+                continue
+            
             all_pairs = []
             
-            # Collect (reward, score) pairs across all datasets/groups
-            for dataset in self.stats[repair_key]:
-                for group in self.stats[repair_key][dataset]:
-                    rewards = self.stats[repair_key][dataset][group]
-                    scores = self.stats[eval_key].get(dataset, {}).get(group, [])
+            # Collect (predicted_score, reward) tuples across all datasets/groups
+            for dataset in self.stats[eval_key]:
+                for group in self.stats[eval_key][dataset]:
+                    predicted_scores = self.stats[eval_key][dataset][group]
+                    rewards = self.stats[reward_key].get(dataset, {}).get(group, [])
                     
-                    # Match up rewards and scores
-                    for r, s in zip(rewards, scores):
-                        if r is not None and s is not None:
-                            all_pairs.append((r, s))
+                    # Match up scores and rewards
+                    for pred_score, reward in zip(predicted_scores, rewards):
+                        if pred_score is not None and reward is not None:
+                            all_pairs.append((pred_score, reward))
             
             if not all_pairs:
                 continue
-                
-            # Apply threshold filtering
-            attempted = [(r, s) for r, s in all_pairs if s >= threshold]
+            
+            # Apply fixed threshold filtering
+            attempted = [(pred_score, reward) for pred_score, reward in all_pairs 
+                        if pred_score >= abstention_threshold]
             
             if attempted:
-                attempted_rewards = [r for r, s in attempted]
+                attempted_rewards = [reward for _, reward in attempted]
                 coverage = len(attempted) / len(all_pairs)
                 
-                selective_stats.update({
-                    f'selective_reward_thresh_{threshold:.1f}': sum(attempted_rewards) / len(attempted_rewards),
-                    f'selective_success_thresh_{threshold:.1f}': sum(1 for r in attempted_rewards if r > 0.8) / len(attempted_rewards),
-                    f'coverage_thresh_{threshold:.1f}': coverage,
-                    f'abstention_rate_thresh_{threshold:.1f}': 1.0 - coverage,
+                abstention_stats.update({
+                    f'{stage}_abstention_reward': sum(attempted_rewards) / len(attempted_rewards),
+                    f'{stage}_abstention_coverage': coverage,
+                    f'{stage}_abstention_rate': 1.0 - coverage,
+                    f'{stage}_abstention_count': len(attempted),
+                    f'{stage}_total_count': len(all_pairs)
+                })
+            else:
+                # All examples abstained
+                abstention_stats.update({
+                    f'{stage}_abstention_reward': 0.0,
+                    f'{stage}_abstention_coverage': 0.0,
+                    f'{stage}_abstention_rate': 1.0,
+                    f'{stage}_abstention_count': 0,
+                    f'{stage}_total_count': len(all_pairs)
                 })
         
-        return selective_stats
+        # Compute overall pipeline abstention stats
+        if abstention_stats:
+            # Pipeline coverage = fraction of examples that made it through all enabled stages
+            pipeline_coverage_values = [abstention_stats.get(f'{stage}_abstention_coverage', 1.0) 
+                                    for stage in stages 
+                                    if f'{stage}_abstention_coverage' in abstention_stats]
+            
+            if pipeline_coverage_values:
+                # Multiplicative coverage (all stages must pass)
+                pipeline_coverage = 1.0
+                for coverage in pipeline_coverage_values:
+                    pipeline_coverage *= coverage
+                
+                abstention_stats['pipeline_abstention_coverage'] = pipeline_coverage
+                abstention_stats['pipeline_abstention_rate'] = 1.0 - pipeline_coverage
+                abstention_stats['abstention_threshold_used'] = abstention_threshold
+        
+        return abstention_stats
 
     def run(self, dataset: list[tuple[str, dict]]):
         loop_start_time = time.time()
@@ -591,7 +631,9 @@ class ActorLoop:
         for k, v in self.sliding_stats.items():
             stats[k] = sum(v) / len(v) if v else 0
         
-        stats.update({f"{split_name}{k}": v for k, v in self.compute_selective_stats().items()})
+        # Add abstention stats with config-fixed threshold
+        abstention_stats = self.compute_abstention_stats()
+        stats.update({f"{split_name}{k}": v for k, v in abstention_stats.items()})
 
         if self.cfg.wandb.use_wandb:
             wandb.log({f"actor/{k}": v for k, v in stats.items()})

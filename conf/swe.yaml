@@ -12,6 +12,7 @@ actor:
   discount_factor: 1
   task_template: "{task}"
   throughput_window_size: 50
+  success_threshold: 0.8  # For repair stage
 
 # Use SWE dataset loader
 dataset_loader: pipelinerl.swe.load_datasets.load_local_swe_dataset
@@ -61,13 +62,31 @@ model_path: Qwen/Qwen2.5-Coder-7B-Instruct
 eval_every_n_versions: 1000
 
 swe:
-  enable_localization: false
-  enable_file_selection: false
+  # Stage enablement flags
+  enable_localization: true
+  enable_file_selection: true
   enable_repair: true
+  
+  # Run flags (for stages that contribute to training data)
+  run_localization: true
+  run_file_selection: true
+  run_repair: true
+  
+  # Self-evaluation flags (NEW - enable generic self-eval for each stage)
+  enable_localization_self_eval: true
+  enable_file_selection_self_eval: true
+  enable_repair_self_eval: true
+  
+  # Repository paths
   repo_path_train: /mnt/llmd/data/swegym/repos
   repo_path_test: /mnt/llmd/data/swebench_lite/repos
+  
+  # Self-evaluation and repair settings
   enable_self_eval: true
   run_self_eval: true
+  
+  # Abstention threshold (NEW - config-fixed threshold for all stages)
+  abstention_threshold: 0.5  # Examples with self-eval score < 0.5 will be marked for abstention
 
 swe_preprocessor_args:
   repo_path: /mnt/llmd/data/swegym/repos
