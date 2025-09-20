@@ -374,10 +374,12 @@ async def run_file_selection_with_self_eval(cfg, llm, problem, enriched_context,
                 relevant_selected = set(selected_files) & set(gold_files)
                 precision = len(relevant_selected) / len(selected_files)
                 recall = len(relevant_selected) / len(gold_files)
-                reward = recall
+                f1 = 2 * (precision * recall) / (precision + recall)
+                reward = f1
                 metrics_dict = {
                     "selection_precision": precision,
                     "selection_recall": recall,
+                    "selection_f1": f1,
                     "gold_files": gold_files,
                     "selected_files": selected_files,
                 }
@@ -624,6 +626,7 @@ async def generate_unified_swe_rollout(cfg, llm, problem, session):
                     sel_metrics = sel_result['metrics']
                     metrics.selection_precision = sel_metrics.get('selection_precision', 0.0)
                     metrics.selection_recall = sel_metrics.get('selection_recall', 0.0)
+                    metrics.selection_f1 = sel_metrics.get('selection_f1', 0.0)
                     metrics.selection_format_penalty = sel_metrics.get('format_penalty', 0.0)
                     
                     # Add self-eval metrics

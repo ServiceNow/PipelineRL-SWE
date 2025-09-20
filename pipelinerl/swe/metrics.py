@@ -22,7 +22,8 @@ class UnifiedMetrics(BaseMetrics):
 
     # File selection metrics 
     selection_precision: Optional[float] = 0.0     
-    selection_recall: Optional[float] = 0.0        
+    selection_recall: Optional[float] = 0.0   
+    selection_f1: Optional[float] = 0.0
     selection_format_penalty: Optional[float] = 0.0
 
     # Repair metrics

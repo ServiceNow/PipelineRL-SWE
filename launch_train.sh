@@ -1,3 +1,3 @@
-JOB_NAME=self_eval_all_stages
+JOB_NAME=self_eval_all
 OUTPUT_DIR=/mnt/llmd/results/exps/aristides/reason/${JOB_NAME} 
 make job JOB_NAME=${JOB_NAME} ENV=prl CONDA_EXE=/opt/conda/bin/conda SNAPSHOT=1 NPROC=8 COMMAND="cd PipelineRL-SWE; python -m pipelinerl.launch --config-dir conf --config-name swe output_dir=${OUTPUT_DIR} wandb.wandb_workspace_root=/mnt/llmd/results/exps wandb.wandb_project_name=prl finetune.seq_parallel=4 finetune.seq_length=50000"
