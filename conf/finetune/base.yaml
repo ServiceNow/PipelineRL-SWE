@@ -85,7 +85,7 @@ queue_size: 32
 max_lag: ${..max_lag}
 weight_update_interval: 1
 pop_old_data: ${..pop_old_data}
-attempts: 1
+attempts: 8
 eval_callback:
   _target_: tapeagents.finetune.eval.dummy_eval_callback
   config_name: ""
