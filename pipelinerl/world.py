@@ -131,20 +131,26 @@ class WorldMap:
 
 
     def _split_gpus_by_purpose(self, cfg):
+        # Reserve GPU for expert LLM BEFORE calculating other allocations
+        expert_llm_gpus = 1 if cfg.world.get('expert_llm', {}).get('enabled', False) else 0
+        
         fraction_sum = cfg.world.actor_fraction + cfg.world.preprocessor_fraction + cfg.world.finetune_fraction
         actor_fraction = cfg.world.actor_fraction / fraction_sum
         preprocessor_fraction = cfg.world.preprocessor_fraction / fraction_sum
 
         # TODO: support nodes with less than 8 GPUs available
         total_gpus = self.world_size * self.node_size
-        desired_actor_gpu_share = max(int(total_gpus * actor_fraction), self.gpus_per_llm)
+        available_for_pipeline = total_gpus - expert_llm_gpus  # Reduce available pool
+        
+        desired_actor_gpu_share = max(int(available_for_pipeline * actor_fraction), self.gpus_per_llm)
         desired_preprocessor_gpu_share = (
-            max(int(total_gpus * preprocessor_fraction), self.gpus_per_llm) if cfg.world.preprocessor_fraction else 0
+            max(int(available_for_pipeline * preprocessor_fraction), self.gpus_per_llm) if cfg.world.preprocessor_fraction else 0
         )
-        desired_finetune_gpu_share = total_gpus - desired_actor_gpu_share - desired_preprocessor_gpu_share
+        desired_finetune_gpu_share = available_for_pipeline - desired_actor_gpu_share - desired_preprocessor_gpu_share
         self._log_info(
             f"Desired GPU share: {desired_actor_gpu_share} for actors,"
-            f"{desired_preprocessor_gpu_share} for preprocessors, {desired_finetune_gpu_share} for finetune"
+            f"{desired_preprocessor_gpu_share} for preprocessors, {desired_finetune_gpu_share} for finetune, "
+            f"{expert_llm_gpus} for expert LLM"
         )
 
         gpus_per_actor = int(desired_actor_gpu_share / cfg.world.replicas) if cfg.world.replicas > 0 else 0
@@ -163,16 +169,16 @@ class WorldMap:
 
         total_actor_gpus = cfg.world.replicas * gpus_per_actor
         total_preprocessor_gpus = cfg.world.replicas * gpus_per_preprocessor
-        self.total_finetune_gpus = total_gpus - total_actor_gpus - total_preprocessor_gpus
+        self.total_finetune_gpus = available_for_pipeline - total_actor_gpus - total_preprocessor_gpus
         self._log_info(
             f"The configuration required:\n"
-            f"{desired_actor_gpu_share} for actors, {desired_preprocessor_gpu_share} for preprocessors, {self.total_finetune_gpus} for finetune,\n"
+            f"{desired_actor_gpu_share} for actors, {desired_preprocessor_gpu_share} for preprocessors, {self.total_finetune_gpus} for finetune, {expert_llm_gpus} for expert LLM,\n"
             f"with {cfg.world.replicas} actors and {cfg.world.replicas} preprocessors,\n"
             f"and with {self.gpus_per_llm} per each LLM.\n"
         )
         self._log_info("I have adjusted the GPU shares to accomodate these constraints.")
         self._log_info(
-            f"Actual GPU share: {total_actor_gpus} for actors, {total_preprocessor_gpus} for preprocessors, {self.total_finetune_gpus} for finetune"
+            f"Actual GPU share: {total_actor_gpus} for actors, {total_preprocessor_gpus} for preprocessors, {self.total_finetune_gpus} for finetune, {expert_llm_gpus} for expert LLM"
         )
         if self.total_finetune_gpus < 0:
             raise ValueError("Not enough gpus to place all workers")
@@ -180,6 +186,9 @@ class WorldMap:
             logger.warning("No GPUs left for finetune workers. You can still debug other parts of the pipeline.")
 
         self.weight_update_group_size = self.total_actor_llms * self.gpus_per_llm + 1
+        
+        # Store for later use in placement
+        self.expert_llm_gpus = expert_llm_gpus
 
     def _place_pipeline_stages(self, cfg):
         for worker_idx in range(cfg.world.replicas):
@@ -201,6 +210,7 @@ class WorldMap:
             )
 
     def _place_inference_jobs(self, cfg):
+        # Place actor LLMs
         for _ in range(cfg.world.replicas):
             for actor_llm_idx in range(self.llms_per_actor):
                 node = next(
@@ -221,6 +231,7 @@ class WorldMap:
                     url=llm_url,
                 )
 
+        # Place preprocessor LLMs
         for _ in range(cfg.world.replicas):
             for preprocessor_llm_idx in range(self.llms_per_preprocessor):
                 node = next(
@@ -239,6 +250,26 @@ class WorldMap:
                     gpus=gpus,
                     url=ref_url,
                 )
+
+        # Place expert LLM if enabled
+        if self.expert_llm_gpus > 0:
+            node = next(
+                (node for node in self.available_gpus if len(self.available_gpus[node]) >= 1), None
+            )
+            if node is None:
+                raise ValueError("Not enough GPUs to place expert LLM")
+            
+            gpu = self.available_gpus[node].pop()
+            expert_url = f"http://{self.address_map[node]}:8280"
+            self.add_job(
+                kind="expert_llm",
+                replica_idx=0,  # Only one expert LLM
+                local_idx=gpu,
+                node_rank=node,
+                gpus=[gpu],
+                port=8280,
+                url=expert_url,
+            )
 
     def get_least_busy_node(self):
         """Get the node with the least number of CPU-heavy jobs."""
@@ -265,3 +296,8 @@ class WorldMap:
 
     def get_preprocessor_urls(self) -> list[str]:
         return [job.url for job in self.get_all_jobs() if job.kind == "preprocessor_llm"]
+
+    def get_expert_llm_url(self) -> str:
+        """Get the expert LLM URL if it exists."""
+        expert_jobs = [job for job in self.get_all_jobs() if job.kind == "expert_llm"]
+        return expert_jobs[0].url if expert_jobs else ""

@@ -113,6 +113,47 @@ def run_ref_llm(cfg: DictConfig, preprocessor_llm_idx: int, local_idx: int, gpus
         )
 
 
+def run_expert_llm(cfg: DictConfig, local_idx: int, gpus: list[int], exp_dir: Path):
+    """Launch the expert LLM for on-demand consultation."""
+    log_dir = exp_dir / "expert_llm"
+    os.makedirs(log_dir, exist_ok=True)
+
+    cmd = [
+        "python",
+        "-m",
+        "vllm.entrypoints.openai.api_server",
+        "--model",
+        str(cfg.world.expert_llm.model_path),
+        "--port",
+        "8280",
+        "--host",
+        "0.0.0.0",
+        "--seed",
+        str(cfg.seed + 9999),  # Different seed for expert
+    ]
+
+    # Add expert-specific vLLM kwargs
+    expert_kwargs = cfg.world.expert_llm.get('vllm_kwargs', {})
+    for k, v in expert_kwargs.items():
+        cmd.append(f"--{k}")
+        if v not in [None, ""]:
+            cmd.append(str(v))
+
+    gpu_str = ",".join([str(gpu) for gpu in gpus])
+    logger.info(f"Running expert LLM with command: {' '.join(cmd)} on GPU: {gpu_str}")
+    save_command(log_dir, cmd)
+    
+    log_file_path = os.path.join(log_dir, "stdout.log")
+    err_file_path = os.path.join(log_dir, "stderr.log")
+    with open(log_file_path, "a") as log_file, open(err_file_path, "a") as err_file:
+        yield _popen(
+            cmd,
+            env={**os.environ, "CUDA_VISIBLE_DEVICES": gpu_str},
+            stdout=log_file,
+            stderr=err_file,
+        )
+
+
 def run_actor_llm(
     cfg: DictConfig, world_map: WorldMap, actor_llm_idx: int, local_idx: int, gpus: list[int], exp_dir: Path
 ):
@@ -178,6 +219,10 @@ def run_actor(world_map: WorldMap, actor_idx: int, exp_dir: Path):
     if actor_idx != 0:
         raise NotImplementedError("Can only do 1 actor yet")
     llm_urls = "+".join(world_map.get_actor_urls())
+    
+    # Pass expert LLM URL to actor if available
+    expert_url = world_map.get_expert_llm_url()
+    
     cmd = [
         "python",
         "-m",
@@ -190,6 +235,10 @@ def run_actor(world_map: WorldMap, actor_idx: int, exp_dir: Path):
         f"hydra.run.dir={exp_dir}/actor",
         f"+me.llm_urls={llm_urls}",
     ]
+    
+    if expert_url:
+        cmd.append(f"+me.expert_llm_url={expert_url}")
+    
     logger.info(f"Running actor with command: {' '.join(cmd)}")
     save_command(exp_dir / "actor", cmd)
     yield _popen(
@@ -460,7 +509,7 @@ def debug_link_streams(cfg: DictConfig, topics: list[str]):
 def launch_jobs(cfg: DictConfig, world_map: WorldMap, job_kind_filter: list | None = None):
     exp_dir = Path(cfg.output_dir)
     processes = []
-    all_job_kinds = ["actor", "environment", "actor_llm", "preprocessor", "preprocessor_llm", "finetune"]
+    all_job_kinds = ["actor", "environment", "actor_llm", "preprocessor", "preprocessor_llm", "finetune", "expert_llm"]
     if job_kind_filter is None:
         job_kind_filter = all_job_kinds
     for job in world_map.my_jobs():
@@ -482,6 +531,10 @@ def launch_jobs(cfg: DictConfig, world_map: WorldMap, job_kind_filter: list | No
             if cfg.debug.use_existing_llms:
                 continue            
             processes.extend(run_ref_llm(cfg, job.replica_idx, job.local_idx, job.gpus, exp_dir))
+        elif job.kind == "expert_llm":
+            if cfg.debug.use_existing_llms:
+                continue
+            processes.extend(run_expert_llm(cfg, job.local_idx, job.gpus, exp_dir))
         elif job.kind == "finetune":
             processes.extend(run_finetune(cfg, world_map, job.gpus, exp_dir))
         else:
