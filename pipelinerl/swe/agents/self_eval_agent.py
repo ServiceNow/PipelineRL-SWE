@@ -233,5 +233,8 @@ class SelfEvalAgent(Agent):
         )
         agent.store_llm_calls = True
         if llm:
-            agent.llm.load_tokenizer()
+            try:
+                agent.llm.load_tokenizer()
+            except AttributeError as e:
+                logger.error(f"Failed to load tokenizer for LLM: {e}")
         return agent

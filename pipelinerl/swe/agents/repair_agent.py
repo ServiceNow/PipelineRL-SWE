@@ -222,10 +222,13 @@ class RepairNode(StandardNode):
         
         messages = [system_message, user_message]
         
-        prompt_token_ids = agent.llm.tokenizer.apply_chat_template(
-            messages, add_special_tokens=True, add_generation_prompt=True
-        )
-        prompt_token_ids = prompt_token_ids[-self.max_prompt_length:]
+        prompt_token_ids = []
+        if hasattr(agent, 'llm') and hasattr(agent.llm, 'tokenizer') and agent.llm.tokenizer:
+            prompt_token_ids = agent.llm.tokenizer.apply_chat_template(
+                messages, add_special_tokens=True, add_generation_prompt=True
+            )
+            prompt_token_ids = prompt_token_ids[-self.max_prompt_length:]
+            
         return Prompt(messages=messages, token_ids=prompt_token_ids)
 
 
@@ -252,5 +255,8 @@ class RepairAgent(Agent):
         )
         agent.store_llm_calls = True
         if llm:
-            agent.llm.load_tokenizer()
+            try:
+                agent.llm.load_tokenizer()
+            except AttributeError as e:
+                logger.error(f"Failed to load tokenizer for LLM: {e}")
         return agent

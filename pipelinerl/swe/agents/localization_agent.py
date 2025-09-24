@@ -195,7 +195,7 @@ class LocalizationNode(StandardNode):
         messages = [system_message, user_message]
         
         # Apply token limit if we have a tokenizer
-        prompt_token_ids = None
+        prompt_token_ids = []
         if hasattr(agent, 'llm') and hasattr(agent.llm, 'tokenizer') and agent.llm.tokenizer:
             prompt_token_ids = agent.llm.tokenizer.apply_chat_template(
                 messages, add_special_tokens=True, add_generation_prompt=True
@@ -236,5 +236,8 @@ class LocalizationAgent(Agent):
         )
         agent.store_llm_calls = True
         if llm:
-            agent.llm.load_tokenizer()
+            try:
+                agent.llm.load_tokenizer()
+            except AttributeError as e:
+                logger.error(f"Failed to load tokenizer for LLM: {e}")
         return agent
