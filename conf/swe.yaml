@@ -98,3 +98,10 @@ swe_preprocessor_args:
   force_reprocess: false
   hf_dataset_name: SWE-Gym/SWE-Gym
   hf_split_name: train
+
+world:
+  expert_llm:
+    enabled: true
+    model_path: openai/gpt-oss-120b
+    vllm_kwargs:
+      max-model-len: 65536
