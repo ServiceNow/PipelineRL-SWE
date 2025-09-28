@@ -21,13 +21,14 @@ train_dataset_names:
 test_dataset_names:
   - swebench_lite
 
-# Localization-specific settings
-localization_agent:
+# Agent-specific settings
+agent:
   max_prompt_length: 48000
-selection_agent:
-  max_prompt_length: 48000
-repair_agent:
-  max_prompt_length: 48000
+  selection_max_prompt_length: 48000
+  repair_max_prompt_length: 48000
+  # A2A agent settings
+  query_generation_max_prompt_length: 16000
+  expert_advice_max_prompt_length: 20000
 
 # Finetune settings optimized for localization
 finetune:
@@ -72,10 +73,28 @@ swe:
   run_file_selection: true
   run_repair: true
   
-  # Self-evaluation flags (NEW - enable generic self-eval for each stage)
+  # Self-evaluation flags (enable generic self-eval for each stage)
   enable_localization_self_eval: true
   enable_file_selection_self_eval: true
   enable_repair_self_eval: true
+  
+  # A2A system configuration
+  enable_a2a: true
+  
+  # A2A trigger thresholds (when to consult expert model)
+  localization_a2a_trigger_threshold: 0.5
+  file_selection_a2a_trigger_threshold: 0.5  
+  repair_a2a_trigger_threshold: 0.5
+  
+  # Expert model configuration (port 8280)
+  expert_model:
+    base_url: "http://localhost:8280"
+    model_name: "gpt-oss-120b"
+    parameters:
+      max_tokens: 64000
+      temperature: 1.0
+    timeout: 300  # seconds
+    max_retries: 3
   
   # Repository paths
   repo_path_train: /mnt/llmd/data/swegym/repos
@@ -85,7 +104,7 @@ swe:
   enable_self_eval: true
   run_self_eval: true
   
-  # Abstention threshold (NEW - config-fixed threshold for all stages)
+  # Abstention threshold (config-fixed threshold for all stages)
   abstention_threshold: 0.5  # Examples with self-eval score < 0.5 will be marked for abstention
 
 swe_preprocessor_args:

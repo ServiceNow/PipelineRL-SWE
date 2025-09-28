@@ -171,50 +171,67 @@ class FileSelectionNode(StandardNode):
 
     def make_prompt(self, agent: Any, tape: Tape) -> Prompt:
         """Create a prompt for the model to select relevant files."""
-        task = tape.steps[0]
-        assert isinstance(task, FileSelectionTask), f"Expected FileSelectionTask, got {task.__class__.__name__}"
+        # Extract expert feedback and task from tape
+        expert_feedback = None
+        task = None
+        
+        for step in tape.steps:
+            if hasattr(step, 'kind') and step.kind == "expert_model_advice":
+                expert_feedback = step
+            elif isinstance(step, FileSelectionTask):
+                task = step
+        
+        assert task is not None, f"No FileSelectionTask found in tape steps: {[type(s).__name__ for s in tape.steps]}"
+        
+        system_content = (
+            "You are an expert software engineer tasked with selecting the most relevant files "
+            "for fixing a given issue. You will be shown candidate files that were identified "
+            "through initial search, along with their key components (functions, classes, imports).\n\n"
+            "Your goal is to select the files that are most likely to contain the bug or need "
+            "modification to fix the issue. Select as many files as you think are necessary - "
+            "this could be 1 file for simple issues or several files for complex issues that "
+            "span multiple components.\n\n"
+            "Consider:\n"
+            "- Which files contain the specific functionality mentioned in the issue\n"
+            "- Which files are most likely to contain the root cause of the problem\n"
+            "- Which files would need to be modified to implement the fix\n"
+            "- Dependencies and relationships between files\n\n"
+            "Selection guidelines:\n"
+            "- Include files that directly implement the problematic functionality\n"
+            "- Include related files that might need coordinated changes\n"
+            "- Don't include files that are clearly unrelated to the issue\n"
+            "- You are selecting from among the provided candidate files ONLY.\n"
+            "- Prioritize quality over quantity - select only truly relevant files\n\n"
+            "IMPORTANT: Your response must end immediately after the last </file> tag. "
+            "Any additional content after the final file tag will result in a penalty.\n\n"
+            
+            "Format your response as:\n"
+            "<thinking>[Your analysis of each candidate file and reasoning for selection]</thinking>\n\n"
+            "<file>full/path/to/first/selected/file.py</file>\n"
+            "<file>full/path/to/second/selected/file.py</file>\n"
+            "<file>full/path/to/additional/files/as/needed.py</file>"
+        )
+        
+        user_content = task.llm_view()
+        
+        # Add expert feedback if present
+        if expert_feedback:
+            user_content = expert_feedback.llm_view() + "\n\n" + user_content
         
         system_message = {
             "role": "system",
-            "content": (
-                "You are an expert software engineer tasked with selecting the most relevant files "
-                "for fixing a given issue. You will be shown candidate files that were identified "
-                "through initial search, along with their key components (functions, classes, imports).\n\n"
-                "Your goal is to select the files that are most likely to contain the bug or need "
-                "modification to fix the issue. Select as many files as you think are necessary - "
-                "this could be 1 file for simple issues or several files for complex issues that "
-                "span multiple components.\n\n"
-                "Consider:\n"
-                "- Which files contain the specific functionality mentioned in the issue\n"
-                "- Which files are most likely to contain the root cause of the problem\n"
-                "- Which files would need to be modified to implement the fix\n"
-                "- Dependencies and relationships between files\n\n"
-                "Selection guidelines:\n"
-                "- Include files that directly implement the problematic functionality\n"
-                "- Include related files that might need coordinated changes\n"
-                "- Don't include files that are clearly unrelated to the issue\n"
-                "- You are selecting from among the provided candidate files ONLY.\n"
-                "- Prioritize quality over quantity - select only truly relevant files\n\n"
-                "IMPORTANT: Your response must end immediately after the last </file> tag. "
-                "Any additional content after the final file tag will result in a penalty.\n\n"
-                
-                "Format your response as:\n"
-                "<thinking>[Your analysis of each candidate file and reasoning for selection]</thinking>\n\n"
-                "<file>full/path/to/first/selected/file.py</file>\n"
-                "<file>full/path/to/second/selected/file.py</file>\n"
-                "<file>full/path/to/additional/files/as/needed.py</file>"
-            )
+            "content": system_content
         }
         
         user_message = {
             "role": "user", 
-            "content": task.llm_view()
+            "content": user_content
         }
         
         messages = [system_message, user_message]
         
         # Apply token limit if we have a tokenizer
-        prompt_token_ids = []
+        prompt_token_ids = None
         if hasattr(agent, 'llm') and hasattr(agent.llm, 'tokenizer') and agent.llm.tokenizer:
             prompt_token_ids = agent.llm.tokenizer.apply_chat_template(
                 messages, add_special_tokens=True, add_generation_prompt=True
@@ -255,8 +272,5 @@ class FileSelectionAgent(Agent):
         )
         agent.store_llm_calls = True
         if llm:
-            try:
-                agent.llm.load_tokenizer()
-            except AttributeError as e:
-                logger.error(f"Failed to load tokenizer for LLM: {e}")
+            agent.llm.load_tokenizer()
         return agent

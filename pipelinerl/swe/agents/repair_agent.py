@@ -204,9 +204,18 @@ class RepairNode(StandardNode):
             return
 
     def make_prompt(self, agent: Any, tape: Tape) -> Prompt:
-        # The tape is only one step long containing the task
-        task = tape.steps[0]
-        assert isinstance(task, RepairTask), f"Expected a RepairTask, got {task.__class__.__name__}"
+        """Create a prompt for the model to perform code repair."""
+        # Extract expert feedback and task from tape
+        expert_feedback = None
+        task = None
+        
+        for step in tape.steps:
+            if hasattr(step, 'kind') and step.kind == "expert_model_advice":
+                expert_feedback = step
+            elif isinstance(step, RepairTask):
+                task = step
+        
+        assert task is not None, f"No RepairTask found in tape steps: {[type(s).__name__ for s in tape.steps]}"
         
         # Simplified system message following Option 1
         system_message = {
@@ -215,20 +224,23 @@ class RepairNode(StandardNode):
         }
         
         # All task-specific instructions now in the user message
+        user_content = task.llm_view()
+        
+        # Add expert feedback if present
+        if expert_feedback:
+            user_content = expert_feedback.llm_view() + "\n\n" + user_content
+        
         user_message = {
             "role": "user",
-            "content": task.llm_view()
+            "content": user_content
         }
         
         messages = [system_message, user_message]
         
-        prompt_token_ids = []
-        if hasattr(agent, 'llm') and hasattr(agent.llm, 'tokenizer') and agent.llm.tokenizer:
-            prompt_token_ids = agent.llm.tokenizer.apply_chat_template(
-                messages, add_special_tokens=True, add_generation_prompt=True
-            )
-            prompt_token_ids = prompt_token_ids[-self.max_prompt_length:]
-            
+        prompt_token_ids = agent.llm.tokenizer.apply_chat_template(
+            messages, add_special_tokens=True, add_generation_prompt=True
+        )
+        prompt_token_ids = prompt_token_ids[-self.max_prompt_length:]
         return Prompt(messages=messages, token_ids=prompt_token_ids)
 
 
@@ -255,8 +267,5 @@ class RepairAgent(Agent):
         )
         agent.store_llm_calls = True
         if llm:
-            try:
-                agent.llm.load_tokenizer()
-            except AttributeError as e:
-                logger.error(f"Failed to load tokenizer for LLM: {e}")
+            agent.llm.load_tokenizer()
         return agent

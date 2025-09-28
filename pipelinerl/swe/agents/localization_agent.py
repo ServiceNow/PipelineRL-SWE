@@ -138,9 +138,17 @@ class LocalizationNode(StandardNode):
 
     def make_prompt(self, agent: Any, tape: Tape) -> Prompt:
         """Create a prompt for the model to generate search queries."""
-        # The tape should contain just the localization task
-        task = tape.steps[0]
-        assert isinstance(task, LocalizationTask), f"Expected LocalizationTask, got {task.__class__.__name__}"
+        # Extract expert feedback and task from tape
+        expert_feedback = None
+        task = None
+        
+        for step in tape.steps:
+            if hasattr(step, 'kind') and step.kind == "expert_model_advice":
+                expert_feedback = step
+            elif isinstance(step, LocalizationTask):
+                task = step
+        
+        assert task is not None, f"No LocalizationTask found in tape steps: {[type(s).__name__ for s in tape.steps]}"
         
         # Extract unique directories from file paths
         directories = set()
@@ -154,48 +162,59 @@ class LocalizationNode(StandardNode):
         # Create simple directory listing
         dirs_text = "\n".join(sorted(directories))
         
+        system_content = (
+            "You are an expert software engineer tasked with generating BM25 search queries to find "
+            "relevant files in a codebase for fixing a given issue.\n\n"
+            "You will be shown the directory structure of the repository. Your goal is to create "
+            "search queries that will rank the most relevant files as highly as possible using "
+            "BM25 keyword matching.\n\n"
+            "Generate 1-10 focused search queries. You can use multiple queries to cover different "
+            "aspects of the issue or different terminology that might be used. The total retrieval "
+            "budget is 10 files, which will be split among your queries, so more queries means "
+            "fewer results per query.\n\n"
+            "Focus on:\n"
+            "- Keywords from the issue description\n"
+            "- Technical terms, class names, method names\n"
+            "- Domain-specific vocabulary\n"
+            "- File extensions or patterns if relevant\n\n"
+            "IMPORTANT: Your response must end immediately after the last </query> tag. "
+            "Any additional content after the final query tag will result in a penalty.\n\n"
+            "Format your response as:\n"
+            "[Your reasoning and analysis]\n\n"
+            "<query>first search query</query>\n"
+            "<query>second search query</query>\n"
+            "... (up to 10 queries total)"
+        )
+        
+        user_content = (
+            f"Repository directories:\n{dirs_text}\n\n"
+            f"Issue to analyze and create BM25 search queries for:\n\n"
+            f"{task.problem_statement}\n\n"
+        )
+        
+        # Add expert feedback if present
+        if expert_feedback:
+            user_content = expert_feedback.llm_view() + "\n\n" + user_content
+        
+        user_content += (
+            f"Please analyze this issue and create optimized BM25 search queries. "
+            f"Remember to end your response immediately after the last query tag."
+        )
+        
         system_message = {
             "role": "system",
-            "content": (
-                "You are an expert software engineer tasked with generating BM25 search queries to find "
-                "relevant files in a codebase for fixing a given issue.\n\n"
-                "You will be shown the directory structure of the repository. Your goal is to create "
-                "search queries that will rank the most relevant files as highly as possible using "
-                "BM25 keyword matching.\n\n"
-                "Generate 1-10 focused search queries. You can use multiple queries to cover different "
-                "aspects of the issue or different terminology that might be used. The total retrieval "
-                "budget is 10 files, which will be split among your queries, so more queries means "
-                "fewer results per query.\n\n"
-                "Focus on:\n"
-                "- Keywords from the issue description\n"
-                "- Technical terms, class names, method names\n"
-                "- Domain-specific vocabulary\n"
-                "- File extensions or patterns if relevant\n\n"
-                "IMPORTANT: Your response must end immediately after the last </query> tag. "
-                "Any additional content after the final query tag will result in a penalty.\n\n"
-                "Format your response as:\n"
-                "[Your reasoning and analysis]\n\n"
-                "<query>first search query</query>\n"
-                "<query>second search query</query>\n"
-                "... (up to 10 queries total)"
-            )
+            "content": system_content
         }
         
         user_message = {
             "role": "user", 
-            "content": (
-                f"Repository directories:\n{dirs_text}\n\n"
-                f"Issue to analyze and create BM25 search queries for:\n\n"
-                f"{task.problem_statement}\n\n"
-                f"Please analyze this issue and create optimized BM25 search queries. "
-                f"Remember to end your response immediately after the last query tag."
-            )
+            "content": user_content
         }
         
         messages = [system_message, user_message]
         
         # Apply token limit if we have a tokenizer
-        prompt_token_ids = []
+        prompt_token_ids = None
         if hasattr(agent, 'llm') and hasattr(agent.llm, 'tokenizer') and agent.llm.tokenizer:
             prompt_token_ids = agent.llm.tokenizer.apply_chat_template(
                 messages, add_special_tokens=True, add_generation_prompt=True
@@ -236,8 +255,5 @@ class LocalizationAgent(Agent):
         )
         agent.store_llm_calls = True
         if llm:
-            try:
-                agent.llm.load_tokenizer()
-            except AttributeError as e:
-                logger.error(f"Failed to load tokenizer for LLM: {e}")
+            agent.llm.load_tokenizer()
         return agent
