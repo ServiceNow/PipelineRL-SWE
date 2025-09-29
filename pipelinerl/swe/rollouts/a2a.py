@@ -178,8 +178,9 @@ async def run_localization_a2a(cfg: DictConfig, llm: TrainableLLM, expert_llm: T
         except:
             stage_input = "Repository context"
         
-        # Extract queries from initial result - simplified for now
-        stage_output = format_stage_output("localization", {"queries": []})
+        # Extract actual queries from initial result
+        initial_queries = initial_result.get('queries', [])
+        stage_output = format_stage_output("localization", {"queries": initial_queries})
         
         # Run A2A
         a2a_result = await run_a2a(
@@ -255,7 +256,10 @@ async def run_file_selection_a2a(cfg: DictConfig, llm: TrainableLLM, expert_llm:
         # Prepare stage input and output for A2A
         stage_input = "\n".join([f"{fp}: {ctx.get('summary', 'No summary')[:100]}..." 
                                for fp, ctx in enriched_context.items()])
-        stage_output = format_stage_output("file_selection", {"selected_files": initial_result.get('selected_files', [])})
+        
+        # Extract actual selected files from initial result
+        initial_selected = initial_result.get('selected_files', [])
+        stage_output = format_stage_output("file_selection", {"selected_files": initial_selected})
         
         # Run A2A
         a2a_result = await run_a2a(
@@ -332,7 +336,10 @@ async def run_repair_a2a(cfg: DictConfig, llm: TrainableLLM, expert_llm: Trainab
         # Prepare stage input and output for A2A
         stage_input = "\n".join([f"**{fp}**\n{content[:500]}..." 
                                for fp, content in file_contents.items()])
-        stage_output = format_stage_output("repair", {"edits": initial_result.get('repair_edits', [])})
+        
+        # Extract actual edits from initial result
+        initial_edits = initial_result.get('repair_edits', [])
+        stage_output = format_stage_output("repair", {"edits": initial_edits})
         
         # Run A2A
         a2a_result = await run_a2a(
