@@ -1,5 +1,5 @@
 """
-Updated unified metrics class for the SWE pipeline with generic self-evaluation.
+Updated unified metrics class for the SWE pipeline with generic self-evaluation and A2A tracking.
 """
 
 from typing import Optional
@@ -8,10 +8,11 @@ from pipelinerl.rollouts import BaseMetrics
 
 class UnifiedMetrics(BaseMetrics):
     """
-    Updated metrics that track performance across pipeline stages with generic self-evaluation.
+    Updated metrics that track performance across pipeline stages with generic self-evaluation and A2A.
     """
     
     # === STAGE-SPECIFIC CORE METRICS ===
+    # These reflect final performance (post-enhancement if A2A was used)
     
     # Localization metrics (core only)
     localization_mrr: Optional[float] = 0.0
@@ -31,6 +32,22 @@ class UnifiedMetrics(BaseMetrics):
     repair_success: Optional[bool] = False         
     repair_format_error: Optional[bool] = False    
 
+    # === PRE-ENHANCEMENT METRICS (for A2A comparison) ===
+    # Only populated if A2A was actually triggered for that stage
+    
+    # Localization pre-enhancement
+    localization_initial_mrr: Optional[float] = None
+    localization_initial_recall: Optional[float] = None
+    
+    # File selection pre-enhancement
+    selection_initial_precision: Optional[float] = None
+    selection_initial_recall: Optional[float] = None
+    selection_initial_f1: Optional[float] = None
+    
+    # Repair pre-enhancement
+    repair_initial_reward: Optional[float] = None
+    repair_initial_success: Optional[bool] = None
+
     # === GENERIC SELF-EVALUATION METRICS ===
     
     # Localization self-evaluation
@@ -47,6 +64,17 @@ class UnifiedMetrics(BaseMetrics):
     repair_self_eval_predicted_score: Optional[float] = 0.0
     repair_self_eval_prediction_error: Optional[float] = 1.0
     repair_self_eval_parsing_error: Optional[bool] = True
+
+    # === A2A TOKEN USAGE ===
+    # Aggregated across all stages that used A2A
+    
+    # Query generation tokens
+    total_a2a_query_prompt_tokens: Optional[int] = 0
+    total_a2a_query_output_tokens: Optional[int] = 0
+    
+    # Expert consultation tokens
+    total_a2a_expert_prompt_tokens: Optional[int] = 0
+    total_a2a_expert_output_tokens: Optional[int] = 0
 
     # === PIPELINE-WIDE METRICS ===
     

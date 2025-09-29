@@ -59,7 +59,7 @@ async def run_a2a(
     Run agent-to-agent consultation: query generation -> expert advice.
     
     Returns:
-        Dictionary with query_training_text, expert_advice, and other metadata
+        Dictionary with query_training_text, expert_advice, and token usage metadata
     """
     start_time = time.time()
     
@@ -204,10 +204,21 @@ async def run_localization_a2a(cfg: DictConfig, llm: TrainableLLM, expert_llm: T
                     a2a_result['query_training_text'].reward = enhanced_result['training_text'].reward
                 training_texts.append(enhanced_result['training_text'])
             
-            # Update metrics and return enhanced result
+            # Add A2A metadata at top level (not in metrics dict)
             enhanced_result['training_texts'] = training_texts
             enhanced_result['a2a_enhanced'] = True
             enhanced_result['initial_self_eval_score'] = self_eval_score
+            
+            # Store initial metrics for comparison
+            enhanced_result['initial_mrr'] = initial_result['metrics'].get('mrr', 0.0)
+            enhanced_result['initial_recall'] = initial_result['metrics'].get('localization_recall', 0.0)
+            
+            # Store token usage
+            enhanced_result['a2a_query_prompt_tokens'] = a2a_result.get('query_prompt_tokens', 0)
+            enhanced_result['a2a_query_output_tokens'] = a2a_result.get('query_output_tokens', 0)
+            enhanced_result['a2a_expert_prompt_tokens'] = a2a_result.get('expert_prompt_tokens', 0)
+            enhanced_result['a2a_expert_output_tokens'] = a2a_result.get('expert_output_tokens', 0)
+            
             return enhanced_result
     
     # Return original result if no A2A triggered
@@ -269,10 +280,22 @@ async def run_file_selection_a2a(cfg: DictConfig, llm: TrainableLLM, expert_llm:
                     a2a_result['query_training_text'].reward = enhanced_result['training_text'].reward
                 training_texts.append(enhanced_result['training_text'])
             
-            # Update metrics and return enhanced result
+            # Add A2A metadata at top level
             enhanced_result['training_texts'] = training_texts
             enhanced_result['a2a_enhanced'] = True
             enhanced_result['initial_self_eval_score'] = self_eval_score
+            
+            # Store initial metrics for comparison
+            enhanced_result['initial_precision'] = initial_result['metrics'].get('selection_precision', 0.0)
+            enhanced_result['initial_recall'] = initial_result['metrics'].get('selection_recall', 0.0)
+            enhanced_result['initial_f1'] = initial_result['metrics'].get('selection_f1', 0.0)
+            
+            # Store token usage
+            enhanced_result['a2a_query_prompt_tokens'] = a2a_result.get('query_prompt_tokens', 0)
+            enhanced_result['a2a_query_output_tokens'] = a2a_result.get('query_output_tokens', 0)
+            enhanced_result['a2a_expert_prompt_tokens'] = a2a_result.get('expert_prompt_tokens', 0)
+            enhanced_result['a2a_expert_output_tokens'] = a2a_result.get('expert_output_tokens', 0)
+            
             return enhanced_result
     
     # Return original result if no A2A triggered
@@ -334,10 +357,21 @@ async def run_repair_a2a(cfg: DictConfig, llm: TrainableLLM, expert_llm: Trainab
                     a2a_result['query_training_text'].reward = enhanced_result['training_text'].reward
                 training_texts.append(enhanced_result['training_text'])
             
-            # Update metrics and return enhanced result
+            # Add A2A metadata at top level
             enhanced_result['training_texts'] = training_texts
             enhanced_result['a2a_enhanced'] = True
             enhanced_result['initial_self_eval_score'] = self_eval_score
+            
+            # Store initial metrics for comparison
+            enhanced_result['initial_reward'] = initial_result['metrics'].get('reward', 0.0)
+            enhanced_result['initial_success'] = initial_result['metrics'].get('success', False)
+            
+            # Store token usage
+            enhanced_result['a2a_query_prompt_tokens'] = a2a_result.get('query_prompt_tokens', 0)
+            enhanced_result['a2a_query_output_tokens'] = a2a_result.get('query_output_tokens', 0)
+            enhanced_result['a2a_expert_prompt_tokens'] = a2a_result.get('expert_prompt_tokens', 0)
+            enhanced_result['a2a_expert_output_tokens'] = a2a_result.get('expert_output_tokens', 0)
+            
             return enhanced_result
     
     # Return original result if no A2A triggered

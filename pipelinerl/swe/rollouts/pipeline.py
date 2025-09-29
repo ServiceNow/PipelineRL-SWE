@@ -99,6 +99,18 @@ async def generate_unified_swe_rollout(cfg: DictConfig, llm: TrainableLLM, probl
                     training_texts.extend(loc_result['training_texts'])
                 elif loc_result.get('training_text'):
                     training_texts.append(loc_result['training_text'])
+                
+                # If A2A was actually used, store initial metrics
+                if loc_result.get('a2a_enhanced'):
+                    metrics.localization_initial_mrr = loc_result.get('initial_mrr')
+                    metrics.localization_initial_recall = loc_result.get('initial_recall')
+                    
+                    # Accumulate A2A token usage
+                    metrics.total_a2a_query_prompt_tokens += loc_result.get('a2a_query_prompt_tokens', 0)
+                    metrics.total_a2a_query_output_tokens += loc_result.get('a2a_query_output_tokens', 0)
+                    metrics.total_a2a_expert_prompt_tokens += loc_result.get('a2a_expert_prompt_tokens', 0)
+                    metrics.total_a2a_expert_output_tokens += loc_result.get('a2a_expert_output_tokens', 0)
+                    
             elif should_use_self_eval_for_stage('localization'):
                 logger.info("Using self-eval mode for localization")
                 loc_result = await run_localization_with_self_eval(cfg, llm, problem, session)
@@ -112,7 +124,7 @@ async def generate_unified_swe_rollout(cfg: DictConfig, llm: TrainableLLM, probl
                 if cfg.swe.get('enable_localization', False) and loc_result['training_text']:
                     training_texts.append(loc_result['training_text'])
             
-            # Update metrics
+            # Update metrics (these are always final/post-enhancement metrics)
             loc_metrics = loc_result['metrics']
             metrics.localization_mrr = loc_metrics.get('mrr', 0.0)
             metrics.localization_ndcg = loc_metrics.get('ndcg', 0.0)
@@ -168,6 +180,19 @@ async def generate_unified_swe_rollout(cfg: DictConfig, llm: TrainableLLM, probl
                             training_texts.extend(sel_result['training_texts'])
                         elif sel_result.get('training_text'):
                             training_texts.append(sel_result['training_text'])
+                        
+                        # If A2A was actually used, store initial metrics
+                        if sel_result.get('a2a_enhanced'):
+                            metrics.selection_initial_precision = sel_result.get('initial_precision')
+                            metrics.selection_initial_recall = sel_result.get('initial_recall')
+                            metrics.selection_initial_f1 = sel_result.get('initial_f1')
+                            
+                            # Accumulate A2A token usage
+                            metrics.total_a2a_query_prompt_tokens += sel_result.get('a2a_query_prompt_tokens', 0)
+                            metrics.total_a2a_query_output_tokens += sel_result.get('a2a_query_output_tokens', 0)
+                            metrics.total_a2a_expert_prompt_tokens += sel_result.get('a2a_expert_prompt_tokens', 0)
+                            metrics.total_a2a_expert_output_tokens += sel_result.get('a2a_expert_output_tokens', 0)
+                            
                     elif should_use_self_eval_for_stage('file_selection'):
                         logger.info("Using self-eval mode for file selection")
                         sel_result = await run_file_selection_with_self_eval(cfg, llm, problem, enriched_context, session)
@@ -183,7 +208,7 @@ async def generate_unified_swe_rollout(cfg: DictConfig, llm: TrainableLLM, probl
                     
                     files_for_repair = sel_result.get('files_for_repair', [])
                     
-                    # Update metrics
+                    # Update metrics (always final/post-enhancement)
                     sel_metrics = sel_result['metrics']
                     metrics.selection_precision = sel_metrics.get('selection_precision', 0.0)
                     metrics.selection_recall = sel_metrics.get('selection_recall', 0.0)
@@ -247,6 +272,18 @@ async def generate_unified_swe_rollout(cfg: DictConfig, llm: TrainableLLM, probl
                         training_texts.extend(rep_result['training_texts'])
                     elif rep_result.get('training_text'):
                         training_texts.append(rep_result['training_text'])
+                    
+                    # If A2A was actually used, store initial metrics
+                    if rep_result.get('a2a_enhanced'):
+                        metrics.repair_initial_reward = rep_result.get('initial_reward')
+                        metrics.repair_initial_success = rep_result.get('initial_success')
+                        
+                        # Accumulate A2A token usage
+                        metrics.total_a2a_query_prompt_tokens += rep_result.get('a2a_query_prompt_tokens', 0)
+                        metrics.total_a2a_query_output_tokens += rep_result.get('a2a_query_output_tokens', 0)
+                        metrics.total_a2a_expert_prompt_tokens += rep_result.get('a2a_expert_prompt_tokens', 0)
+                        metrics.total_a2a_expert_output_tokens += rep_result.get('a2a_expert_output_tokens', 0)
+                        
                 elif should_use_self_eval_for_stage('repair'):
                     logger.info("Using self-eval mode for repair")
                     rep_result = await run_repair_with_self_eval(cfg, llm, problem, file_contents, session)
@@ -260,7 +297,7 @@ async def generate_unified_swe_rollout(cfg: DictConfig, llm: TrainableLLM, probl
                     if cfg.swe.get('enable_repair', False) and rep_result['training_text']:
                         training_texts.append(rep_result['training_text'])
                 
-                # Update metrics
+                # Update metrics (always final/post-enhancement)
                 rep_metrics = rep_result['metrics']
                 metrics.repair_reward = rep_metrics.get('reward')
                 metrics.repair_success = rep_metrics.get('success')
