@@ -37,14 +37,8 @@ async def run_localization(cfg: DictConfig, llm: TrainableLLM, problem: Dict, se
     except (json.JSONDecodeError, TypeError):
         logger.warning("Failed to parse file stats")
         return {
-            'training_text': None,
-            'top_files': [],
-            'queries': [],  # Include empty queries
-            'metrics': {"error": "parse_failure"},
-            'latency': 0.0,
-            'prompt_tokens': 0,
-            'output_tokens': 0,
-            'success': False
+            'training_text': None, 'top_files': [], 'queries': [], 'metrics': {"error": "parse_failure"},
+            'latency': 0.0, 'prompt_tokens': 0, 'output_tokens': 0, 'success': False
         }
     
     task = LocalizationTask(
@@ -130,7 +124,7 @@ async def run_localization(cfg: DictConfig, llm: TrainableLLM, problem: Dict, se
         return {
             'training_text': training_text,
             'top_files': top_files,
-            'queries': queries if queries else [],  # Add queries to return dict
+            'queries': queries if queries else [],  # Add queries to result
             'metrics': metrics_dict,
             'latency': latency,
             'prompt_tokens': llm_call.prompt_length_tokens,
@@ -141,13 +135,8 @@ async def run_localization(cfg: DictConfig, llm: TrainableLLM, problem: Dict, se
     except Exception as e:
         logger.error(f"Localization error: {e}")
         return {
-            'training_text': None,
-            'top_files': [],
-            'queries': [],  # Include empty queries on error
-            'metrics': {"error": str(e)},
-            'latency': time.time() - start_time,
-            'prompt_tokens': 0,
-            'output_tokens': 0,
+            'training_text': None, 'top_files': [], 'queries': [], 'metrics': {"error": str(e)},
+            'latency': time.time() - start_time, 'prompt_tokens': 0, 'output_tokens': 0, 
             'success': False
         }
 
@@ -226,7 +215,7 @@ async def run_file_selection(cfg: DictConfig, llm: TrainableLLM, problem: Dict, 
         
         return {
             'training_text': training_text,
-            'selected_files': selected_files,  # Already in return dict
+            'selected_files': selected_files,
             'files_for_repair': files_for_repair,
             'metrics': metrics_dict,
             'latency': latency,
@@ -238,14 +227,9 @@ async def run_file_selection(cfg: DictConfig, llm: TrainableLLM, problem: Dict, 
     except Exception as e:
         logger.error(f"File selection error: {e}")
         return {
-            'training_text': None,
-            'selected_files': [],  # Include empty list on error
-            'files_for_repair': [],
-            'metrics': {"error": str(e)},
-            'latency': time.time() - start_time,
-            'prompt_tokens': 0,
-            'output_tokens': 0,
-            'success': False
+            'training_text': None, 'selected_files': [], 'files_for_repair': [],
+            'metrics': {"error": str(e)}, 'latency': time.time() - start_time,
+            'prompt_tokens': 0, 'output_tokens': 0, 'success': False
         }
 
 
@@ -306,7 +290,7 @@ async def run_repair(cfg: DictConfig, llm: TrainableLLM, problem: Dict, file_con
         
         return {
             'training_text': training_text,
-            'repair_edits': edits,  # Already in return dict
+            'repair_edits': edits,
             'metrics': metrics_dict,
             'latency': latency,
             'prompt_tokens': llm_call.prompt_length_tokens,
@@ -317,11 +301,7 @@ async def run_repair(cfg: DictConfig, llm: TrainableLLM, problem: Dict, file_con
     except Exception as e:
         logger.error(f"Repair error: {e}")
         return {
-            'training_text': None,
-            'repair_edits': [],  # Include empty list on error
-            'metrics': {"error": str(e)},
-            'latency': time.time() - start_time,
-            'prompt_tokens': 0,
-            'output_tokens': 0,
+            'training_text': None, 'repair_edits': [], 'metrics': {"error": str(e)},
+            'latency': time.time() - start_time, 'prompt_tokens': 0, 'output_tokens': 0, 
             'success': False
         }

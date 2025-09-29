@@ -178,9 +178,8 @@ async def run_localization_a2a(cfg: DictConfig, llm: TrainableLLM, expert_llm: T
         except:
             stage_input = "Repository context"
         
-        # Extract actual queries from initial result
-        initial_queries = initial_result.get('queries', [])
-        stage_output = format_stage_output("localization", {"queries": initial_queries})
+        # Extract queries from initial result
+        stage_output = format_stage_output("localization", {"queries": initial_result.get('queries', [])})
         
         # Run A2A
         a2a_result = await run_a2a(
@@ -204,6 +203,10 @@ async def run_localization_a2a(cfg: DictConfig, llm: TrainableLLM, expert_llm: T
                 if a2a_result['query_training_text']:
                     a2a_result['query_training_text'].reward = enhanced_result['training_text'].reward
                 training_texts.append(enhanced_result['training_text'])
+            
+            # Add enhanced result's self-eval training text if available
+            if enhanced_result.get('self_eval_result') and enhanced_result['self_eval_result'].get('training_text'):
+                training_texts.append(enhanced_result['self_eval_result']['training_text'])
             
             # Add A2A metadata at top level (not in metrics dict)
             enhanced_result['training_texts'] = training_texts
@@ -256,10 +259,7 @@ async def run_file_selection_a2a(cfg: DictConfig, llm: TrainableLLM, expert_llm:
         # Prepare stage input and output for A2A
         stage_input = "\n".join([f"{fp}: {ctx.get('summary', 'No summary')[:100]}..." 
                                for fp, ctx in enriched_context.items()])
-        
-        # Extract actual selected files from initial result
-        initial_selected = initial_result.get('selected_files', [])
-        stage_output = format_stage_output("file_selection", {"selected_files": initial_selected})
+        stage_output = format_stage_output("file_selection", {"selected_files": initial_result.get('selected_files', [])})
         
         # Run A2A
         a2a_result = await run_a2a(
@@ -283,6 +283,10 @@ async def run_file_selection_a2a(cfg: DictConfig, llm: TrainableLLM, expert_llm:
                 if a2a_result['query_training_text']:
                     a2a_result['query_training_text'].reward = enhanced_result['training_text'].reward
                 training_texts.append(enhanced_result['training_text'])
+            
+            # Add enhanced result's self-eval training text if available
+            if enhanced_result.get('self_eval_result') and enhanced_result['self_eval_result'].get('training_text'):
+                training_texts.append(enhanced_result['self_eval_result']['training_text'])
             
             # Add A2A metadata at top level
             enhanced_result['training_texts'] = training_texts
@@ -336,10 +340,7 @@ async def run_repair_a2a(cfg: DictConfig, llm: TrainableLLM, expert_llm: Trainab
         # Prepare stage input and output for A2A
         stage_input = "\n".join([f"**{fp}**\n{content[:500]}..." 
                                for fp, content in file_contents.items()])
-        
-        # Extract actual edits from initial result
-        initial_edits = initial_result.get('repair_edits', [])
-        stage_output = format_stage_output("repair", {"edits": initial_edits})
+        stage_output = format_stage_output("repair", {"edits": initial_result.get('repair_edits', [])})
         
         # Run A2A
         a2a_result = await run_a2a(
@@ -363,6 +364,10 @@ async def run_repair_a2a(cfg: DictConfig, llm: TrainableLLM, expert_llm: Trainab
                 if a2a_result['query_training_text']:
                     a2a_result['query_training_text'].reward = enhanced_result['training_text'].reward
                 training_texts.append(enhanced_result['training_text'])
+            
+            # Add enhanced result's self-eval training text if available
+            if enhanced_result.get('self_eval_result') and enhanced_result['self_eval_result'].get('training_text'):
+                training_texts.append(enhanced_result['self_eval_result']['training_text'])
             
             # Add A2A metadata at top level
             enhanced_result['training_texts'] = training_texts

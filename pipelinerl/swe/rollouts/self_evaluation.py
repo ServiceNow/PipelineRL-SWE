@@ -15,6 +15,9 @@ from tapeagents.llms.trainable import TrainableLLM
 
 from pipelinerl.async_llm import make_training_text
 from pipelinerl.swe.agents.generic_self_eval_agent import GenericSelfEvalAgent, GenericSelfEvalTask, GenericSelfEvalTape, GenericSelfEvalResponse
+from pipelinerl.swe.agents.localization_agent import LocalizationQuery
+from pipelinerl.swe.agents.file_selection_agent import FileSelectionResponse
+from pipelinerl.swe.agents.repair_agent import SearchReplaceResponse
 from .base import execute_agent_with_retry
 from .stages import run_localization, run_file_selection, run_repair
 
@@ -159,13 +162,9 @@ async def run_localization_with_self_eval(cfg: DictConfig, llm: TrainableLLM, pr
             stage_input = f"Repository has {len(file_stats)} files"
         except:
             stage_input = "Repository context"
-            
-        # Extract queries from result for formatting
-        queries = []
-        if result.get('training_text') and hasattr(result['training_text'], 'text'):
-            # This is a simplified extraction - in practice you'd need to parse the tape
-            # or store queries in the result
-            pass
+        
+        # Extract queries from result (now returned by run_localization)
+        queries = result.get('queries', [])
         
         stage_output = format_stage_output("localization", {"queries": queries})
         reward = result['metrics'].get('mrr', 0.0)
@@ -188,7 +187,11 @@ async def run_file_selection_with_self_eval(cfg: DictConfig, llm: TrainableLLM, 
     if cfg.swe.get('enable_file_selection_self_eval', False):
         stage_input = "\n".join([f"{fp}: {ctx.get('summary', 'No summary')[:100]}..." 
                                for fp, ctx in enriched_context.items()])
-        stage_output = format_stage_output("file_selection", {"selected_files": result.get('selected_files', [])})
+        
+        # Extract selected_files from result - this is available!
+        selected_files = result.get('selected_files', [])
+        
+        stage_output = format_stage_output("file_selection", {"selected_files": selected_files})
         reward = result['metrics'].get('selection_f1', 0.0)
         
         self_eval_result = await run_generic_self_eval(
@@ -209,7 +212,11 @@ async def run_repair_with_self_eval(cfg: DictConfig, llm: TrainableLLM, problem:
     if cfg.swe.get('enable_repair_self_eval', False):
         stage_input = "\n".join([f"**{fp}**\n{content[:500]}..." 
                                for fp, content in file_contents.items()])
-        stage_output = format_stage_output("repair", {"edits": result.get('repair_edits', [])})
+        
+        # Extract edits from result - this is available!
+        repair_edits = result.get('repair_edits', [])
+        
+        stage_output = format_stage_output("repair", {"edits": repair_edits})
         reward = result['metrics'].get('reward', 0.0)
         
         self_eval_result = await run_generic_self_eval(
