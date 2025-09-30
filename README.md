@@ -54,6 +54,12 @@ TMPDIR=/new/tmp/dir pip install --force-reinstall --no-cache-dir flash-attn --ex
 TMPDIR=/new/tmp/dir pip install --force-reinstall --no-cache-dir ring-flash-attn --extra-index-url https://wheels.vllm.ai/gpt-oss/
 ```
 
+you also might need to fix the `libstdcxx-ng` dependency if you get an inspection error with the architecture:
+
+```bash
+conda install -c conda-forge libstdcxx-ng
+```
+
 By default Pipeline-RL will use the file system as the medium for streaming the generated data to the trainer processes. This works on one node, but the files can get quite large. To use Redis instead you will need to install the Redis server in the same conda environment:
 ```bash
 conda install redis-server==7.4.0 -c conda-forge 
