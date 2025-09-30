@@ -33,7 +33,7 @@ cd PipelineRL
 
 Create the environments with dependencies.
 ```bash
-conda create -n pipeline-rl -y python=3.11
+conda create -n pipeline-rl -y python=3.12 # 3.12 for new vllm version
 conda run --no-capture-output -n pipeline-rl pip install torch==2.6.0 
 conda run --no-capture-output -n pipeline-rl pip install -e . --no-build-isolation
 ```
@@ -41,10 +41,7 @@ conda run --no-capture-output -n pipeline-rl pip install -e . --no-build-isolati
 Install the version of vllm needed to run GPT-OSS 120B:
 
 ```bash
-uv pip install --pre vllm==0.10.1+gptoss \
-    --extra-index-url https://wheels.vllm.ai/gpt-oss/ \
-    --extra-index-url https://download.pytorch.org/whl/nightly/cu128 \
-    --index-strategy unsafe-best-match
+uv pip install vllm==0.10.1 --torch-backend=auto
 ```
 
 then install flash-attn and ring-flash-attn from scratch, redirecting to a different tmp dir if necessary to avoid fs constraints:

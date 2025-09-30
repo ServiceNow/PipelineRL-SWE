@@ -123,4 +123,6 @@ world:
     enabled: true
     model_path: openai/gpt-oss-120b
     vllm_kwargs:
-      max-model-len: 65536
+      max-model-len: 32768
+      gpu-memory-utilization: 0.95
+      enforce-eager: true
