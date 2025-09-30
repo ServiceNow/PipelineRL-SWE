@@ -2,7 +2,7 @@ import os
 import torch
 import torch.nn as nn
 from dataclasses import dataclass
-from transformers import PreTrainedModel
+from transformers.modeling_utils import PreTrainedModel
 from transformers.modeling_outputs import ModelOutput
 from typing import Optional, Tuple, Union
 from transformers import AutoModelForCausalLM

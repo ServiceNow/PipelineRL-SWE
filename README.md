@@ -47,8 +47,12 @@ uv pip install vllm==0.10.1 --torch-backend=auto
 then install flash-attn and ring-flash-attn from scratch, redirecting to a different tmp dir if necessary to avoid fs constraints:
 
 ```bash
-TMPDIR=/new/tmp/dir pip install --force-reinstall --no-cache-dir flash-attn --extra-index-url https://wheels.vllm.ai/gpt-oss/
-TMPDIR=/new/tmp/dir pip install --force-reinstall --no-cache-dir ring-flash-attn --extra-index-url https://wheels.vllm.ai/gpt-oss/
+TMPDIR=/new/tmp/dir pip install --force-reinstall --no-cache-dir flash-attn
+TMPDIR=/new/tmp/dir pip install --force-reinstall --no-cache-dir ring-flash-attn
+```
+
+```bash
+uv pip install -U torchvision
 ```
 
 you also might need to fix the `libstdcxx-ng` dependency if you get an inspection error with the architecture:
