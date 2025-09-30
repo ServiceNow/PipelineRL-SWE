@@ -38,6 +38,22 @@ conda run --no-capture-output -n pipeline-rl pip install torch==2.6.0
 conda run --no-capture-output -n pipeline-rl pip install -e . --no-build-isolation
 ```
 
+Install the version of vllm needed to run GPT-OSS 120B:
+
+```bash
+uv pip install --pre vllm==0.10.1+gptoss \
+    --extra-index-url https://wheels.vllm.ai/gpt-oss/ \
+    --extra-index-url https://download.pytorch.org/whl/nightly/cu128 \
+    --index-strategy unsafe-best-match
+```
+
+then install flash-attn and ring-flash-attn from scratch, redirecting to a different tmp dir if necessary to avoid fs constraints:
+
+```bash
+TMPDIR=/new/tmp/dir pip install --force-reinstall --no-cache-dir flash-attn --extra-index-url https://wheels.vllm.ai/gpt-oss/
+TMPDIR=/new/tmp/dir pip install --force-reinstall --no-cache-dir ring-flash-attn --extra-index-url https://wheels.vllm.ai/gpt-oss/
+```
+
 By default Pipeline-RL will use the file system as the medium for streaming the generated data to the trainer processes. This works on one node, but the files can get quite large. To use Redis instead you will need to install the Redis server in the same conda environment:
 ```bash
 conda install redis-server==7.4.0 -c conda-forge 
