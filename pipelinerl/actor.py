@@ -115,6 +115,7 @@ async def schedule_rollouts(
     trainer_state: TrainerState,
     llms: list[TrainableLLM],
     scheduler_name: str,
+    expert_llm: TrainableLLM = None,
 ):
     """This courotuine does the following.
 
@@ -149,7 +150,7 @@ async def schedule_rollouts(
             llm = llms[llm_index]
             model_version = trainer_state.propagated_weight_version
             assert model_version is not None
-            rollout_result = await rollout_policy(cfg, llm, problem, session)
+            rollout_result = await rollout_policy(cfg, llm, problem, session, expert_llm)
             rollout_result.model_version = model_version
             # Make a group id that will be different from groups made by another rollout maker
             full_group_id = f"{scheduler_name}_{group_id}"
@@ -239,6 +240,7 @@ def rollout_maker_entrypoint(
     result_queue: SharedMemoryQueue,
     llms: list[TrainableLLM],
     scheduler_name: str,
+    expert_llm: TrainableLLM = None,
 ):
     trainer_state = TrainerState(Path(cfg.output_dir))
     if cfg.debug.mode:
@@ -249,7 +251,7 @@ def rollout_maker_entrypoint(
     loop = uvloop.new_event_loop()
     asyncio.set_event_loop(loop)
     loop.run_until_complete(
-        schedule_rollouts(cfg, attempts, problem_queue, result_queue, trainer_state, llms, scheduler_name)
+        schedule_rollouts(cfg, attempts, problem_queue, result_queue, trainer_state, llms, scheduler_name, expert_llm)
     )
     loop.close()
     logger.info("Rollout maker loop closed")
@@ -274,6 +276,7 @@ class ActorLoop:
         stats_stream: StreamSpec,
         trainer_state: TrainerState,
         is_training: bool = True,
+        expert_llm: TrainableLLM = None,
     ) -> None:
         self.data_stream = data_stream
         self.trainer_state = trainer_state
@@ -285,6 +288,7 @@ class ActorLoop:
         self.is_training = is_training
         self.is_scheduling_paused = False
         self.debug_mode = bool(cfg.debug.mode)
+        self.expert_llm = expert_llm
 
         # Determine the number of processes to use
         num_processes = min(self.cfg.actor.rollout_workers, len(self.llms))
@@ -318,7 +322,7 @@ class ActorLoop:
             )
             process = mp.Process(
                 target=rollout_maker_entrypoint,
-                args=(self.cfg, attempts, self.problem_queue, self.result_queue, llms, scheduler_name),
+                args=(self.cfg, attempts, self.problem_queue, self.result_queue, llms, scheduler_name, self.expert_llm),
             )
             process.start()
             self.rollout_processes.append(process)
@@ -656,6 +660,31 @@ def run_actor_loop(cfg: DictConfig):
             raise ValueError("Failed to initialize wandb run")
     llm_urls = str(cfg.me.llm_urls).split("+")
 
+    expert_llm = None
+    if cfg.swe.get('enable_a2a', False):
+        expert_llm_url = cfg.me.get('expert_llm_url', '')
+        if expert_llm_url:
+            expert_config = cfg.swe.get('expert_model', {})
+            if expert_config:
+                try:
+                    expert_llm = TrainableLLM(
+                        base_url=expert_llm_url,
+                        model_name=expert_config.get('model_name', 'expert-model'),
+                        tokenizer_name=expert_config.get('model_name', 'expert-model'),
+                        parameters=expert_config.get('parameters', {'max_tokens': 64000, 'temperature': 1.0}),
+                        use_cache=False,
+                        collect_logprobs=False,
+                        observe_llm_calls=False,
+                    )
+                    logger.info(f"Created expert LLM for A2A: {expert_llm_url}")
+                except Exception as e:
+                    logger.error(f"Failed to create expert LLM: {e}, A2A will be disabled")
+                    expert_llm = None
+            else:
+                logger.warning("A2A enabled but no expert_model config found")
+        else:
+            logger.warning("A2A enabled but no expert_llm_url found in config")
+
     stats_stream = SingleStreamSpec(exp_path=exp_path, topic="stats")
     test_stats_stream = SingleStreamSpec(exp_path=exp_path, topic="stats_test")
     data_stream = SingleStreamSpec(exp_path=exp_path, topic="actor")
@@ -710,6 +739,10 @@ def run_actor_loop(cfg: DictConfig):
     ]
 
     wait_for_inference_servers(llm_urls)
+    
+    if expert_llm is not None:
+        wait_for_inference_servers([expert_llm_url])
+
     wait_for_environments(cfg)
     trainer_state = TrainerState(exp_path)
     if cfg.debug.mode:
@@ -719,7 +752,7 @@ def run_actor_loop(cfg: DictConfig):
         trainer_state.wait_for_model_version()
 
     train_loop = ActorLoop(
-        data_stream=data_stream, cfg=cfg, trainer_state=trainer_state, stats_stream=stats_stream, llms=train_llms
+        data_stream=data_stream, cfg=cfg, trainer_state=trainer_state, stats_stream=stats_stream, llms=train_llms, expert_llm=expert_llm
     )
     train_loop_run = train_loop.run(
         dataset=train_dataset,
@@ -731,6 +764,7 @@ def run_actor_loop(cfg: DictConfig):
         stats_stream=test_stats_stream,
         llms=test_llms,
         is_training=False,
+        expert_llm=expert_llm,
     )
     test_loop_run = None
 
