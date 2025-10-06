@@ -33,38 +33,11 @@ cd PipelineRL
 
 Create the environments with dependencies.
 ```bash
-conda create -n pipeline-rl -y python=3.12 # 3.12 for new vllm version
+conda create -n pipeline-rl -y python=3.11
 conda run --no-capture-output -n pipeline-rl pip install torch==2.6.0 
 conda run --no-capture-output -n pipeline-rl pip install -e . --no-build-isolation
 ```
 
-Install the version of vllm needed to run GPT-OSS 120B:
-
-```bash
-uv pip install vllm==0.10.1 --torch-backend=auto
-```
-
-then install flash-attn and ring-flash-attn from scratch, redirecting to a different tmp dir if necessary to avoid fs constraints:
-
-```bash
-TMPDIR=/new/tmp/dir pip install --force-reinstall --no-cache-dir flash-attn
-TMPDIR=/new/tmp/dir pip install --force-reinstall --no-cache-dir ring-flash-attn
-```
-
-```bash
-uv pip install -U torchvision
-```
-
-you also might need to fix the `libstdcxx-ng` dependency if you get an inspection error with the architecture:
-
-```bash
-conda install -c conda-forge libstdcxx-ng
-```
-
-By default Pipeline-RL will use the file system as the medium for streaming the generated data to the trainer processes. This works on one node, but the files can get quite large. To use Redis instead you will need to install the Redis server in the same conda environment:
-```bash
-conda install redis-server==7.4.0 -c conda-forge 
-```
 
 ## Run experiments
 

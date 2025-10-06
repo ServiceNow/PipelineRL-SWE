@@ -89,7 +89,7 @@ swe:
   # Expert model configuration (port 8280)
   expert_model:
     base_url: "http://localhost:8280"
-    model_name: "gpt-oss-120b"
+    model_name: "Qwen/Qwen2.5-Coder-32B-Instruct"
     parameters:
       max_tokens: 64000
       temperature: 1.0
@@ -121,8 +121,8 @@ swe_preprocessor_args:
 world:
   expert_llm:
     enabled: true
-    model_path: openai/gpt-oss-120b
+    model_path: Qwen/Qwen2.5-Coder-32B-Instruct
     vllm_kwargs:
-      max-model-len: 32768
-      gpu-memory-utilization: 0.95
-      enforce-eager: true
+      max-model-len: 16000
+      gpu_memory_utilization: 0.95
+      enforce_eager: true
