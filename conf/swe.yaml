@@ -5,7 +5,7 @@ defaults:
 
 # Override the rollout policy for localization
 actor:
-  rollout_policy: pipelinerl.swe.rollouts.generate_unified_swe_rollout
+  rollout_policy: pipelinerl.swe.rollouts.pipeline.generate_unified_swe_rollout
   log_each_n_secs: 10
   llm_max_rollouts: 64
   rollout_workers: 1
@@ -79,7 +79,7 @@ swe:
   enable_repair_self_eval: true
   
   # A2A system configuration
-  enable_a2a: true
+  enable_a2a: false
   
   # A2A trigger thresholds (when to consult expert model)
   localization_a2a_trigger_threshold: 0.5
@@ -120,7 +120,7 @@ swe_preprocessor_args:
 
 world:
   expert_llm:
-    enabled: true
+    enabled: false
     model_path: Qwen/Qwen2.5-Coder-32B-Instruct
     vllm_kwargs:
       max-model-len: 16000
