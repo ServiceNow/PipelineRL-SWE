@@ -36,17 +36,17 @@ class UnifiedMetrics(BaseMetrics):
     # Only populated if A2A was actually triggered for that stage
     
     # Localization pre-enhancement
-    localization_initial_mrr: Optional[float] = None
-    localization_initial_recall: Optional[float] = None
+    localization_initial_mrr: Optional[float] = 0.0
+    localization_initial_recall: Optional[float] = 0.0
     
     # File selection pre-enhancement
-    selection_initial_precision: Optional[float] = None
-    selection_initial_recall: Optional[float] = None
-    selection_initial_f1: Optional[float] = None
+    selection_initial_precision: Optional[float] = 0.0
+    selection_initial_recall: Optional[float] = 0.0
+    selection_initial_f1: Optional[float] = 0.0
     
     # Repair pre-enhancement
-    repair_initial_reward: Optional[float] = None
-    repair_initial_success: Optional[bool] = None
+    repair_initial_reward: Optional[float] = 0.0
+    repair_initial_success: Optional[bool] = False
 
     # === GENERIC SELF-EVALUATION METRICS ===
     
@@ -99,8 +99,19 @@ class UnifiedMetrics(BaseMetrics):
     reward: Optional[float] = 0.0                  
     success: Optional[bool] = False                
     no_error: Optional[bool] = True                
-    no_answer: Optional[bool] = False              
+    no_answer: Optional[bool] = False             
+
+    localization_was_retried: Optional[bool] = False
+    selection_was_retried: Optional[bool] = False
+    repair_was_retried: Optional[bool] = False 
     
+    localization_mrr_improvement: Optional[float] = 0.0
+    localization_recall_improvement: Optional[float] = 0.0
+    selection_precision_improvement: Optional[float] = 0.0
+    selection_recall_improvement: Optional[float] = 0.0
+    selection_f1_improvement: Optional[float] = 0.0
+    repair_reward_improvement: Optional[float] = 0.0
+
     def set_abstention_threshold(self, threshold: float):
         """Set the abstention threshold from config."""
         self.abstention_threshold = threshold
@@ -131,6 +142,24 @@ class UnifiedMetrics(BaseMetrics):
         # Error tracking
         self.localization_format_error = (self.localization_format_penalty or 0) > 0
         self.selection_format_error = (self.selection_format_penalty or 0) > 0
+
+        if self.localization_was_retried:
+            if self.localization_initial_mrr is not None and self.localization_mrr is not None:
+                self.localization_mrr_improvement = self.localization_mrr - self.localization_initial_mrr
+            if self.localization_initial_recall is not None and self.localization_recall is not None:
+                self.localization_recall_improvement = self.localization_recall - self.localization_initial_recall
+        
+        if self.selection_was_retried:
+            if self.selection_initial_precision is not None and self.selection_precision is not None:
+                self.selection_precision_improvement = self.selection_precision - self.selection_initial_precision
+            if self.selection_initial_recall is not None and self.selection_recall is not None:
+                self.selection_recall_improvement = self.selection_recall - self.selection_initial_recall
+            if self.selection_initial_f1 is not None and self.selection_f1 is not None:
+                self.selection_f1_improvement = self.selection_f1 - self.selection_initial_f1
+        
+        if self.repair_was_retried:
+            if self.repair_initial_reward is not None and self.repair_reward is not None:
+                self.repair_reward_improvement = self.repair_reward - self.repair_initial_reward
         
         self.no_error = not any([
             self.localization_format_error,

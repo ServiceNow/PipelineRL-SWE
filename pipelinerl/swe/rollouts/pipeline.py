@@ -104,6 +104,7 @@ async def generate_unified_swe_rollout(cfg: DictConfig, llm: TrainableLLM, probl
                 if loc_result.get('a2a_enhanced'):
                     metrics.localization_initial_mrr = loc_result.get('initial_mrr')
                     metrics.localization_initial_recall = loc_result.get('initial_recall')
+                    metrics.localization_was_retried = True
                     
                     # Accumulate A2A token usage
                     metrics.total_a2a_query_prompt_tokens += loc_result.get('a2a_query_prompt_tokens', 0)
@@ -186,6 +187,7 @@ async def generate_unified_swe_rollout(cfg: DictConfig, llm: TrainableLLM, probl
                             metrics.selection_initial_precision = sel_result.get('initial_precision')
                             metrics.selection_initial_recall = sel_result.get('initial_recall')
                             metrics.selection_initial_f1 = sel_result.get('initial_f1')
+                            metrics.selection_was_retried = True
                             
                             # Accumulate A2A token usage
                             metrics.total_a2a_query_prompt_tokens += sel_result.get('a2a_query_prompt_tokens', 0)
@@ -277,6 +279,7 @@ async def generate_unified_swe_rollout(cfg: DictConfig, llm: TrainableLLM, probl
                     if rep_result.get('a2a_enhanced'):
                         metrics.repair_initial_reward = rep_result.get('initial_reward')
                         metrics.repair_initial_success = rep_result.get('initial_success')
+                        metrics.repair_was_retried = True
                         
                         # Accumulate A2A token usage
                         metrics.total_a2a_query_prompt_tokens += rep_result.get('a2a_query_prompt_tokens', 0)

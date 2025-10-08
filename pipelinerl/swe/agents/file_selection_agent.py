@@ -150,7 +150,7 @@ class FileSelectionNode(StandardNode):
                 last_tag_pos = last_file_matches[-1].end()
                 content_after = completion[last_tag_pos:].strip()
                 
-                if content_after:
+                if content_after and content_after != '<|im_end|>':
                     garbage_content = content_after
                     format_penalty = 0.5  # Apply -0.5 penalty for garbage content
                     logger.info(f"Garbage content detected after last tag: {repr(content_after[:100])}")

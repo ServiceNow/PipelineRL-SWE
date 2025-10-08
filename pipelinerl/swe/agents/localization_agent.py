@@ -116,7 +116,7 @@ class LocalizationNode(StandardNode):
                 # Check what comes after the last expected tag
                 content_after = completion[last_tag_pos:].strip()
                 
-                if content_after:
+                if content_after and content_after != '<|im_end|>':
                     garbage_content = content_after
                     format_penalty = 0.5  # Apply -0.5 penalty for garbage content
                     
