@@ -91,7 +91,7 @@ swe:
     base_url: "http://localhost:8280"
     model_name: "Qwen/Qwen2.5-Coder-32B-Instruct"
     parameters:
-      max_tokens: 64000
+      max_tokens: 8000
       temperature: 1.0
     timeout: 300  # seconds
     max_retries: 3
