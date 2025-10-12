@@ -9,7 +9,7 @@ import logging
 from typing import Dict, List
 
 from omegaconf import DictConfig
-from tapeagents.core import LLMCall
+from tapeagents.core import LLMCall, Observation
 from tapeagents.llms.trainable import TrainableLLM
 
 from pipelinerl.async_llm import make_training_text
@@ -21,16 +21,12 @@ from .self_evaluation import run_localization_with_self_eval, run_file_selection
 logger = logging.getLogger(__name__)
 
 
-class ExpertModelAdvice:
-    """
-    Observation containing advice from a stronger expert model.
-    This can be consumed by any stage to improve its output.
-    """
-    def __init__(self, original_query: str, expert_advice: str, stage_name: str):
-        self.kind = "expert_model_advice"
-        self.original_query = original_query
-        self.expert_advice = expert_advice
-        self.stage_name = stage_name
+class ExpertModelAdvice(Observation):
+    """Observation containing advice from a stronger expert model."""
+    kind: Literal["expert_model_advice"] = "expert_model_advice"
+    original_query: str = Field(description="Query sent to expert model")
+    expert_advice: str = Field(description="Advice from expert model")
+    stage_name: str = Field(description="Stage this advice is for")
     
     def llm_view(self, indent: int | None = 2) -> str:
         return (

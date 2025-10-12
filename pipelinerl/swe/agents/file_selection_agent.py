@@ -17,6 +17,8 @@ from tapeagents.core import (
 from tapeagents.llms import LLM
 from tapeagents.nodes import StandardNode
 
+from pipelinerl.swe.rollouts.a2a import ExpertModelAdvice
+
 logger = logging.getLogger(__name__)
 
 
@@ -87,6 +89,7 @@ FileSelectionTape = Tape[
         FileSelectionTask,
         FileSelectionResponse,
         LLMOutputParsingFailureAction,
+        ExpertModelAdvice,
     ],
 ]
 
