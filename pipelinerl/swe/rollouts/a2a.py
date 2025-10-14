@@ -15,28 +15,11 @@ from tapeagents.llms.trainable import TrainableLLM
 from pipelinerl.async_llm import make_training_text
 from pipelinerl.swe.agents.query_generator_agent import QueryGeneratorAgent, QueryGenerationTask, QueryGenerationTape, QueryGenerationResponse
 from pipelinerl.swe.agents.expert_llm_advice_agent import ExpertLLMAdviceAgent, ExpertAdviceTask, ExpertAdviceTape, ExpertAdviceResponse
+from pipelinerl.swe.types import ExpertModelAdvice
 from .base import execute_agent_with_retry
 from .self_evaluation import run_localization_with_self_eval, run_file_selection_with_self_eval, run_repair_with_self_eval, format_stage_output
 
 logger = logging.getLogger(__name__)
-
-
-class ExpertModelAdvice(Observation):
-    """Observation containing advice from a stronger expert model."""
-    kind: Literal["expert_model_advice"] = "expert_model_advice"
-    original_query: str = Field(description="Query sent to expert model")
-    expert_advice: str = Field(description="Advice from expert model")
-    stage_name: str = Field(description="Stage this advice is for")
-    
-    def llm_view(self, indent: int | None = 2) -> str:
-        return (
-            f"=== EXPERT GUIDANCE FOR {self.stage_name.upper()} ===\n"
-            f"You previously asked for guidance: {self.original_query}\n\n"
-            f"Expert advice received:\n"
-            f"{self.expert_advice}\n\n"
-            f"Please incorporate this expert guidance to improve your {self.stage_name} output.\n"
-            f"=== END EXPERT GUIDANCE ==="
-        )
 
 
 async def run_a2a(
@@ -120,7 +103,7 @@ async def run_a2a(
             'query_training_text': query_training_text,
             'expert_advice': ExpertModelAdvice(
                 original_query=generated_query,
-                expert_advice=expert_advice,
+                advice=expert_advice,
                 stage_name=stage_name
             ),
             'latency': time.time() - start_time,

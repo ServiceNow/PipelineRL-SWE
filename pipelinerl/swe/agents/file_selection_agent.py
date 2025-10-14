@@ -17,7 +17,8 @@ from tapeagents.core import (
 from tapeagents.llms import LLM
 from tapeagents.nodes import StandardNode
 
-from pipelinerl.swe.rollouts.a2a import ExpertModelAdvice
+from pipelinerl.swe.types import ExpertModelAdvice
+
 
 logger = logging.getLogger(__name__)
 
