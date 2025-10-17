@@ -180,7 +180,8 @@ async def run_localization_a2a(cfg: DictConfig, llm: TrainableLLM, expert_llm: T
             if enhanced_result['training_text']:
                 # Set query reward based on enhanced performance
                 if a2a_result['query_training_text']:
-                    a2a_result['query_training_text'].reward = enhanced_result['training_text'].reward
+                    improvement = enhanced_result['metrics']['reward'] - initial_result['metrics']['reward']
+                    a2a_result['query_training_text'].reward = improvement
                 training_texts.append(enhanced_result['training_text'])
             
             # Add enhanced result's self-eval training text if available
@@ -260,7 +261,8 @@ async def run_file_selection_a2a(cfg: DictConfig, llm: TrainableLLM, expert_llm:
             if enhanced_result['training_text']:
                 # Set query reward based on enhanced performance
                 if a2a_result['query_training_text']:
-                    a2a_result['query_training_text'].reward = enhanced_result['training_text'].reward
+                    improvement = enhanced_result['metrics']['reward'] - initial_result['metrics']['reward']
+                    a2a_result['query_training_text'].reward = improvement
                 training_texts.append(enhanced_result['training_text'])
             
             # Add enhanced result's self-eval training text if available
@@ -341,7 +343,8 @@ async def run_repair_a2a(cfg: DictConfig, llm: TrainableLLM, expert_llm: Trainab
             if enhanced_result['training_text']:
                 # Set query reward based on enhanced performance
                 if a2a_result['query_training_text']:
-                    a2a_result['query_training_text'].reward = enhanced_result['training_text'].reward
+                    improvement = enhanced_result['metrics']['reward'] - initial_result['metrics']['reward']
+                    a2a_result['query_training_text'].reward = improvement
                 training_texts.append(enhanced_result['training_text'])
             
             # Add enhanced result's self-eval training text if available
