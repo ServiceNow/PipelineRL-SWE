@@ -168,6 +168,7 @@ async def run_localization_with_self_eval(cfg: DictConfig, llm: TrainableLLM, pr
         
         stage_output = format_stage_output("localization", {"queries": queries})
         reward = result['metrics'].get('mrr', 0.0)
+        result['metrics']['reward'] = reward # Ensure reward is set for later
         
         self_eval_result = await run_generic_self_eval(
             cfg, llm, "localization", problem["problem_statement"],
@@ -193,6 +194,7 @@ async def run_file_selection_with_self_eval(cfg: DictConfig, llm: TrainableLLM, 
         
         stage_output = format_stage_output("file_selection", {"selected_files": selected_files})
         reward = result['metrics'].get('selection_f1', 0.0)
+        result['metrics']['reward'] = reward # Ensure reward is set for later
         
         self_eval_result = await run_generic_self_eval(
             cfg, llm, "file_selection", problem["problem_statement"],
@@ -218,6 +220,7 @@ async def run_repair_with_self_eval(cfg: DictConfig, llm: TrainableLLM, problem:
         
         stage_output = format_stage_output("repair", {"edits": repair_edits})
         reward = result['metrics'].get('reward', 0.0)
+        result['metrics']['reward'] = reward # Ensure reward is set for later
         
         self_eval_result = await run_generic_self_eval(
             cfg, llm, "repair", problem["problem_statement"],
