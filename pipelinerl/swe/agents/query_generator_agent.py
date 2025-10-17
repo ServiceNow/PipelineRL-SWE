@@ -43,7 +43,8 @@ class QueryGenerationTask(Observation):
             f"Analysis: {self.self_eval_analysis}\n\n"
             f"Generate a clear, specific query that asks the stronger model how to improve your "
             f"{self.stage_name} output. Include relevant context and be specific about what "
-            f"kind of guidance would be helpful."
+            f"kind of guidance would be helpful. Make sure to **include the content you will "
+            f"reference, because the stronger model will see **only your query and nothing else**."
         )
 
 
