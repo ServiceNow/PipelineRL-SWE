@@ -83,32 +83,26 @@ class ExpertAdviceNode(StandardNode):
             )
 
     def make_prompt(self, agent: Any, tape: Tape) -> Prompt:
-        """Create a prompt for the expert model to provide advice."""
         task = tape.steps[0]
         assert isinstance(task, ExpertAdviceTask), f"Expected ExpertAdviceTask, got {task.__class__.__name__}"
         
         system_message = {
             "role": "system",
             "content": (
-                "You are an expert software engineer and AI assistant. Your role is to provide "
-                "helpful, specific, and actionable guidance to improve software engineering tasks. "
-                "When asked for advice, focus on:\n\n"
-                "- Specific improvements that can be made\n"
-                "- Clear reasoning for your recommendations\n"
-                "- Actionable steps rather than general comments\n"
-                "- Technical accuracy and best practices\n\n"
-                "Be concise but thorough in your guidance."
+                "You are an expert software engineer and AI assistant providing guidance to improve "
+                "software engineering outputs. Provide specific, actionable advice."
             )
         }
         
+        # The query now contains both context and question
         user_message = {
             "role": "user",
-            "content": task.llm_view()
+            "content": task.query  # Just use the query directly
         }
         
         messages = [system_message, user_message]
         
-        # Apply token limit if we have a tokenizer
+        # Apply token limit
         prompt_token_ids = None
         if hasattr(agent, 'llm') and hasattr(agent.llm, 'tokenizer') and agent.llm.tokenizer:
             prompt_token_ids = agent.llm.tokenizer.apply_chat_template(

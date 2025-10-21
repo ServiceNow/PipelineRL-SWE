@@ -32,19 +32,16 @@ class QueryGenerationTask(Observation):
         return (
             f"You need to generate a query to send to a stronger model for guidance on improving "
             f"the {self.stage_name} stage output.\n\n"
-            f"=== CONTEXT ===\n"
+            f"=== AVAILABLE INFORMATION ===\n"
             f"Problem: {self.problem_statement}\n\n"
-            f"=== STAGE INPUT ===\n"
-            f"{self.stage_input}\n\n"
-            f"=== YOUR {self.stage_name.upper()} OUTPUT ===\n"
-            f"{self.stage_output}\n\n"
-            f"=== SELF-EVALUATION ===\n"
-            f"Predicted quality score: {self.self_eval_score:.2f}/1.0\n"
+            f"Stage Input:\n{self.stage_input}\n\n"
+            f"Your {self.stage_name.upper()} Output:\n{self.stage_output}\n\n"
+            f"Self-Evaluation Score: {self.self_eval_score:.2f}/1.0\n"
             f"Analysis: {self.self_eval_analysis}\n\n"
-            f"Generate a clear, specific query that asks the stronger model how to improve your "
-            f"{self.stage_name} output. Include relevant context and be specific about what "
-            f"kind of guidance would be helpful. Make sure to **include the content you will "
-            f"reference, because the stronger model will see **only your query and nothing else**."
+            f"Generate a query with two parts:\n"
+            f"1. <context> - Copy any information the expert needs to understand your situation\n"
+            f"2. <question> - Your specific question\n\n"
+            f"The expert will ONLY see what you put in these tags."
         )
 
 
@@ -78,25 +75,35 @@ class QueryGenerationNode(StandardNode):
     def parse_completion(self, completion: str) -> Generator[Step, None, None]:
         """Parse the LLM completion to extract the generated query."""
         try:
-            # Look for query tags
-            if "<query>" in completion and "</query>" in completion:
-                start = completion.find("<query>") + 7
-                end = completion.find("</query>")
-                generated_query = completion[start:end].strip()
-                
-                # Extract reasoning (everything before the query tags)
-                reasoning = completion[:completion.find("<query>")].strip()
-            else:
-                # Fallback: treat the entire completion as the query
-                generated_query = completion.strip()
-                reasoning = ""
+            # Extract context
+            context = ""
+            if "<context>" in completion and "</context>" in completion:
+                ctx_start = completion.find("<context>") + 9
+                ctx_end = completion.find("</context>")
+                context = completion[ctx_start:ctx_end].strip()
             
-            if not generated_query:
+            # Extract question
+            question = ""
+            if "<question>" in completion and "</question>" in completion:
+                q_start = completion.find("<question>") + 10
+                q_end = completion.find("</question>")
+                question = completion[q_start:q_end].strip()
+            
+            # Basic non-empty check
+            if not context or not question:
                 yield LLMOutputParsingFailureAction(
-                    error="Empty query generated", 
+                    error="Missing or empty <context> or <question> tags", 
                     llm_output=completion
                 )
                 return
+            
+            # Combine into final query
+            generated_query = f"{context}\n\n{question}"
+            
+            # Extract reasoning (everything before tags)
+            reasoning = ""
+            if "<context>" in completion:
+                reasoning = completion[:completion.find("<context>")].strip()
             
             yield QueryGenerationResponse(
                 generated_query=generated_query,
@@ -118,19 +125,15 @@ class QueryGenerationNode(StandardNode):
         system_message = {
             "role": "system",
             "content": (
-                "You are an expert at formulating queries to get helpful guidance from stronger models. "
-                "Your task is to analyze a stage output that has low confidence and create a specific, "
-                "actionable query that will help improve it.\n\n"
-                "Guidelines for good queries:\n"
-                "- Be specific about what you're uncertain about\n"
-                "- Include relevant context but be concise\n"
-                "- Ask for actionable guidance, not just evaluation\n"
-                "- Focus on the most important improvements needed\n\n"
+                "You are an expert at formulating queries to get helpful guidance from stronger models.\n\n"
                 "Format your response as:\n"
-                "[Your reasoning about what guidance is needed]\n\n"
-                "<query>\n"
-                "[Your specific query to the stronger model]\n"
-                "</query>"
+                "[Your reasoning about what to include]\n\n"
+                "<context>\n"
+                "[Copy any information the expert needs - problem details, your output, etc.]\n"
+                "</context>\n\n"
+                "<question>\n"
+                "[Your specific question]\n"
+                "</question>"
             )
         }
         
