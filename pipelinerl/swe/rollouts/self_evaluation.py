@@ -186,7 +186,7 @@ async def run_file_selection_with_self_eval(cfg: DictConfig, llm: TrainableLLM, 
     
     # Add self-evaluation if enabled
     if cfg.swe.get('enable_file_selection_self_eval', False):
-        stage_input = "\n".join([f"{fp}: {ctx.get('summary', 'No summary')[:100]}..." 
+        stage_input = "\n".join([f"{fp}: {ctx.get('summary', 'No summary')}..." 
                                for fp, ctx in enriched_context.items()])
         
         # Extract selected_files from result - this is available!
@@ -212,7 +212,7 @@ async def run_repair_with_self_eval(cfg: DictConfig, llm: TrainableLLM, problem:
     
     # Add self-evaluation if enabled
     if cfg.swe.get('enable_repair_self_eval', False):
-        stage_input = "\n".join([f"**{fp}**\n{content[:500]}..." 
+        stage_input = "\n".join([f"**{fp}**\n{content}..." 
                                for fp, content in file_contents.items()])
         
         # Extract edits from result - this is available!

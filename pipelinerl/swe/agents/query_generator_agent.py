@@ -30,18 +30,12 @@ class QueryGenerationTask(Observation):
     
     def llm_view(self, indent: int | None = 2) -> str:
         return (
-            f"You need to generate a query to send to a stronger model for guidance on improving "
-            f"the {self.stage_name} stage output.\n\n"
-            f"=== AVAILABLE INFORMATION ===\n"
             f"Problem: {self.problem_statement}\n\n"
+            f"Stage: {self.stage_name}\n"
             f"Stage Input:\n{self.stage_input}\n\n"
-            f"Your {self.stage_name.upper()} Output:\n{self.stage_output}\n\n"
+            f"Your Output:\n{self.stage_output}\n\n"
             f"Self-Evaluation Score: {self.self_eval_score:.2f}/1.0\n"
-            f"Analysis: {self.self_eval_analysis}\n\n"
-            f"Generate a query with two parts:\n"
-            f"1. <context> - Copy any information the expert needs to understand your situation\n"
-            f"2. <question> - Your specific question\n\n"
-            f"The expert will ONLY see what you put in these tags."
+            f"Analysis: {self.self_eval_analysis}"
         )
 
 
@@ -82,6 +76,13 @@ class QueryGenerationNode(StandardNode):
                 ctx_end = completion.find("</context>")
                 context = completion[ctx_start:ctx_end].strip()
             
+            # Extract code
+            code = ""
+            if "<code>" in completion and "</code>" in completion:
+                code_start = completion.find("<code>") + 6
+                code_end = completion.find("</code>")
+                code = completion[code_start:code_end].strip()
+            
             # Extract question
             question = ""
             if "<question>" in completion and "</question>" in completion:
@@ -89,21 +90,31 @@ class QueryGenerationNode(StandardNode):
                 q_end = completion.find("</question>")
                 question = completion[q_start:q_end].strip()
             
-            # Basic non-empty check
-            if not context or not question:
+            # Check for required tags
+            if not question:
                 yield LLMOutputParsingFailureAction(
-                    error="Missing or empty <context> or <question> tags", 
+                    error="Missing or empty <question> tag", 
                     llm_output=completion
                 )
                 return
             
             # Combine into final query
-            generated_query = f"{context}\n\n{question}"
+            parts = []
+            if context:
+                parts.append(context)
+            if code:
+                parts.append(f"\nCode:\n{code}")
+            parts.append(f"\n{question}")
+            
+            generated_query = "\n\n".join(parts)
             
             # Extract reasoning (everything before tags)
             reasoning = ""
-            if "<context>" in completion:
-                reasoning = completion[:completion.find("<context>")].strip()
+            first_tag_pos = min(
+                completion.find(tag) for tag in ["<context>", "<code>", "<question>"]
+                if tag in completion
+            )
+            reasoning = completion[:first_tag_pos].strip() if first_tag_pos > 0 else ""
             
             yield QueryGenerationResponse(
                 generated_query=generated_query,
@@ -125,15 +136,18 @@ class QueryGenerationNode(StandardNode):
         system_message = {
             "role": "system",
             "content": (
-                "You are an expert at formulating queries to get helpful guidance from stronger models.\n\n"
-                "Format your response as:\n"
-                "[Your reasoning about what to include]\n\n"
-                "<context>\n"
-                "[Copy any information the expert needs - problem details, your output, etc.]\n"
-                "</context>\n\n"
-                "<question>\n"
-                "[Your specific question]\n"
-                "</question>"
+                "You formulate queries for a stronger model that will help improve your work.\n\n"
+                "CRITICAL: The stronger model is ISOLATED. It can ONLY see what you put in the tags below. "
+                "It has NO access to the problem statement, your code, or any other context unless you explicitly copy it.\n\n"
+                "Use these tags:\n"
+                "<context>Background information the expert needs</context>\n"
+                "<code>All relevant code snippets - copy complete functions/classes</code>\n"
+                "<question>Your specific question</question>\n\n"
+                "Rules:\n"
+                "- If your question references code, YOU MUST copy that code into <code> tags\n"
+                "- If your question needs problem context, YOU MUST copy it into <context> tags\n"
+                "- Don't reference 'the code above' or 'my output' - the expert can't see those\n"
+                "- Make your query self-contained"
             )
         }
         

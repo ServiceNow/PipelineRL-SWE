@@ -237,7 +237,7 @@ async def run_file_selection_a2a(cfg: DictConfig, llm: TrainableLLM, expert_llm:
         logger.info(f"File selection confidence {self_eval_score:.2f} below threshold {threshold}, triggering A2A")
         
         # Prepare stage input and output for A2A
-        stage_input = "\n".join([f"{fp}: {ctx.get('summary', 'No summary')[:100]}..." 
+        stage_input = "\n".join([f"{fp}: {ctx.get('summary', 'No summary')}..." 
                                for fp, ctx in enriched_context.items()])
         stage_output = format_stage_output("file_selection", {"selected_files": initial_result.get('selected_files', [])})
         
@@ -319,7 +319,7 @@ async def run_repair_a2a(cfg: DictConfig, llm: TrainableLLM, expert_llm: Trainab
         logger.info(f"Repair confidence {self_eval_score:.2f} below threshold {threshold}, triggering A2A")
         
         # Prepare stage input and output for A2A
-        stage_input = "\n".join([f"**{fp}**\n{content[:500]}..." 
+        stage_input = "\n".join([f"**{fp}**\n{content}..." 
                                for fp, content in file_contents.items()])
         stage_output = format_stage_output("repair", {"edits": initial_result.get('repair_edits', [])})
         
