@@ -68,8 +68,11 @@ async def run_a2a(
         
         if not generated_query:
             logger.warning("No query generated, skipping A2A")
+            # Still create training data with penalty to prevent reward hacking
+            query_training_text = make_training_text(llm, query_llm_call)
+            query_training_text.reward = -0.5  # Penalty for malformed query
             return {
-                'query_training_text': None,
+                'query_training_text': query_training_text,
                 'expert_advice': None,
                 'latency': time.time() - start_time,
                 'success': False
@@ -171,39 +174,43 @@ async def run_localization_a2a(cfg: DictConfig, llm: TrainableLLM, expert_llm: T
             # Add query training text
             if a2a_result['query_training_text']:
                 training_texts.append(a2a_result['query_training_text'])
-            
+
             # Re-run localization with expert advice
             enhanced_result = await run_localization_with_self_eval(
                 cfg, llm, problem, session, a2a_result['expert_advice']
             )
-            
+
             if enhanced_result['training_text']:
                 # Set query reward based on enhanced performance
                 if a2a_result['query_training_text']:
                     improvement = enhanced_result['metrics']['reward'] - initial_result['metrics']['reward']
                     a2a_result['query_training_text'].reward = improvement
                 training_texts.append(enhanced_result['training_text'])
-            
+
             # Add enhanced result's self-eval training text if available
             if enhanced_result.get('self_eval_result') and enhanced_result['self_eval_result'].get('training_text'):
                 training_texts.append(enhanced_result['self_eval_result']['training_text'])
-            
+
             # Add A2A metadata at top level (not in metrics dict)
             enhanced_result['training_texts'] = training_texts
             enhanced_result['a2a_enhanced'] = True
             enhanced_result['initial_self_eval_score'] = self_eval_score
-            
+
             # Store initial metrics for comparison
             enhanced_result['initial_mrr'] = initial_result['metrics'].get('mrr', 0.0)
             enhanced_result['initial_recall'] = initial_result['metrics'].get('localization_recall', 0.0)
-            
+
             # Store token usage
             enhanced_result['a2a_query_prompt_tokens'] = a2a_result.get('query_prompt_tokens', 0)
             enhanced_result['a2a_query_output_tokens'] = a2a_result.get('query_output_tokens', 0)
             enhanced_result['a2a_expert_prompt_tokens'] = a2a_result.get('expert_prompt_tokens', 0)
             enhanced_result['a2a_expert_output_tokens'] = a2a_result.get('expert_output_tokens', 0)
-            
+
             return enhanced_result
+        else:
+            # A2A failed (e.g., malformed query) - still need to include failed query for training
+            if a2a_result.get('query_training_text'):
+                training_texts.append(a2a_result['query_training_text'])
     
     # Return original result if no A2A triggered
     initial_result['training_texts'] = training_texts
@@ -252,40 +259,44 @@ async def run_file_selection_a2a(cfg: DictConfig, llm: TrainableLLM, expert_llm:
             # Add query training text
             if a2a_result['query_training_text']:
                 training_texts.append(a2a_result['query_training_text'])
-            
+
             # Re-run file selection with expert advice
             enhanced_result = await run_file_selection_with_self_eval(
                 cfg, llm, problem, enriched_context, session, a2a_result['expert_advice']
             )
-            
+
             if enhanced_result['training_text']:
                 # Set query reward based on enhanced performance
                 if a2a_result['query_training_text']:
                     improvement = enhanced_result['metrics']['reward'] - initial_result['metrics']['reward']
                     a2a_result['query_training_text'].reward = improvement
                 training_texts.append(enhanced_result['training_text'])
-            
+
             # Add enhanced result's self-eval training text if available
             if enhanced_result.get('self_eval_result') and enhanced_result['self_eval_result'].get('training_text'):
                 training_texts.append(enhanced_result['self_eval_result']['training_text'])
-            
+
             # Add A2A metadata at top level
             enhanced_result['training_texts'] = training_texts
             enhanced_result['a2a_enhanced'] = True
             enhanced_result['initial_self_eval_score'] = self_eval_score
-            
+
             # Store initial metrics for comparison
             enhanced_result['initial_precision'] = initial_result['metrics'].get('selection_precision', 0.0)
             enhanced_result['initial_recall'] = initial_result['metrics'].get('selection_recall', 0.0)
             enhanced_result['initial_f1'] = initial_result['metrics'].get('selection_f1', 0.0)
-            
+
             # Store token usage
             enhanced_result['a2a_query_prompt_tokens'] = a2a_result.get('query_prompt_tokens', 0)
             enhanced_result['a2a_query_output_tokens'] = a2a_result.get('query_output_tokens', 0)
             enhanced_result['a2a_expert_prompt_tokens'] = a2a_result.get('expert_prompt_tokens', 0)
             enhanced_result['a2a_expert_output_tokens'] = a2a_result.get('expert_output_tokens', 0)
-            
+
             return enhanced_result
+        else:
+            # A2A failed (e.g., malformed query) - still need to include failed query for training
+            if a2a_result.get('query_training_text'):
+                training_texts.append(a2a_result['query_training_text'])
     
     # Return original result if no A2A triggered
     initial_result['training_texts'] = training_texts
@@ -334,39 +345,43 @@ async def run_repair_a2a(cfg: DictConfig, llm: TrainableLLM, expert_llm: Trainab
             # Add query training text
             if a2a_result['query_training_text']:
                 training_texts.append(a2a_result['query_training_text'])
-            
+
             # Re-run repair with expert advice
             enhanced_result = await run_repair_with_self_eval(
                 cfg, llm, problem, file_contents, session, a2a_result['expert_advice']
             )
-            
+
             if enhanced_result['training_text']:
                 # Set query reward based on enhanced performance
                 if a2a_result['query_training_text']:
                     improvement = enhanced_result['metrics']['reward'] - initial_result['metrics']['reward']
                     a2a_result['query_training_text'].reward = improvement
                 training_texts.append(enhanced_result['training_text'])
-            
+
             # Add enhanced result's self-eval training text if available
             if enhanced_result.get('self_eval_result') and enhanced_result['self_eval_result'].get('training_text'):
                 training_texts.append(enhanced_result['self_eval_result']['training_text'])
-            
+
             # Add A2A metadata at top level
             enhanced_result['training_texts'] = training_texts
             enhanced_result['a2a_enhanced'] = True
             enhanced_result['initial_self_eval_score'] = self_eval_score
-            
+
             # Store initial metrics for comparison
             enhanced_result['initial_reward'] = initial_result['metrics'].get('reward', 0.0)
             enhanced_result['initial_success'] = initial_result['metrics'].get('success', False)
-            
+
             # Store token usage
             enhanced_result['a2a_query_prompt_tokens'] = a2a_result.get('query_prompt_tokens', 0)
             enhanced_result['a2a_query_output_tokens'] = a2a_result.get('query_output_tokens', 0)
             enhanced_result['a2a_expert_prompt_tokens'] = a2a_result.get('expert_prompt_tokens', 0)
             enhanced_result['a2a_expert_output_tokens'] = a2a_result.get('expert_output_tokens', 0)
-            
+
             return enhanced_result
+        else:
+            # A2A failed (e.g., malformed query) - still need to include failed query for training
+            if a2a_result.get('query_training_text'):
+                training_texts.append(a2a_result['query_training_text'])
     
     # Return original result if no A2A triggered
     initial_result['training_texts'] = training_texts
