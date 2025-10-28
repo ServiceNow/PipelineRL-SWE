@@ -69,43 +69,30 @@ class QueryGenerationNode(StandardNode):
     def parse_completion(self, completion: str) -> Generator[Step, None, None]:
         """Parse the LLM completion to extract the generated query."""
         try:
-            # Extract context
-            context = ""
-            if "<context>" in completion and "</context>" in completion:
-                ctx_start = completion.find("<context>") + 9
-                ctx_end = completion.find("</context>")
-                context = completion[ctx_start:ctx_end].strip()
+            def extract_required_tag(tag: str) -> str:
+                open_tag = f"<{tag}>"
+                close_tag = f"</{tag}>"
+                msg = f"Missing or empty <{tag}> tag"
+                start = completion.find(open_tag)
+                end = completion.find(close_tag)
+                if start == -1 or end == -1:
+                    raise ValueError(msg)
+                start += len(open_tag)
+                if end <= start:
+                    raise ValueError(msg)
+                value = completion[start:end].strip()
+                if not value:
+                    raise ValueError(msg)
+                return value
             
-            # Extract code
-            code = ""
-            if "<code>" in completion and "</code>" in completion:
-                code_start = completion.find("<code>") + 6
-                code_end = completion.find("</code>")
-                code = completion[code_start:code_end].strip()
-            
-            # Extract question
-            question = ""
-            if "<question>" in completion and "</question>" in completion:
-                q_start = completion.find("<question>") + 10
-                q_end = completion.find("</question>")
-                question = completion[q_start:q_end].strip()
-            
-            # Check for required tags
-            if not question:
-                yield LLMOutputParsingFailureAction(
-                    error="Missing or empty <question> tag", 
-                    llm_output=completion
-                )
-                return
+            # Extract required sections; fail fast if any tag is missing/empty
+            context = extract_required_tag("context")
+            code = extract_required_tag("code")
+            question = extract_required_tag("question")
+        
             
             # Combine into final query
-            parts = []
-            if context:
-                parts.append(context)
-            if code:
-                parts.append(f"\nCode:\n{code}")
-            parts.append(f"\n{question}")
-            
+            parts = [context, f"Code:\n{code}", question]
             generated_query = "\n\n".join(parts)
             
             # Extract reasoning (everything before tags)
@@ -121,6 +108,12 @@ class QueryGenerationNode(StandardNode):
                 reasoning=reasoning
             )
             
+        except ValueError as e:
+            yield LLMOutputParsingFailureAction(
+                error=str(e),
+                llm_output=completion
+            )
+            return
         except Exception as e:
             logger.info(f"Failed to parse query generation: {completion}\n\nError: {e}")
             yield LLMOutputParsingFailureAction(

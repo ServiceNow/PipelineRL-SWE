@@ -70,7 +70,7 @@ async def run_a2a(
             logger.warning("No query generated, skipping A2A")
             # Still create training data with penalty to prevent reward hacking
             query_training_text = make_training_text(llm, query_llm_call)
-            query_training_text.reward = -0.5  # Penalty for malformed query
+            query_training_text.reward = -1.0  # Penalty for malformed query
             return {
                 'query_training_text': query_training_text,
                 'expert_advice': None,
@@ -216,6 +216,7 @@ async def run_localization_a2a(cfg: DictConfig, llm: TrainableLLM, expert_llm: T
     initial_result['training_texts'] = training_texts
     initial_result['a2a_enhanced'] = False
     return initial_result
+
 
 
 async def run_file_selection_a2a(cfg: DictConfig, llm: TrainableLLM, expert_llm: TrainableLLM, problem: Dict, enriched_context: Dict, session):
