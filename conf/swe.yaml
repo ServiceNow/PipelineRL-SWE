@@ -126,3 +126,4 @@ world:
       tokenizer_mode: mistral
       config_format: mistral
       load_format: mistral
+      max_model_len: 32000
