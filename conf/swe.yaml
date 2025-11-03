@@ -89,7 +89,7 @@ swe:
   # Expert model configuration (port 8280)
   expert_model:
     base_url: "http://localhost:8280"
-    model_name: "Qwen/Qwen2.5-Coder-32B-Instruct"
+    model_name: "mistralai/Devstral-Small-2505"
     parameters:
       max_tokens: 8000
       temperature: 1.0
@@ -121,7 +121,7 @@ swe_preprocessor_args:
 world:
   expert_llm:
     enabled: false
-    model_path: Qwen/Qwen2.5-Coder-32B-Instruct
+    model_path: mistralai/Devstral-Small-2505
     vllm_kwargs:
       max-model-len: 16000
       gpu_memory_utilization: 0.95
