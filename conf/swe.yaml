@@ -123,5 +123,6 @@ world:
     enabled: false
     model_path: mistralai/Devstral-Small-2505
     vllm_kwargs:
-      max-model-len: 16000
-      gpu_memory_utilization: 0.95
+      tokenizer_mode: mistral
+      config_format: mistral
+      load_format: mistral
