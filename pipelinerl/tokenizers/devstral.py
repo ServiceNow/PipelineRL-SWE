@@ -70,12 +70,17 @@ def configure_devstral_tokenizer(llm: Any) -> Any:
             request_cls=ChatCompletionRequest,
         )
 
-        setattr(self, "_tokenizer", adapter)
-        setattr(self, "tokenizer", adapter)
-        setattr(self, "_tokenizer_loaded", True)
+        object.__setattr__(self, "_tokenizer", adapter)
+        object.__setattr__(self, "tokenizer", adapter)
+        object.__setattr__(self, "_tokenizer_loaded", True)
         return adapter
 
-    llm.load_tokenizer = MethodType(_load_tokenizer, llm)
+    try:
+        object.__setattr__(llm, "load_tokenizer", MethodType(_load_tokenizer, llm))
+    except (AttributeError, TypeError) as exc:
+        raise RuntimeError(
+            f"Failed to install DevStral tokenizer loader on {llm}: {exc}"
+        ) from exc
     return llm
 
 

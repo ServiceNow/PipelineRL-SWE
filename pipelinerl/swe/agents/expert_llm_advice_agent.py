@@ -122,23 +122,19 @@ class ExpertLLMAdviceAgent(Agent):
     def create(cls, system_prompt: str = None, llm: LLM = None, max_prompt_length: int = 20000):
         """Create an ExpertLLMAdviceAgent."""
         # Handle the llm parameter correctly for the Agent base class
-        llm_objects: list[LLM] = []
+        llm_map: dict[str, LLM] = {}
         llms = llm
 
-        def _collect_llms(value: LLM | None):
-            if value is None:
-                return
-            llm_objects.append(value)
+        if isinstance(llm, dict):
+            llm_map = {key: value for key, value in llm.items() if value is not None}
+        elif llm is not None:
+            llm_map = {"default": llm}
+            llms = llm_map
+
+        for value in llm_map.values():
             model_name = getattr(value, "tokenizer_name", None) or getattr(value, "model_name", None)
             if is_devstral_model_name(model_name):
                 configure_devstral_tokenizer(value)
-
-        if isinstance(llm, dict):
-            for value in llm.values():
-                _collect_llms(value)
-        elif llm is not None:
-            _collect_llms(llm)
-            llms = {"default": llm}
             
         agent = super().create(
             llms=llms,
@@ -153,6 +149,18 @@ class ExpertLLMAdviceAgent(Agent):
             max_iterations=1,  # Single step agent
         )
         agent.store_llm_calls = True
-        for value in llm_objects:
-            value.load_tokenizer()
+        def _init_tokenizer(candidate: LLM | None):
+            if candidate is None:
+                return
+            model_name = getattr(candidate, "tokenizer_name", None) or getattr(candidate, "model_name", None)
+            if is_devstral_model_name(model_name):
+                configure_devstral_tokenizer(candidate)
+            if hasattr(candidate, "load_tokenizer"):
+                candidate.load_tokenizer()
+
+        if hasattr(agent, "llms") and isinstance(agent.llms, dict):
+            for candidate in agent.llms.values():
+                _init_tokenizer(candidate)
+        else:
+            _init_tokenizer(getattr(agent, "llm", None))
         return agent
