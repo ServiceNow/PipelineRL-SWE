@@ -15,6 +15,8 @@ from tapeagents.core import (
 from tapeagents.llms import LLM
 from tapeagents.nodes import StandardNode
 
+from pipelinerl.tokenizers import configure_devstral_tokenizer, is_devstral_model_name
+
 logger = logging.getLogger(__name__)
 
 
@@ -120,8 +122,22 @@ class ExpertLLMAdviceAgent(Agent):
     def create(cls, system_prompt: str = None, llm: LLM = None, max_prompt_length: int = 20000):
         """Create an ExpertLLMAdviceAgent."""
         # Handle the llm parameter correctly for the Agent base class
+        llm_objects: list[LLM] = []
         llms = llm
-        if llm is not None and not isinstance(llm, dict):
+
+        def _collect_llms(value: LLM | None):
+            if value is None:
+                return
+            llm_objects.append(value)
+            model_name = getattr(value, "tokenizer_name", None) or getattr(value, "model_name", None)
+            if is_devstral_model_name(model_name):
+                configure_devstral_tokenizer(value)
+
+        if isinstance(llm, dict):
+            for value in llm.values():
+                _collect_llms(value)
+        elif llm is not None:
+            _collect_llms(llm)
             llms = {"default": llm}
             
         agent = super().create(
@@ -137,6 +153,6 @@ class ExpertLLMAdviceAgent(Agent):
             max_iterations=1,  # Single step agent
         )
         agent.store_llm_calls = True
-        if llm:
-            agent.llm.load_tokenizer()
+        for value in llm_objects:
+            value.load_tokenizer()
         return agent

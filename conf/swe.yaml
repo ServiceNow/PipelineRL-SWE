@@ -64,22 +64,22 @@ eval_every_n_versions: 1000
 
 swe:
   # Stage enablement flags
-  enable_localization: true
-  enable_file_selection: true
+  enable_localization: false
+  enable_file_selection: false
   enable_repair: true
   
   # Run flags (for stages that contribute to training data)
-  run_localization: true
-  run_file_selection: true
+  run_localization: false
+  run_file_selection: false
   run_repair: true
   
   # Self-evaluation flags (enable generic self-eval for each stage)
-  enable_localization_self_eval: true
-  enable_file_selection_self_eval: true
+  enable_localization_self_eval: false
+  enable_file_selection_self_eval: false
   enable_repair_self_eval: true
   
   # A2A system configuration
-  enable_a2a: false
+  enable_a2a: true
   
   # A2A trigger thresholds (when to consult expert model)
   localization_a2a_trigger_threshold: 0.5
@@ -120,7 +120,7 @@ swe_preprocessor_args:
 
 world:
   expert_llm:
-    enabled: false
+    enabled: true
     model_path: mistralai/Devstral-Small-2505
     vllm_kwargs:
       tokenizer_mode: mistral
