@@ -108,20 +108,6 @@ class _DevStralChatTokenizerAdapter:
         self.bos_token = getattr(special_tokens, "bos", None)
         self.pad_token = getattr(special_tokens, "pad", None)
 
-        self._assistant_generation_kwargs: dict[str, Any] | None = None
-        for flag in ("prefix", "continue_final_message"):
-            try:
-                self.assistant_cls(content="", **{flag: True})
-            except TypeError:
-                continue
-            self._assistant_generation_kwargs = {"content": "", flag: True}
-            break
-        if self._assistant_generation_kwargs is None:
-            logger.debug(
-                "DevStral assistant messages do not accept 'prefix' or 'continue_final_message'; "
-                "generation prompts will be skipped."
-            )
-
     # Delegate unknown attributes to the wrapped tokenizer.
     def __getattr__(self, item: str) -> Any:  # pragma: no cover - defensive programming
         return getattr(self.tokenizer, item)
@@ -168,14 +154,6 @@ class _DevStralChatTokenizerAdapter:
             else:
                 raise ValueError(f"Unsupported role '{role}' in conversation: {msg}")
 
-        if add_generation_prompt:
-            if self._assistant_generation_kwargs:
-                messages.append(self.assistant_cls(**self._assistant_generation_kwargs))
-            else:
-                logger.debug(
-                    "Skipping DevStral assistant generation prompt because required flags are unsupported."
-                )
-
         return messages
 
     def _normalize_content(self, content: Any) -> str:
@@ -203,6 +181,4 @@ class _DevStralChatTokenizerAdapter:
             role = msg.get("role", "user")
             content = self._normalize_content(msg.get("content"))
             rendered.append(f"<|{role}|>\n{content}")
-        if add_generation_prompt and self._assistant_generation_kwargs:
-            rendered.append("<|assistant|>\n")
         return "\n\n".join(rendered)
