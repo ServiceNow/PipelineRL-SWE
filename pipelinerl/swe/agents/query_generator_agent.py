@@ -1,4 +1,5 @@
 import logging
+import re
 from typing import Annotated, Any, Generator, Literal, TypeAlias, Union, Optional, Dict
 
 from pydantic import Field
@@ -65,36 +66,84 @@ class QueryGenerationNode(StandardNode):
     """Node that generates queries for stronger models."""
     
     max_prompt_length: int = 16000
+    _code_block_pattern = re.compile(
+        r'<code\s+path="([^"\n]+)">\s*(.*?)\s*</code>',
+        re.DOTALL | re.IGNORECASE,
+    )
     
     def parse_completion(self, completion: str) -> Generator[Step, None, None]:
         """Parse the LLM completion to extract the generated query."""
         try:
             def extract_required_tag(tag: str) -> str:
-                open_tag = f"<{tag}>"
-                close_tag = f"</{tag}>"
-                msg = f"Missing or empty <{tag}> tag"
-                start = completion.find(open_tag)
-                end = completion.find(close_tag)
-                if start == -1 or end == -1:
-                    raise ValueError(msg)
-                start += len(open_tag)
-                if end <= start:
-                    raise ValueError(msg)
-                value = completion[start:end].strip()
-                if not value:
-                    raise ValueError(msg)
+                pattern = re.compile(
+                    rf"<{tag}>\s*(.*?)\s*</{tag}>",
+                    re.DOTALL | re.IGNORECASE,
+                )
+                match = pattern.search(completion)
+                if not match:
+                    raise ValueError(f"Missing or empty <{tag}> tag")
+                value = match.group(1)
+                if not value or not value.strip():
+                    raise ValueError(f"Missing or empty <{tag}> tag")
                 return value
-            
+
+            def format_tag(tag: str, value: str) -> str:
+                cleaned = value.strip("\n")
+                return f"<{tag}>\n{cleaned}\n</{tag}>"
+
             # Extract required sections; fail fast if any tag is missing/empty
-            context = extract_required_tag("context")
-            code = extract_required_tag("code")
-            question = extract_required_tag("question")
-        
-            
-            # Combine into final query
-            parts = [context, f"Code:\n{code}", question]
-            generated_query = "\n\n".join(parts)
-            
+            context_content = extract_required_tag("context")
+            question_content = extract_required_tag("question")
+
+            code_matches = list(self._code_block_pattern.finditer(completion))
+            if not code_matches:
+                raise ValueError("At least one <code path=\"...\"> block is required")
+
+            formatted_code_blocks: list[str] = []
+            invalid_lines: list[tuple[str, str]] = []
+            stage_input = getattr(self, "_current_stage_input", "") or ""
+            stage_lines = {
+                line.rstrip("\r")
+                for line in stage_input.splitlines()
+            } if stage_input else set()
+
+            for match in code_matches:
+                file_path = match.group(1).strip()
+                if not file_path:
+                    raise ValueError("Each <code> block must include a non-empty path attribute")
+
+                block_content = match.group(2)
+                if not block_content or not block_content.strip():
+                    raise ValueError(f"<code path=\"{file_path}\"> block is empty")
+
+                # Validate that every non-empty line exists somewhere in the stage input.
+                if stage_lines:
+                    for raw_line in block_content.splitlines():
+                        normalized_line = raw_line.rstrip("\r")
+                        if not normalized_line.strip():
+                            continue
+                        if normalized_line not in stage_lines:
+                            invalid_lines.append((file_path, normalized_line))
+
+                cleaned_block = block_content.strip("\n")
+                formatted_code_blocks.append(
+                    f'<code path="{file_path}">\n{cleaned_block}\n</code>'
+                )
+
+            if invalid_lines:
+                preview = "\n".join(f"{path}: {line}" for path, line in invalid_lines[:5])
+                raise ValueError(
+                    "Code lines must match the stage input exactly (no paraphrasing or ellipses). "
+                    f"Examples:\n{preview}"
+                )
+
+            context_tag = format_tag("context", context_content)
+            question_tag = format_tag("question", question_content)
+            codes_tag = "\n\n".join(formatted_code_blocks)
+
+            parts = [context_tag, codes_tag, question_tag]
+            generated_query = "\n\n".join(part for part in parts if part)
+
             # Extract reasoning (everything before tags)
             reasoning = ""
             first_tag_pos = min(
@@ -116,6 +165,7 @@ class QueryGenerationNode(StandardNode):
             return
         except Exception as e:
             logger.info(f"Failed to parse query generation: {completion}\n\nError: {e}")
+            logger.debug("Stage input used for validation:\n%s", getattr(self, "_current_stage_input", ""))
             yield LLMOutputParsingFailureAction(
                 error=f"Failed to parse query generation: {e}", 
                 llm_output=completion
@@ -134,11 +184,13 @@ class QueryGenerationNode(StandardNode):
                 "It has NO access to the problem statement, your code, or any other context unless you explicitly copy it.\n\n"
                 "Use these tags:\n"
                 "<context>Background information the expert needs</context>\n"
-                "<code>All relevant code snippets - copy complete functions/classes</code>\n"
+                "<code path=\"relative/file.py\">Copy-pasted code (use one block per file or snippet)</code>\n"
                 "<question>Your specific question</question>\n\n"
                 "Rules:\n"
-                "- If your question references code, YOU MUST copy that code into <code> tags\n"
-                "- If your question needs problem context, YOU MUST copy it into <context> tags\n"
+                "- If your question references code, YOU MUST paste it into one or more <code path=\"...\"> blocks.\n"
+                "- Use the exact file path in the path attribute so the expert knows where the code lives.\n"
+                "- You may include excerpts, but every line must be copied verbatim from the code you saw (no summaries, ellipses, or renaming).\n"
+                "- If your question needs problem context, YOU MUST copy it into <context> tags.\n"
                 "- Don't reference 'the code above' or 'my output' - the expert can't see those\n"
                 "- Make your query self-contained"
             )
@@ -148,6 +200,9 @@ class QueryGenerationNode(StandardNode):
             "role": "user",
             "content": task.llm_view()
         }
+
+        # Store the current task input so we can validate copied code lines.
+        self._current_stage_input = task.stage_input
         
         messages = [system_message, user_message]
         

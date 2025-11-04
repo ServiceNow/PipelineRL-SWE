@@ -212,7 +212,7 @@ async def run_repair_with_self_eval(cfg: DictConfig, llm: TrainableLLM, problem:
     
     # Add self-evaluation if enabled
     if cfg.swe.get('enable_repair_self_eval', False):
-        stage_input = "\n".join([f"**{fp}**\n{content}..." 
+        stage_input = "\n".join([f"**{fp}**\n{content}" 
                                for fp, content in file_contents.items()])
         
         # Extract edits from result - this is available!
