@@ -22,6 +22,53 @@ from .self_evaluation import run_localization_with_self_eval, run_file_selection
 logger = logging.getLogger(__name__)
 
 
+def build_full_context_payload(
+    stage_name: str,
+    problem_statement: str,
+    stage_input: str | Dict | List | None,
+    stage_output: str | Dict | List | None,
+    self_eval_score: float,
+    self_eval_analysis: str,
+    question: str,
+) -> str:
+    """Create a context-rich payload for the expert model."""
+
+    def normalize(value):
+        if value is None:
+            return ""
+        if isinstance(value, (dict, list)):
+            try:
+                return json.dumps(value, ensure_ascii=False, indent=2)
+            except Exception:
+                return str(value)
+        return str(value)
+
+    sections: List[str] = []
+    sections.append(f"Problem Statement:\n{problem_statement}\n")
+    sections.append(f"Stage Name: {stage_name}")
+    stage_input_text = normalize(stage_input)
+    if stage_input_text:
+        sections.append(f"Stage Input:\n{stage_input_text}")
+    stage_output_text = normalize(stage_output)
+    if stage_output_text:
+        sections.append(f"Stage Output:\n{stage_output_text}")
+    sections.append(f"Self-Eval Score: {self_eval_score:.2f}")
+    if self_eval_analysis:
+        sections.append(f"Self-Eval Analysis:\n{self_eval_analysis}")
+
+    context_block = "\n\n".join(sections)
+    question_block = question.strip()
+
+    return (
+        "<context>\n"
+        f"{context_block}\n"
+        "</context>\n\n"
+        "<question>\n"
+        f"{question_block}\n"
+        "</question>"
+    )
+
+
 async def run_a2a(
     cfg: DictConfig, 
     stage_name: str, 
@@ -80,7 +127,16 @@ async def run_a2a(
         
         # Step 2: Get expert advice
         expert_agent = ExpertLLMAdviceAgent.create(llm=expert_llm)
-        expert_task = ExpertAdviceTask(query=generated_query)
+        full_payload = build_full_context_payload(
+            stage_name=stage_name,
+            problem_statement=problem_statement,
+            stage_input=stage_input,
+            stage_output=stage_output,
+            self_eval_score=self_eval_score,
+            self_eval_analysis=self_eval_analysis,
+            question=generated_query,
+        )
+        expert_task = ExpertAdviceTask(query=full_payload)
         expert_tape = ExpertAdviceTape(steps=[expert_task], context=None)
         
         expert_tape_result, expert_llm_call = await execute_agent_with_retry(expert_agent, expert_tape, session)
@@ -155,10 +211,11 @@ async def run_localization_a2a(cfg: DictConfig, llm: TrainableLLM, expert_llm: T
         
         # Prepare stage input and output for A2A
         try:
-            file_stats = json.loads(problem.get('all_file_stats', '{}'))
-            stage_input = f"Repository context with {len(file_stats)} files"
-        except:
-            stage_input = "Repository context"
+            raw_file_stats = problem.get('all_file_stats', '{}')
+            file_stats = json.loads(raw_file_stats)
+            stage_input = json.dumps(file_stats, indent=2)
+        except Exception:
+            stage_input = problem.get('all_file_stats', 'Repository context')
         
         # Extract queries from initial result
         stage_output = format_stage_output("localization", {"queries": initial_result.get('queries', [])})
