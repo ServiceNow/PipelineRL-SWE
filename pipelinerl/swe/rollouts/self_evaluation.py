@@ -100,7 +100,8 @@ async def run_generic_self_eval(
             "true_reward": true_reward,
             "prediction_error": prediction_error,
             "parsing_error": parsing_error,
-            "analysis_length": len(analysis.split()) if analysis else 0
+            "analysis_length": len(analysis.split()) if analysis else 0,
+            "analysis": analysis,
         }
         
         return {
