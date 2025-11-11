@@ -70,6 +70,152 @@ class QueryGenerationNode(StandardNode):
         r'<code\s+path="([^"\n]+)">\s*(.*?)\s*</code>',
         re.DOTALL | re.IGNORECASE,
     )
+
+    # ----------------------------
+    # Few-shot input+output pairs
+    # ----------------------------
+    def _fewshot_pairs(self) -> list[dict]:
+        """
+        Repair-stage paired demonstrations with full I/O:
+        - USER turns mirror QueryGenerationTask.llm_view() (Problem, Stage=repair, Stage Input code, Your Output, Self-Eval, Analysis)
+        - ASSISTANT turns emit <context> + <code> (verbatim lines) + <question>
+        - Code lines in <code> appear exactly in the corresponding USER Stage Input.
+        """
+        pairs: list[dict] = []
+
+        # Pair A — Pagination off-by-one
+        user_a = (
+            "Problem: JSON pagination returns 49 items when total is an exact multiple of page_size. "
+            "Client API expects exactly page_size items per full page.\n\n"
+            "Stage: repair\n"
+            "Stage Input:\n"
+            "### paginator.py\n"
+            "```\n"
+            "def page(items, start, page_size):\n"
+            "    \"\"\"Return a slice of items for one page.\n"
+            "    start: index of first item on the page (0-based)\n"
+            "    page_size: items per page\n"
+            "    \"\"\"\n"
+            "    if page_size <= 0:\n"
+            "        return []\n"
+            "    end = start + page_size - 1  # suspect off-by-one\n"
+            "    return items[start:end]\n"
+            "```\n\n"
+            "Your Output:\n"
+            "Produced no edit. Summarized: \"might be inclusive end confusion\".\n\n"
+            "Self-Evaluation Score: 0.34/1.0\n"
+            "Analysis: I think end should be start+page_size (exclusive) but I'm not 100%."
+        )
+        asst_a = (
+            "<context>\n"
+            "Python slices are half-open: items[a:b] includes a..b-1. Using `- 1` when computing `end` then passing to an exclusive end drops the last element on full pages.\n"
+            "</context>\n"
+            "<code path=\"paginator.py\">\n"
+            "end = start + page_size - 1\n"
+            "return items[start:end]\n"
+            "</code>\n"
+            "<question>\n"
+            "Confirm contract is exactly `page_size` items for full pages. If so, should I:\n"
+            "1) change `end` to `start + page_size` and keep the half-open slice, and\n"
+            "2) add a brief comment on half-open slicing?\n"
+            "Any edge cases to honor (start < 0, start >= len, empty list)?\n"
+            "</question>"
+        )
+        pairs += [{"role": "user", "content": user_a}, {"role": "assistant", "content": asst_a}]
+
+        # Pair B — Unknown 'strict' + normalization
+        user_b = (
+            "Problem: ValueError: unknown key 'strict' during config parsing. The flag is later read in validation.\n\n"
+            "Stage: repair\n"
+            "Stage Input:\n"
+            "### config_schema.py\n"
+            "```\n"
+            "ALLOWED = {\n"
+            "    'timeout', 'retries', 'endpoint'\n"
+            "}\n"
+            "```\n"
+            "### parser.py\n"
+            "```\n"
+            "def load_config(d):\n"
+            "    # Validate keys\n"
+            "    for k in d:\n"
+            "        if k not in ALLOWED:\n"
+            "            raise ValueError(f\"unknown key '{k}'\")\n"
+            "    # Later logic expects 'strict' to be a boolean\n"
+            "    if d.get('strict'):\n"
+            "        validate_strict(d)\n"
+            "    return d\n"
+            "```\n\n"
+            "Your Output:\n"
+            "Proposed: add 'strict' to ALLOWED; uncertain where to coerce to bool (parser vs. downstream).\n\n"
+            "Self-Evaluation Score: 0.39/1.0\n"
+            "Analysis: Leaning toward normalization in load_config, but want confirmation about accepted string/int forms."
+        )
+        asst_b = (
+            "<context>\n"
+            "'strict' is referenced later as a boolean but currently rejected by allowlist. The right boundary is input loading.\n"
+            "</context>\n"
+            "<code path=\"config_schema.py\">\n"
+            "ALLOWED = {\n"
+            "    'timeout', 'retries', 'endpoint'\n"
+            "}\n"
+            "</code>\n"
+            "<code path=\"parser.py\">\n"
+            "if k not in ALLOWED:\n"
+            "    raise ValueError(f\"unknown key '{k}'\")\n"
+            "if d.get('strict'):\n"
+            "    validate_strict(d)\n"
+            "</code>\n"
+            "<question>\n"
+            "Should I (a) add 'strict' to ALLOWED and (b) canonicalize 'strict' to a boolean inside load_config, accepting common\n"
+            "truthy/falsey strings ('true'/'false', '1'/'0', 'yes'/'no') and numerics? Default when absent?\n"
+            "</question>"
+        )
+        pairs += [{"role": "user", "content": user_b}, {"role": "assistant", "content": asst_b}]
+
+        # Pair C — Backoff ms vs seconds
+        user_c = (
+            "Problem: Retry delays are ~1000× too long in production; likely milliseconds passed to time.sleep (seconds).\n\n"
+            "Stage: repair\n"
+            "Stage Input:\n"
+            "### backoff.py\n"
+            "```\n"
+            "def backoff(attempt):\n"
+            "    \"\"\"Exponential backoff duration in milliseconds.\"\"\"\n"
+            "    return min(32000, (2 ** attempt) * 100)\n"
+            "```\n"
+            "### client.py\n"
+            "```\n"
+            "import time\n"
+            "from .backoff import backoff\n"
+            "\n"
+            "def call(max_attempts=5):\n"
+            "    for attempt in range(max_attempts):\n"
+            "        try:\n"
+            "            return do_request()\n"
+            "        except TransientError:\n"
+            "            time.sleep(backoff(attempt))  # expects seconds\n"
+            "```\n\n"
+            "Your Output:\n"
+            "No edit. Considered dividing by 1000 at the call site vs. changing backoff() to seconds.\n\n"
+            "Self-Evaluation Score: 0.42/1.0\n"
+            "Analysis: Unsure about other callers of backoff()."
+        )
+        asst_c = (
+            "<context>\n"
+            "Producer returns milliseconds; consumer sleeps in seconds. Safer to convert at call site unless all callers can be migrated.\n"
+            "</context>\n"
+            "<code path=\"client.py\">\n"
+            "time.sleep(backoff(attempt))\n"
+            "</code>\n"
+            "<question>\n"
+            "Prefer patching the call to `time.sleep(backoff(attempt) / 1000.0)` to avoid changing backoff()'s contract? "
+            "If you want backoff() to return seconds universally, confirm there are no ms-dependent callers.\n"
+            "</question>"
+        )
+        pairs += [{"role": "user", "content": user_c}, {"role": "assistant", "content": asst_c}]
+
+        return pairs
     
     def parse_completion(self, completion: str) -> Generator[Step, None, None]:
         """Parse the LLM completion to extract the generated query."""
@@ -179,32 +325,29 @@ class QueryGenerationNode(StandardNode):
         system_message = {
             "role": "system",
             "content": (
-                "You formulate queries for a stronger model that will help improve your work.\n\n"
-                "CRITICAL: The stronger model is ISOLATED. It can ONLY see what you put in the tags below. "
-                "It has NO access to the problem statement, your code, or any other context unless you explicitly copy it.\n\n"
-                "Use these tags:\n"
-                "<context>Background information the expert needs</context>\n"
-                "<code path=\"relative/file.py\">Copy-pasted code (use one block per file or snippet)</code>\n"
-                "<question>Your specific question</question>\n\n"
+                "You craft self-contained queries for an isolated expert (REPAIR stage). "
+                "The expert sees ONLY what you place inside tags:\n"
+                "<context>background</context>\n"
+                "<code path=\"relative/file.py\">verbatim snippet(s)</code>\n"
+                "<question>precise question</question>\n\n"
                 "Rules:\n"
-                "- If your question references code, YOU MUST paste it into one or more <code path=\"...\"> blocks.\n"
-                "- Use the exact file path in the path attribute so the expert knows where the code lives.\n"
-                "- You may include excerpts, but every line must be copied verbatim from the code you saw (no summaries, ellipses, or renaming).\n"
-                "- If your question needs problem context, YOU MUST copy it into <context> tags.\n"
-                "- Don't reference 'the code above' or 'my output' - the expert can't see those\n"
-                "- Make your query self-contained"
+                "- Paste any referenced code verbatim in <code> with exact file paths.\n"
+                "- No paraphrasing/ellipses/renames in code lines.\n"
+                "- Add <context> only if essential.\n"
+                "- Make the query compact yet fully self-contained."
             )
         }
+        
+        # Keep the exact-line validation source
+        self._current_stage_input = task.stage_input
         
         user_message = {
             "role": "user",
             "content": task.llm_view()
         }
 
-        # Store the current task input so we can validate copied code lines.
-        self._current_stage_input = task.stage_input
-        
-        messages = [system_message, user_message]
+        # Prepend large repair-focused I/O demos
+        messages = [system_message, *self._fewshot_pairs(), user_message]
         
         # Apply token limit if we have a tokenizer
         prompt_token_ids = None

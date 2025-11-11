@@ -61,6 +61,88 @@ class ExpertAdviceNode(StandardNode):
     """Node that provides expert advice."""
     
     max_prompt_length: int = 20000  # Larger for comprehensive advice
+
+    # ----------------------------
+    # Few-shot advice pairs
+    # ----------------------------
+    def _fewshot_pairs(self) -> list[dict]:
+        """
+        Advice demos for repair: the user sends the tagged, self-contained query;
+        assistant replies with targeted nudges (no full patches), rationale, and gotchas.
+        """
+        pairs: list[dict] = []
+
+        # A — Pagination
+        user1 = (
+            "<context>\n"
+            "Full pages (n % page_size == 0) currently return 49 instead of 50.\n"
+            "</context>\n"
+            "<code path=\"paginator.py\">\n"
+            "end = start + page_size - 1\n"
+            "return items[start:end]\n"
+            "</code>\n"
+            "<question>\n"
+            "Confirm fix: compute end = start + page_size and keep half-open slice?\n"
+            "</question>"
+        )
+        asst1 = (
+            "Yes. Guidance:\n"
+            "• Compute `end = start + page_size`; keep `items[start:end]` (end exclusive).\n"
+            "• Edge cases to sanity-check (conceptually): start=0; final full page; empty items; start ≥ len(items); page_size<=0.\n"
+            "• Consider a brief comment explaining the half-open slice to prevent regressions."
+        )
+        pairs += [{"role": "user", "content": user1}, {"role": "assistant", "content": asst1}]
+
+        # B — 'strict' allowlist + normalization
+        user2 = (
+            "<context>\n"
+            "Allowlist rejects 'strict' while downstream reads it as a boolean.\n"
+            "</context>\n"
+            "<code path=\"config_schema.py\">\n"
+            "ALLOWED = {\n"
+            "    'timeout', 'retries', 'endpoint'\n"
+            "}\n"
+            "</code>\n"
+            "<code path=\"parser.py\">\n"
+            "if k not in ALLOWED:\n"
+            "    raise ValueError(f\"unknown key '{k}'\")\n"
+            "if d.get('strict'):\n"
+            "    validate_strict(d)\n"
+            "</code>\n"
+            "<question>\n"
+            "Add 'strict' and normalize to bool at load time? Accepted forms?\n"
+            "</question>"
+        )
+        asst2 = (
+            "Do this:\n"
+            "• Add 'strict' to ALLOWED.\n"
+            "• Normalize in load_config so all downstream code sees a boolean.\n"
+            "• Accept common forms: 'true'/'false', '1'/'0', 'yes'/'no', 'on'/'off' (case-insensitive), numbers→bool.\n"
+            "• Default when absent: False (unless product requires tri-state)."
+        )
+        pairs += [{"role": "user", "content": user2}, {"role": "assistant", "content": asst2}]
+
+        # C — Backoff ms vs seconds
+        user3 = (
+            "<context>\n"
+            "backoff() returns milliseconds; time.sleep expects seconds; delays 1000× too long.\n"
+            "</context>\n"
+            "<code path=\"client.py\">\n"
+            "time.sleep(backoff(attempt))\n"
+            "</code>\n"
+            "<question>\n"
+            "Convert at call site or change backoff() globally?\n"
+            "</question>"
+        )
+        asst3 = (
+            "Prefer minimal, safe change:\n"
+            "• Convert at the call site: `time.sleep(backoff(attempt) / 1000.0)`.\n"
+            "• Only change backoff() to seconds if you audit all callers and update them consistently.\n"
+            "• Consider adding a docstring note near backoff() about units to prevent future misuse."
+        )
+        pairs += [{"role": "user", "content": user3}, {"role": "assistant", "content": asst3}]
+
+        return pairs
     
     def parse_completion(self, completion: str) -> Generator[Step, None, None]:
         """Parse the LLM completion to extract the advice."""
@@ -91,8 +173,8 @@ class ExpertAdviceNode(StandardNode):
         system_message = {
             "role": "system",
             "content": (
-                "You are an expert software engineer and AI assistant providing guidance to improve "
-                "software engineering outputs. Provide specific, actionable advice."
+                "You are an expert software engineer. Provide concise, actionable REPAIR guidance. "
+                "Nudge; do not write full patches."
             )
         }
         
@@ -102,7 +184,7 @@ class ExpertAdviceNode(StandardNode):
             "content": task.query  # Just use the query directly
         }
         
-        messages = [system_message, user_message]
+        messages = [system_message, *self._fewshot_pairs(), user_message]
         
         # Apply token limit
         prompt_token_ids = None
