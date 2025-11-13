@@ -17,8 +17,6 @@ from tapeagents.core import (
 from tapeagents.llms import LLM
 from tapeagents.nodes import StandardNode
 
-from pipelinerl.swe.types import ExpertModelAdvice
-
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +88,6 @@ FileSelectionTape = Tape[
         FileSelectionTask,
         FileSelectionResponse,
         LLMOutputParsingFailureAction,
-        ExpertModelAdvice,
     ],
 ]
 
@@ -175,14 +172,11 @@ class FileSelectionNode(StandardNode):
 
     def make_prompt(self, agent: Any, tape: Tape) -> Prompt:
         """Create a prompt for the model to select relevant files."""
-        # Extract expert feedback and task from tape
-        expert_feedback = None
+        # Extract task from tape
         task = None
         
         for step in tape.steps:
-            if hasattr(step, 'kind') and step.kind == "expert_model_advice":
-                expert_feedback = step
-            elif isinstance(step, FileSelectionTask):
+            if isinstance(step, FileSelectionTask):
                 task = step
         
         assert task is not None, f"No FileSelectionTask found in tape steps: {[type(s).__name__ for s in tape.steps]}"
@@ -217,10 +211,6 @@ class FileSelectionNode(StandardNode):
         )
         
         user_content = task.llm_view()
-        
-        # Add expert feedback if present
-        if expert_feedback:
-            user_content = expert_feedback.llm_view() + "\n\n" + user_content
         
         system_message = {
             "role": "system",

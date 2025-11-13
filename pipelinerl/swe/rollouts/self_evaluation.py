@@ -151,10 +151,9 @@ def format_stage_output(stage_name: str, stage_data: Dict) -> str:
     return str(stage_data)
 
 
-async def run_localization_with_self_eval(cfg: DictConfig, llm: TrainableLLM, problem: Dict, session, expert_feedback=None):
+async def run_localization_with_self_eval(cfg: DictConfig, llm: TrainableLLM, problem: Dict, session):
     """Run localization stage with optional self-evaluation."""
-    # Call the pure stage function
-    result = await run_localization(cfg, llm, problem, session, expert_feedback)
+    result = await run_localization(cfg, llm, problem, session)
     
     # Add self-evaluation if enabled
     if cfg.swe.get('enable_localization_self_eval', False):
@@ -180,10 +179,9 @@ async def run_localization_with_self_eval(cfg: DictConfig, llm: TrainableLLM, pr
     return result
 
 
-async def run_file_selection_with_self_eval(cfg: DictConfig, llm: TrainableLLM, problem: Dict, enriched_context: Dict, session, expert_feedback=None):
+async def run_file_selection_with_self_eval(cfg: DictConfig, llm: TrainableLLM, problem: Dict, enriched_context: Dict, session):
     """Run file selection stage with optional self-evaluation."""
-    # Call the pure stage function
-    result = await run_file_selection(cfg, llm, problem, enriched_context, session, expert_feedback)
+    result = await run_file_selection(cfg, llm, problem, enriched_context, session)
     
     # Add self-evaluation if enabled
     if cfg.swe.get('enable_file_selection_self_eval', False):
@@ -206,10 +204,9 @@ async def run_file_selection_with_self_eval(cfg: DictConfig, llm: TrainableLLM, 
     return result
 
 
-async def run_repair_with_self_eval(cfg: DictConfig, llm: TrainableLLM, problem: Dict, file_contents: Dict, session, expert_feedback=None):
+async def run_repair_with_self_eval(cfg: DictConfig, llm: TrainableLLM, problem: Dict, file_contents: Dict, session):
     """Run repair stage with optional self-evaluation."""
-    # Call the pure stage function
-    result = await run_repair(cfg, llm, problem, file_contents, session, expert_feedback)
+    result = await run_repair(cfg, llm, problem, file_contents, session)
     
     # Add self-evaluation if enabled
     if cfg.swe.get('enable_repair_self_eval', False):

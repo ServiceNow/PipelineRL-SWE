@@ -11,12 +11,9 @@ from tapeagents.core import (
     Step,
     Tape,
     Thought,
-    FinalStep,
 )
 from tapeagents.llms import LLM
 from tapeagents.nodes import StandardNode
-
-from pipelinerl.swe.types import ExpertModelAdvice
 
 logger = logging.getLogger(__name__)
 
@@ -98,277 +95,12 @@ RepairTape = Tape[
         RepairTask,
         SearchReplaceResponse,
         LLMOutputParsingFailureAction,
-        ExpertModelAdvice,
     ],
 ]
 
 
 class RepairNode(StandardNode):
     max_prompt_length: int = 16000  # Increased for code tasks which tend to be longer
-
-    # --------------------------------
-    # Few-shot pairs when advice exists
-    # --------------------------------
-    def _advice_present_fewshots(self) -> list[dict]:
-        """
-        Used ONLY when ExpertModelAdvice is present.
-        Large repair demos:
-        - USER: expert guidance block + your repair task template + full code context
-        - ASSISTANT: detailed <think> integrating the advice + strict SEARCH/REPLACE edits
-        """
-        demos: list[dict] = []
-
-        # 1) Pagination off-by-one
-        user1 = (
-            "=== EXPERT GUIDANCE FOR REPAIR ===\n"
-            "You previously asked for guidance: Pagination off-by-one; should end be start+page_size?\n\n"
-            "Expert advice received:\n"
-            "- Compute end = start + page_size; Python slice end is exclusive.\n"
-            "- Keep items[start:end].\n"
-            "- Re-check conceptual edges.\n\n"
-            "Please incorporate this expert guidance to improve your repair output.\n"
-            "=== END EXPERT GUIDANCE ===\n\n"
-            "Analyze the following code to find and fix bugs. Use this format:\n\n"
-            "<think>\n"
-            "[Your analysis process - be as detailed as you want until you're confident in your solution]\n"
-            "</think>\n\n"
-            "<solution>\n"
-            "[Your SEARCH/REPLACE edits using this format:]\n\n"
-            "### filename.py\n"
-            "<<<<<<< SEARCH\n"
-            "[exact code to find]\n"
-            "=======\n"
-            "[replacement code]\n"
-            ">>>>>>> REPLACE\n"
-            "</solution>\n\n"
-            "IMPORTANT REQUIREMENTS:\n"
-            "- Every SEARCH/REPLACE edit must use the exact format above\n"
-            "- The SEARCH block must contain a contiguous chunk of lines that exist in the source code\n"
-            "- PROPER INDENTATION IS CRITICAL - if you want to add '    print(x)', you must include all those spaces\n"
-            "- Wrap each SEARCH/REPLACE edit in a code block\n"
-            "- Use separate code blocks for multiple edits\n\n"
-            "Here is the issue:\n"
-            "--- BEGIN ISSUE ---\n"
-            "Off-by-one: full pages return 49 instead of 50.\n"
-            "--- END ISSUE ---\n\n"
-            "Below are the code files that may contain bugs:\n"
-            "### paginator.py\n"
-            "```\n"
-            "def page(items, start, page_size):\n"
-            "    \"\"\"Return a slice of items for one page.\n"
-            "    start: index of first item on the page (0-based)\n"
-            "    page_size: items per page\n"
-            "    \"\"\"\n"
-            "    if page_size <= 0:\n"
-            "        return []\n"
-            "    end = start + page_size - 1  # suspect off-by-one\n"
-            "    return items[start:end]\n"
-            "```\n"
-        )
-        asst1 = (
-            "<think>\n"
-            "Given the advice, the intended contract matches half-open slicing. The current code subtracts 1 from end, then uses an exclusive end, "
-            "losing the last element on exact multiples. Minimal edit: compute end = start + page_size and keep the slice. "
-            "No other callers are shown; this change is local and safe. Edge cases: when page_size<=0 we already return [].\n"
-            "</think>\n\n"
-            "<solution>\n"
-            "```python\n"
-            "### paginator.py\n"
-            "<<<<<<< SEARCH\n"
-            "    end = start + page_size - 1  # suspect off-by-one\n"
-            "    return items[start:end]\n"
-            "=======\n"
-            "    end = start + page_size  # half-open slice end is exclusive\n"
-            "    return items[start:end]\n"
-            ">>>>>>> REPLACE\n"
-            "```\n"
-            "</solution>"
-        )
-        demos += [{"role": "user", "content": user1}, {"role": "assistant", "content": asst1}]
-
-        # 2) Unknown 'strict' + normalization
-        user2 = (
-            "=== EXPERT GUIDANCE FOR REPAIR ===\n"
-            "You previously asked for guidance: 'strict' rejected by ALLOWED; normalize to bool at load time.\n\n"
-            "Expert advice received:\n"
-            "- Add 'strict' to ALLOWED.\n"
-            "- Normalize 'strict' to boolean inside load_config.\n"
-            "- Accept common truthy/falsey forms.\n\n"
-            "Please incorporate this expert guidance to improve your repair output.\n"
-            "=== END EXPERT GUIDANCE ===\n\n"
-            "Analyze the following code to find and fix bugs. Use this format:\n\n"
-            "<think>\n"
-            "[Your analysis process - be as detailed as you want until you're confident in your solution]\n"
-            "</think>\n\n"
-            "<solution>\n"
-            "[Your SEARCH/REPLACE edits using this format:]\n\n"
-            "### filename.py\n"
-            "<<<<<<< SEARCH\n"
-            "[exact code to find]\n"
-            "=======\n"
-            "[replacement code]\n"
-            ">>>>>>> REPLACE\n"
-            "</solution>\n\n"
-            "IMPORTANT REQUIREMENTS:\n"
-            "- Every SEARCH/REPLACE edit must use the exact format above\n"
-            "- The SEARCH block must contain a contiguous chunk of lines that exist in the source code\n"
-            "- PROPER INDENTATION IS CRITICAL - if you want to add '    print(x)', you must include all those spaces\n"
-            "- Wrap each SEARCH/REPLACE edit in a code block\n"
-            "- Use separate code blocks for multiple edits\n\n"
-            "Here is the issue:\n"
-            "--- BEGIN ISSUE ---\n"
-            "Config parser raises ValueError for unknown key 'strict', but downstream reads it as a boolean feature flag.\n"
-            "--- END ISSUE ---\n\n"
-            "Below are the code files that may contain bugs:\n"
-            "### config_schema.py\n"
-            "```\n"
-            "ALLOWED = {\n"
-            "    'timeout', 'retries', 'endpoint'\n"
-            "}\n"
-            "```\n"
-            "### parser.py\n"
-            "```\n"
-            "def load_config(d):\n"
-            "    # Validate keys\n"
-            "    for k in d:\n"
-            "        if k not in ALLOWED:\n"
-            "            raise ValueError(f\"unknown key '{k}'\")\n"
-            "    # Later logic expects 'strict' to be a boolean\n"
-            "    if d.get('strict'):\n"
-            "        validate_strict(d)\n"
-            "    return d\n"
-            "```\n"
-        )
-        asst2 = (
-            "<think>\n"
-            "We must align schema and usage. Add 'strict' to the allowlist, and normalize at the input boundary so downstream code sees a bool. "
-            "Normalization should accept common truthy/falsey strings and numerics. Keeping behavior local to load_config avoids ripple effects.\n"
-            "</think>\n\n"
-            "<solution>\n"
-            "```python\n"
-            "### config_schema.py\n"
-            "<<<<<<< SEARCH\n"
-            "ALLOWED = {\n"
-            "    'timeout', 'retries', 'endpoint'\n"
-            "}\n"
-            "=======\n"
-            "ALLOWED = {\n"
-            "    'timeout', 'retries', 'endpoint', 'strict'\n"
-            "}\n"
-            ">>>>>>> REPLACE\n"
-            "```\n"
-            "```python\n"
-            "### parser.py\n"
-            "<<<<<<< SEARCH\n"
-            "def load_config(d):\n"
-            "    # Validate keys\n"
-            "    for k in d:\n"
-            "        if k not in ALLOWED:\n"
-            "            raise ValueError(f\"unknown key '{k}'\")\n"
-            "    # Later logic expects 'strict' to be a boolean\n"
-            "    if d.get('strict'):\n"
-            "        validate_strict(d)\n"
-            "    return d\n"
-            "=======\n"
-            "def load_config(d):\n"
-            "    # Validate keys\n"
-            "    for k in d:\n"
-            "        if k not in ALLOWED:\n"
-            "            raise ValueError(f\"unknown key '{k}'\")\n"
-            "    # Normalize 'strict' to bool (accepting common forms)\n"
-            "    if 'strict' in d:\n"
-            "        v = d['strict']\n"
-            "        if isinstance(v, str):\n"
-            "            lv = v.strip().lower()\n"
-            "            if lv in ('true', '1', 'yes', 'on'):\n"
-            "                d['strict'] = True\n"
-            "            elif lv in ('false', '0', 'no', 'off'):\n"
-            "                d['strict'] = False\n"
-            "        elif isinstance(v, (int, float)):\n"
-            "            d['strict'] = bool(v)\n"
-            "        elif isinstance(v, bool):\n"
-            "            pass  # already boolean\n"
-            "    # Later logic expects 'strict' to be a boolean\n"
-            "    if d.get('strict'):\n"
-            "        validate_strict(d)\n"
-            "    return d\n"
-            ">>>>>>> REPLACE\n"
-            "```\n"
-            "</solution>"
-        )
-        demos += [{"role": "user", "content": user2}, {"role": "assistant", "content": asst2}]
-
-        # 3) Backoff units mismatch (convert at call site)
-        user3 = (
-            "=== EXPERT GUIDANCE FOR REPAIR ===\n"
-            "You previously asked for guidance: backoff() returns ms but time.sleep expects seconds.\n\n"
-            "Expert advice received:\n"
-            "- Prefer converting at the call site: divide by 1000.0.\n"
-            "- Consider migrating backoff() later only if all callers updated coherently.\n\n"
-            "Please incorporate this expert guidance to improve your repair output.\n"
-            "=== END EXPERT GUIDANCE ===\n\n"
-            "Analyze the following code to find and fix bugs. Use this format:\n"
-            "<think>\n"
-            "[Your analysis process - be as detailed as you want until you're confident in your solution]\n"
-            "</think>\n\n"
-            "<solution>\n"
-            "[Your SEARCH/REPLACE edits using this format:]\n\n"
-            "### filename.py\n"
-            "<<<<<<< SEARCH\n"
-            "[exact code to find]\n"
-            "=======\n"
-            "[replacement code]\n"
-            ">>>>>>> REPLACE\n"
-            "</solution>\n\n"
-            "IMPORTANT REQUIREMENTS:\n"
-            "- Every SEARCH/REPLACE edit must use the exact format above\n"
-            "- The SEARCH block must contain a contiguous chunk of lines that exist in the source code\n"
-            "- PROPER INDENTATION IS CRITICAL - if you want to add '    print(x)', you must include all those spaces\n"
-            "- Wrap each SEARCH/REPLACE edit in a code block\n"
-            "- Use separate code blocks for multiple edits\n\n"
-            "Here is the issue:\n"
-            "--- BEGIN ISSUE ---\n"
-            "Delays are ~1000× longer than configured.\n"
-            "--- END ISSUE ---\n\n"
-            "Below are the code files that may contain bugs:\n"
-            "### backoff.py\n"
-            "```\n"
-            "def backoff(attempt):\n"
-            "    \"\"\"Exponential backoff duration in milliseconds.\"\"\"\n"
-            "    return min(32000, (2 ** attempt) * 100)\n"
-            "```\n"
-            "### client.py\n"
-            "```\n"
-            "import time\n"
-            "from .backoff import backoff\n"
-            "\n"
-            "def call(max_attempts=5):\n"
-            "    for attempt in range(max_attempts):\n"
-            "        try:\n"
-            "            return do_request()\n"
-            "        except TransientError:\n"
-            "            time.sleep(backoff(attempt))  # expects seconds\n"
-            "```\n"
-        )
-        asst3 = (
-            "<think>\n"
-            "Advice indicates we should preserve backoff()'s current ms contract and adjust only the consumer. "
-            "Therefore patch client.py to divide the value by 1000.0 when sleeping. This is minimal and avoids breaking other callers.\n"
-            "</think>\n\n"
-            "<solution>\n"
-            "```python\n"
-            "### client.py\n"
-            "<<<<<<< SEARCH\n"
-            "            time.sleep(backoff(attempt))  # expects seconds\n"
-            "=======\n"
-            "            time.sleep(backoff(attempt) / 1000.0)  # convert ms→s\n"
-            ">>>>>>> REPLACE\n"
-            "```\n"
-            "</solution>"
-        )
-        demos += [{"role": "user", "content": user3}, {"role": "assistant", "content": asst3}]
-
-        return demos
 
     def _extract_search_replace_edits(self, solution_text: str) -> list[dict]:
         """Extract search/replace edits from the solution text.
@@ -467,14 +199,11 @@ class RepairNode(StandardNode):
 
     def make_prompt(self, agent: Any, tape: Tape) -> Prompt:
         """Create a prompt for the model to perform code repair."""
-        # Extract expert feedback and task from tape
-        expert_feedback = None
+        # Extract task from tape
         task = None
         
         for step in tape.steps:
-            if hasattr(step, 'kind') and step.kind == "expert_model_advice":
-                expert_feedback = step
-            elif isinstance(step, RepairTask):
+            if isinstance(step, RepairTask):
                 task = step
         
         assert task is not None, f"No RepairTask found in tape steps: {[type(s).__name__ for s in tape.steps]}"
@@ -488,20 +217,12 @@ class RepairNode(StandardNode):
         # All task-specific instructions now in the user message
         user_content = task.llm_view()
         
-        # Add expert feedback if present
-        if expert_feedback:
-            user_content = expert_feedback.llm_view() + "\n\n" + user_content
-        
         user_message = {
             "role": "user",
             "content": user_content
         }
 
-        # If we have advice, prepend the large repair demos
-        if expert_feedback:
-            messages = [system_message, *self._advice_present_fewshots(), user_message]
-        else:
-            messages = [system_message, user_message]
+        messages = [system_message, user_message]
         
         prompt_token_ids = agent.llm.tokenizer.apply_chat_template(
             messages, add_special_tokens=True, add_generation_prompt=True

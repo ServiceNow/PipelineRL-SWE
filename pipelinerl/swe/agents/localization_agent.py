@@ -18,8 +18,6 @@ from tapeagents.core import (
 from tapeagents.llms import LLM
 from tapeagents.nodes import StandardNode
 
-from pipelinerl.swe.types import ExpertModelAdvice
-
 logger = logging.getLogger(__name__)
 
 
@@ -58,7 +56,6 @@ LocalizationTape = Tape[
         LocalizationTask,
         LocalizationQuery,
         LLMOutputParsingFailureAction,
-        ExpertModelAdvice,  # Add this
     ],
 ]
 
@@ -141,14 +138,11 @@ class LocalizationNode(StandardNode):
 
     def make_prompt(self, agent: Any, tape: Tape) -> Prompt:
         """Create a prompt for the model to generate search queries."""
-        # Extract expert feedback and task from tape
-        expert_feedback = None
+        # Extract task from tape
         task = None
         
         for step in tape.steps:
-            if hasattr(step, 'kind') and step.kind == "expert_model_advice":
-                expert_feedback = step
-            elif isinstance(step, LocalizationTask):
+            if isinstance(step, LocalizationTask):
                 task = step
         
         assert task is not None, f"No LocalizationTask found in tape steps: {[type(s).__name__ for s in tape.steps]}"
@@ -194,10 +188,6 @@ class LocalizationNode(StandardNode):
             f"Issue to analyze and create BM25 search queries for:\n\n"
             f"{task.problem_statement}\n\n"
         )
-        
-        # Add expert feedback if present
-        if expert_feedback:
-            user_content = expert_feedback.llm_view() + "\n\n" + user_content
         
         user_content += (
             f"Please analyze this issue and create optimized BM25 search queries. "

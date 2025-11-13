@@ -166,3 +166,21 @@ PipelineRL is organized as a modular, Hydra-driven pipeline with 6 core componen
 - `training_data` stream (StreamRangeSpec(topic="training_data")): File- or Redis-backed stream used to transfer processed training micro-batches from the Preprocessor to the Trainer. Configured via `cfg.preprocess.output` and `cfg.finetune.input` (defaulting to "training_data") in `conf/base.yaml`. Written in `pipelinerl/run_preprocess.py` and consumed in `pipelinerl/run_finetune.py`.
 - `actor_test` and `stats_test` streams: analogous streams used for evaluation loops (test samples and test metrics).
 - `stats` stream (SingleStreamSpec(topic="stats")): produced by `ActorLoop.publish_stats` with sliding-window metrics; consumed by external monitoring (e.g. WANDB, logging viewers).
+
+### SWE Expert Handoff Mode
+
+- The online “ask-to-ask” machinery has been removed in favour of a pure self-eval run. Each rollout now records:
+  - `metrics.repair_self_eval_predicted_score` (confidence between 0-1),
+  - `metrics.repair_success` (small model outcome),
+  - token breakdowns per stage and per self-eval (`repair_prompt_tokens`, `repair_self_eval_prompt_tokens`, etc.).
+- To build the Pareto curve:
+  1. Run `python -m pipelinerl.launch --config-name swe …` once. This logs every `RolloutResult` into `results/<run>/streams/actor/*/*.jsonl`.
+  2. Parse those JSONL files, collecting `(predicted_score, repair_success, repair_prompt_tokens + repair_output_tokens + repair_self_eval_prompt_tokens + repair_self_eval_output_tokens)` per example.
+  3. Sweep a threshold `τ`: treat samples with `predicted_score < τ` as “handed off” to an expert model, and keep the small-model answer otherwise.
+  4. For each `τ`, estimate total token cost as:
+     ```
+     cost(τ) = sum_small_model_tokens +
+               N_handoff(τ) * expert_cost_estimate
+     ```
+     and the blended accuracy as `success_small_high_conf + success_expert * N_handoff(τ)`.
+  5. Plot `cost(τ)` vs `accuracy(τ)` to obtain the Pareto frontier. Because the handoff happens offline, the thresholds can be re-swept without re-running the rollout loop.

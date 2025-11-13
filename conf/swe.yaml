@@ -26,9 +26,6 @@ agent:
   max_prompt_length: 48000
   selection_max_prompt_length: 48000
   repair_max_prompt_length: 48000
-  # A2A agent settings
-  query_generation_max_prompt_length: 16000
-  expert_advice_max_prompt_length: 20000
 
 # Finetune settings optimized for localization
 finetune:
@@ -78,24 +75,6 @@ swe:
   enable_file_selection_self_eval: false
   enable_repair_self_eval: true
   
-  # A2A system configuration
-  enable_a2a: true
-  
-  # A2A trigger thresholds (when to consult expert model)
-  localization_a2a_trigger_threshold: 0.5
-  file_selection_a2a_trigger_threshold: 0.5  
-  repair_a2a_trigger_threshold: 0.5
-  
-  # Expert model configuration (port 8280)
-  expert_model:
-    base_url: "http://localhost:8280"
-    model_name: "mistralai/Devstral-Small-2505"
-    parameters:
-      max_tokens: 8000
-      temperature: 1.0
-    timeout: 300  # seconds
-    max_retries: 3
-  
   # Repository paths
   repo_path_train: /mnt/llmd/data/swegym/repos
   repo_path_test: /mnt/llmd/data/swebench_lite/repos
@@ -117,13 +96,3 @@ swe_preprocessor_args:
   force_reprocess: false
   hf_dataset_name: SWE-Gym/SWE-Gym
   hf_split_name: train
-
-world:
-  expert_llm:
-    enabled: true
-    model_path: mistralai/Devstral-Small-2505
-    vllm_kwargs:
-      tokenizer_mode: mistral
-      config_format: mistral
-      load_format: mistral
-      max_model_len: 32000

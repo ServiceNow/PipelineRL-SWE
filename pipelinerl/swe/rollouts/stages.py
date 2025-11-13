@@ -25,8 +25,8 @@ from .base import execute_agent_with_retry
 logger = logging.getLogger(__name__)
 
 
-async def run_localization(cfg: DictConfig, llm: TrainableLLM, problem: Dict, session, expert_feedback=None):
-    """Run core localization stage with optional expert feedback."""
+async def run_localization(cfg: DictConfig, llm: TrainableLLM, problem: Dict, session):
+    """Run core localization stage."""
     agent = LocalizationAgent.create(
         llm=llm,
         max_prompt_length=getattr(cfg.agent, 'max_prompt_length', 8000)
@@ -46,9 +46,7 @@ async def run_localization(cfg: DictConfig, llm: TrainableLLM, problem: Dict, se
         file_stats=file_stats
     )
     
-    # Create tape with optional expert feedback
-    steps = [expert_feedback, task] if expert_feedback else [task]
-    tape = LocalizationTape(steps=steps, context=None)
+    tape = LocalizationTape(steps=[task], context=None)
     
     start_time = time.time()
     try:
@@ -141,8 +139,8 @@ async def run_localization(cfg: DictConfig, llm: TrainableLLM, problem: Dict, se
         }
 
 
-async def run_file_selection(cfg: DictConfig, llm: TrainableLLM, problem: Dict, enriched_context: Dict, session, expert_feedback=None):
-    """Run core file selection stage with optional expert feedback."""
+async def run_file_selection(cfg: DictConfig, llm: TrainableLLM, problem: Dict, enriched_context: Dict, session):
+    """Run core file selection stage."""
     agent = FileSelectionAgent.create(
         llm=llm,
         max_prompt_length=getattr(cfg.agent, 'selection_max_prompt_length', 16000)
@@ -153,9 +151,7 @@ async def run_file_selection(cfg: DictConfig, llm: TrainableLLM, problem: Dict, 
         candidate_files=enriched_context
     )
     
-    # Create tape with optional expert feedback
-    steps = [expert_feedback, task] if expert_feedback else [task]
-    tape = FileSelectionTape(steps=steps, context=None)
+    tape = FileSelectionTape(steps=[task], context=None)
     
     start_time = time.time()
     try:
@@ -233,8 +229,8 @@ async def run_file_selection(cfg: DictConfig, llm: TrainableLLM, problem: Dict, 
         }
 
 
-async def run_repair(cfg: DictConfig, llm: TrainableLLM, problem: Dict, file_contents: Dict, session, expert_feedback=None):
-    """Run core repair stage with optional expert feedback."""
+async def run_repair(cfg: DictConfig, llm: TrainableLLM, problem: Dict, file_contents: Dict, session):
+    """Run core repair stage."""
     agent = RepairAgent.create(
         llm=llm,
         max_prompt_length=getattr(cfg.agent, 'repair_max_prompt_length', 16000)
@@ -245,9 +241,7 @@ async def run_repair(cfg: DictConfig, llm: TrainableLLM, problem: Dict, file_con
         file_contents=file_contents
     )
     
-    # Create tape with optional expert feedback
-    steps = [expert_feedback, task] if expert_feedback else [task]
-    tape = RepairTape(steps=steps, context=None)
+    tape = RepairTape(steps=[task], context=None)
     
     start_time = time.time()
     try:
