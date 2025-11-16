@@ -184,3 +184,20 @@ PipelineRL is organized as a modular, Hydra-driven pipeline with 6 core componen
      ```
      and the blended accuracy as `success_small_high_conf + success_expert * N_handoff(τ)`.
   5. Plot `cost(τ)` vs `accuracy(τ)` to obtain the Pareto frontier. Because the handoff happens offline, the thresholds can be re-swept without re-running the rollout loop.
+- Script support:
+  - Generate expert-only repair traces (same dataset loader + repair agent) via:
+    ```bash
+    python -m pipelinerl.swe.scripts.run_expert_repair_eval \
+      --config-name swe \
+      expert_eval.base_url=http://localhost:8280 \
+      expert_eval.model_name=mistralai/Devstral-Small-2505 \
+      expert_eval.output_path=/tmp/expert_repair.jsonl
+    ```
+  - Combine the actor traces and expert JSONL to report the cost/accuracy curve:
+    ```bash
+    python -m pipelinerl.swe.scripts.analyze_handoff \
+      --config-name swe \
+      handoff_analysis.actor_glob="results/<run>/streams/actor/**/*.jsonl" \
+      handoff_analysis.expert_jsonl=/tmp/expert_repair.jsonl \
+      handoff_analysis.output_path=/tmp/handoff_curve.json
+    ```

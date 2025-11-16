@@ -20,6 +20,7 @@ from pipelinerl.swe.agents.file_selection_agent import FileSelectionResponse
 from pipelinerl.swe.agents.repair_agent import SearchReplaceResponse
 from .base import execute_agent_with_retry
 from .stages import run_localization, run_file_selection, run_repair
+from .utils import annotate_training_text
 
 logger = logging.getLogger(__name__)
 
@@ -175,6 +176,18 @@ async def run_localization_with_self_eval(cfg: DictConfig, llm: TrainableLLM, pr
             stage_input, stage_output, reward, session
         )
         result['self_eval_result'] = self_eval_result
+        if self_eval_result.get('training_text'):
+            annotate_training_text(
+                self_eval_result['training_text'],
+                stage="localization_self_eval",
+                problem=problem,
+                llm=llm,
+                extra={
+                    "metrics": self_eval_result.get('metrics', {}),
+                    "predicted_score": self_eval_result.get('metrics', {}).get('predicted_score'),
+                    "true_reward": reward,
+                },
+            )
     
     return result
 
@@ -200,6 +213,18 @@ async def run_file_selection_with_self_eval(cfg: DictConfig, llm: TrainableLLM, 
             stage_input, stage_output, reward, session
         )
         result['self_eval_result'] = self_eval_result
+        if self_eval_result.get('training_text'):
+            annotate_training_text(
+                self_eval_result['training_text'],
+                stage="file_selection_self_eval",
+                problem=problem,
+                llm=llm,
+                extra={
+                    "metrics": self_eval_result.get('metrics', {}),
+                    "predicted_score": self_eval_result.get('metrics', {}).get('predicted_score'),
+                    "true_reward": reward,
+                },
+            )
     
     return result
 
@@ -225,5 +250,17 @@ async def run_repair_with_self_eval(cfg: DictConfig, llm: TrainableLLM, problem:
             stage_input, stage_output, reward, session
         )
         result['self_eval_result'] = self_eval_result
+        if self_eval_result.get('training_text'):
+            annotate_training_text(
+                self_eval_result['training_text'],
+                stage="repair_self_eval",
+                problem=problem,
+                llm=llm,
+                extra={
+                    "metrics": self_eval_result.get('metrics', {}),
+                    "predicted_score": self_eval_result.get('metrics', {}).get('predicted_score'),
+                    "true_reward": reward,
+                },
+            )
     
     return result

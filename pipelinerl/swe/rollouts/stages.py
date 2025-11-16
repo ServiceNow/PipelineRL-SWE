@@ -21,6 +21,7 @@ from pipelinerl.swe.utils.bm25_searcher import BM25Searcher
 from pipelinerl.swe.utils.localization_utils import parse_patch_for_gold_files, calculate_multi_query_mrr
 from pipelinerl.swe.utils.repair_utils import calculate_precise_reward
 from .base import execute_agent_with_retry
+from .utils import annotate_training_text
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +119,36 @@ async def run_localization(cfg: DictConfig, llm: TrainableLLM, problem: Dict, se
 
         training_text = make_training_text(llm, llm_call)
         training_text.reward = reward if (reward is not None and not math.isnan(reward)) else 0.0
+        annotate_training_text(
+            training_text,
+            stage="repair",
+            problem=problem,
+            llm=llm,
+            extra={
+                "metrics": metrics_dict,
+                "success": reward > 0.5,
+            },
+        )
+        annotate_training_text(
+            training_text,
+            stage="file_selection",
+            problem=problem,
+            llm=llm,
+            extra={
+                "metrics": metrics_dict,
+                "success": reward > 0.5,
+            },
+        )
+        annotate_training_text(
+            training_text,
+            stage="localization",
+            problem=problem,
+            llm=llm,
+            extra={
+                "metrics": metrics_dict,
+                "success": reward > 0.5,
+            },
+        )
         
         return {
             'training_text': training_text,

@@ -27,6 +27,27 @@ agent:
   selection_max_prompt_length: 48000
   repair_max_prompt_length: 48000
 
+expert_eval:
+  base_url: null
+  model_name: ""
+  tokenizer_name: ${expert_eval.model_name}
+  parameters:
+    max_tokens: 8000
+    temperature: 0.0
+  output_path: ${output_dir}/expert_repair_eval.jsonl
+  limit: null
+  connector_limit: 32
+  request_timeout: 600
+
+handoff_analysis:
+  actor_glob: ""
+  expert_jsonl: ${expert_eval.output_path}
+  output_path: ${output_dir}/handoff_analysis.json
+  threshold_start: 0.0
+  threshold_stop: 1.0
+  threshold_step: 0.05
+  thresholds: []
+
 # Finetune settings optimized for localization
 finetune:
   seq_length: 48000  # Shorter sequences for query generation
