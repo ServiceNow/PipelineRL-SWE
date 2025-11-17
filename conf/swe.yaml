@@ -36,8 +36,10 @@ expert_eval:
     temperature: 0.0
   output_path: ${output_dir}/expert_repair_eval.jsonl
   limit: null
+  subsample: null
   connector_limit: 32
   request_timeout: 600
+  collect_logprobs: false
 
 handoff_analysis:
   actor_glob: ""

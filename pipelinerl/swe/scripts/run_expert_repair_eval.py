@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import random
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -9,9 +10,11 @@ import hydra
 from hydra.utils import get_method
 from omegaconf import DictConfig
 from tapeagents.llms.trainable import TrainableLLM
+from tqdm import tqdm
 
 from pipelinerl.swe.rollouts.stages import run_repair
 from pipelinerl.swe.rollouts.utils import annotate_training_text, get_problem_id
+from pipelinerl.tokenizers import configure_devstral_tokenizer, is_devstral_model_name
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +77,13 @@ async def _evaluate(cfg: DictConfig) -> None:
     dataset: List[Dict[str, Any]] = dataset_loader(dataset_names, **test_params)
     logger.info("Loaded %d evaluation problems", len(dataset))
 
+    subsample = expert_cfg.get("subsample")
+    if subsample:
+        rng = random.Random(cfg.get("seed", 42))
+        size = min(int(subsample), len(dataset))
+        dataset = rng.sample(dataset, size)
+        logger.info("Randomly selected %d problems for this expert run (subsample=%s)", len(dataset), subsample)
+
     expert_cfg = cfg.expert_eval
     if not expert_cfg.get("base_url"):
         raise ValueError("expert_eval.base_url must be set (point to the expert vLLM server)")
@@ -86,10 +96,14 @@ async def _evaluate(cfg: DictConfig) -> None:
         tokenizer_name=expert_cfg.get("tokenizer_name", expert_cfg.model_name),
         parameters=expert_cfg.get("parameters", {}),
         use_cache=False,
-        collect_logprobs=True,
+        collect_logprobs=expert_cfg.get("collect_logprobs", False),
         observe_llm_calls=False,
-        api_token=expert_cfg.get("api_token"),
+        api_token=expert_cfg.get("api_token") or "",
     )
+    if is_devstral_model_name(llm.model_name):
+        configure_devstral_tokenizer(llm)
+        existing_params = llm.parameters or {}
+        llm.parameters = {**existing_params, "skip_special_tokens": True}
 
     output_path = Path(expert_cfg.output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -100,6 +114,8 @@ async def _evaluate(cfg: DictConfig) -> None:
 
     processed = 0
     skipped = 0
+    total = min(len(dataset), limit) if limit else len(dataset)
+    progress = tqdm(total=total, desc="Expert repair", unit="problem")
     async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
         with output_path.open("w") as sink:
             for problem in dataset:
@@ -109,16 +125,18 @@ async def _evaluate(cfg: DictConfig) -> None:
                     record = await _run_single_problem(cfg, llm, problem, session)
                     sink.write(json.dumps(record) + "\n")
                     processed += 1
+                    progress.update(1)
                     if processed % 10 == 0:
                         logger.info("Processed %d problems", processed)
                 except Exception as exc:  # pylint: disable=broad-except
                     skipped += 1
                     logger.exception("Failed to evaluate problem %s: %s", get_problem_id(problem), exc)
+    progress.close()
 
     logger.info("Expert evaluation complete. Wrote %d records to %s (skipped %d).", processed, output_path, skipped)
 
 
-@hydra.main(config_path="../../conf", config_name="swe", version_base=None)
+@hydra.main(config_path="../../../conf", config_name="swe", version_base=None)
 def main(cfg: DictConfig) -> None:  # pragma: no cover - CLI entrypoint
     """Entry point for running the expert repair evaluation."""
     asyncio.run(_evaluate(cfg))

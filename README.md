@@ -201,3 +201,4 @@ PipelineRL is organized as a modular, Hydra-driven pipeline with 6 core componen
       handoff_analysis.expert_jsonl=/tmp/expert_repair.jsonl \
       handoff_analysis.output_path=/tmp/handoff_curve.json
     ```
+    Add `expert_eval.subsample=20` to the first command if you just want to spot-check the workflow on a random subset before committing to the full dataset.
