@@ -14,8 +14,10 @@ from tqdm import tqdm
 from pipelinerl.swe.rollouts.utils import get_problem_id
 from pipelinerl.swe.scripts.repair_eval_utils import (
     build_repair_messages,
+    build_self_eval_messages,
     chat_completion,
     extract_search_replace_edits,
+    parse_self_eval_response,
 )
 from pipelinerl.swe.utils.repair_utils import FormatError, calculate_precise_reward
 
@@ -32,7 +34,7 @@ async def _evaluate_problem(
     if not file_contents:
         raise ValueError("Problem missing file_contents")
 
-    repair_messages, _ = build_repair_messages(problem["problem_statement"], file_contents)
+    repair_messages, stage_input = build_repair_messages(problem["problem_statement"], file_contents)
     repair_text, usage, latency = await chat_completion(
         session,
         eval_cfg.base_url,
@@ -52,14 +54,37 @@ async def _evaluate_problem(
         reward = 0.0
         reward_metadata = {"error": str(exc)}
 
-    success_threshold = eval_cfg.get("success_threshold", cfg.actor.get("success_threshold", 0.8))
+    success_threshold = cfg.actor.get("success_threshold", 0.8)
     success = bool(reward and reward > success_threshold)
 
-    return {
+    self_eval_analysis = ""
+    self_eval_score = 1.0
+    self_eval_output = ""
+    self_eval_usage: Dict[str, int] = {}
+    self_eval_latency = 0.0
+    self_eval_parsing_error = False
+
+    if eval_cfg.get("run_self_eval", True):
+        self_eval_messages = build_self_eval_messages(
+            problem["problem_statement"], stage_input, repair_text
+        )
+        self_eval_output, self_eval_usage, self_eval_latency = await chat_completion(
+            session,
+            eval_cfg.base_url,
+            eval_cfg.model_name,
+            self_eval_messages,
+            eval_cfg.get("parameters", {}),
+            eval_cfg.get("api_key"),
+        )
+        self_eval_analysis, self_eval_score, self_eval_parsing_error = parse_self_eval_response(
+            self_eval_output
+        )
+
+    record: Dict[str, Any] = {
         "problem_id": get_problem_id(problem),
         "dataset": problem.get("dataset"),
         "repo": problem.get("repo"),
-        "source": eval_cfg.get("source_label", "expert_eval"),
+        "source": eval_cfg.get("source_label", "actor_eval"),
         "repair_output": repair_text,
         "repair_reward": reward or 0.0,
         "repair_success": success,
@@ -68,14 +93,22 @@ async def _evaluate_problem(
         "repair_output_tokens": usage.get("completion_tokens", 0),
         "repair_latency": latency,
         "repair_edits": edits,
+        "self_eval_output": self_eval_output,
+        "self_eval_analysis": self_eval_analysis,
+        "self_eval_score": self_eval_score,
+        "self_eval_prompt_tokens": self_eval_usage.get("prompt_tokens", 0),
+        "self_eval_output_tokens": self_eval_usage.get("completion_tokens", 0),
+        "self_eval_latency": self_eval_latency,
+        "self_eval_parsing_error": self_eval_parsing_error,
     }
+
+    return record
 
 
 async def _evaluate(cfg: DictConfig) -> None:
     dataset_loader = get_method(cfg.dataset_loader)
-    dataset_loader_params = cfg.get("dataset_loader_params", {}) or {}
-
-    test_params = dict(dataset_loader_params)
+    loader_params = cfg.get("dataset_loader_params", {}) or {}
+    test_params = dict(loader_params)
     if "test_dataset_path" in test_params:
         test_params["dataset_path"] = test_params.pop("test_dataset_path")
 
@@ -83,73 +116,64 @@ async def _evaluate(cfg: DictConfig) -> None:
     dataset: List[Dict[str, Any]] = dataset_loader(dataset_names, **test_params)
     logger.info("Loaded %d evaluation problems", len(dataset))
 
-    expert_cfg = cfg.expert_eval
+    eval_cfg = cfg.small_eval
+    if not eval_cfg.get("base_url"):
+        raise ValueError("small_eval.base_url must be provided")
+    if not eval_cfg.get("model_name"):
+        raise ValueError("small_eval.model_name must be provided")
 
-    ids_path = expert_cfg.get("problem_ids_path")
-    if ids_path:
-        include_file = Path(ids_path)
-        if not include_file.exists():
-            raise FileNotFoundError(f"problem_ids_path not found: {include_file}")
-        include_ids = {line.strip() for line in include_file.open() if line.strip()}
-        before = len(dataset)
-        dataset = [p for p in dataset if get_problem_id(p) in include_ids]
-        logger.info(
-            "Filtered dataset to %d problems based on ids in %s (was %d)",
-            len(dataset),
-            ids_path,
-            before,
-        )
-
-    subsample = expert_cfg.get("subsample")
+    subsample = eval_cfg.get("subsample")
     if subsample:
         rng = random.Random(cfg.get("seed", 42))
         size = min(int(subsample), len(dataset))
         dataset = rng.sample(dataset, size)
-        logger.info(
-            "Randomly selected %d problems for this expert run (subsample=%s)",
-            len(dataset),
-            subsample,
-        )
+        logger.info("Subsampled to %d problems for evaluation", len(dataset))
 
-    if not expert_cfg.get("base_url"):
-        raise ValueError("expert_eval.base_url must be set (point to the expert vLLM server)")
-    if not expert_cfg.get("model_name"):
-        raise ValueError("expert_eval.model_name must be provided")
+    ids_path = eval_cfg.get("problem_ids_path")
+    if ids_path:
+        path = Path(ids_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w") as handle:
+            for problem in dataset:
+                pid = get_problem_id(problem)
+                if pid:
+                    handle.write(f"{pid}\n")
+        logger.info("Saved %d problem ids to %s", len(dataset), path)
 
-    output_path = Path(expert_cfg.output_path)
+    output_path = Path(eval_cfg.get("output_path", cfg.output_dir + "/actor_eval.jsonl"))
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    limit = expert_cfg.get("limit")
-    connector = aiohttp.TCPConnector(limit=expert_cfg.get("connector_limit", 128))
-    timeout = aiohttp.ClientTimeout(total=expert_cfg.get("request_timeout", 600))
+    connector = aiohttp.TCPConnector(limit=eval_cfg.get("connector_limit", 32))
+    timeout = aiohttp.ClientTimeout(total=eval_cfg.get("request_timeout", 600))
 
-    processed = 0
+    progress = tqdm(total=len(dataset), desc="Actor repair eval", unit="problem")
     skipped = 0
-    total = min(len(dataset), limit) if limit else len(dataset)
-    progress = tqdm(total=total, desc="Expert repair", unit="problem")
+
     async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
         with output_path.open("w") as sink:
             for problem in dataset:
-                if limit is not None and processed >= limit:
-                    break
                 try:
-                    record = await _evaluate_problem(cfg, expert_cfg, problem, session)
-                    sink.write(json.dumps(record) + "\n")
-                    processed += 1
-                    progress.update(1)
-                    if processed % 10 == 0:
-                        logger.info("Processed %d problems", processed)
+                    record = await _evaluate_problem(cfg, eval_cfg, problem, session)
                 except Exception as exc:  # pylint: disable=broad-except
                     skipped += 1
                     logger.exception("Failed to evaluate problem %s: %s", get_problem_id(problem), exc)
-    progress.close()
+                    progress.update(1)
+                    continue
 
-    logger.info("Expert evaluation complete. Wrote %d records to %s (skipped %d).", processed, output_path, skipped)
+                sink.write(json.dumps(record) + "\n")
+                progress.update(1)
+
+    progress.close()
+    logger.info(
+        "Completed actor repair eval. Wrote %s (%d problems, skipped %d)",
+        output_path,
+        len(dataset) - skipped,
+        skipped,
+    )
 
 
 @hydra.main(config_path="../../../conf", config_name="swe", version_base=None)
-def main(cfg: DictConfig) -> None:  # pragma: no cover - CLI entrypoint
-    """Entry point for running the expert repair evaluation."""
+def main(cfg: DictConfig) -> None:  # pragma: no cover
     asyncio.run(_evaluate(cfg))
 
 

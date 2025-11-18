@@ -117,8 +117,12 @@ async def run_localization(cfg: DictConfig, llm: TrainableLLM, problem: Dict, se
         if hasattr(cfg.actor, 'discount_factor'):
             reward *= cfg.actor.discount_factor ** llm_call.output_length_tokens
 
-        training_text = make_training_text(llm, llm_call)
-        training_text.reward = reward if (reward is not None and not math.isnan(reward)) else 0.0
+        training_text = None
+        try:
+            training_text = make_training_text(llm, llm_call)
+            training_text.reward = reward if (reward is not None and not math.isnan(reward)) else 0.0
+        except ValueError as exc:
+            logger.warning("Unable to build training text (continuing without it): %s", exc)
         annotate_training_text(
             training_text,
             stage="repair",

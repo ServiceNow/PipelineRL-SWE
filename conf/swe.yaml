@@ -37,18 +37,37 @@ expert_eval:
   output_path: ${output_dir}/expert_repair_eval.jsonl
   limit: null
   subsample: null
+  problem_ids_path: null
   connector_limit: 32
   request_timeout: 600
   collect_logprobs: false
+
+small_eval:
+  base_url: null
+  model_name: ""
+  tokenizer_name: ${small_eval.model_name}
+  parameters:
+    max_tokens: ${llm.parameters.max_tokens}
+    temperature: ${llm.parameters.temperature}
+  output_path: ${output_dir}/actor_eval.jsonl
+  subsample: null
+  problem_ids_path: ${output_dir}/actor_eval_ids.txt
+  connector_limit: 32
+  request_timeout: 600
+  collect_logprobs: false
+  source_label: actor_eval
 
 handoff_analysis:
   actor_glob: ""
   expert_jsonl: ${expert_eval.output_path}
   output_path: ${output_dir}/handoff_analysis.json
+  plot_path: null
   threshold_start: 0.0
   threshold_stop: 1.0
   threshold_step: 0.05
   thresholds: []
+  small_token_cost_per_1k: 0.0
+  expert_token_cost_per_1k: 0.0
 
 # Finetune settings optimized for localization
 finetune:

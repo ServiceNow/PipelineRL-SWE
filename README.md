@@ -185,20 +185,31 @@ PipelineRL is organized as a modular, Hydra-driven pipeline with 6 core componen
      and the blended accuracy as `success_small_high_conf + success_expert * N_handoff(τ)`.
   5. Plot `cost(τ)` vs `accuracy(τ)` to obtain the Pareto frontier. Because the handoff happens offline, the thresholds can be re-swept without re-running the rollout loop.
 - Script support:
+  - Generate small-model repair/self-eval traces (using your trained model) via:
+    ```bash
+    python -m pipelinerl.swe.scripts.run_actor_repair_eval \
+      --config-name swe \
+      small_eval.base_url=http://localhost:8080 \
+      small_eval.model_name=/path/to/finetuned/model \
+      small_eval.output_path=/mnt/llmd/results/.../actor_eval.jsonl \
+      small_eval.problem_ids_path=/mnt/llmd/results/.../actor_eval_ids.txt
+    ```
+    Add `small_eval.subsample=20` if you just want to sanity-check the workflow on a handful of problems.
   - Generate expert-only repair traces (same dataset loader + repair agent) via:
     ```bash
     python -m pipelinerl.swe.scripts.run_expert_repair_eval \
       --config-name swe \
       expert_eval.base_url=http://localhost:8280 \
       expert_eval.model_name=mistralai/Devstral-Small-2505 \
-      expert_eval.output_path=/tmp/expert_repair.jsonl
+      expert_eval.output_path=/tmp/expert_repair.jsonl \
+      expert_eval.problem_ids_path=/mnt/llmd/results/.../actor_eval_ids.txt
     ```
   - Combine the actor traces and expert JSONL to report the cost/accuracy curve:
     ```bash
     python -m pipelinerl.swe.scripts.analyze_handoff \
       --config-name swe \
-      handoff_analysis.actor_glob="results/<run>/streams/actor/**/*.jsonl" \
+      handoff_analysis.actor_glob="/mnt/llmd/results/.../actor_eval.jsonl" \
       handoff_analysis.expert_jsonl=/tmp/expert_repair.jsonl \
       handoff_analysis.output_path=/tmp/handoff_curve.json
     ```
-    Add `expert_eval.subsample=20` to the first command if you just want to spot-check the workflow on a random subset before committing to the full dataset.
+    Add `expert_eval.subsample=20` to the expert command if you just want to spot-check the workflow on a random subset before committing to the full dataset.

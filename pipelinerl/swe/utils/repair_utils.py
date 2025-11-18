@@ -176,7 +176,8 @@ def compute_change_similarities(
 def calculate_precise_reward(
     file_contents: Dict[str, str],
     oracle_patch_text: str,
-    predicted_edits: List[Dict]
+    predicted_edits: List[Dict],
+    silent: bool = False,
 ) -> Tuple[float, Dict]:
     """
     Calculate reward using precise file-by-file patch analysis.
@@ -198,7 +199,7 @@ def calculate_precise_reward(
         oracle_patch = get_filelevel_diff(oracle_patch_text)
         
         # Apply predicted edits to get new file contents (this can raise FormatError)
-        pred_new_content = apply_edits_to_files(file_contents, predicted_edits)
+        pred_new_content = apply_edits_to_files(file_contents, predicted_edits, silent=silent)
         
         # Generate predicted patch as file-level diffs
         pred_patch = get_normalized_patch(file_contents, pred_new_content)

@@ -87,14 +87,17 @@ async def run_generic_self_eval(
         prediction_error = abs(predicted_score - true_reward)
         
         if hasattr(cfg.actor, 'discount_factor'):
-            # Use prediction error to compute reward for self-eval training
             reward = max(0.0, 1.0 - prediction_error)
             reward *= cfg.actor.discount_factor ** llm_call.output_length_tokens
         else:
             reward = max(0.0, 1.0 - prediction_error)
 
-        training_text = make_training_text(llm, llm_call)
-        training_text.reward = reward if (reward is not None and not math.isnan(reward)) else 0.0
+        training_text = None
+        try:
+            training_text = make_training_text(llm, llm_call)
+            training_text.reward = reward if (reward is not None and not math.isnan(reward)) else 0.0
+        except ValueError as exc:
+            logger.warning("Unable to build self-eval training text: %s", exc)
         
         metrics_dict = {
             "predicted_score": predicted_score,
