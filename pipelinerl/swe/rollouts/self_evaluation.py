@@ -85,12 +85,13 @@ async def run_generic_self_eval(
                 break
         
         prediction_error = abs(predicted_score - true_reward)
-        
+        squared_error = (predicted_score - true_reward) ** 2
+
         if hasattr(cfg.actor, 'discount_factor'):
-            reward = max(0.0, 1.0 - prediction_error)
+            reward = max(0.0, 1.0 - squared_error)
             reward *= cfg.actor.discount_factor ** llm_call.output_length_tokens
         else:
-            reward = max(0.0, 1.0 - prediction_error)
+            reward = max(0.0, 1.0 - squared_error)
 
         training_text = None
         try:
@@ -103,6 +104,7 @@ async def run_generic_self_eval(
             "predicted_score": predicted_score,
             "true_reward": true_reward,
             "prediction_error": prediction_error,
+            "squared_error": squared_error,
             "parsing_error": parsing_error,
             "analysis_length": len(analysis.split()) if analysis else 0,
             "analysis": analysis,

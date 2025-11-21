@@ -31,14 +31,9 @@ class GenericSelfEvalTask(Observation):
     templates: Dict[str, str] = Field(
         default_factory=lambda: {
             "localization": (
-                "You are evaluating a localization stage that generates search queries to find relevant files for a bug fix.\n\n"
-                "TASK: Predict how well the generated search queries will find the relevant files.\n"
-                "Scale: 0.0 (completely ineffective queries) to 1.0 (perfect queries that will find all relevant files)\n\n"
-                "EVALUATION CRITERIA:\n"
-                "- Relevance: Do the queries target the right concepts and terminology?\n"
-                "- Coverage: Do the queries cover different aspects of the problem?\n"
-                "- Specificity: Are the queries specific enough to avoid noise?\n"
-                "- Completeness: Are there important search terms missing?\n\n"
+                "Evaluate the localization stage outputs.\n"
+                "- Predict how well the queries will find relevant files.\n"
+                "- Score: 0.0 (ineffective/harmful) to 1.0 (perfect).\n\n"
                 "=== PROBLEM STATEMENT ===\n"
                 "{problem_statement}\n\n"
                 "=== REPOSITORY CONTEXT ===\n"
@@ -47,14 +42,9 @@ class GenericSelfEvalTask(Observation):
                 "{stage_output}\n"
             ),
             "file_selection": (
-                "You are evaluating a file selection stage that chooses relevant files from candidates for bug fixing.\n\n"
-                "TASK: Predict how well the selected files will help solve the given problem.\n"
-                "Scale: 0.0 (completely wrong files) to 1.0 (perfect file selection)\n\n"
-                "EVALUATION CRITERIA:\n"
-                "- Relevance: Are the selected files likely to contain the bug or need modification?\n"
-                "- Completeness: Are all necessary files included?\n"
-                "- Efficiency: Are unnecessary files excluded?\n"
-                "- Coverage: Do the selected files cover all aspects of the problem?\n\n"
+                "Evaluate the file selection stage outputs.\n"
+                "- Predict how well the selected files will help solve the problem.\n"
+                "- Score: 0.0 (wrong files) to 1.0 (perfect selection).\n\n"
                 "=== PROBLEM STATEMENT ===\n"
                 "{problem_statement}\n\n"
                 "=== CANDIDATE FILES ===\n"
@@ -63,14 +53,9 @@ class GenericSelfEvalTask(Observation):
                 "{stage_output}\n"
             ),
             "repair": (
-                "You are evaluating a code repair stage that generates fixes for a given problem.\n\n"
-                "TASK: Predict how well the proposed edits solve the given problem.\n"
-                "Scale: 0.0 (completely wrong/harmful) to 1.0 (perfect solution)\n\n"
-                "EVALUATION CRITERIA:\n"
-                "- Correctness: Do the edits fix the described issue?\n"
-                "- Completeness: Are all necessary changes included?\n"
-                "- Safety: Do the edits avoid introducing new bugs?\n"
-                "- Quality: Is the code well-written and maintainable?\n\n"
+                "Evaluate the code repair stage outputs.\n"
+                "- Predict how well the proposed edits solve the problem.\n"
+                "- Score: 0.0 (wrong/harmful) to 1.0 (clearly fixes the issue).\n\n"
                 "=== PROBLEM STATEMENT ===\n"
                 "{problem_statement}\n\n"
                 "=== CODE FILES ===\n"
@@ -92,19 +77,10 @@ class GenericSelfEvalTask(Observation):
         
         return (
             f"{formatted_template}\n\n"
-            f"SCORING GUIDELINES:\n"
-            f"• 0.0-0.2: Completely incorrect, harmful, or off-target\n"
-            f"• 0.3-0.4: Partially addresses the issue but has major problems\n"
-            f"• 0.5-0.6: Good attempt but missing key elements or has notable issues\n"
-            f"• 0.7-0.8: Solid approach with minor room for improvement\n"
-            f"• 0.9-1.0: Excellent or perfect solution\n\n"
-            f"FORMAT YOUR RESPONSE:\n"
-            f"<analysis>\n"
-            f"[Step-by-step evaluation explaining your reasoning]\n"
-            f"</analysis>\n\n"
-            f"<score>\n"
-            f"[Single number from 0.0 to 1.0]\n"
-            f"</score>"
+            "Return exactly one score between 0.0 and 1.0.\n"
+            "FORMAT:\n"
+            "<analysis>your reasoning</analysis>\n"
+            "<score>0.0-1.0</score>"
         )
 
 

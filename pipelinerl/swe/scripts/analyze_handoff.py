@@ -382,6 +382,7 @@ def main(cfg: DictConfig) -> None:  # pragma: no cover
         plt.title("Actor/Expert Handoff Pareto Curve")
         cbar = plt.colorbar()
         cbar.set_label("Avg cost (USD)")
+        plt.gca().invert_xaxis()
         plt.tight_layout()
         plt.savefig(plot_path)
         plt.close()

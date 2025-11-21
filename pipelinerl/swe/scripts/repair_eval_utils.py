@@ -53,38 +53,21 @@ REPAIR_TEMPLATE = (
     "{file_contents}"
 )
 
-SELF_EVAL_SYSTEM_PROMPT = (
-    "You are an expert evaluator that predicts the quality of repair-stage outputs on a 0.0-1.0 scale."
-)
+SELF_EVAL_SYSTEM_PROMPT = "You are an expert evaluator. Return one score between 0.0 (failed/harmful) and 1.0 (clearly fixes the issue)."
 
 SELF_EVAL_TEMPLATE = (
-    "You are evaluating a code repair stage that generates fixes for a given problem.\n\n"
-    "TASK: Predict how well the proposed edits solve the given problem.\n"
-    "Scale: 0.0 (completely wrong/harmful) to 1.0 (perfect solution)\n\n"
-    "EVALUATION CRITERIA:\n"
-    "- Correctness: Do the edits fix the described issue?\n"
-    "- Completeness: Are all necessary changes included?\n"
-    "- Safety: Do the edits avoid introducing new bugs?\n"
-    "- Quality: Is the code well-written and maintainable?\n\n"
+    "Evaluate the proposed repair.\n"
+    "- Focus on correctness, completeness, and avoiding new bugs.\n"
+    "- Return exactly one score in <score> tags.\n\n"
     "=== PROBLEM STATEMENT ===\n"
     "{problem_statement}\n\n"
     "=== CODE FILES ===\n"
     "{stage_input}\n\n"
     "=== PROPOSED EDITS ===\n"
     "{stage_output}\n\n"
-    "SCORING GUIDELINES:\n"
-    "• 0.0-0.2: Completely incorrect, harmful, or off-target\n"
-    "• 0.3-0.4: Partially addresses the issue but has major problems\n"
-    "• 0.5-0.6: Good attempt but missing key elements or has notable issues\n"
-    "• 0.7-0.8: Solid approach with minor room for improvement\n"
-    "• 0.9-1.0: Excellent or perfect solution\n\n"
-    "FORMAT YOUR RESPONSE:\n"
-    "<analysis>\n"
-    "[Step-by-step evaluation explaining your reasoning]\n"
-    "</analysis>\n\n"
-    "<score>\n"
-    "[Single number from 0.0 to 1.0]\n"
-    "</score>"
+    "FORMAT:\n"
+    "<analysis>your reasoning</analysis>\n"
+    "<score>0.0-1.0</score>"
 )
 
 
