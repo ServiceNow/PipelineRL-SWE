@@ -1,10 +1,14 @@
 import json
+import logging
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 import aiohttp
 from omegaconf import DictConfig, OmegaConf
+
+
+logger = logging.getLogger(__name__)
 
 REPAIR_SYSTEM_PROMPT = (
     "You are a helpful coding assistant. You will see a bug report and the relevant files. "
@@ -211,6 +215,8 @@ async def chat_completion(
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
+        key_preview = f"{api_key[:5]}...{api_key[-4:]}" if len(api_key) >= 9 else api_key
+        print("chat_completion using api key %s", key_preview)
     if isinstance(parameters, DictConfig):
         parameters = OmegaConf.to_container(parameters, resolve=True) or {}
     payload = {"model": model_name, "messages": messages} | (parameters or {})

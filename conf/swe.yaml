@@ -41,6 +41,7 @@ expert_eval:
   connector_limit: 32
   request_timeout: 600
   collect_logprobs: false
+  api_key: null
 
 small_eval:
   base_url: null
@@ -56,6 +57,7 @@ small_eval:
   request_timeout: 600
   collect_logprobs: false
   source_label: actor_eval
+  api_key: null
 
 handoff_analysis:
   actor_glob: ""

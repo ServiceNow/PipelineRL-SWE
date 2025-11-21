@@ -362,23 +362,26 @@ def main(cfg: DictConfig) -> None:  # pragma: no cover
             plot_path.parent.mkdir(parents=True, exist_ok=True)
 
         plt.figure(figsize=(6, 4))
-        costs = [pt["avg_cost"] for pt in curve]
+        thresholds = [pt["threshold"] for pt in curve]
         rewards = [pt["avg_reward"] for pt in curve]
-        plt.scatter(costs, rewards, c=[pt["threshold"] for pt in curve], cmap="viridis", s=40)
-        for pt in curve:
+        costs = [pt["avg_cost"] for pt in curve]
+        plt.scatter(thresholds, rewards, c=costs, cmap="viridis", s=40)
+        offsets = [8, -6, 14, -12, 0]
+        for idx, pt in enumerate(curve):
+            offset = offsets[idx % len(offsets)]
             plt.annotate(
-                f"{pt['threshold']:.2f}",
-                (pt["avg_cost"], pt["avg_reward"]),
+                f"${pt['avg_cost']:.2f}",
+                (pt["threshold"], pt["avg_reward"]),
                 textcoords="offset points",
-                xytext=(0, 5),
+                xytext=(0, offset),
                 ha="center",
                 fontsize=7,
             )
-        plt.xlabel("Avg cost (USD)")
+        plt.xlabel("Self-eval threshold")
         plt.ylabel("Avg reward (string similarity)")
         plt.title("Actor/Expert Handoff Pareto Curve")
         cbar = plt.colorbar()
-        cbar.set_label("Self-eval threshold")
+        cbar.set_label("Avg cost (USD)")
         plt.tight_layout()
         plt.savefig(plot_path)
         plt.close()
