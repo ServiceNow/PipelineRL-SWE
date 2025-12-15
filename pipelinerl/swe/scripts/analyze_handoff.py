@@ -1,5 +1,6 @@
 import json
 import logging
+import math
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Literal
 
@@ -295,6 +296,61 @@ def compute_handoff_curve(
     return results
 
 
+def _predicted_scores(records: Dict[str, Dict[str, Any]]) -> List[float]:
+    scores: List[float] = []
+    for data in records.values():
+        if data.get("repair_self_eval"):
+            score = _predicted_score(data["repair_self_eval"])
+            if score is not None:
+                scores.append(float(score))
+    return scores
+
+
+def _rewards(records: Dict[str, Dict[str, Any]]) -> List[float]:
+    rewards: List[float] = []
+    for data in records.values():
+        rewards.append(_entry_reward(data["repair"]))
+    return rewards
+
+
+def _pearson(x: List[float], y: List[float]) -> float | None:
+    if len(x) != len(y) or len(x) < 2:
+        return None
+    mean_x = sum(x) / len(x)
+    mean_y = sum(y) / len(y)
+    num = sum((a - mean_x) * (b - mean_y) for a, b in zip(x, y))
+    den_x = math.sqrt(sum((a - mean_x) ** 2 for a in x))
+    den_y = math.sqrt(sum((b - mean_y) ** 2 for b in y))
+    if den_x == 0 or den_y == 0:
+        return None
+    return num / (den_x * den_y)
+
+
+def _rank(values: List[float]) -> List[float]:
+    """Return average ranks for values with ties."""
+    indexed = list(enumerate(values))
+    indexed.sort(key=lambda p: p[1])
+    ranks = [0.0] * len(values)
+    i = 0
+    while i < len(indexed):
+        j = i
+        while j + 1 < len(indexed) and indexed[j + 1][1] == indexed[i][1]:
+            j += 1
+        avg_rank = (i + j) / 2 + 1  # ranks are 1-based
+        for k in range(i, j + 1):
+            ranks[indexed[k][0]] = avg_rank
+        i = j + 1
+    return ranks
+
+
+def _spearman(x: List[float], y: List[float]) -> float | None:
+    if len(x) != len(y) or len(x) < 2:
+        return None
+    rx = _rank(x)
+    ry = _rank(y)
+    return _pearson(rx, ry)
+
+
 @hydra.main(config_path="../../../conf", config_name="swe", version_base=None)
 def main(cfg: DictConfig) -> None:  # pragma: no cover
     """Analyze the cost/accuracy Pareto frontier for the repair-stage handoff."""
@@ -344,6 +400,117 @@ def main(cfg: DictConfig) -> None:  # pragma: no cover
     with output_path.open("w") as handle:
         json.dump(curve, handle, indent=2)
     logger.info("Wrote analysis with %d thresholds to %s", len(curve), output_path)
+
+    # Additional summaries: self-eval histogram, correlation, handoff table
+    scores_for_hist: List[float] = []
+    rewards_for_corr: List[float] = []
+    for data in merged.values():
+        if data.get("repair_self_eval"):
+            score = _predicted_score(data["repair_self_eval"])
+            if score is not None:
+                scores_for_hist.append(float(score))
+                rewards_for_corr.append(_entry_reward(data["repair"]))
+
+    hist_path = analysis_cfg.get("histogram_path")
+    hist_path = Path(hist_path) if hist_path else output_path.with_name(output_path.stem + "_self_eval_hist.png")
+    if scores_for_hist:
+        plt.figure(figsize=(6, 4))
+        plt.hist(scores_for_hist, bins=20, range=(0, 1), color="steelblue", edgecolor="white")
+        plt.xlabel("Self-eval score")
+        plt.ylabel("Count")
+        plt.title("Self-eval score distribution")
+        plt.tight_layout()
+        plt.savefig(hist_path)
+        plt.close()
+        logger.info("Saved self-eval histogram to %s", hist_path)
+    else:
+        logger.info("No self-eval scores found; skipping histogram.")
+
+    corr = _pearson(scores_for_hist, rewards_for_corr) if scores_for_hist else None
+    if corr is not None:
+        logger.info("Self-eval vs reward Pearson correlation: %.4f", corr)
+    else:
+        logger.info("Correlation unavailable (insufficient data or zero variance).")
+
+    spearman = _spearman(scores_for_hist, rewards_for_corr) if scores_for_hist else None
+    if spearman is not None:
+        logger.info("Self-eval vs reward Spearman correlation: %.4f", spearman)
+    else:
+        logger.info("Spearman correlation unavailable (insufficient data or zero variance).")
+
+    # Scatter: self-eval score vs repair reward
+    scatter_path = analysis_cfg.get("scatter_path")
+    scatter_path = Path(scatter_path) if scatter_path else output_path.with_name(output_path.stem + "_self_eval_vs_reward.png")
+    if scores_for_hist and rewards_for_corr and len(scores_for_hist) == len(rewards_for_corr):
+        plt.figure(figsize=(6, 4))
+        plt.scatter(scores_for_hist, rewards_for_corr, alpha=0.6, color="slateblue", edgecolor="white", linewidth=0.5)
+        plt.xlabel("Self-eval score")
+        plt.ylabel("Repair reward")
+        plt.title("Self-eval score vs repair reward")
+        if corr is not None:
+            plt.annotate(f"Pearson: {corr:.3f}", xy=(0.02, 0.95), xycoords="axes fraction", fontsize=9, ha="left", va="top")
+        if spearman is not None:
+            plt.annotate(f"Spearman: {spearman:.3f}", xy=(0.02, 0.88), xycoords="axes fraction", fontsize=9, ha="left", va="top")
+        plt.tight_layout()
+        plt.savefig(scatter_path)
+        plt.close()
+        logger.info("Saved self-eval vs reward scatter to %s", scatter_path)
+    else:
+        logger.info("Skipping scatter plot (missing scores/rewards).")
+
+    stats_path = analysis_cfg.get("stats_path")
+    stats_path = Path(stats_path) if stats_path else output_path.with_name(output_path.stem + "_stats.json")
+    stats_payload = {
+        "num_problems": len(merged),
+        "num_self_eval_scores": len(scores_for_hist),
+        "avg_self_eval_score": sum(scores_for_hist) / len(scores_for_hist) if scores_for_hist else None,
+        "avg_reward": sum(rewards_for_corr) / len(rewards_for_corr) if rewards_for_corr else None,
+        "pearson_self_eval_reward": corr,
+        "spearman_self_eval_reward": spearman,
+    }
+    with stats_path.open("w") as handle:
+        json.dump(stats_payload, handle, indent=2)
+    logger.info("Saved stats to %s", stats_path)
+
+    # Reward histograms for actor vs expert
+    actor_rewards = _rewards(merged)
+    expert_rewards = [_entry_reward(val["expert"]) for val in merged.values()]
+
+    actor_hist_path = analysis_cfg.get("actor_histogram_path")
+    actor_hist_path = Path(actor_hist_path) if actor_hist_path else output_path.with_name(output_path.stem + "_actor_reward_hist.png")
+    if actor_rewards:
+        plt.figure(figsize=(6, 4))
+        plt.hist(actor_rewards, bins=20, range=(0, 1), color="seagreen", edgecolor="white")
+        plt.xlabel("Actor reward")
+        plt.ylabel("Count")
+        plt.title("Actor reward distribution")
+        plt.tight_layout()
+        plt.savefig(actor_hist_path)
+        plt.close()
+        logger.info("Saved actor reward histogram to %s", actor_hist_path)
+
+    expert_hist_path = analysis_cfg.get("expert_histogram_path")
+    expert_hist_path = Path(expert_hist_path) if expert_hist_path else output_path.with_name(output_path.stem + "_expert_reward_hist.png")
+    if expert_rewards:
+        plt.figure(figsize=(6, 4))
+        plt.hist(expert_rewards, bins=20, range=(0, 1), color="darkorange", edgecolor="white")
+        plt.xlabel("Expert reward")
+        plt.ylabel("Count")
+        plt.title("Expert reward distribution")
+        plt.tight_layout()
+        plt.savefig(expert_hist_path)
+        plt.close()
+        logger.info("Saved expert reward histogram to %s", expert_hist_path)
+
+    table_path = analysis_cfg.get("handoff_table_path")
+    table_path = Path(table_path) if table_path else output_path.with_name(output_path.stem + "_handoff_table.csv")
+    with table_path.open("w") as handle:
+        handle.write("threshold,handed_off,handed_off_pct,avg_reward,avg_cost\n")
+        for pt in curve:
+            handle.write(
+                f"{pt['threshold']},{pt['handed_off']},{pt['handoff_fraction']*100:.2f},{pt['avg_reward']:.4f},{pt.get('avg_cost', 0):.4f}\n"
+            )
+    logger.info("Saved handoff table to %s", table_path)
 
     if curve:
         best = max(curve, key=lambda x: x["avg_reward"])

@@ -1,6 +1,6 @@
 defaults:
   - base
-  - override finetune: grpo
+  - override finetune: ppo
   - _self_
 
 # Override the rollout policy for localization
@@ -117,15 +117,15 @@ swe:
   # Self-evaluation flags (enable generic self-eval for each stage)
   enable_localization_self_eval: false
   enable_file_selection_self_eval: false
-  enable_repair_self_eval: true
+  enable_repair_self_eval: false
   
   # Repository paths
   repo_path_train: /mnt/llmd/data/swegym/repos
   repo_path_test: /mnt/llmd/data/swebench_lite/repos
   
   # Self-evaluation and repair settings
-  enable_self_eval: true
-  run_self_eval: true
+  enable_self_eval: false
+  run_self_eval: false
   
   # Abstention threshold (config-fixed threshold for all stages)
   abstention_threshold: 0.5  # Examples with self-eval score < 0.5 will be marked for abstention

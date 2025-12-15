@@ -85,6 +85,9 @@ async def _evaluate_problem(
         "dataset": problem.get("dataset"),
         "repo": problem.get("repo"),
         "source": eval_cfg.get("source_label", "actor_eval"),
+        "problem_statement": problem.get("problem_statement"),
+        "stage_input": stage_input,
+        "repair_prompt": repair_messages,
         "repair_output": repair_text,
         "repair_reward": reward or 0.0,
         "repair_success": success,
@@ -100,6 +103,7 @@ async def _evaluate_problem(
         "self_eval_output_tokens": self_eval_usage.get("completion_tokens", 0),
         "self_eval_latency": self_eval_latency,
         "self_eval_parsing_error": self_eval_parsing_error,
+        "self_eval_prompt": self_eval_messages if eval_cfg.get("run_self_eval", True) else None,
     }
 
     return record
@@ -172,9 +176,97 @@ async def _evaluate(cfg: DictConfig) -> None:
     )
 
 
+async def _evaluate_reuse(cfg: DictConfig) -> None:
+    """
+    Re-run only the self-evaluation step on an existing set of repair trajectories.
+    Expects JSONL input with problem_statement, stage_input, and repair_output fields.
+    """
+    eval_cfg = cfg.small_eval
+    reuse_path = eval_cfg.get("reuse_repair_path")
+    if not reuse_path:
+        raise ValueError("reuse_repair_path must be provided for reuse mode")
+    reuse_path = Path(reuse_path)
+    if not reuse_path.exists():
+        raise FileNotFoundError(f"reuse_repair_path not found: {reuse_path}")
+
+    with reuse_path.open() as handle:
+        records = [json.loads(line) for line in handle if line.strip()]
+    logger.info("Loaded %d trajectories from %s", len(records), reuse_path)
+
+    subsample = eval_cfg.get("subsample")
+    if subsample:
+        rng = random.Random(cfg.get("seed", 42))
+        size = min(int(subsample), len(records))
+        records = rng.sample(records, size)
+        logger.info("Subsampled to %d records for self-eval reuse", len(records))
+
+    output_path = Path(eval_cfg.get("output_path", cfg.output_dir + "/actor_eval_reuse.jsonl"))
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    connector = aiohttp.TCPConnector(limit=eval_cfg.get("connector_limit", 32))
+    timeout = aiohttp.ClientTimeout(total=eval_cfg.get("request_timeout", 600))
+
+    progress = tqdm(total=len(records), desc="Actor self-eval reuse", unit="problem")
+    skipped = 0
+
+    async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
+        with output_path.open("w") as sink:
+            for record in records:
+                try:
+                    problem_statement = record.get("problem_statement")
+                    stage_input = record.get("stage_input")
+                    repair_text = record.get("repair_output") or record.get("repair_text")
+                    if not (problem_statement and stage_input is not None and repair_text):
+                        raise ValueError("Record missing problem_statement, stage_input, or repair_output")
+
+                    self_eval_messages = build_self_eval_messages(problem_statement, stage_input, repair_text)
+                    self_eval_output, self_eval_usage, self_eval_latency = await chat_completion(
+                        session,
+                        eval_cfg.base_url,
+                        eval_cfg.model_name,
+                        self_eval_messages,
+                        eval_cfg.get("parameters", {}),
+                        eval_cfg.get("api_key"),
+                    )
+                    self_eval_analysis, self_eval_score, self_eval_parsing_error = parse_self_eval_response(
+                        self_eval_output
+                    )
+
+                    record.update(
+                        {
+                            "source": eval_cfg.get("source_label", "actor_eval_reuse"),
+                            "self_eval_output": self_eval_output,
+                            "self_eval_analysis": self_eval_analysis,
+                            "self_eval_score": self_eval_score,
+                            "self_eval_prompt_tokens": self_eval_usage.get("prompt_tokens", 0),
+                            "self_eval_output_tokens": self_eval_usage.get("completion_tokens", 0),
+                            "self_eval_latency": self_eval_latency,
+                            "self_eval_parsing_error": self_eval_parsing_error,
+                            "self_eval_prompt": self_eval_messages,
+                        }
+                    )
+                    sink.write(json.dumps(record) + "\n")
+                except Exception as exc:  # pylint: disable=broad-except
+                    skipped += 1
+                    logger.exception("Failed to self-eval record %s: %s", record.get("problem_id"), exc)
+                finally:
+                    progress.update(1)
+
+    progress.close()
+    logger.info(
+        "Completed self-eval reuse. Wrote %s (%d records, skipped %d)",
+        output_path,
+        len(records) - skipped,
+        skipped,
+    )
+
+
 @hydra.main(config_path="../../../conf", config_name="swe", version_base=None)
 def main(cfg: DictConfig) -> None:  # pragma: no cover
-    asyncio.run(_evaluate(cfg))
+    if cfg.small_eval.get("reuse_repair_path"):
+        asyncio.run(_evaluate_reuse(cfg))
+    else:
+        asyncio.run(_evaluate(cfg))
 
 
 if __name__ == "__main__":  # pragma: no cover
