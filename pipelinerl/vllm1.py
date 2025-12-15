@@ -27,8 +27,8 @@ from vllm.v1.worker.gpu_model_runner import GPUModelRunner
 
 from pipelinerl.finetune_loop import WeightUpdateRequest
 from pipelinerl.vllm_quantization import string_to_dtype  # reuse mapping
-from pipelinerl.torch_utils import stateless_init_process_group
 from typing import Any, Protocol, runtime_checkable
+import pipelinerl.torch_utils
 import pipelinerl.vllm_quantization  # Register bf16_last_layer_fp32 quantization config
 
 logger = logging.getLogger(__name__)
@@ -81,7 +81,7 @@ class WorkerExtension:
         )
 
         # Use vLLM's StatelessProcessGroup instead of torch.distributed
-        self.model_update_group = stateless_init_process_group(
+        self.model_update_group = pipelinerl.torch_utils.stateless_init_process_group(
             init_method=weight_update_group_init_method,
             rank=self.pg_rank,
             world_size=weight_update_group_world_size,
@@ -94,17 +94,15 @@ class WorkerExtension:
         torch.cuda.synchronize(self.device)
         logger.info("Start receiving weight update")
         expected_dtypes = (torch.bfloat16, torch.float32, torch.float16)
-
         for info in request.parameters_info:
             target_dtype = string_to_dtype(info.dtype)
             if target_dtype not in expected_dtypes:
                 logger.warning(f"Unexpected dtype for {info.name}: {info.dtype}")
             buffer = torch.empty(tuple(info.shape), dtype=target_dtype, device=self.device)
-            self.model_update_group.broadcast(buffer, src=0, stream=torch.cuda.current_stream())
-            loaded_params = self.model_runner.model.load_weights(weights=[(info.name, buffer)])  # type: ignore
+            torch.distributed.broadcast(buffer, src=0, group=self.process_group)
+            loaded_params = self.model_runner.model.load_weights(weights=[(info.name, buffer)]) # type: ignore
             if len(loaded_params) != 1:
                 raise ValueError(f"model {info.name} not found in model state dict")
-
         pipelinerl.vllm_quantization.invalidate_fp32_cache()
         logger.info("Weight update received")
 

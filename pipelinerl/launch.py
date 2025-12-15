@@ -219,7 +219,7 @@ def run_expert_llm(cfg: DictConfig, local_idx: int, gpus: list[int], exp_dir: Pa
     with open(log_file_path, "a") as log_file, open(err_file_path, "a") as err_file:
         proc = _popen(
             cmd,
-            env={**os.environ, "CUDA_VISIBLE_DEVICES": gpu_str},
+            env=env,
             stdout=log_file,
             stderr=err_file,
         )

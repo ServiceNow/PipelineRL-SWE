@@ -111,7 +111,7 @@ def make_worker_class(multi_step: bool):
                 if target_dtype not in expected_dtypes:
                     logger.warning(f"Unexpected dtype for {info.name}: {info.dtype}")
                 buffer = torch.empty(tuple(info.shape), dtype=target_dtype, device=self.device)
-                self.process_group.broadcast(buffer, src=0, stream=torch.cuda.current_stream())
+                torch.distributed.broadcast(buffer, src=0, group=self.process_group)
                 if isinstance(self.model_runner, MultiStepModelRunner):
                     loaded_params = self.model_runner._base_model_runner.model.load_weights(
                         weights=[(info.name, buffer)]

@@ -214,6 +214,11 @@ def load_model(args, model_class, current_dir, performance_value_dim: int | None
         layer_prefix = getattr(args, "fp32_layer_prefix", "lm_head")
         model = apply_fp32_lm_head(model, layer_prefix=layer_prefix)
 
+    # apply FP32 fix to lm_head for numerical precision
+    if getattr(args, "fp32_lm_head", False):
+        layer_prefix = getattr(args, "fp32_layer_prefix", "lm_head")
+        model = apply_fp32_lm_head(model, layer_prefix=layer_prefix)
+
     if args.gradient_checkpointing:
         model.gradient_checkpointing_enable(
             gradient_checkpointing_kwargs={"use_reentrant": args.reentrant_checkpointing}
