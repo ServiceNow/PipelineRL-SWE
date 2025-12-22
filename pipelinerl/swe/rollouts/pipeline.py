@@ -174,17 +174,17 @@ async def generate_unified_swe_rollout(cfg: DictConfig, llm: TrainableLLM, probl
                     for filepath in files_for_repair
                     if filepath in original_contents
                 }
-            
-                if file_contents:
-                    logger.info("Using pure stage mode for repair")
-                    rep_result = await run_repair(cfg, llm, problem, file_contents, session)
-                    if cfg.swe.get('enable_repair', False) and rep_result['training_text']:
-                        if expert_llm is not None:
-                            expert_rep_result = await run_repair(cfg, expert_llm, problem, file_contents, session)
-                            if expert_rep_result.get('training_text'):
-                                rep_result['training_text'].expert_reward = expert_rep_result['training_text'].reward
-                        training_texts.append(rep_result['training_text'])
-                
+
+            if file_contents:
+                logger.info("Using pure stage mode for repair")
+                rep_result = await run_repair(cfg, llm, problem, file_contents, session)
+                if cfg.swe.get('enable_repair', False) and rep_result['training_text']:
+                    if expert_llm is not None:
+                        expert_rep_result = await run_repair(cfg, expert_llm, problem, file_contents, session)
+                        if expert_rep_result.get('training_text'):
+                            rep_result['training_text'].expert_reward = expert_rep_result['training_text'].reward
+                    training_texts.append(rep_result['training_text'])
+
                 # Update metrics (always final/post-enhancement)
                 rep_metrics = rep_result['metrics']
                 metrics.repair_reward = rep_metrics.get('reward')
