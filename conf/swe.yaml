@@ -46,6 +46,7 @@ expert_eval:
 small_eval:
   base_url: null
   model_name: ""
+  value_model_path: ${model_path}
   tokenizer_name: ${small_eval.model_name}
   parameters:
     max_tokens: ${llm.parameters.max_tokens}
@@ -62,6 +63,7 @@ small_eval:
 handoff_analysis:
   actor_glob: ""
   expert_jsonl: ${expert_eval.output_path}
+  value_model_path: ${model_path}
   output_path: ${output_dir}/handoff_analysis.json
   plot_path: null
   threshold_start: 0.0

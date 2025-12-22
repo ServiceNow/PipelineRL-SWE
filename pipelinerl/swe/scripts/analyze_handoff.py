@@ -1,13 +1,17 @@
+#!/usr/bin/env python
+import argparse
+import glob
 import json
 import logging
 import math
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Literal
 
-import glob
-import hydra
-import matplotlib.pyplot as plt
-from omegaconf import DictConfig
+try:
+    import matplotlib.pyplot as plt  # type: ignore
+    MATPLOTLIB_AVAILABLE = True
+except Exception:
+    MATPLOTLIB_AVAILABLE = False
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
@@ -77,7 +81,6 @@ def _collect_legacy_actor_records(actor_files: List[Path]) -> Dict[str, Dict[str
     target_version = max(versions_with_repair)
 
     records: Dict[str, Dict[str, Any]] = {}
-    # Reuse the same line count to drive the progress bar for pass 2
     pbar.reset(total=total_lines)
     pbar.set_description("Collecting latest-model entries")
     for entry in _iter_training_texts(actor_files):
@@ -119,19 +122,21 @@ def _collect_direct_actor_records(actor_files: List[Path]) -> Dict[str, Dict[str
                 problem_id = entry.get("problem_id")
                 if not problem_id:
                     continue
-                repair_entry = {
-                    "prompt_tokens": entry.get("repair_prompt_tokens", 0),
-                    "output_tokens": entry.get("repair_output_tokens", 0),
-                    "reward": entry.get("repair_reward", 0.0),
-                    "success": entry.get("repair_success"),
-                    "metadata": {
+                record: Dict[str, Any] = {
+                    "repair": {
+                        "prompt_tokens": entry.get("repair_prompt_tokens", 0),
+                        "output_tokens": entry.get("repair_output_tokens", 0),
+                        "reward": entry.get("repair_reward", 0.0),
                         "success": entry.get("repair_success"),
-                        "metrics": entry.get("repair_metrics", {}),
-                        "predicted_score": entry.get("self_eval_score"),
-                        "source": entry.get("source"),
+                        "metadata": {
+                            "success": entry.get("repair_success"),
+                            "metrics": entry.get("repair_metrics", {}),
+                            "predicted_score": entry.get("self_eval_score"),
+                            "source": entry.get("source"),
+                        },
                     },
+                    "dataset": entry.get("dataset"),
                 }
-                record: Dict[str, Any] = {"repair": repair_entry, "dataset": entry.get("dataset")}
                 if "self_eval_score" in entry or entry.get("self_eval_output"):
                     record["repair_self_eval"] = {
                         "prompt_tokens": entry.get("self_eval_prompt_tokens", 0),
@@ -141,6 +146,9 @@ def _collect_direct_actor_records(actor_files: List[Path]) -> Dict[str, Dict[str
                             "parsing_error": entry.get("self_eval_parsing_error"),
                         },
                     }
+                if "value_score_mean" in entry or "value_score_last" in entry:
+                    record["value_score_mean"] = entry.get("value_score_mean")
+                    record["value_score_last"] = entry.get("value_score_last")
                 records[problem_id] = record
     pbar.close()
     return records
@@ -184,7 +192,6 @@ def _load_expert_records(path: Path) -> Dict[str, Dict[str, Any]]:
 def _frange(start: float, stop: float, step: float) -> List[float]:
     values = []
     current = start
-    # Avoid floating precision drift by iterating in integers
     count = int(round((stop - start) / step)) + 1
     for i in range(count):
         values.append(round(start + i * step, 6))
@@ -212,16 +219,6 @@ def _entry_reward(entry: Dict[str, Any]) -> float:
     return 0.0
 
 
-def _predicted_score(entry: Dict[str, Any]) -> float:
-    meta = entry.get("metadata", {})
-    metrics = meta.get("metrics") or {}
-    if "predicted_score" in meta:
-        return float(meta["predicted_score"])
-    if "predicted_score" in metrics:
-        return float(metrics["predicted_score"])
-    return 1.0
-
-
 def _merge_records(actor_records: Dict[str, Dict[str, Any]], expert_records: Dict[str, Dict[str, Any]]):
     merged = {}
     for problem_id, data in actor_records.items():
@@ -229,11 +226,15 @@ def _merge_records(actor_records: Dict[str, Dict[str, Any]], expert_records: Dic
             continue
         if problem_id not in expert_records:
             continue
-        merged[problem_id] = {
+        merged_entry: Dict[str, Any] = {
             "repair": data["repair"],
             "repair_self_eval": data.get("repair_self_eval"),
             "expert": expert_records[problem_id],
         }
+        for key in ("value_score_mean", "value_score_last"):
+            if key in data:
+                merged_entry[key] = data[key]
+        merged[problem_id] = merged_entry
     return merged
 
 
@@ -242,6 +243,7 @@ def compute_handoff_curve(
     thresholds: List[float],
     small_token_cost: float,
     expert_token_cost: float,
+    score_key: str,
 ) -> List[Dict[str, Any]]:
     total_problems = len(records)
     if total_problems == 0:
@@ -263,7 +265,9 @@ def compute_handoff_curve(
         handoffs = 0
 
         for pid, data in records.items():
-            predicted = _predicted_score(data.get("repair_self_eval") or {})
+            predicted = data.get(score_key)
+            if predicted is None:
+                continue
             small_tokens = per_problem_small_tokens[pid]
             small_reward = _entry_reward(data["repair"])
             small_cost = (small_tokens / 1000.0) * small_token_cost
@@ -296,21 +300,63 @@ def compute_handoff_curve(
     return results
 
 
-def _predicted_scores(records: Dict[str, Dict[str, Any]]) -> List[float]:
-    scores: List[float] = []
-    for data in records.values():
-        if data.get("repair_self_eval"):
-            score = _predicted_score(data["repair_self_eval"])
-            if score is not None:
-                scores.append(float(score))
-    return scores
+def compute_topk_curve(
+    records: Dict[str, Dict[str, Any]],
+    small_token_cost: float,
+    expert_token_cost: float,
+    score_key: str,
+) -> List[Dict[str, Any]]:
+    """Sweep k lowest scores → handoff; return metrics per k."""
+    scored = [(pid, data.get(score_key)) for pid, data in records.items() if data.get(score_key) is not None]
+    scored = sorted(scored, key=lambda x: x[1])
+    total = len(scored)
+    if total == 0:
+        raise ValueError(f"No {score_key} found in actor records; cannot compute top-k curve")
 
+    # Precompute per-problem stats
+    per_problem = {}
+    for pid, score in scored:
+        data = records[pid]
+        repair_tokens = _to_tokens(data["repair"]) + (_to_tokens(data["repair_self_eval"]) if data.get("repair_self_eval") else 0)
+        expert_tokens = _to_tokens(data["expert"])
+        per_problem[pid] = {
+            "score": score,
+            "repair_reward": _entry_reward(data["repair"]),
+            "expert_reward": _entry_reward(data["expert"]),
+            "repair_tokens": repair_tokens,
+            "expert_tokens": expert_tokens,
+        }
 
-def _rewards(records: Dict[str, Dict[str, Any]]) -> List[float]:
-    rewards: List[float] = []
-    for data in records.values():
-        rewards.append(_entry_reward(data["repair"]))
-    return rewards
+    results = []
+    for k in range(0, total + 1):
+        handoff_pids = set(pid for pid, _ in scored[:k])
+        total_tokens = 0.0
+        total_reward = 0.0
+        total_cost = 0.0
+        for pid, _ in scored:
+            info = per_problem[pid]
+            small_tokens = info["repair_tokens"]
+            small_reward = info["repair_reward"]
+            small_cost = (small_tokens / 1000.0) * small_token_cost
+            if pid in handoff_pids:
+                total_tokens += small_tokens + info["expert_tokens"]
+                total_reward += info["expert_reward"]
+                total_cost += small_cost + (info["expert_tokens"] / 1000.0) * expert_token_cost
+            else:
+                total_tokens += small_tokens
+                total_reward += small_reward
+                total_cost += small_cost
+        results.append(
+            {
+                "k": k,
+                "fraction": k / total,
+                "tau": scored[k - 1][1] if k > 0 else None,
+                "avg_reward": total_reward / total,
+                "avg_tokens": total_tokens / total,
+                "avg_cost": total_cost / total,
+            }
+        )
+    return results
 
 
 def _pearson(x: List[float], y: List[float]) -> float | None:
@@ -327,7 +373,6 @@ def _pearson(x: List[float], y: List[float]) -> float | None:
 
 
 def _rank(values: List[float]) -> List[float]:
-    """Return average ranks for values with ties."""
     indexed = list(enumerate(values))
     indexed.sort(key=lambda p: p[1])
     ranks = [0.0] * len(values)
@@ -336,7 +381,7 @@ def _rank(values: List[float]) -> List[float]:
         j = i
         while j + 1 < len(indexed) and indexed[j + 1][1] == indexed[i][1]:
             j += 1
-        avg_rank = (i + j) / 2 + 1  # ranks are 1-based
+        avg_rank = (i + j) / 2 + 1
         for k in range(i, j + 1):
             ranks[indexed[k][0]] = avg_rank
         i = j + 1
@@ -351,209 +396,384 @@ def _spearman(x: List[float], y: List[float]) -> float | None:
     return _pearson(rx, ry)
 
 
-@hydra.main(config_path="../../../conf", config_name="swe", version_base=None)
-def main(cfg: DictConfig) -> None:  # pragma: no cover
-    """Analyze the cost/accuracy Pareto frontier for the repair-stage handoff."""
-    analysis_cfg = cfg.handoff_analysis
-    actor_pattern = analysis_cfg.get("actor_glob")
-    if not actor_pattern:
-        raise ValueError("handoff_analysis.actor_glob must be provided (glob to actor JSONL shards)")
-    actor_files = [Path(p) for p in glob.glob(actor_pattern, recursive=True) if Path(p).is_file()]
+def _bin_stats(scores: List[float], rewards: List[float], bins: int = 10):
+    if not scores:
+        return []
+    lo, hi = min(scores), max(scores)
+    if lo == hi:
+        hi = lo + 1e-6
+    width = (hi - lo) / bins
+    edges = [lo + i * width for i in range(bins + 1)]
+    rows = []
+    for i in range(bins):
+        left, right = edges[i], edges[i + 1]
+        idxs = [j for j, s in enumerate(scores) if (s >= left and (s < right or (i == bins - 1 and s <= right)))]
+        if not idxs:
+            rows.append(
+                {"bin": i, "left": left, "right": right, "count": 0, "score_mean": None, "success_rate": None,
+                 "p_r_eq_0": None, "reward_pos_mean": None, "reward_mean": None}
+            )
+            continue
+        bin_scores = [scores[j] for j in idxs]
+        bin_rewards = [rewards[j] for j in idxs]
+        successes = [r > 0 for r in bin_rewards]
+        reward_pos = [r for r in bin_rewards if r > 0]
+        rows.append(
+            {
+                "bin": i,
+                "left": left,
+                "right": right,
+                "count": len(idxs),
+                "score_mean": sum(bin_scores) / len(bin_scores),
+                "success_rate": sum(successes) / len(successes),
+                "p_r_eq_0": (len(bin_rewards) - len(reward_pos)) / len(bin_rewards),
+                "reward_pos_mean": sum(reward_pos) / len(reward_pos) if reward_pos else None,
+                "reward_mean": sum(bin_rewards) / len(bin_rewards),
+            }
+        )
+    return rows
+
+
+def _cdf(scores: List[float]):
+    sorted_scores = sorted(scores)
+    n = len(sorted_scores)
+    return [{"score": s, "cdf": (i + 1) / n} for i, s in enumerate(sorted_scores)]
+
+
+def _lift_curve(scores: List[float], rewards: List[float]):
+    paired = sorted(zip(scores, rewards), key=lambda x: x[0])
+    cum = []
+    total = 0.0
+    for i, (_, r) in enumerate(paired, 1):
+        total += r
+        cum.append({"fraction": i / len(paired), "cum_reward_mean": total / i})
+    return cum
+
+
+def _roc_pr(scores: List[float], rewards: List[float]):
+    # positives are rewards > 0
+    paired = sorted(zip(scores, rewards), key=lambda x: x[0], reverse=True)
+    P = sum(1 for _, r in paired if r > 0)
+    N = len(paired) - P
+    if P == 0 or N == 0:
+        return None, None, None, None, None
+    tp = fp = 0
+    roc_points = []
+    pr_points = []
+    prev_score = None
+    for score, r in paired:
+        if score != prev_score:
+            roc_points.append((fp / N, tp / P))
+            precision = tp / (tp + fp) if (tp + fp) > 0 else 1.0
+            recall = tp / P
+            pr_points.append((recall, precision))
+            prev_score = score
+        if r > 0:
+            tp += 1
+        else:
+            fp += 1
+    roc_points.append((fp / N, tp / P))
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 1.0
+    recall = tp / P
+    pr_points.append((recall, precision))
+    # AUROC via trapezoid on FPR-TPR
+    roc_points_sorted = sorted(roc_points, key=lambda p: p[0])
+    auroc = 0.0
+    for (x0, y0), (x1, y1) in zip(roc_points_sorted[:-1], roc_points_sorted[1:]):
+        auroc += (x1 - x0) * (y0 + y1) / 2
+    pr_points_sorted = sorted(pr_points, key=lambda p: p[0])
+    auprc = 0.0
+    for (r0, p0), (r1, p1) in zip(pr_points_sorted[:-1], pr_points_sorted[1:]):
+        auprc += (r1 - r0) * ((p0 + p1) / 2)
+    return auroc, auprc, roc_points_sorted, pr_points_sorted
+
+
+def run_analysis(
+    actor_glob: str,
+    expert_jsonl: str,
+    output_path: str,
+    threshold_start: float,
+    threshold_stop: float,
+    threshold_step: float,
+    small_token_cost_per_1k: float,
+    expert_token_cost_per_1k: float,
+):
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+
+    actor_files = [Path(p) for p in glob.glob(actor_glob, recursive=True) if Path(p).is_file()]
     if not actor_files:
-        raise ValueError(f"No actor JSONL files found for pattern: {actor_pattern}")
+        raise ValueError(f"No actor JSONL files found for pattern: {actor_glob}")
     actor_files.sort()
     logger.info("Reading actor traces from %d files", len(actor_files))
 
     actor_records = _collect_latest_actor_records(actor_files)
     if not actor_records:
         raise ValueError("No repair entries found in actor traces for the latest model version")
-    sample_version = next(iter(actor_records.values())).get("model_version")
-    if sample_version is not None:
-        logger.info("Found %d problems in latest model_version=%s", len(actor_records), sample_version)
-    else:
-        logger.info("Found %d problems from actor logs", len(actor_records))
 
-    expert_path = Path(analysis_cfg.get("expert_jsonl", cfg.expert_eval.output_path))
+    expert_path = Path(expert_jsonl)
     expert_records = _load_expert_records(expert_path)
     logger.info("Loaded %d expert records from %s", len(expert_records), expert_path)
 
     merged = _merge_records(actor_records, expert_records)
     logger.info("Overlap contains %d problems", len(merged))
 
-    thresholds = analysis_cfg.get("thresholds")
-    if thresholds:
-        threshold_values = [float(t) for t in thresholds]
-    else:
-        threshold_values = _frange(
-            float(analysis_cfg.get("threshold_start", 0.0)),
-            float(analysis_cfg.get("threshold_stop", 1.0)),
-            float(analysis_cfg.get("threshold_step", 0.05)),
+    threshold_values = _frange(threshold_start, threshold_stop, threshold_step)
+
+    variants = [("value_score_mean", "mean"), ("value_score_last", "last")]
+    base_output_path = Path(output_path)
+    small_cost = float(small_token_cost_per_1k)
+    expert_cost = float(expert_token_cost_per_1k)
+
+    for score_key, label in variants:
+        if not any(data.get(score_key) is not None for data in merged.values()):
+            raise ValueError(f"No {score_key} found in actor records; cannot run {label} handoff analysis")
+
+        curve = compute_handoff_curve(merged, threshold_values, small_cost, expert_cost, score_key)
+        topk_curve = compute_topk_curve(merged, small_cost, expert_cost, score_key)
+
+        out_path = base_output_path if label == "mean" else base_output_path.with_name(
+            base_output_path.stem + f"_{label}" + base_output_path.suffix
         )
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with out_path.open("w") as handle:
+            json.dump(curve, handle, indent=2)
+        logger.info("Wrote %s analysis with %d thresholds to %s", label, len(curve), out_path)
 
-    small_cost = float(analysis_cfg.get("small_token_cost_per_1k", 0.0))
-    expert_cost = float(analysis_cfg.get("expert_token_cost_per_1k", 0.0))
+        topk_path = out_path.with_name(out_path.stem + f"_{label}_topk.json")
+        with topk_path.open("w") as handle:
+            json.dump(topk_curve, handle, indent=2)
+        logger.info("Wrote %s top-k analysis to %s", label, topk_path)
 
-    curve = compute_handoff_curve(merged, threshold_values, small_cost, expert_cost)
-
-    output_path = Path(analysis_cfg.get("output_path", cfg.output_dir + "/handoff_analysis.json"))
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("w") as handle:
-        json.dump(curve, handle, indent=2)
-    logger.info("Wrote analysis with %d thresholds to %s", len(curve), output_path)
-
-    # Additional summaries: self-eval histogram, correlation, handoff table
-    scores_for_hist: List[float] = []
-    rewards_for_corr: List[float] = []
-    for data in merged.values():
-        if data.get("repair_self_eval"):
-            score = _predicted_score(data["repair_self_eval"])
+        scores_for_hist: List[float] = []
+        rewards_for_corr: List[float] = []
+        for data in merged.values():
+            score = data.get(score_key)
             if score is not None:
                 scores_for_hist.append(float(score))
                 rewards_for_corr.append(_entry_reward(data["repair"]))
 
-    hist_path = analysis_cfg.get("histogram_path")
-    hist_path = Path(hist_path) if hist_path else output_path.with_name(output_path.stem + "_self_eval_hist.png")
-    if scores_for_hist:
-        plt.figure(figsize=(6, 4))
-        plt.hist(scores_for_hist, bins=20, range=(0, 1), color="steelblue", edgecolor="white")
-        plt.xlabel("Self-eval score")
-        plt.ylabel("Count")
-        plt.title("Self-eval score distribution")
-        plt.tight_layout()
-        plt.savefig(hist_path)
-        plt.close()
-        logger.info("Saved self-eval histogram to %s", hist_path)
-    else:
-        logger.info("No self-eval scores found; skipping histogram.")
-
-    corr = _pearson(scores_for_hist, rewards_for_corr) if scores_for_hist else None
-    if corr is not None:
-        logger.info("Self-eval vs reward Pearson correlation: %.4f", corr)
-    else:
-        logger.info("Correlation unavailable (insufficient data or zero variance).")
-
-    spearman = _spearman(scores_for_hist, rewards_for_corr) if scores_for_hist else None
-    if spearman is not None:
-        logger.info("Self-eval vs reward Spearman correlation: %.4f", spearman)
-    else:
-        logger.info("Spearman correlation unavailable (insufficient data or zero variance).")
-
-    # Scatter: self-eval score vs repair reward
-    scatter_path = analysis_cfg.get("scatter_path")
-    scatter_path = Path(scatter_path) if scatter_path else output_path.with_name(output_path.stem + "_self_eval_vs_reward.png")
-    if scores_for_hist and rewards_for_corr and len(scores_for_hist) == len(rewards_for_corr):
-        plt.figure(figsize=(6, 4))
-        plt.scatter(scores_for_hist, rewards_for_corr, alpha=0.6, color="slateblue", edgecolor="white", linewidth=0.5)
-        plt.xlabel("Self-eval score")
-        plt.ylabel("Repair reward")
-        plt.title("Self-eval score vs repair reward")
-        if corr is not None:
-            plt.annotate(f"Pearson: {corr:.3f}", xy=(0.02, 0.95), xycoords="axes fraction", fontsize=9, ha="left", va="top")
-        if spearman is not None:
-            plt.annotate(f"Spearman: {spearman:.3f}", xy=(0.02, 0.88), xycoords="axes fraction", fontsize=9, ha="left", va="top")
-        plt.tight_layout()
-        plt.savefig(scatter_path)
-        plt.close()
-        logger.info("Saved self-eval vs reward scatter to %s", scatter_path)
-    else:
-        logger.info("Skipping scatter plot (missing scores/rewards).")
-
-    stats_path = analysis_cfg.get("stats_path")
-    stats_path = Path(stats_path) if stats_path else output_path.with_name(output_path.stem + "_stats.json")
-    stats_payload = {
-        "num_problems": len(merged),
-        "num_self_eval_scores": len(scores_for_hist),
-        "avg_self_eval_score": sum(scores_for_hist) / len(scores_for_hist) if scores_for_hist else None,
-        "avg_reward": sum(rewards_for_corr) / len(rewards_for_corr) if rewards_for_corr else None,
-        "pearson_self_eval_reward": corr,
-        "spearman_self_eval_reward": spearman,
-    }
-    with stats_path.open("w") as handle:
-        json.dump(stats_payload, handle, indent=2)
-    logger.info("Saved stats to %s", stats_path)
-
-    # Reward histograms for actor vs expert
-    actor_rewards = _rewards(merged)
-    expert_rewards = [_entry_reward(val["expert"]) for val in merged.values()]
-
-    actor_hist_path = analysis_cfg.get("actor_histogram_path")
-    actor_hist_path = Path(actor_hist_path) if actor_hist_path else output_path.with_name(output_path.stem + "_actor_reward_hist.png")
-    if actor_rewards:
-        plt.figure(figsize=(6, 4))
-        plt.hist(actor_rewards, bins=20, range=(0, 1), color="seagreen", edgecolor="white")
-        plt.xlabel("Actor reward")
-        plt.ylabel("Count")
-        plt.title("Actor reward distribution")
-        plt.tight_layout()
-        plt.savefig(actor_hist_path)
-        plt.close()
-        logger.info("Saved actor reward histogram to %s", actor_hist_path)
-
-    expert_hist_path = analysis_cfg.get("expert_histogram_path")
-    expert_hist_path = Path(expert_hist_path) if expert_hist_path else output_path.with_name(output_path.stem + "_expert_reward_hist.png")
-    if expert_rewards:
-        plt.figure(figsize=(6, 4))
-        plt.hist(expert_rewards, bins=20, range=(0, 1), color="darkorange", edgecolor="white")
-        plt.xlabel("Expert reward")
-        plt.ylabel("Count")
-        plt.title("Expert reward distribution")
-        plt.tight_layout()
-        plt.savefig(expert_hist_path)
-        plt.close()
-        logger.info("Saved expert reward histogram to %s", expert_hist_path)
-
-    table_path = analysis_cfg.get("handoff_table_path")
-    table_path = Path(table_path) if table_path else output_path.with_name(output_path.stem + "_handoff_table.csv")
-    with table_path.open("w") as handle:
-        handle.write("threshold,handed_off,handed_off_pct,avg_reward,avg_cost\n")
-        for pt in curve:
-            handle.write(
-                f"{pt['threshold']},{pt['handed_off']},{pt['handoff_fraction']*100:.2f},{pt['avg_reward']:.4f},{pt.get('avg_cost', 0):.4f}\n"
-            )
-    logger.info("Saved handoff table to %s", table_path)
-
-    if curve:
-        best = max(curve, key=lambda x: x["avg_reward"])
-        logger.info(
-            "Best avg reward %.3f at threshold %.2f with avg tokens %.1f",
-            best["avg_reward"],
-            best["threshold"],
-            best["avg_tokens"],
-        )
-
-        plot_path = analysis_cfg.get("plot_path")
-        if not plot_path:
-            plot_path = output_path.with_suffix(".png")
+        hist_path = out_path.with_name(out_path.stem + f"_{label}_hist.png")
+        if MATPLOTLIB_AVAILABLE and scores_for_hist:
+            plt.figure(figsize=(6, 4))
+            plt.hist(scores_for_hist, bins=20, range=(0, 1), color="steelblue", edgecolor="white")
+            plt.xlabel(f"Value score ({label})")
+            plt.ylabel("Count")
+            plt.title(f"Value score ({label}) distribution")
+            plt.tight_layout()
+            plt.savefig(hist_path)
+            plt.close()
+            logger.info("Saved value histogram to %s", hist_path)
+        elif not MATPLOTLIB_AVAILABLE:
+            logger.warning("matplotlib not available; skipping histogram for %s", label)
         else:
-            plot_path = Path(plot_path)
-            plot_path.parent.mkdir(parents=True, exist_ok=True)
+            logger.info("No value scores found; skipping histogram for %s.", label)
 
-        plt.figure(figsize=(6, 4))
-        thresholds = [pt["threshold"] for pt in curve]
-        rewards = [pt["avg_reward"] for pt in curve]
-        costs = [pt["avg_cost"] for pt in curve]
-        plt.scatter(thresholds, rewards, c=costs, cmap="viridis", s=40)
-        offsets = [8, -6, 14, -12, 0]
-        for idx, pt in enumerate(curve):
-            offset = offsets[idx % len(offsets)]
-            plt.annotate(
-                f"${pt['avg_cost']:.2f}",
-                (pt["threshold"], pt["avg_reward"]),
-                textcoords="offset points",
-                xytext=(0, offset),
-                ha="center",
-                fontsize=7,
+        corr = _pearson(scores_for_hist, rewards_for_corr) if scores_for_hist else None
+        spearman = _spearman(scores_for_hist, rewards_for_corr) if scores_for_hist else None
+
+        scatter_path = out_path.with_name(out_path.stem + f"_{label}_vs_reward.png")
+        if MATPLOTLIB_AVAILABLE and scores_for_hist and rewards_for_corr and len(scores_for_hist) == len(rewards_for_corr):
+            plt.figure(figsize=(6, 4))
+            plt.scatter(scores_for_hist, rewards_for_corr, alpha=0.6, color="slateblue", edgecolor="white", linewidth=0.5)
+            plt.xlabel(f"Value score ({label})")
+            plt.ylabel("Repair reward")
+            plt.title(f"Value score ({label}) vs repair reward")
+            if corr is not None:
+                plt.annotate(f"Pearson: {corr:.3f}", xy=(0.02, 0.95), xycoords="axes fraction", fontsize=9, ha="left", va="top")
+            if spearman is not None:
+                plt.annotate(f"Spearman: {spearman:.3f}", xy=(0.02, 0.88), xycoords="axes fraction", fontsize=9, ha="left", va="top")
+            plt.tight_layout()
+            plt.savefig(scatter_path)
+            plt.close()
+            logger.info("Saved value vs reward scatter to %s", scatter_path)
+        elif not MATPLOTLIB_AVAILABLE:
+            logger.warning("matplotlib not available; skipping scatter for %s", label)
+        else:
+            logger.info("Skipping scatter plot for %s (missing scores/rewards).", label)
+
+        stats_path = out_path.with_name(out_path.stem + f"_{label}_stats.json")
+        stats_payload = {
+            "num_problems": len(merged),
+            f"num_value_scores_{label}": len(scores_for_hist),
+            f"avg_value_score_{label}": sum(scores_for_hist) / len(scores_for_hist) if scores_for_hist else None,
+            "avg_reward": sum(rewards_for_corr) / len(rewards_for_corr) if rewards_for_corr else None,
+            f"pearson_value_reward_{label}": corr,
+            f"spearman_value_reward_{label}": spearman,
+            f"auroc_{label}": None,
+            f"auprc_{label}": None,
+        }
+        with stats_path.open("w") as handle:
+            json.dump(stats_payload, handle, indent=2)
+        logger.info("Saved stats to %s", stats_path)
+
+        # Diagnostics
+        bin_rows = _bin_stats(scores_for_hist, rewards_for_corr, bins=10)
+        reliability_path = out_path.with_name(out_path.stem + f"_{label}_reliability.csv")
+        with reliability_path.open("w") as fh:
+            fh.write("bin,left,right,count,score_mean,success_rate,p_r_eq_0,reward_pos_mean,reward_mean\n")
+            for row in bin_rows:
+                fh.write(
+                    f"{row['bin']},{row['left']},{row['right']},{row['count']},{row['score_mean']},"
+                    f"{row['success_rate']},{row['p_r_eq_0']},{row['reward_pos_mean']},{row['reward_mean']}\n"
+                )
+        logger.info("Saved reliability/conditional reward table to %s", reliability_path)
+
+        cdf_rows = _cdf(scores_for_hist)
+        cdf_path = out_path.with_name(out_path.stem + f"_{label}_cdf.csv")
+        with cdf_path.open("w") as fh:
+            fh.write("score,cdf\n")
+            for row in cdf_rows:
+                fh.write(f"{row['score']},{row['cdf']}\n")
+        logger.info("Saved CDF data to %s", cdf_path)
+
+        lift_rows = _lift_curve(scores_for_hist, rewards_for_corr)
+        lift_path = out_path.with_name(out_path.stem + f"_{label}_lift.csv")
+        with lift_path.open("w") as fh:
+            fh.write("fraction,cum_reward_mean\n")
+            for row in lift_rows:
+                fh.write(f"{row['fraction']},{row['cum_reward_mean']}\n")
+        logger.info("Saved lift curve data to %s", lift_path)
+
+        auroc, auprc, roc_points, pr_points = _roc_pr(scores_for_hist, rewards_for_corr)
+        stats_payload[f"auroc_{label}"] = auroc
+        stats_payload[f"auprc_{label}"] = auprc
+        if roc_points and pr_points:
+            roc_path = out_path.with_name(out_path.stem + f"_{label}_roc.csv")
+            with roc_path.open("w") as fh:
+                fh.write("fpr,tpr\n")
+                for fpr, tpr in roc_points:
+                    fh.write(f"{fpr},{tpr}\n")
+            pr_path = out_path.with_name(out_path.stem + f"_{label}_pr.csv")
+            with pr_path.open("w") as fh:
+                fh.write("recall,precision\n")
+                for rec, prec in pr_points:
+                    fh.write(f"{rec},{prec}\n")
+            logger.info("Saved ROC/PR data to %s and %s", roc_path, pr_path)
+
+        actor_rewards = [_entry_reward(val["repair"]) for val in merged.values()]
+        expert_rewards = [_entry_reward(val["expert"]) for val in merged.values()]
+
+        actor_hist_path = out_path.with_name(out_path.stem + f"_{label}_actor_reward_hist.png")
+        if MATPLOTLIB_AVAILABLE and actor_rewards:
+            plt.figure(figsize=(6, 4))
+            plt.hist(actor_rewards, bins=20, range=(0, 1), color="seagreen", edgecolor="white")
+            plt.xlabel("Actor reward")
+            plt.ylabel("Count")
+            plt.title("Actor reward distribution")
+            plt.tight_layout()
+            plt.savefig(actor_hist_path)
+            plt.close()
+            logger.info("Saved actor reward histogram to %s", actor_hist_path)
+        elif not MATPLOTLIB_AVAILABLE:
+            logger.warning("matplotlib not available; skipping actor reward histogram for %s", label)
+
+        expert_hist_path = out_path.with_name(out_path.stem + f"_{label}_expert_reward_hist.png")
+        if MATPLOTLIB_AVAILABLE and expert_rewards:
+            plt.figure(figsize=(6, 4))
+            plt.hist(expert_rewards, bins=20, range=(0, 1), color="darkorange", edgecolor="white")
+            plt.xlabel("Expert reward")
+            plt.ylabel("Count")
+            plt.title("Expert reward distribution")
+            plt.tight_layout()
+            plt.savefig(expert_hist_path)
+            plt.close()
+            logger.info("Saved expert reward histogram to %s", expert_hist_path)
+        elif not MATPLOTLIB_AVAILABLE:
+            logger.warning("matplotlib not available; skipping expert reward histogram for %s", label)
+
+        table_path = out_path.with_name(out_path.stem + f"_{label}_handoff_table.csv")
+        with table_path.open("w") as handle:
+            handle.write("threshold,handed_off,handed_off_pct,avg_reward,avg_cost\n")
+            for pt in curve:
+                handle.write(
+                    f"{pt['threshold']},{pt['handed_off']},{pt['handoff_fraction']*100:.2f},{pt['avg_reward']:.4f},{pt.get('avg_cost', 0):.4f}\n"
+                )
+        logger.info("Saved handoff table to %s", table_path)
+
+        if curve and MATPLOTLIB_AVAILABLE:
+            best = max(curve, key=lambda x: x["avg_reward"])
+            logger.info(
+                "[%s] Best avg reward %.3f at threshold %.2f with avg tokens %.1f",
+                label,
+                best["avg_reward"],
+                best["threshold"],
+                best["avg_tokens"],
             )
-        plt.xlabel("Self-eval threshold")
-        plt.ylabel("Avg reward (string similarity)")
-        plt.title("Actor/Expert Handoff Pareto Curve")
-        cbar = plt.colorbar()
-        cbar.set_label("Avg cost (USD)")
-        plt.gca().invert_xaxis()
-        plt.tight_layout()
-        plt.savefig(plot_path)
-        plt.close()
-        logger.info("Saved Pareto plot to %s", plot_path)
+            plot_path = out_path.with_name(out_path.stem + f"_{label}.png")
+            plt.figure(figsize=(6, 4))
+            thresholds_pts = [pt["threshold"] for pt in curve]
+            rewards = [pt["avg_reward"] for pt in curve]
+            costs = [pt["avg_cost"] for pt in curve]
+            plt.scatter(thresholds_pts, rewards, c=costs, cmap="viridis", s=40)
+            offsets = [8, -6, 14, -12, 0]
+            for idx, pt in enumerate(curve):
+                offset = offsets[idx % len(offsets)]
+                plt.annotate(
+                    f"${pt['avg_cost']:.2f}",
+                    (pt["threshold"], pt["avg_reward"]),
+                    textcoords="offset points",
+                    xytext=(0, offset),
+                    ha="center",
+                    fontsize=7,
+                )
+            plt.xlabel("Value threshold")
+            plt.ylabel("Avg reward (string similarity)")
+            plt.title(f"Actor/Expert Handoff Pareto Curve ({label})")
+            cbar = plt.colorbar()
+            cbar.set_label("Avg cost (USD)")
+            plt.gca().invert_xaxis()
+            plt.tight_layout()
+            plt.savefig(plot_path)
+            plt.close()
+            logger.info("Saved Pareto plot to %s", plot_path)
+        elif not MATPLOTLIB_AVAILABLE:
+            logger.warning("matplotlib not available; skipping Pareto plot for %s", label)
+
+        if topk_curve and MATPLOTLIB_AVAILABLE:
+            plot_path = out_path.with_name(out_path.stem + f"_{label}_topk.png")
+            plt.figure(figsize=(6, 4))
+            ks = [pt["k"] for pt in topk_curve]
+            rewards = [pt["avg_reward"] for pt in topk_curve]
+            costs = [pt["avg_cost"] for pt in topk_curve]
+            plt.scatter(costs, rewards, c=ks, cmap="plasma", s=40)
+            for pt in topk_curve:
+                if pt["tau"] is not None:
+                    plt.annotate(f"τ={pt['tau']:.3f}", (pt["avg_cost"], pt["avg_reward"]), textcoords="offset points", xytext=(0, 4), ha="center", fontsize=7)
+            plt.xlabel("Avg cost (USD)")
+            plt.ylabel("Avg reward (string similarity)")
+            plt.title(f"Top-k handoff curve ({label})")
+            cbar = plt.colorbar()
+            cbar.set_label("k")
+            plt.tight_layout()
+            plt.savefig(plot_path)
+            plt.close()
+            logger.info("Saved top-k Pareto plot to %s", plot_path)
+        elif not MATPLOTLIB_AVAILABLE:
+            logger.warning("matplotlib not available; skipping top-k plot for %s", label)
+
+
+def main():  # pragma: no cover
+    parser = argparse.ArgumentParser(description="Analyze handoff using value-head scores.")
+    parser.add_argument("--actor_glob", required=True, help="Glob to actor JSONL shards")
+    parser.add_argument("--expert_jsonl", required=True, help="Path to expert JSONL")
+    parser.add_argument("--output_path", required=True, help="Base output path for analysis JSON")
+    parser.add_argument("--threshold_start", type=float, default=0.0)
+    parser.add_argument("--threshold_stop", type=float, default=1.0)
+    parser.add_argument("--threshold_step", type=float, default=0.05)
+    parser.add_argument("--small_token_cost_per_1k", type=float, default=0.0)
+    parser.add_argument("--expert_token_cost_per_1k", type=float, default=0.0)
+    args = parser.parse_args()
+
+    run_analysis(
+        actor_glob=args.actor_glob,
+        expert_jsonl=args.expert_jsonl,
+        output_path=args.output_path,
+        threshold_start=args.threshold_start,
+        threshold_stop=args.threshold_stop,
+        threshold_step=args.threshold_step,
+        small_token_cost_per_1k=args.small_token_cost_per_1k,
+        expert_token_cost_per_1k=args.expert_token_cost_per_1k,
+    )
 
 
 if __name__ == "__main__":  # pragma: no cover
