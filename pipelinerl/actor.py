@@ -676,14 +676,14 @@ def run_actor_loop(cfg: DictConfig):
                         collect_logprobs=False,
                         observe_llm_calls=False,
                     )
-                    logger.info(f"Created expert LLM for A2A: {expert_llm_url}")
+                    logger.info(f"Created expert LLM for expert reward regression: {expert_llm_url}")
                 except Exception as e:
-                    logger.error(f"Failed to create expert LLM: {e}, A2A will be disabled")
+                    logger.error(f"Failed to create expert LLM: {e}, expert reward regression will be disabled")
                     expert_llm = None
             else:
-                logger.warning("A2A enabled but no expert_model config found")
+                logger.warning("Expert reward enabled but no expert_model config found")
         else:
-            logger.warning("A2A enabled but no expert_llm_url found in config")
+            logger.warning("Expert reward enabled but no expert_llm_url found in config")
 
     stats_stream = SingleStreamSpec(exp_path=exp_path, topic="stats")
     test_stats_stream = SingleStreamSpec(exp_path=exp_path, topic="stats_test")

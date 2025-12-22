@@ -21,6 +21,8 @@ class CausalLMOutputWithValue(ModelOutput):
             Prediction scores of the language modeling head.
         value (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Value predictions from the value head.
+        expert_value (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Expert reward predictions from the expert value head.
         past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*):
             Contains cached key/value states.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*):
@@ -32,6 +34,7 @@ class CausalLMOutputWithValue(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
     value: torch.FloatTensor = None
+    expert_value: torch.FloatTensor | None = None
     past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -65,6 +68,8 @@ class AutoModelForCausalLMWithValueHead(nn.Module):
 
         # Initialize value head
         self.value_head = ValueHead(hidden_size)
+        # Initialize expert value head (predict expert model reward)
+        self.expert_value_head = ValueHead(hidden_size)
 
         # Copy relevant attributes from the pretrained model
         self.main_input_name = pretrained_model.main_input_name
@@ -105,11 +110,13 @@ class AutoModelForCausalLMWithValueHead(nn.Module):
 
         # Compute values
         values = self.value_head(hidden_states)
+        expert_values = self.expert_value_head(hidden_states)
 
         return CausalLMOutputWithValue(
             loss=outputs.loss,
             logits=outputs.logits,
             value=values,
+            expert_value=expert_values,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
@@ -139,12 +146,16 @@ class AutoModelForCausalLMWithValueHead(nn.Module):
         # Extract pretrained model and value head state dicts
         pretrained_model_state_dict = {}
         value_head_state_dict = {}
+        expert_head_state_dict = {}
         
         for key, value in state_dict.items():
             if key.startswith("value_head."):
                 # Remove the "value_head." prefix
                 new_key = key[len("value_head."):]
                 value_head_state_dict[new_key] = value
+            elif key.startswith("expert_value_head."):
+                new_key = key[len("expert_value_head."):]
+                expert_head_state_dict[new_key] = value
             elif key.startswith("pretrained_model."):
                 # Remove the "pretrained_model." prefix
                 new_key = key[len("pretrained_model."):]
@@ -170,6 +181,9 @@ class AutoModelForCausalLMWithValueHead(nn.Module):
             value_head_path = os.path.join(save_directory, "value_head.pt")
             save_function(value_head_state_dict, value_head_path)
             logger.info(f"Saved value head to {value_head_path}")
+            expert_head_path = os.path.join(save_directory, "expert_value_head.pt")
+            save_function(expert_head_state_dict, expert_head_path)
+            logger.info(f"Saved expert value head to {expert_head_path}")
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -187,9 +201,13 @@ class AutoModelForCausalLMWithValueHead(nn.Module):
 
         # Try to load value head weights if they exist
         value_head_path = os.path.join(pretrained_model_name_or_path, "value_head.pt")
+        expert_value_head_path = os.path.join(pretrained_model_name_or_path, "expert_value_head.pt")
         if os.path.exists(value_head_path):
             value_head_state_dict = torch.load(value_head_path, map_location="cpu")
             model.value_head.load_state_dict(value_head_state_dict)
+        if os.path.exists(expert_value_head_path):
+            expert_head_state_dict = torch.load(expert_value_head_path, map_location="cpu")
+            model.expert_value_head.load_state_dict(expert_head_state_dict)
 
         return model
 

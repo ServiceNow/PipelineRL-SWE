@@ -1,7 +1,7 @@
 """
 Main pipeline orchestration for SWE rollouts.
 Coordinates the execution of all stages and produces the final RolloutResult.
-Uses the layered architecture to select appropriate execution mode.
+Now runs policy + optional expert model (for reward regression) without A2A/self-eval layers.
 """
 
 import logging
@@ -15,25 +15,17 @@ from pipelinerl.swe.metrics import UnifiedMetrics
 from pipelinerl.swe.utils.file_context_enricher import FileContextEnricher
 from pipelinerl.swe.utils.localization_utils import parse_patch_for_gold_files
 from .stages import run_localization, run_file_selection, run_repair
-from .self_evaluation import run_localization_with_self_eval, run_file_selection_with_self_eval, run_repair_with_self_eval
-from .a2a import run_localization_a2a, run_file_selection_a2a, run_repair_a2a
 
 logger = logging.getLogger(__name__)
 
 
 async def generate_unified_swe_rollout(cfg: DictConfig, llm: TrainableLLM, problem: dict, session, expert_llm: TrainableLLM = None):
     """
-    Generate complete SWE pipeline rollout using the layered architecture.
-    Selects appropriate execution mode based on configuration.
-    
-    Args:
-        cfg: Configuration
-        llm: Main language model
-        problem: Problem dictionary
-        session: HTTP session
-        expert_llm: Optional expert model for A2A (if None, will try to create from config)
+    Generate complete SWE pipeline rollout using the streamlined architecture.
+    Runs each stage once with the policy model; if an expert model is available, also runs
+    the expert to collect an expert reward for auxiliary regression.
     """
-    # Create expert LLM if not provided but A2A is enabled
+    # Create expert LLM if not provided but configured
     if expert_llm is None and cfg.swe.get('enable_a2a', False):
         try:
             expert_config = cfg.swe.get('expert_model', {})
@@ -47,11 +39,11 @@ async def generate_unified_swe_rollout(cfg: DictConfig, llm: TrainableLLM, probl
                     collect_logprobs=False,
                     observe_llm_calls=False,
                 )
-                logger.info(f"Created expert LLM for A2A: {expert_config.get('base_url')}")
+                logger.info(f"Created expert LLM for expert reward regression: {expert_config.get('base_url')}")
             else:
-                logger.warning("A2A enabled but no expert_model config found, disabling A2A")
+                logger.warning("Expert reward enabled but no expert_model config found, disabling expert reward")
         except Exception as e:
-            logger.error(f"Failed to create expert LLM: {e}, disabling A2A for this rollout")
+            logger.error(f"Failed to create expert LLM: {e}, disabling expert reward for this rollout")
             expert_llm = None
     training_texts = []
     metrics = UnifiedMetrics()
@@ -75,55 +67,19 @@ async def generate_unified_swe_rollout(cfg: DictConfig, llm: TrainableLLM, probl
     else:
         base_repo_path = '/tmp'
     
-    # Determine execution mode for each stage
-    # A2A requires self-eval to be enabled for confidence scoring
-    def should_use_a2a_for_stage(stage_name):
-        return (expert_llm is not None and 
-                cfg.swe.get('enable_a2a', False) and
-                cfg.swe.get(f'enable_{stage_name}_self_eval', False))
-    
-    def should_use_self_eval_for_stage(stage_name):
-        return cfg.swe.get(f'enable_{stage_name}_self_eval', False)
-    
     try:
         # Stage 1: Localization
         top_files = []
         if cfg.swe.get('enable_localization', False) or cfg.swe.get('run_localization', False):
             logger.info("Running localization stage")
-            
-            if should_use_a2a_for_stage('localization'):
-                logger.info("Using A2A mode for localization")
-                loc_result = await run_localization_a2a(cfg, llm, expert_llm, problem, session)
-                # Handle multiple training texts from A2A
-                if 'training_texts' in loc_result:
-                    training_texts.extend(loc_result['training_texts'])
-                elif loc_result.get('training_text'):
-                    training_texts.append(loc_result['training_text'])
-                
-                # If A2A was actually used, store initial metrics
-                if loc_result.get('a2a_enhanced'):
-                    metrics.localization_initial_mrr = loc_result.get('initial_mrr')
-                    metrics.localization_initial_recall = loc_result.get('initial_recall')
-                    metrics.localization_was_retried = True
-                    
-                    # Accumulate A2A token usage
-                    metrics.total_a2a_query_prompt_tokens += loc_result.get('a2a_query_prompt_tokens', 0)
-                    metrics.total_a2a_query_output_tokens += loc_result.get('a2a_query_output_tokens', 0)
-                    metrics.total_a2a_expert_prompt_tokens += loc_result.get('a2a_expert_prompt_tokens', 0)
-                    metrics.total_a2a_expert_output_tokens += loc_result.get('a2a_expert_output_tokens', 0)
-                    
-            elif should_use_self_eval_for_stage('localization'):
-                logger.info("Using self-eval mode for localization")
-                loc_result = await run_localization_with_self_eval(cfg, llm, problem, session)
-                if loc_result['training_text']:
-                    training_texts.append(loc_result['training_text'])
-                if loc_result.get('self_eval_result') and loc_result['self_eval_result'].get('training_text'):
-                    training_texts.append(loc_result['self_eval_result']['training_text'])
-            else:
-                logger.info("Using pure stage mode for localization")
-                loc_result = await run_localization(cfg, llm, problem, session)
-                if cfg.swe.get('enable_localization', False) and loc_result['training_text']:
-                    training_texts.append(loc_result['training_text'])
+            loc_result = await run_localization(cfg, llm, problem, session)
+            if cfg.swe.get('enable_localization', False) and loc_result['training_text']:
+                # Attach expert reward if available
+                if expert_llm is not None:
+                    expert_loc_result = await run_localization(cfg, expert_llm, problem, session)
+                    if expert_loc_result.get('training_text'):
+                        loc_result['training_text'].expert_reward = expert_loc_result['training_text'].reward
+                training_texts.append(loc_result['training_text'])
             
             # Update metrics (these are always final/post-enhancement metrics)
             loc_metrics = loc_result['metrics']
@@ -132,23 +88,13 @@ async def generate_unified_swe_rollout(cfg: DictConfig, llm: TrainableLLM, probl
             metrics.localization_num_queries = loc_metrics.get('num_queries', 0)
             metrics.localization_format_penalty = loc_metrics.get('format_penalty', 0.0)
             metrics.localization_recall = loc_metrics.get('localization_recall', 0.0)
-            
-            # Add self-eval metrics if available
-            if loc_result.get('self_eval_result'):
-                se_metrics = loc_result['self_eval_result']['metrics']
-                metrics.localization_self_eval_predicted_score = se_metrics.get('predicted_score', 0.0)
-                metrics.localization_self_eval_prediction_error = se_metrics.get('prediction_error', 1.0)
-                metrics.localization_self_eval_parsing_error = se_metrics.get('parsing_error', True)
+            metrics.localization_self_eval_parsing_error = False
+            metrics.localization_self_eval_prediction_error = 0.0
+            metrics.localization_self_eval_predicted_score = 0.0
             
             total_latency += loc_result['latency']
             all_prompt_tokens.append(loc_result['prompt_tokens'])
             all_output_tokens.append(loc_result['output_tokens'])
-            
-            # Add self-eval tokens if available
-            if loc_result.get('self_eval_result'):
-                total_latency += loc_result['self_eval_result']['latency']
-                all_prompt_tokens.append(loc_result['self_eval_result']['prompt_tokens'])
-                all_output_tokens.append(loc_result['self_eval_result']['output_tokens'])
             
             top_files = loc_result['top_files']
             
@@ -173,40 +119,14 @@ async def generate_unified_swe_rollout(cfg: DictConfig, llm: TrainableLLM, probl
                 enriched_context = enricher.enrich_files_on_demand(top_files, repo_path, base_commit)
                 
                 if enriched_context:
-                    if should_use_a2a_for_stage('file_selection'):
-                        logger.info("Using A2A mode for file selection")
-                        sel_result = await run_file_selection_a2a(cfg, llm, expert_llm, problem, enriched_context, session)
-                        # Handle multiple training texts from A2A
-                        if 'training_texts' in sel_result:
-                            training_texts.extend(sel_result['training_texts'])
-                        elif sel_result.get('training_text'):
-                            training_texts.append(sel_result['training_text'])
-                        
-                        # If A2A was actually used, store initial metrics
-                        if sel_result.get('a2a_enhanced'):
-                            metrics.selection_initial_precision = sel_result.get('initial_precision')
-                            metrics.selection_initial_recall = sel_result.get('initial_recall')
-                            metrics.selection_initial_f1 = sel_result.get('initial_f1')
-                            metrics.selection_was_retried = True
-                            
-                            # Accumulate A2A token usage
-                            metrics.total_a2a_query_prompt_tokens += sel_result.get('a2a_query_prompt_tokens', 0)
-                            metrics.total_a2a_query_output_tokens += sel_result.get('a2a_query_output_tokens', 0)
-                            metrics.total_a2a_expert_prompt_tokens += sel_result.get('a2a_expert_prompt_tokens', 0)
-                            metrics.total_a2a_expert_output_tokens += sel_result.get('a2a_expert_output_tokens', 0)
-                            
-                    elif should_use_self_eval_for_stage('file_selection'):
-                        logger.info("Using self-eval mode for file selection")
-                        sel_result = await run_file_selection_with_self_eval(cfg, llm, problem, enriched_context, session)
-                        if sel_result['training_text']:
-                            training_texts.append(sel_result['training_text'])
-                        if sel_result.get('self_eval_result') and sel_result['self_eval_result'].get('training_text'):
-                            training_texts.append(sel_result['self_eval_result']['training_text'])
-                    else:
-                        logger.info("Using pure stage mode for file selection")
-                        sel_result = await run_file_selection(cfg, llm, problem, enriched_context, session)
-                        if cfg.swe.get('enable_file_selection', False) and sel_result['training_text']:
-                            training_texts.append(sel_result['training_text'])
+                    logger.info("Using pure stage mode for file selection")
+                    sel_result = await run_file_selection(cfg, llm, problem, enriched_context, session)
+                    if cfg.swe.get('enable_file_selection', False) and sel_result['training_text']:
+                        if expert_llm is not None:
+                            expert_sel_result = await run_file_selection(cfg, expert_llm, problem, enriched_context, session)
+                            if expert_sel_result.get('training_text'):
+                                sel_result['training_text'].expert_reward = expert_sel_result['training_text'].reward
+                        training_texts.append(sel_result['training_text'])
                     
                     files_for_repair = sel_result.get('files_for_repair', [])
                     
@@ -216,23 +136,13 @@ async def generate_unified_swe_rollout(cfg: DictConfig, llm: TrainableLLM, probl
                     metrics.selection_recall = sel_metrics.get('selection_recall', 0.0)
                     metrics.selection_f1 = sel_metrics.get('selection_f1', 0.0)
                     metrics.selection_format_penalty = sel_metrics.get('format_penalty', 0.0)
-                    
-                    # Add self-eval metrics if available
-                    if sel_result.get('self_eval_result'):
-                        se_metrics = sel_result['self_eval_result']['metrics']
-                        metrics.selection_self_eval_predicted_score = se_metrics.get('predicted_score', 0.0)
-                        metrics.selection_self_eval_prediction_error = se_metrics.get('prediction_error', 1.0)
-                        metrics.selection_self_eval_parsing_error = se_metrics.get('parsing_error', True)
-                    
+                    metrics.selection_self_eval_parsing_error = False
+                    metrics.selection_self_eval_prediction_error = 0.0
+                    metrics.selection_self_eval_predicted_score = 0.0
+
                     total_latency += sel_result['latency']
                     all_prompt_tokens.append(sel_result['prompt_tokens'])
                     all_output_tokens.append(sel_result['output_tokens'])
-                    
-                    # Add self-eval tokens if available
-                    if sel_result.get('self_eval_result'):
-                        total_latency += sel_result['self_eval_result']['latency']
-                        all_prompt_tokens.append(sel_result['self_eval_result']['prompt_tokens'])
-                        all_output_tokens.append(sel_result['self_eval_result']['output_tokens'])
                 else:
                     logger.warning("File enrichment failed, using top 3 files")
                     files_for_repair = top_files[:3]
@@ -265,39 +175,14 @@ async def generate_unified_swe_rollout(cfg: DictConfig, llm: TrainableLLM, probl
                     if filepath in original_contents
                 }
             
-            if file_contents:
-                if should_use_a2a_for_stage('repair'):
-                    logger.info("Using A2A mode for repair")
-                    rep_result = await run_repair_a2a(cfg, llm, expert_llm, problem, file_contents, session)
-                    # Handle multiple training texts from A2A
-                    if 'training_texts' in rep_result:
-                        training_texts.extend(rep_result['training_texts'])
-                    elif rep_result.get('training_text'):
-                        training_texts.append(rep_result['training_text'])
-                    
-                    # If A2A was actually used, store initial metrics
-                    if rep_result.get('a2a_enhanced'):
-                        metrics.repair_initial_reward = rep_result.get('initial_reward')
-                        metrics.repair_initial_success = rep_result.get('initial_success')
-                        metrics.repair_was_retried = True
-                        
-                        # Accumulate A2A token usage
-                        metrics.total_a2a_query_prompt_tokens += rep_result.get('a2a_query_prompt_tokens', 0)
-                        metrics.total_a2a_query_output_tokens += rep_result.get('a2a_query_output_tokens', 0)
-                        metrics.total_a2a_expert_prompt_tokens += rep_result.get('a2a_expert_prompt_tokens', 0)
-                        metrics.total_a2a_expert_output_tokens += rep_result.get('a2a_expert_output_tokens', 0)
-                        
-                elif should_use_self_eval_for_stage('repair'):
-                    logger.info("Using self-eval mode for repair")
-                    rep_result = await run_repair_with_self_eval(cfg, llm, problem, file_contents, session)
-                    if rep_result['training_text']:
-                        training_texts.append(rep_result['training_text'])
-                    if rep_result.get('self_eval_result') and rep_result['self_eval_result'].get('training_text'):
-                        training_texts.append(rep_result['self_eval_result']['training_text'])
-                else:
+                if file_contents:
                     logger.info("Using pure stage mode for repair")
                     rep_result = await run_repair(cfg, llm, problem, file_contents, session)
                     if cfg.swe.get('enable_repair', False) and rep_result['training_text']:
+                        if expert_llm is not None:
+                            expert_rep_result = await run_repair(cfg, expert_llm, problem, file_contents, session)
+                            if expert_rep_result.get('training_text'):
+                                rep_result['training_text'].expert_reward = expert_rep_result['training_text'].reward
                         training_texts.append(rep_result['training_text'])
                 
                 # Update metrics (always final/post-enhancement)
@@ -305,23 +190,13 @@ async def generate_unified_swe_rollout(cfg: DictConfig, llm: TrainableLLM, probl
                 metrics.repair_reward = rep_metrics.get('reward')
                 metrics.repair_success = rep_metrics.get('success')
                 metrics.repair_format_error = rep_metrics.get('format_error')
-                
-                # Add self-eval metrics if available
-                if rep_result.get('self_eval_result'):
-                    se_metrics = rep_result['self_eval_result']['metrics']
-                    metrics.repair_self_eval_predicted_score = se_metrics.get('predicted_score', 0.0)
-                    metrics.repair_self_eval_prediction_error = se_metrics.get('prediction_error', 1.0)
-                    metrics.repair_self_eval_parsing_error = se_metrics.get('parsing_error', True)
-                
+                metrics.repair_self_eval_parsing_error = False
+                metrics.repair_self_eval_prediction_error = 0.0
+                metrics.repair_self_eval_predicted_score = 0.0
+
                 total_latency += rep_result['latency']
                 all_prompt_tokens.append(rep_result['prompt_tokens'])
                 all_output_tokens.append(rep_result['output_tokens'])
-                
-                # Add self-eval tokens if available
-                if rep_result.get('self_eval_result'):
-                    total_latency += rep_result['self_eval_result']['latency']
-                    all_prompt_tokens.append(rep_result['self_eval_result']['prompt_tokens'])
-                    all_output_tokens.append(rep_result['self_eval_result']['output_tokens'])
             else:
                 logger.error("No file contents available for repair")
                 metrics.repair_reward = 0

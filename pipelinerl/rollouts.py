@@ -39,6 +39,7 @@ class TrainingText(BaseModel):
     ref_logprobs: List[float] = Field(default_factory=list)
     input_ids: List[int] = Field(default_factory=list)
     labels: List[int] = Field(default_factory=list)
+    expert_reward: float | None = None
     group_id: str | None = None
     finished: bool = False
     prompt_tokens: int = Field(default=0)

@@ -63,6 +63,7 @@ class PipelineBatchEncoding(BaseModel):
     group_tokens: torch.FloatTensor
     num_labels: torch.FloatTensor 
     overflow: torch.FloatTensor
+    expert_rewards: torch.FloatTensor
     
     model_version: int
     sentinel: bool = False
@@ -96,7 +97,7 @@ class PipelineBatchEncoding(BaseModel):
             return v.int() # type: ignore
         return torch.tensor(v, dtype=torch.int)
     
-    @field_validator('rewards', 'advantages', 'ref_logprobs', 'old_logprobs', 'group_tokens', 'num_labels', 'overflow', 'pixel_values', mode='before')
+    @field_validator('rewards', 'expert_rewards', 'advantages', 'ref_logprobs', 'old_logprobs', 'group_tokens', 'num_labels', 'overflow', 'pixel_values', mode='before')
     @classmethod
     def convert_to_float_tensor(cls, v: List[float] | torch.Tensor | None, info) -> torch.FloatTensor | None:
         """Handle initialization of float tensors from different types."""
@@ -159,6 +160,7 @@ class PipelineBatchEncoding(BaseModel):
                 "labels": self.labels[:, bs[i]:bs[i + 1]],
                 "position_ids": self.position_ids[:, bs[i]:bs[i + 1]] if self.position_ids is not None else None,
                 "rewards": self.rewards[:, bs[i]:bs[i + 1]],
+                "expert_rewards": self.expert_rewards[:, bs[i]:bs[i + 1]],
                 "advantages": self.advantages[:, bs[i]:bs[i + 1]],
                 "ref_logprobs": self.ref_logprobs[:, bs[i]:bs[i + 1]],
                 "old_logprobs": self.old_logprobs[:, bs[i]:bs[i + 1]],
@@ -177,4 +179,3 @@ class PipelineBatchEncoding(BaseModel):
             slices.append(PipelineBatchEncoding(**result))
         return slices
         
-

@@ -149,6 +149,7 @@ def preprocess_fn(
             entry["reward"],
             entry["logprobs"],
             entry["ref_logprobs"],
+            expert_reward=entry.get("expert_reward"),
         )
     
     # Preserve visual fields if they exist

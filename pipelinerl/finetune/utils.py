@@ -45,6 +45,7 @@ def create_sentinel_batch(device, tokenizer=None, model_version=0) -> PipelineBa
         "group_tokens": torch.tensor(ones, dtype=torch.float).reshape(1, -1),
         "num_labels": torch.tensor(ones, dtype=torch.float).reshape(1, -1),
         "overflow": torch.tensor(zeros, dtype=torch.float).reshape(1, -1),
+        "expert_rewards": torch.tensor(zeros, dtype=torch.float).reshape(1, -1),
         "seq_boundaries": torch.tensor([0, length], dtype=torch.int)
     }
 
@@ -70,6 +71,7 @@ def create_sentinel_example(n_tokens: int, tokenizer=None, model_version=0) -> d
         "group_tokens": n_tokens * [1.0],
         "num_labels": n_tokens * [1.0], 
         "overflow": n_tokens * [0.0],
+        "expert_rewards": n_tokens * [0.0],
         "model_version": model_version,
     }
     return example

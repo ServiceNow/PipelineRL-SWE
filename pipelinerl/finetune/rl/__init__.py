@@ -32,6 +32,7 @@ RL_DATA_COLUMNS = [
     "advantages",
     "old_logprobs",
     "ref_logprobs",
+    "expert_rewards",
 ]
 
 
@@ -97,6 +98,10 @@ class RLConfig(BaseModel):
         default=0.0,
         description="Coefficient for the value loss in the final loss",
     )
+    expert_value_loss_coef: float = Field(
+        default=0.0,
+        description="Coefficient for the expert value loss in the final loss",
+    )
 
 
 def make_rl_data_callback(args, current_dir, rl_config, model):
@@ -152,7 +157,8 @@ def rl_step(
     masks = batch.labels != -100
     masks_shifted = masks[:, 1:]
 
-    has_value_head = hasattr(model, 'value_head')
+    has_value_head = hasattr(model, 'value_head') and config.value_loss_coef > 0
+    has_expert_value_head = hasattr(model, 'expert_value_head') and config.expert_value_loss_coef > 0
 
     # if we have position_ids, we are packing
     if batch.is_packed:
@@ -309,6 +315,18 @@ def rl_step(
     else:
         final_loss = policy_loss_total
 
+    if has_expert_value_head:
+        expert_values = outputs.expert_value[:, :-1]
+        expert_labels = batch.expert_rewards[:, 1:] if hasattr(batch, "expert_rewards") else None
+        if expert_labels is None:
+            raise ValueError("expert_rewards missing from batch while expert_value_head is present")
+        assert expert_values.shape == tokens_weights.shape, (
+            f"Expert values shape {expert_values.shape} does not match example weights shape {tokens_weights.shape}"
+        )
+        expert_value_loss = 0.5 * torch.square(expert_values - expert_labels) * tokens_weights
+        expert_value_loss = sum_sum(expert_value_loss, masks_shifted, segments)
+        final_loss = final_loss + config.expert_value_loss_coef * expert_value_loss
+
     # ensure loss is valid
     assert torch.isfinite(final_loss), f"Non-finite loss detected: {final_loss}"
 
@@ -373,6 +391,11 @@ def rl_step(
         stats["value_mse"] = sum_sum(
             torch.square(value_predictions - value_labels) / num_labels_in_seq, masks_shifted, segments
         ).item()
+    if has_expert_value_head:
+        stats["expert_value_loss"] = expert_value_loss.item()
+        stats["expert_value_mean"] = sum_sum(expert_values / num_labels_in_seq, masks_shifted, segments).item()
+        stats["expert_value_max"] = expert_values[masks_shifted].max().item() if masks_shifted.any() else 0.0
+        stats["expert_value_min"] = expert_values[masks_shifted].min().item() if masks_shifted.any() else 0.0
 
     return final_loss, stats
 
@@ -506,6 +529,7 @@ def prepare_rl_fields(
     reward: float,
     old_logprobs: list[float],
     ref_logprobs: list[float],
+    expert_reward: float | None = None,
 ) -> dict[str, Any]:
     """
     Convert reward per agent step to reward per token and add returns and advantages placeholders
@@ -522,4 +546,7 @@ def prepare_rl_fields(
     encoding["overflow"] = [0] * len(encoding["labels"])  # place holder
     encoding["group_tokens"] = [0] * len(encoding["labels"])  # place holder
     encoding["num_labels"] = [1 if label != -100 else 0 for label in encoding["labels"]]  # count only output tokens
+    # Expert reward defaults to the regular reward if not provided
+    expert_value = reward if expert_reward is None else expert_reward
+    encoding["expert_rewards"] = [expert_value] * len(encoding["labels"])
     return encoding
