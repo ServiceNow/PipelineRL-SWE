@@ -661,7 +661,7 @@ def run_actor_loop(cfg: DictConfig):
     llm_urls = str(cfg.me.llm_urls).split("+")
 
     expert_llm = None
-    if cfg.swe.get('enable_a2a', False):
+    if cfg.swe.get('enable_expert_reward', False):
         expert_llm_url = cfg.me.get('expert_llm_url', '')
         if expert_llm_url:
             expert_config = cfg.swe.get('expert_model', {})

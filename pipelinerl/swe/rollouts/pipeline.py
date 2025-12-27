@@ -26,7 +26,7 @@ async def generate_unified_swe_rollout(cfg: DictConfig, llm: TrainableLLM, probl
     the expert to collect an expert reward for auxiliary regression.
     """
     # Create expert LLM if not provided but configured
-    if expert_llm is None and cfg.swe.get('enable_a2a', False):
+    if expert_llm is None and cfg.swe.get('enable_expert_reward', False):
         try:
             expert_config = cfg.swe.get('expert_model', {})
             if expert_config:
@@ -47,11 +47,6 @@ async def generate_unified_swe_rollout(cfg: DictConfig, llm: TrainableLLM, probl
             expert_llm = None
     training_texts = []
     metrics = UnifiedMetrics()
-    
-    # Set abstention threshold from config (for statistics only)
-    abstention_threshold = getattr(cfg.swe, 'abstention_threshold', None)
-    if abstention_threshold is not None:
-        metrics.set_abstention_threshold(abstention_threshold)
     
     total_latency = 0.0
     all_prompt_tokens = []
@@ -88,9 +83,6 @@ async def generate_unified_swe_rollout(cfg: DictConfig, llm: TrainableLLM, probl
             metrics.localization_num_queries = loc_metrics.get('num_queries', 0)
             metrics.localization_format_penalty = loc_metrics.get('format_penalty', 0.0)
             metrics.localization_recall = loc_metrics.get('localization_recall', 0.0)
-            metrics.localization_self_eval_parsing_error = False
-            metrics.localization_self_eval_prediction_error = 0.0
-            metrics.localization_self_eval_predicted_score = 0.0
             
             total_latency += loc_result['latency']
             all_prompt_tokens.append(loc_result['prompt_tokens'])
@@ -136,9 +128,6 @@ async def generate_unified_swe_rollout(cfg: DictConfig, llm: TrainableLLM, probl
                     metrics.selection_recall = sel_metrics.get('selection_recall', 0.0)
                     metrics.selection_f1 = sel_metrics.get('selection_f1', 0.0)
                     metrics.selection_format_penalty = sel_metrics.get('format_penalty', 0.0)
-                    metrics.selection_self_eval_parsing_error = False
-                    metrics.selection_self_eval_prediction_error = 0.0
-                    metrics.selection_self_eval_predicted_score = 0.0
 
                     total_latency += sel_result['latency']
                     all_prompt_tokens.append(sel_result['prompt_tokens'])
@@ -190,9 +179,6 @@ async def generate_unified_swe_rollout(cfg: DictConfig, llm: TrainableLLM, probl
                 metrics.repair_reward = rep_metrics.get('reward')
                 metrics.repair_success = rep_metrics.get('success')
                 metrics.repair_format_error = rep_metrics.get('format_error')
-                metrics.repair_self_eval_parsing_error = False
-                metrics.repair_self_eval_prediction_error = 0.0
-                metrics.repair_self_eval_predicted_score = 0.0
 
                 total_latency += rep_result['latency']
                 all_prompt_tokens.append(rep_result['prompt_tokens'])

@@ -1,6 +1,6 @@
 defaults:
   - base
-  - override finetune: grpo
+  - override finetune: ppo
   - _self_
 
 # Override the rollout policy for localization
@@ -26,9 +26,6 @@ agent:
   max_prompt_length: 48000
   selection_max_prompt_length: 48000
   repair_max_prompt_length: 48000
-  # A2A agent settings
-  query_generation_max_prompt_length: 16000
-  expert_advice_max_prompt_length: 20000
 
 # Finetune settings optimized for localization
 finetune:
@@ -36,6 +33,7 @@ finetune:
   gradient_accumulation_passes: 512  # Adjust based on your setup
   rl:
     temperature: ${...llm.parameters.temperature}
+    expert_value_loss_coef: 0.1
 
 # LLM settings for localization
 llm:
@@ -73,18 +71,8 @@ swe:
   run_file_selection: false
   run_repair: true
   
-  # Self-evaluation flags (enable generic self-eval for each stage)
-  enable_localization_self_eval: false
-  enable_file_selection_self_eval: false
-  enable_repair_self_eval: true
-  
-  # A2A system configuration
-  enable_a2a: true
-  
-  # A2A trigger thresholds (when to consult expert model)
-  localization_a2a_trigger_threshold: 0.5
-  file_selection_a2a_trigger_threshold: 0.5  
-  repair_a2a_trigger_threshold: 0.5
+  # Expert model reward regression
+  enable_expert_reward: true
   
   # Expert model configuration (port 8280)
   expert_model:
@@ -100,12 +88,6 @@ swe:
   repo_path_train: /mnt/llmd/data/swegym/repos
   repo_path_test: /mnt/llmd/data/swebench_lite/repos
   
-  # Self-evaluation and repair settings
-  enable_self_eval: true
-  run_self_eval: true
-  
-  # Abstention threshold (config-fixed threshold for all stages)
-  abstention_threshold: 0.5  # Examples with self-eval score < 0.5 will be marked for abstention
 
 swe_preprocessor_args:
   repo_path: /mnt/llmd/data/swegym/repos

@@ -32,50 +32,6 @@ class UnifiedMetrics(BaseMetrics):
     repair_success: Optional[bool] = False         
     repair_format_error: Optional[bool] = False    
 
-    # === PRE-ENHANCEMENT METRICS (for A2A comparison) ===
-    # Only populated if A2A was actually triggered for that stage
-    
-    # Localization pre-enhancement
-    localization_initial_mrr: Optional[float] = 0.0
-    localization_initial_recall: Optional[float] = 0.0
-    
-    # File selection pre-enhancement
-    selection_initial_precision: Optional[float] = 0.0
-    selection_initial_recall: Optional[float] = 0.0
-    selection_initial_f1: Optional[float] = 0.0
-    
-    # Repair pre-enhancement
-    repair_initial_reward: Optional[float] = 0.0
-    repair_initial_success: Optional[bool] = False
-
-    # === GENERIC SELF-EVALUATION METRICS ===
-    
-    # Localization self-evaluation
-    localization_self_eval_predicted_score: Optional[float] = 0.0
-    localization_self_eval_prediction_error: Optional[float] = 1.0
-    localization_self_eval_parsing_error: Optional[bool] = True
-    
-    # File selection self-evaluation  
-    selection_self_eval_predicted_score: Optional[float] = 0.0
-    selection_self_eval_prediction_error: Optional[float] = 1.0
-    selection_self_eval_parsing_error: Optional[bool] = True
-    
-    # Repair self-evaluation
-    repair_self_eval_predicted_score: Optional[float] = 0.0
-    repair_self_eval_prediction_error: Optional[float] = 1.0
-    repair_self_eval_parsing_error: Optional[bool] = True
-
-    # === A2A TOKEN USAGE ===
-    # Aggregated across all stages that used A2A
-    
-    # Query generation tokens
-    total_a2a_query_prompt_tokens: Optional[int] = 0
-    total_a2a_query_output_tokens: Optional[int] = 0
-    
-    # Expert consultation tokens
-    total_a2a_expert_prompt_tokens: Optional[int] = 0
-    total_a2a_expert_output_tokens: Optional[int] = 0
-
     # === PIPELINE-WIDE METRICS ===
     
     # Pipeline success metrics
@@ -89,33 +45,12 @@ class UnifiedMetrics(BaseMetrics):
     selection_format_error: Optional[bool] = False
     repair_format_error: Optional[bool] = False
     
-    # === ABSTENTION METRICS (CONFIG-DRIVEN) ===
-    
-    # These will be computed based on a fixed threshold from config
-    # NOTE: This is ONLY for aggregate statistics, not for stopping the pipeline
-    abstention_threshold: Optional[float] = 0.5  # Can be set from config
-    
     # Override base class required fields
     reward: Optional[float] = 0.0                  
     success: Optional[bool] = False                
     no_error: Optional[bool] = True                
     no_answer: Optional[bool] = False             
 
-    localization_was_retried: Optional[bool] = False
-    selection_was_retried: Optional[bool] = False
-    repair_was_retried: Optional[bool] = False 
-    
-    localization_mrr_improvement: Optional[float] = 0.0
-    localization_recall_improvement: Optional[float] = 0.0
-    selection_precision_improvement: Optional[float] = 0.0
-    selection_recall_improvement: Optional[float] = 0.0
-    selection_f1_improvement: Optional[float] = 0.0
-    repair_reward_improvement: Optional[float] = 0.0
-
-    def set_abstention_threshold(self, threshold: float):
-        """Set the abstention threshold from config."""
-        self.abstention_threshold = threshold
-    
     def compute_derived_metrics(self):
         """Compute derived metrics after all stages have completed."""
         
@@ -143,29 +78,8 @@ class UnifiedMetrics(BaseMetrics):
         self.localization_format_error = (self.localization_format_penalty or 0) > 0
         self.selection_format_error = (self.selection_format_penalty or 0) > 0
 
-        if self.localization_was_retried:
-            if self.localization_initial_mrr is not None and self.localization_mrr is not None:
-                self.localization_mrr_improvement = self.localization_mrr - self.localization_initial_mrr
-            if self.localization_initial_recall is not None and self.localization_recall is not None:
-                self.localization_recall_improvement = self.localization_recall - self.localization_initial_recall
-        
-        if self.selection_was_retried:
-            if self.selection_initial_precision is not None and self.selection_precision is not None:
-                self.selection_precision_improvement = self.selection_precision - self.selection_initial_precision
-            if self.selection_initial_recall is not None and self.selection_recall is not None:
-                self.selection_recall_improvement = self.selection_recall - self.selection_initial_recall
-            if self.selection_initial_f1 is not None and self.selection_f1 is not None:
-                self.selection_f1_improvement = self.selection_f1 - self.selection_initial_f1
-        
-        if self.repair_was_retried:
-            if self.repair_initial_reward is not None and self.repair_reward is not None:
-                self.repair_reward_improvement = self.repair_reward - self.repair_initial_reward
-        
         self.no_error = not any([
             self.localization_format_error,
             self.selection_format_error, 
-            self.repair_format_error or False,
-            self.localization_self_eval_parsing_error or False,
-            self.selection_self_eval_parsing_error or False,
-            self.repair_self_eval_parsing_error or False
+            self.repair_format_error or False
         ])
