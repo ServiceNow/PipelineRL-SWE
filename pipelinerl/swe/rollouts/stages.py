@@ -25,7 +25,14 @@ from .base import execute_agent_with_retry
 logger = logging.getLogger(__name__)
 
 
-async def run_localization(cfg: DictConfig, llm: TrainableLLM, problem: Dict, session, expert_feedback=None):
+async def run_localization(
+    cfg: DictConfig,
+    llm: TrainableLLM,
+    problem: Dict,
+    session,
+    expert_feedback=None,
+    collect_training_text: bool = True,
+):
     """Run core localization stage with optional expert feedback."""
     agent = LocalizationAgent.create(
         llm=llm,
@@ -118,14 +125,17 @@ async def run_localization(cfg: DictConfig, llm: TrainableLLM, problem: Dict, se
         if hasattr(cfg.actor, 'discount_factor'):
             reward *= cfg.actor.discount_factor ** llm_call.output_length_tokens
 
-        training_text = make_training_text(llm, llm_call)
-        training_text.reward = reward if (reward is not None and not math.isnan(reward)) else 0.0
+        training_text = None
+        if collect_training_text:
+            training_text = make_training_text(llm, llm_call)
+            training_text.reward = reward if (reward is not None and not math.isnan(reward)) else 0.0
         
         return {
             'training_text': training_text,
             'top_files': top_files,
             'queries': queries if queries else [],  # Add queries to result
             'metrics': metrics_dict,
+            'reward': reward if (reward is not None and not math.isnan(reward)) else 0.0,
             'latency': latency,
             'prompt_tokens': llm_call.prompt_length_tokens,
             'output_tokens': llm_call.output_length_tokens,
@@ -141,7 +151,15 @@ async def run_localization(cfg: DictConfig, llm: TrainableLLM, problem: Dict, se
         }
 
 
-async def run_file_selection(cfg: DictConfig, llm: TrainableLLM, problem: Dict, enriched_context: Dict, session, expert_feedback=None):
+async def run_file_selection(
+    cfg: DictConfig,
+    llm: TrainableLLM,
+    problem: Dict,
+    enriched_context: Dict,
+    session,
+    expert_feedback=None,
+    collect_training_text: bool = True,
+):
     """Run core file selection stage with optional expert feedback."""
     agent = FileSelectionAgent.create(
         llm=llm,
@@ -210,14 +228,17 @@ async def run_file_selection(cfg: DictConfig, llm: TrainableLLM, problem: Dict, 
         if hasattr(cfg.actor, 'discount_factor'):
             reward *= cfg.actor.discount_factor ** llm_call.output_length_tokens
 
-        training_text = make_training_text(llm, llm_call)
-        training_text.reward = reward if (reward is not None and not math.isnan(reward)) else 0.0
+        training_text = None
+        if collect_training_text:
+            training_text = make_training_text(llm, llm_call)
+            training_text.reward = reward if (reward is not None and not math.isnan(reward)) else 0.0
         
         return {
             'training_text': training_text,
             'selected_files': selected_files,
             'files_for_repair': files_for_repair,
             'metrics': metrics_dict,
+            'reward': reward if (reward is not None and not math.isnan(reward)) else 0.0,
             'latency': latency,
             'prompt_tokens': llm_call.prompt_length_tokens,
             'output_tokens': llm_call.output_length_tokens,
@@ -233,7 +254,15 @@ async def run_file_selection(cfg: DictConfig, llm: TrainableLLM, problem: Dict, 
         }
 
 
-async def run_repair(cfg: DictConfig, llm: TrainableLLM, problem: Dict, file_contents: Dict, session, expert_feedback=None):
+async def run_repair(
+    cfg: DictConfig,
+    llm: TrainableLLM,
+    problem: Dict,
+    file_contents: Dict,
+    session,
+    expert_feedback=None,
+    collect_training_text: bool = True,
+):
     """Run core repair stage with optional expert feedback."""
     agent = RepairAgent.create(
         llm=llm,
@@ -274,8 +303,10 @@ async def run_repair(cfg: DictConfig, llm: TrainableLLM, problem: Dict, file_con
         if hasattr(cfg.actor, 'discount_factor'):
             reward *= cfg.actor.discount_factor ** llm_call.output_length_tokens
         
-        training_text = make_training_text(llm, llm_call)
-        training_text.reward = reward if (reward is not None and not math.isnan(reward)) else 0.0
+        training_text = None
+        if collect_training_text:
+            training_text = make_training_text(llm, llm_call)
+            training_text.reward = reward if (reward is not None and not math.isnan(reward)) else 0.0
         
         success_threshold = getattr(cfg.actor, 'success_threshold', 0.8)
         success = reward > success_threshold
@@ -292,6 +323,7 @@ async def run_repair(cfg: DictConfig, llm: TrainableLLM, problem: Dict, file_con
             'training_text': training_text,
             'repair_edits': edits,
             'metrics': metrics_dict,
+            'reward': reward if (reward is not None and not math.isnan(reward)) else 0.0,
             'latency': latency,
             'prompt_tokens': llm_call.prompt_length_tokens,
             'output_tokens': llm_call.output_length_tokens,

@@ -670,7 +670,7 @@ def run_actor_loop(cfg: DictConfig):
                     expert_llm = TrainableLLM(
                         base_url=expert_llm_url,
                         model_name=expert_config.get('model_name', 'expert-model'),
-                        tokenizer_name=expert_config.get('model_name', 'expert-model'),
+                        tokenizer_name=expert_config.get('tokenizer_name', cfg.model_path),
                         parameters=expert_config.get('parameters', {'max_tokens': 64000, 'temperature': 1.0}),
                         use_cache=False,
                         collect_logprobs=False,

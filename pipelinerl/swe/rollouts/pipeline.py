@@ -33,7 +33,7 @@ async def generate_unified_swe_rollout(cfg: DictConfig, llm: TrainableLLM, probl
                 expert_llm = TrainableLLM(
                     base_url=expert_config.get('base_url', 'http://localhost:8280'),
                     model_name=expert_config.get('model_name', 'expert-model'),
-                    tokenizer_name=expert_config.get('model_name', 'expert-model'),
+                    tokenizer_name=expert_config.get('tokenizer_name', cfg.model_path),
                     parameters=expert_config.get('parameters', {'max_tokens': 4000, 'temperature': 0.7}),
                     use_cache=False,
                     collect_logprobs=False,
@@ -71,9 +71,10 @@ async def generate_unified_swe_rollout(cfg: DictConfig, llm: TrainableLLM, probl
             if cfg.swe.get('enable_localization', False) and loc_result['training_text']:
                 # Attach expert reward if available
                 if expert_llm is not None:
-                    expert_loc_result = await run_localization(cfg, expert_llm, problem, session)
-                    if expert_loc_result.get('training_text'):
-                        loc_result['training_text'].expert_reward = expert_loc_result['training_text'].reward
+                    expert_loc_result = await run_localization(
+                        cfg, expert_llm, problem, session, collect_training_text=False
+                    )
+                    loc_result['training_text'].expert_reward = expert_loc_result.get('reward', 0.0)
                 training_texts.append(loc_result['training_text'])
             
             # Update metrics (these are always final/post-enhancement metrics)
@@ -115,9 +116,10 @@ async def generate_unified_swe_rollout(cfg: DictConfig, llm: TrainableLLM, probl
                     sel_result = await run_file_selection(cfg, llm, problem, enriched_context, session)
                     if cfg.swe.get('enable_file_selection', False) and sel_result['training_text']:
                         if expert_llm is not None:
-                            expert_sel_result = await run_file_selection(cfg, expert_llm, problem, enriched_context, session)
-                            if expert_sel_result.get('training_text'):
-                                sel_result['training_text'].expert_reward = expert_sel_result['training_text'].reward
+                            expert_sel_result = await run_file_selection(
+                                cfg, expert_llm, problem, enriched_context, session, collect_training_text=False
+                            )
+                            sel_result['training_text'].expert_reward = expert_sel_result.get('reward', 0.0)
                         training_texts.append(sel_result['training_text'])
                     
                     files_for_repair = sel_result.get('files_for_repair', [])
@@ -169,9 +171,10 @@ async def generate_unified_swe_rollout(cfg: DictConfig, llm: TrainableLLM, probl
                 rep_result = await run_repair(cfg, llm, problem, file_contents, session)
                 if cfg.swe.get('enable_repair', False) and rep_result['training_text']:
                     if expert_llm is not None:
-                        expert_rep_result = await run_repair(cfg, expert_llm, problem, file_contents, session)
-                        if expert_rep_result.get('training_text'):
-                            rep_result['training_text'].expert_reward = expert_rep_result['training_text'].reward
+                        expert_rep_result = await run_repair(
+                            cfg, expert_llm, problem, file_contents, session, collect_training_text=False
+                        )
+                        rep_result['training_text'].expert_reward = expert_rep_result.get('reward', 0.0)
                     training_texts.append(rep_result['training_text'])
 
                 # Update metrics (always final/post-enhancement)

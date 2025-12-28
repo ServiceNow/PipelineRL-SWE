@@ -78,6 +78,7 @@ swe:
   expert_model:
     base_url: "http://localhost:8280"
     model_name: "mistralai/Devstral-Small-2505"
+    tokenizer_name: ${model_path}
     parameters:
       max_tokens: 8000
       temperature: 1.0
