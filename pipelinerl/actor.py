@@ -39,6 +39,13 @@ from .utils import (
     wait_for_environments,
     wait_for_inference_servers,
 )
+from pipelinerl.swe.handoff_eval import (
+    HandoffRecord,
+    ValueScorer,
+    compute_handoff_curve,
+    summarize_handoff_curve,
+    write_handoff_curve,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -277,6 +284,8 @@ class ActorLoop:
         trainer_state: TrainerState,
         is_training: bool = True,
         expert_llm: TrainableLLM = None,
+        exp_path: Path | None = None,
+        value_model_path: str | None = None,
     ) -> None:
         self.data_stream = data_stream
         self.trainer_state = trainer_state
@@ -289,6 +298,16 @@ class ActorLoop:
         self.is_scheduling_paused = False
         self.debug_mode = bool(cfg.debug.mode)
         self.expert_llm = expert_llm
+        self.exp_path = exp_path
+        self.value_scorer = None
+        self.handoff_eval_cfg = cfg.swe.get("handoff_eval", {})
+
+        if not is_training and self.handoff_eval_cfg.get("enabled", False):
+            if value_model_path:
+                self.value_scorer = ValueScorer(value_model_path)
+                logger.info("Initialized value scorer for handoff evaluation")
+            else:
+                logger.warning("handoff_eval enabled but value_model_path is not set")
 
         # Determine the number of processes to use
         num_processes = min(self.cfg.actor.rollout_workers, len(self.llms))
@@ -359,6 +378,20 @@ class ActorLoop:
                     self.stats[k][dataset_name][group_id].append(v)
                 else:
                     raise ValueError(f"Unsupported metric type: {type(v)} for key {k}")
+
+            for training_text in result.training_texts:
+                stage = training_text.metadata.get("stage")
+                if stage != "repair":
+                    continue
+                if training_text.expert_reward is not None:
+                    self.stats["repair_expert_reward"][dataset_name][group_id].append(training_text.expert_reward)
+                if self.value_scorer is not None:
+                    scores = self.value_scorer.score_training_text(training_text)
+                    for key, value in scores.items():
+                        if value is None:
+                            continue
+                        stats_key = f"repair_{key}"
+                        self.stats[stats_key][dataset_name][group_id].append(value)
         
         prompt_length_tokens = [training_text.prompt_tokens for result in rollout_results for training_text in result.training_texts]
         output_length_tokens = [training_text.output_tokens for result in rollout_results for training_text in result.training_texts]
@@ -639,6 +672,75 @@ class ActorLoop:
         abstention_stats = self.compute_abstention_stats()
         stats.update({f"{split_name}{k}": v for k, v in abstention_stats.items()})
 
+        if not self.is_training and self.handoff_eval_cfg.get("enabled", False):
+            policy_key = self.handoff_eval_cfg.get("policy_score_key", "repair_policy_value_mean")
+            expert_key = self.handoff_eval_cfg.get("expert_score_key", "repair_expert_value_prompt_last")
+            reward_key = "repair_reward"
+            expert_reward_key = "repair_expert_reward"
+
+            def build_thresholds() -> list[float]:
+                thresholds = self.handoff_eval_cfg.get("thresholds")
+                if thresholds:
+                    return [float(t) for t in thresholds]
+                start = float(self.handoff_eval_cfg.get("threshold_start", 0.0))
+                stop = float(self.handoff_eval_cfg.get("threshold_stop", 1.0))
+                step = float(self.handoff_eval_cfg.get("threshold_step", 0.05))
+                count = int(round((stop - start) / step)) + 1
+                return [round(start + i * step, 6) for i in range(count)]
+
+            def iter_grouped(stats_key: str):
+                for dataset, groups in self.stats.get(stats_key, {}).items():
+                    for group, values in groups.items():
+                        yield dataset, group, values
+
+            records: list[HandoffRecord] = []
+            for dataset, group, policy_scores in iter_grouped(policy_key):
+                expert_scores = self.stats.get(expert_key, {}).get(dataset, {}).get(group, [])
+                policy_rewards = self.stats.get(reward_key, {}).get(dataset, {}).get(group, [])
+                expert_rewards = self.stats.get(expert_reward_key, {}).get(dataset, {}).get(group, [])
+
+                lengths = [len(policy_scores), len(expert_scores), len(policy_rewards)]
+                if expert_rewards:
+                    lengths.append(len(expert_rewards))
+                min_len = min(lengths) if lengths else 0
+                if min_len == 0:
+                    continue
+
+                for idx in range(min_len):
+                    records.append(
+                        HandoffRecord(
+                            policy_score=policy_scores[idx],
+                            expert_score=expert_scores[idx],
+                            policy_reward=policy_rewards[idx] if idx < len(policy_rewards) else None,
+                            expert_reward=expert_rewards[idx] if idx < len(expert_rewards) else None,
+                        )
+                    )
+
+            if records:
+                thresholds = build_thresholds()
+                handoff_margin = float(self.cfg.swe.get("abstain", {}).get("handoff_margin", 0.0))
+                quality_threshold = self.cfg.swe.get("abstain", {}).get("quality_threshold")
+                if quality_threshold is not None:
+                    quality_threshold = float(quality_threshold)
+
+                curve = compute_handoff_curve(records, thresholds, handoff_margin)
+                summary = summarize_handoff_curve(curve)
+
+                stats[f"{split_name}handoff_best_threshold"] = summary.get("best_threshold")
+                stats[f"{split_name}handoff_best_avg_reward"] = summary.get("best_avg_reward")
+                if quality_threshold is not None:
+                    quality_curve = compute_handoff_curve(records, [quality_threshold], handoff_margin)
+                    if quality_curve:
+                        stats[f"{split_name}handoff_threshold"] = quality_threshold
+                        stats[f"{split_name}handoff_avg_reward"] = quality_curve[0].get("avg_reward")
+                        stats[f"{split_name}handoff_attempt_rate"] = quality_curve[0].get("attempt_rate")
+                        stats[f"{split_name}handoff_handoff_rate"] = quality_curve[0].get("handoff_rate")
+
+                if self.handoff_eval_cfg.get("log_curves", False) and self.exp_path is not None:
+                    trainer_version = loop_stats.get("trainer_model_version", "unknown")
+                    curve_path = self.exp_path / "actor" / "handoff_eval" / f"handoff_curve_{trainer_version}.json"
+                    write_handoff_curve(curve_path, curve)
+
         if self.cfg.wandb.use_wandb:
             wandb.log({f"actor/{k}": v for k, v in stats.items()})
         stats_writer.write(stats)
@@ -712,6 +814,11 @@ def run_actor_loop(cfg: DictConfig):
         actor_model_path = finetune_model_path
     else:
         actor_model_path = cfg.model_path
+
+    handoff_cfg = cfg.swe.get("handoff_eval", {})
+    value_model_path = None
+    if handoff_cfg.get("enabled", False):
+        value_model_path = handoff_cfg.get("value_model_path", str(actor_model_path))
     
     train_llms = [
         TrainableLLM(
@@ -752,7 +859,14 @@ def run_actor_loop(cfg: DictConfig):
         trainer_state.wait_for_model_version()
 
     train_loop = ActorLoop(
-        data_stream=data_stream, cfg=cfg, trainer_state=trainer_state, stats_stream=stats_stream, llms=train_llms, expert_llm=expert_llm
+        data_stream=data_stream,
+        cfg=cfg,
+        trainer_state=trainer_state,
+        stats_stream=stats_stream,
+        llms=train_llms,
+        expert_llm=expert_llm,
+        exp_path=exp_path,
+        value_model_path=value_model_path,
     )
     train_loop_run = train_loop.run(
         dataset=train_dataset,
@@ -765,6 +879,8 @@ def run_actor_loop(cfg: DictConfig):
         llms=test_llms,
         is_training=False,
         expert_llm=expert_llm,
+        exp_path=exp_path,
+        value_model_path=value_model_path,
     )
     test_loop_run = None
 

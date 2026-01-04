@@ -132,6 +132,36 @@ def linear_decay_coef(current_step: int, max_step: int, initial_coef: float, fin
     return initial_coef + (final_coef - initial_coef) * current_step / max_step
 
 
+def build_last_prompt_token_mask(
+    labels: torch.Tensor,
+    segments: list | None,
+) -> torch.Tensor:
+    """
+    Build a mask that selects the last prompt token (just before the first output token)
+    for each sequence. Works for both packed and unpacked batches.
+    """
+    mask = torch.zeros_like(labels, dtype=torch.bool)
+
+    def mark_last_prompt(row_idx: int, start: int, end: int) -> None:
+        row_labels = labels[row_idx, start:end]
+        output_idx = (row_labels != -100).nonzero(as_tuple=True)[0]
+        if output_idx.numel() == 0:
+            return
+        last_prompt = start + int(output_idx[0].item()) - 1
+        if last_prompt >= start:
+            mask[row_idx, last_prompt] = True
+
+    if segments:
+        # packed batches have a single row and explicit segments
+        for start, end in segments:
+            mark_last_prompt(0, int(start), int(end))
+    else:
+        for row_idx in range(labels.shape[0]):
+            mark_last_prompt(row_idx, 0, labels.shape[1])
+
+    return mask
+
+
 def rl_step(
     model: PreTrainedModel,
     batch: PipelineBatchEncoding,
@@ -316,15 +346,29 @@ def rl_step(
         final_loss = policy_loss_total
 
     if has_expert_value_head:
-        expert_values = outputs.expert_value[:, :-1]
-        expert_labels = batch.expert_rewards[:, 1:] if hasattr(batch, "expert_rewards") else None
+        expert_values = outputs.expert_value
+        expert_labels = batch.expert_rewards if hasattr(batch, "expert_rewards") else None
         if expert_labels is None:
             raise ValueError("expert_rewards missing from batch while expert_value_head is present")
-        assert expert_values.shape == tokens_weights.shape, (
-            f"Expert values shape {expert_values.shape} does not match example weights shape {tokens_weights.shape}"
+
+        # Train expert value head on the last prompt token only (prompt-only estimate).
+        expert_prompt_mask = build_last_prompt_token_mask(batch.labels, segments)
+
+        if config.group_normalization:
+            prompt_tokens_weights = torch.ones_like(batch.group_tokens) / batch.group_tokens
+        else:
+            prompt_tokens_weights = torch.ones_like(batch.group_tokens) / config.batch_size
+
+        if config.overlong_filtering:
+            overflow_full = batch.overflow
+            prompt_tokens_weights = prompt_tokens_weights * (1 - overflow_full)
+
+        assert expert_values.shape == expert_labels.shape, (
+            f"Expert values shape {expert_values.shape} does not match expert labels shape {expert_labels.shape}"
         )
-        expert_value_loss = 0.5 * torch.square(expert_values - expert_labels) * tokens_weights
-        expert_value_loss = sum_sum(expert_value_loss, masks_shifted, segments)
+
+        expert_value_loss = 0.5 * torch.square(expert_values - expert_labels) * prompt_tokens_weights
+        expert_value_loss = sum_sum(expert_value_loss, expert_prompt_mask, segments)
         final_loss = final_loss + config.expert_value_loss_coef * expert_value_loss
 
     # ensure loss is valid
@@ -393,9 +437,9 @@ def rl_step(
         ).item()
     if has_expert_value_head:
         stats["expert_value_loss"] = expert_value_loss.item()
-        stats["expert_value_mean"] = sum_sum(expert_values / num_labels_in_seq, masks_shifted, segments).item()
-        stats["expert_value_max"] = expert_values[masks_shifted].max().item() if masks_shifted.any() else 0.0
-        stats["expert_value_min"] = expert_values[masks_shifted].min().item() if masks_shifted.any() else 0.0
+        stats["expert_value_mean"] = sum_sum(expert_values, expert_prompt_mask, segments).item()
+        stats["expert_value_max"] = expert_values[expert_prompt_mask].max().item() if expert_prompt_mask.any() else 0.0
+        stats["expert_value_min"] = expert_values[expert_prompt_mask].min().item() if expert_prompt_mask.any() else 0.0
 
     return final_loss, stats
 

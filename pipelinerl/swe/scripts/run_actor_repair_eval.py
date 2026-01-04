@@ -56,15 +56,21 @@ def _encode_chat_for_value(tokenizer, messages: List[Dict[str, str]], response: 
     return prompt_ids, full_ids
 
 
-def _compute_value_scores(tokenizer, model, device, messages, response) -> tuple[float | None, float | None]:
-    """Return (mean_value, last_value) for the response tokens."""
+def _compute_value_scores(
+    tokenizer,
+    model,
+    device,
+    messages,
+    response,
+) -> tuple[float | None, float | None, float | None]:
+    """Return (policy_mean, policy_last, expert_prompt_last)."""
     if not messages or response is None:
-        return None, None
+        return None, None, None
     try:
         prompt_ids, full_ids = _encode_chat_for_value(tokenizer, messages, response)
     except Exception as exc:  # pylint: disable=broad-except
         logger.warning("Value scoring failed to build inputs: %s", exc)
-        return None, None
+        return None, None, None
 
     prompt_len = prompt_ids.shape[1]
     input_ids = full_ids.to(device)
@@ -78,12 +84,16 @@ def _compute_value_scores(tokenizer, model, device, messages, response) -> tuple
             return_dict=True,
         )
     values = outputs.value.squeeze(0)
+    expert_values = outputs.expert_value.squeeze(0) if outputs.expert_value is not None else None
     if values.shape[0] <= prompt_len:
-        return None, None
+        return None, None, None
     response_values = values[prompt_len:]
     mean_val = response_values.mean().item()
     last_val = response_values[-1].item()
-    return mean_val, last_val
+    expert_prompt_last = None
+    if expert_values is not None and prompt_len > 0:
+        expert_prompt_last = expert_values[prompt_len - 1].item()
+    return mean_val, last_val, expert_prompt_last
 
 
 def _local_chat_completion(model, tokenizer, device, messages, parameters):
@@ -191,7 +201,9 @@ async def _evaluate_problem(
             self_eval_output
         )
 
-    mean_value, last_value = _compute_value_scores(tokenizer, value_model, device, repair_messages, repair_text)
+    mean_value, last_value, expert_prompt_last = _compute_value_scores(
+        tokenizer, value_model, device, repair_messages, repair_text
+    )
 
     record: Dict[str, Any] = {
         "problem_id": get_problem_id(problem),
@@ -219,6 +231,7 @@ async def _evaluate_problem(
         "self_eval_prompt": self_eval_messages if eval_cfg.get("run_self_eval", True) else None,
         "value_score_mean": mean_value,
         "value_score_last": last_value,
+        "expert_value_prompt_last": expert_prompt_last,
     }
 
     return record
@@ -376,7 +389,7 @@ async def _evaluate_reuse(cfg: DictConfig) -> None:
                         self_eval_output
                     )
 
-                    mean_value, last_value = _compute_value_scores(
+                    mean_value, last_value, expert_prompt_last = _compute_value_scores(
                         tokenizer, value_model, device, self_eval_messages, repair_text
                     )
 
@@ -393,6 +406,7 @@ async def _evaluate_reuse(cfg: DictConfig) -> None:
                             "self_eval_prompt": self_eval_messages,
                             "value_score_mean": mean_value,
                             "value_score_last": last_value,
+                            "expert_value_prompt_last": expert_prompt_last,
                         }
                     )
                     sink.write(json.dumps(record) + "\n")

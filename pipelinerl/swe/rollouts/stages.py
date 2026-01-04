@@ -129,6 +129,9 @@ async def run_localization(
         if collect_training_text:
             training_text = make_training_text(llm, llm_call)
             training_text.reward = reward if (reward is not None and not math.isnan(reward)) else 0.0
+            training_text.metadata["stage"] = "localization"
+            training_text.metadata["dataset"] = problem.get("dataset")
+            training_text.metadata["problem_id"] = problem.get("problem_id") or problem.get("instance_id")
         
         return {
             'training_text': training_text,
@@ -232,6 +235,9 @@ async def run_file_selection(
         if collect_training_text:
             training_text = make_training_text(llm, llm_call)
             training_text.reward = reward if (reward is not None and not math.isnan(reward)) else 0.0
+            training_text.metadata["stage"] = "selection"
+            training_text.metadata["dataset"] = problem.get("dataset")
+            training_text.metadata["problem_id"] = problem.get("problem_id") or problem.get("instance_id")
         
         return {
             'training_text': training_text,
@@ -307,6 +313,9 @@ async def run_repair(
         if collect_training_text:
             training_text = make_training_text(llm, llm_call)
             training_text.reward = reward if (reward is not None and not math.isnan(reward)) else 0.0
+            training_text.metadata["stage"] = "repair"
+            training_text.metadata["dataset"] = problem.get("dataset")
+            training_text.metadata["problem_id"] = problem.get("problem_id") or problem.get("instance_id")
         
         success_threshold = getattr(cfg.actor, 'success_threshold', 0.8)
         success = reward > success_threshold

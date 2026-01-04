@@ -32,8 +32,8 @@ python pipelinerl/swe/scripts/analyze_handoff.py \
   --actor_glob="${ACTOR_EVAL_JSONL}" \
   --expert_jsonl="${EXPERT_JSONL}" \
   --output_path="${ANALYSIS_OUTPUT}" \
-  --small_token_cost_per_1k=0.15 \
-  --expert_token_cost_per_1k=1.20
+  --expert_score_key="expert_value_prompt_last" \
+  --handoff_margin=0.0
 
 if [[ ! -f "${ANALYSIS_OUTPUT}" ]]; then
   echo "ERROR: Expected ${ANALYSIS_OUTPUT} but it was not created" >&2

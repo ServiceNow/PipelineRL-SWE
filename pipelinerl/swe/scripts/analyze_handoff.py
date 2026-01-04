@@ -14,6 +14,8 @@ except Exception:
     MATPLOTLIB_AVAILABLE = False
 from tqdm import tqdm
 
+from pipelinerl.swe.handoff_eval import HandoffRecord, compute_handoff_curve, summarize_handoff_curve
+
 logger = logging.getLogger(__name__)
 
 
@@ -96,6 +98,10 @@ def _collect_legacy_actor_records(actor_files: List[Path]) -> Dict[str, Dict[str
             continue
         records.setdefault(problem_id, {"dataset": meta.get("dataset"), "model_version": target_version})
         records[problem_id][stage] = entry
+        if stage in {"repair", "repair_self_eval"}:
+            for score_key in ("value_score_mean", "value_score_last", "expert_value_prompt_last"):
+                if score_key in entry:
+                    records[problem_id][score_key] = entry.get(score_key)
 
     pbar.close()
     return records
@@ -149,6 +155,8 @@ def _collect_direct_actor_records(actor_files: List[Path]) -> Dict[str, Dict[str
                 if "value_score_mean" in entry or "value_score_last" in entry:
                     record["value_score_mean"] = entry.get("value_score_mean")
                     record["value_score_last"] = entry.get("value_score_last")
+                if "expert_value_prompt_last" in entry:
+                    record["expert_value_prompt_last"] = entry.get("expert_value_prompt_last")
                 records[problem_id] = record
     pbar.close()
     return records
@@ -198,10 +206,6 @@ def _frange(start: float, stop: float, step: float) -> List[float]:
     return values
 
 
-def _to_tokens(entry: Dict[str, Any]) -> int:
-    return int(entry.get("prompt_tokens", 0) + entry.get("output_tokens", 0))
-
-
 def _entry_reward(entry: Dict[str, Any]) -> float:
     if not entry:
         return 0.0
@@ -231,132 +235,11 @@ def _merge_records(actor_records: Dict[str, Dict[str, Any]], expert_records: Dic
             "repair_self_eval": data.get("repair_self_eval"),
             "expert": expert_records[problem_id],
         }
-        for key in ("value_score_mean", "value_score_last"):
+        for key in ("value_score_mean", "value_score_last", "expert_value_prompt_last"):
             if key in data:
                 merged_entry[key] = data[key]
         merged[problem_id] = merged_entry
     return merged
-
-
-def compute_handoff_curve(
-    records: Dict[str, Dict[str, Any]],
-    thresholds: List[float],
-    small_token_cost: float,
-    expert_token_cost: float,
-    score_key: str,
-) -> List[Dict[str, Any]]:
-    total_problems = len(records)
-    if total_problems == 0:
-        raise ValueError("No overlapping problems between actor and expert results")
-
-    per_problem_small_tokens: Dict[str, int] = {}
-    for pid, data in records.items():
-        repair_tokens = _to_tokens(data["repair"])
-        self_eval_tokens = 0
-        if data.get("repair_self_eval"):
-            self_eval_tokens = _to_tokens(data["repair_self_eval"])
-        per_problem_small_tokens[pid] = repair_tokens + self_eval_tokens
-
-    results = []
-    for threshold in thresholds:
-        total_tokens = 0.0
-        total_reward = 0.0
-        total_cost = 0.0
-        handoffs = 0
-
-        for pid, data in records.items():
-            predicted = data.get(score_key)
-            if predicted is None:
-                continue
-            small_tokens = per_problem_small_tokens[pid]
-            small_reward = _entry_reward(data["repair"])
-            small_cost = (small_tokens / 1000.0) * small_token_cost
-
-            use_expert = predicted < threshold
-            if use_expert:
-                expert_entry = data["expert"]
-                expert_tokens = _to_tokens(expert_entry)
-                total_tokens += small_tokens + expert_tokens
-                total_reward += _entry_reward(expert_entry)
-                expert_cost = (expert_tokens / 1000.0) * expert_token_cost
-                total_cost += small_cost + expert_cost
-                handoffs += 1
-            else:
-                total_tokens += small_tokens
-                total_reward += small_reward
-                total_cost += small_cost
-
-        results.append(
-            {
-                "threshold": threshold,
-                "avg_reward": total_reward / total_problems,
-                "avg_tokens": total_tokens / total_problems,
-                "avg_cost": total_cost / total_problems,
-                "handoff_fraction": handoffs / total_problems,
-                "handed_off": handoffs,
-                "total_problems": total_problems,
-            }
-        )
-    return results
-
-
-def compute_topk_curve(
-    records: Dict[str, Dict[str, Any]],
-    small_token_cost: float,
-    expert_token_cost: float,
-    score_key: str,
-) -> List[Dict[str, Any]]:
-    """Sweep k lowest scores → handoff; return metrics per k."""
-    scored = [(pid, data.get(score_key)) for pid, data in records.items() if data.get(score_key) is not None]
-    scored = sorted(scored, key=lambda x: x[1])
-    total = len(scored)
-    if total == 0:
-        raise ValueError(f"No {score_key} found in actor records; cannot compute top-k curve")
-
-    # Precompute per-problem stats
-    per_problem = {}
-    for pid, score in scored:
-        data = records[pid]
-        repair_tokens = _to_tokens(data["repair"]) + (_to_tokens(data["repair_self_eval"]) if data.get("repair_self_eval") else 0)
-        expert_tokens = _to_tokens(data["expert"])
-        per_problem[pid] = {
-            "score": score,
-            "repair_reward": _entry_reward(data["repair"]),
-            "expert_reward": _entry_reward(data["expert"]),
-            "repair_tokens": repair_tokens,
-            "expert_tokens": expert_tokens,
-        }
-
-    results = []
-    for k in range(0, total + 1):
-        handoff_pids = set(pid for pid, _ in scored[:k])
-        total_tokens = 0.0
-        total_reward = 0.0
-        total_cost = 0.0
-        for pid, _ in scored:
-            info = per_problem[pid]
-            small_tokens = info["repair_tokens"]
-            small_reward = info["repair_reward"]
-            small_cost = (small_tokens / 1000.0) * small_token_cost
-            if pid in handoff_pids:
-                total_tokens += small_tokens + info["expert_tokens"]
-                total_reward += info["expert_reward"]
-                total_cost += small_cost + (info["expert_tokens"] / 1000.0) * expert_token_cost
-            else:
-                total_tokens += small_tokens
-                total_reward += small_reward
-                total_cost += small_cost
-        results.append(
-            {
-                "k": k,
-                "fraction": k / total,
-                "tau": scored[k - 1][1] if k > 0 else None,
-                "avg_reward": total_reward / total,
-                "avg_tokens": total_tokens / total,
-                "avg_cost": total_cost / total,
-            }
-        )
-    return results
 
 
 def _pearson(x: List[float], y: List[float]) -> float | None:
@@ -495,8 +378,8 @@ def run_analysis(
     threshold_start: float,
     threshold_stop: float,
     threshold_step: float,
-    small_token_cost_per_1k: float,
-    expert_token_cost_per_1k: float,
+    expert_score_key: str,
+    handoff_margin: float,
 ):
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -521,15 +404,30 @@ def run_analysis(
 
     variants = [("value_score_mean", "mean"), ("value_score_last", "last")]
     base_output_path = Path(output_path)
-    small_cost = float(small_token_cost_per_1k)
-    expert_cost = float(expert_token_cost_per_1k)
 
     for score_key, label in variants:
         if not any(data.get(score_key) is not None for data in merged.values()):
             raise ValueError(f"No {score_key} found in actor records; cannot run {label} handoff analysis")
+        if not any(data.get(expert_score_key) is not None for data in merged.values()):
+            raise ValueError(f"No {expert_score_key} found in actor records; cannot run {label} handoff analysis")
 
-        curve = compute_handoff_curve(merged, threshold_values, small_cost, expert_cost, score_key)
-        topk_curve = compute_topk_curve(merged, small_cost, expert_cost, score_key)
+        records: List[HandoffRecord] = []
+        for data in merged.values():
+            policy_score = data.get(score_key)
+            expert_score = data.get(expert_score_key)
+            if policy_score is None or expert_score is None:
+                continue
+            records.append(
+                HandoffRecord(
+                    policy_score=float(policy_score),
+                    expert_score=float(expert_score),
+                    policy_reward=_entry_reward(data["repair"]),
+                    expert_reward=_entry_reward(data["expert"]),
+                )
+            )
+
+        curve = compute_handoff_curve(records, threshold_values, handoff_margin)
+        summary = summarize_handoff_curve(curve)
 
         out_path = base_output_path if label == "mean" else base_output_path.with_name(
             base_output_path.stem + f"_{label}" + base_output_path.suffix
@@ -538,11 +436,6 @@ def run_analysis(
         with out_path.open("w") as handle:
             json.dump(curve, handle, indent=2)
         logger.info("Wrote %s analysis with %d thresholds to %s", label, len(curve), out_path)
-
-        topk_path = out_path.with_name(out_path.stem + f"_{label}_topk.json")
-        with topk_path.open("w") as handle:
-            json.dump(topk_curve, handle, indent=2)
-        logger.info("Wrote %s top-k analysis to %s", label, topk_path)
 
         scores_for_hist: List[float] = []
         rewards_for_corr: List[float] = []
@@ -601,6 +494,8 @@ def run_analysis(
             f"spearman_value_reward_{label}": spearman,
             f"auroc_{label}": None,
             f"auprc_{label}": None,
+            "handoff_margin": handoff_margin,
+            "expert_score_key": expert_score_key,
         }
         with stats_path.open("w") as handle:
             json.dump(stats_payload, handle, indent=2)
@@ -681,87 +576,42 @@ def run_analysis(
         elif not MATPLOTLIB_AVAILABLE:
             logger.warning("matplotlib not available; skipping expert reward histogram for %s", label)
 
-        table_path = out_path.with_name(out_path.stem + f"_{label}_handoff_table.csv")
-        with table_path.open("w") as handle:
-            handle.write("threshold,handed_off,handed_off_pct,avg_reward,avg_cost\n")
-            for pt in curve:
-                handle.write(
-                    f"{pt['threshold']},{pt['handed_off']},{pt['handoff_fraction']*100:.2f},{pt['avg_reward']:.4f},{pt.get('avg_cost', 0):.4f}\n"
-                )
-        logger.info("Saved handoff table to %s", table_path)
-
         if curve and MATPLOTLIB_AVAILABLE:
-            best = max(curve, key=lambda x: x["avg_reward"])
-            logger.info(
-                "[%s] Best avg reward %.3f at threshold %.2f with avg tokens %.1f",
-                label,
-                best["avg_reward"],
-                best["threshold"],
-                best["avg_tokens"],
-            )
+            best = summary
+            if best.get("best_avg_reward") is not None:
+                logger.info(
+                    "[%s] Best avg reward %.3f at threshold %.2f",
+                    label,
+                    best["best_avg_reward"],
+                    best["best_threshold"],
+                )
             plot_path = out_path.with_name(out_path.stem + f"_{label}.png")
             plt.figure(figsize=(6, 4))
             thresholds_pts = [pt["threshold"] for pt in curve]
-            rewards = [pt["avg_reward"] for pt in curve]
-            costs = [pt["avg_cost"] for pt in curve]
-            plt.scatter(thresholds_pts, rewards, c=costs, cmap="viridis", s=40)
-            offsets = [8, -6, 14, -12, 0]
-            for idx, pt in enumerate(curve):
-                offset = offsets[idx % len(offsets)]
-                plt.annotate(
-                    f"${pt['avg_cost']:.2f}",
-                    (pt["threshold"], pt["avg_reward"]),
-                    textcoords="offset points",
-                    xytext=(0, offset),
-                    ha="center",
-                    fontsize=7,
-                )
-            plt.xlabel("Value threshold")
+            rewards = [pt["avg_reward"] if pt["avg_reward"] is not None else 0.0 for pt in curve]
+            plt.plot(thresholds_pts, rewards, marker="o", linestyle="-", color="steelblue")
+            plt.xlabel("Quality threshold")
             plt.ylabel("Avg reward (string similarity)")
-            plt.title(f"Actor/Expert Handoff Pareto Curve ({label})")
-            cbar = plt.colorbar()
-            cbar.set_label("Avg cost (USD)")
+            plt.title(f"Actor/Expert Handoff Curve ({label})")
             plt.gca().invert_xaxis()
             plt.tight_layout()
             plt.savefig(plot_path)
             plt.close()
-            logger.info("Saved Pareto plot to %s", plot_path)
+            logger.info("Saved handoff plot to %s", plot_path)
         elif not MATPLOTLIB_AVAILABLE:
-            logger.warning("matplotlib not available; skipping Pareto plot for %s", label)
-
-        if topk_curve and MATPLOTLIB_AVAILABLE:
-            plot_path = out_path.with_name(out_path.stem + f"_{label}_topk.png")
-            plt.figure(figsize=(6, 4))
-            ks = [pt["k"] for pt in topk_curve]
-            rewards = [pt["avg_reward"] for pt in topk_curve]
-            costs = [pt["avg_cost"] for pt in topk_curve]
-            plt.scatter(costs, rewards, c=ks, cmap="plasma", s=40)
-            for pt in topk_curve:
-                if pt["tau"] is not None:
-                    plt.annotate(f"τ={pt['tau']:.3f}", (pt["avg_cost"], pt["avg_reward"]), textcoords="offset points", xytext=(0, 4), ha="center", fontsize=7)
-            plt.xlabel("Avg cost (USD)")
-            plt.ylabel("Avg reward (string similarity)")
-            plt.title(f"Top-k handoff curve ({label})")
-            cbar = plt.colorbar()
-            cbar.set_label("k")
-            plt.tight_layout()
-            plt.savefig(plot_path)
-            plt.close()
-            logger.info("Saved top-k Pareto plot to %s", plot_path)
-        elif not MATPLOTLIB_AVAILABLE:
-            logger.warning("matplotlib not available; skipping top-k plot for %s", label)
+            logger.warning("matplotlib not available; skipping handoff plot for %s", label)
 
 
 def main():  # pragma: no cover
-    parser = argparse.ArgumentParser(description="Analyze handoff using value-head scores.")
+    parser = argparse.ArgumentParser(description="Analyze handoff using policy/expert value scores.")
     parser.add_argument("--actor_glob", required=True, help="Glob to actor JSONL shards")
     parser.add_argument("--expert_jsonl", required=True, help="Path to expert JSONL")
     parser.add_argument("--output_path", required=True, help="Base output path for analysis JSON")
     parser.add_argument("--threshold_start", type=float, default=0.0)
     parser.add_argument("--threshold_stop", type=float, default=1.0)
     parser.add_argument("--threshold_step", type=float, default=0.05)
-    parser.add_argument("--small_token_cost_per_1k", type=float, default=0.0)
-    parser.add_argument("--expert_token_cost_per_1k", type=float, default=0.0)
+    parser.add_argument("--expert_score_key", default="expert_value_prompt_last")
+    parser.add_argument("--handoff_margin", type=float, default=0.0)
     args = parser.parse_args()
 
     run_analysis(
@@ -771,8 +621,8 @@ def main():  # pragma: no cover
         threshold_start=args.threshold_start,
         threshold_stop=args.threshold_stop,
         threshold_step=args.threshold_step,
-        small_token_cost_per_1k=args.small_token_cost_per_1k,
-        expert_token_cost_per_1k=args.expert_token_cost_per_1k,
+        expert_score_key=args.expert_score_key,
+        handoff_margin=args.handoff_margin,
     )
 
 
