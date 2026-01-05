@@ -9,10 +9,10 @@
 set -euo pipefail
 
 # Paths (edit as needed)
-ACTOR_EVAL_JSONL="/mnt/llmd/results/exps/aristides/reason/pure_ppo_swe/actor_eval_value_2.jsonl"
+ACTOR_EVAL_JSONL="/mnt/llmd/results/exps/aristides/reason/pure_ppo_swe/actor_eval_value_700.jsonl"
 EXPERT_JSONL="/mnt/llmd/results/exps/aristides/reason/pareto/expert_claude.jsonl"
-MODEL_PATH="/mnt/llmd/results/exps/aristides/reason/pure_ppo_swe/finetune/current"
-OUTPUT_DIR="/home/toolkit/PipelineRL-SWE/value_handoff_2"
+MODEL_PATH="/mnt/llmd/results/exps/aristides/reason/pure_ppo_swe/finetune/intermediate/700"
+OUTPUT_DIR="/home/toolkit/PipelineRL-SWE/value_handoff_700"
 ANALYSIS_OUTPUT="${OUTPUT_DIR}/handoff_analysis.json"
 
 # 1) Run actor repair eval with value-head scoring
@@ -28,7 +28,7 @@ else
 fi
 
 # 2) Run handoff analysis using value scores (mean/last)
-python pipelinerl/swe/scripts/analyze_handoff.py \
+python /home/toolkit/PipelineRL-SWE/pipelinerl/swe/scripts/analyze_handoff.py \
   --actor_glob="${ACTOR_EVAL_JSONL}" \
   --expert_jsonl="${EXPERT_JSONL}" \
   --output_path="${ANALYSIS_OUTPUT}" \
