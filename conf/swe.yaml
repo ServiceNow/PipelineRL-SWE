@@ -89,16 +89,6 @@ swe:
   repo_path_train: /mnt/llmd/data/swegym/repos
   repo_path_test: /mnt/llmd/data/swebench_lite/repos
 
-  handoff_eval:
-    enabled: true
-    policy_score_key: repair_performance_policy_mean
-    expert_score_key: repair_performance_expert_prompt_last
-    threshold_start: 0.0
-    threshold_stop: 1.0
-    threshold_step: 0.05
-    log_curves: false
-    value_model_path: ${model_path}
-
   abstain:
     quality_threshold: null
     handoff_margin: 0.0

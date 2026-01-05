@@ -99,9 +99,10 @@ def _collect_legacy_actor_records(actor_files: List[Path]) -> Dict[str, Dict[str
         records.setdefault(problem_id, {"dataset": meta.get("dataset"), "model_version": target_version})
         records[problem_id][stage] = entry
         if stage in {"repair", "repair_self_eval"}:
-            for score_key in ("performance_policy_mean", "performance_policy_last", "performance_expert_prompt_last"):
-                if score_key in entry:
-                    records[problem_id][score_key] = entry.get(score_key)
+            if "performance_value_head_prompt_last_all" in entry:
+                records[problem_id]["performance_value_head_prompt_last_all"] = entry.get(
+                    "performance_value_head_prompt_last_all"
+                )
 
     pbar.close()
     return records
@@ -152,11 +153,10 @@ def _collect_direct_actor_records(actor_files: List[Path]) -> Dict[str, Dict[str
                             "parsing_error": entry.get("self_eval_parsing_error"),
                         },
                     }
-                if "performance_policy_mean" in entry or "performance_policy_last" in entry:
-                    record["performance_policy_mean"] = entry.get("performance_policy_mean")
-                    record["performance_policy_last"] = entry.get("performance_policy_last")
-                if "performance_expert_prompt_last" in entry:
-                    record["performance_expert_prompt_last"] = entry.get("performance_expert_prompt_last")
+                if "performance_value_head_prompt_last_all" in entry:
+                    record["performance_value_head_prompt_last_all"] = entry.get(
+                        "performance_value_head_prompt_last_all"
+                    )
                 records[problem_id] = record
     pbar.close()
     return records
@@ -235,11 +235,21 @@ def _merge_records(actor_records: Dict[str, Dict[str, Any]], expert_records: Dic
             "repair_self_eval": data.get("repair_self_eval"),
             "expert": expert_records[problem_id],
         }
-        for key in ("performance_policy_mean", "performance_policy_last", "performance_expert_prompt_last"):
-            if key in data:
-                merged_entry[key] = data[key]
+        if "performance_value_head_prompt_last_all" in data:
+            merged_entry["performance_value_head_prompt_last_all"] = data["performance_value_head_prompt_last_all"]
         merged[problem_id] = merged_entry
     return merged
+
+
+def _extract_expert_score(
+    data: Dict[str, Any],
+    score_list_key: str,
+) -> float | None:
+    value = data.get(score_list_key)
+    if isinstance(value, list):
+        expert_values = [float(v) for v in value[1:]]
+        return max(expert_values) if expert_values else None
+    return None
 
 
 def _pearson(x: List[float], y: List[float]) -> float | None:
@@ -371,6 +381,44 @@ def _roc_pr(scores: List[float], rewards: List[float]):
     return auroc, auprc, roc_points_sorted, pr_points_sorted
 
 
+def _routing_summary(
+    merged: Dict[str, Dict[str, Any]],
+    score_list_key: str,
+    threshold: float,
+) -> Dict[str, Any]:
+    counts: Dict[str, int] = {"policy": 0, "abstain": 0}
+    total = 0
+    for data in merged.values():
+        score_list = data.get(score_list_key)
+        if not isinstance(score_list, list) or not score_list:
+            continue
+        total += 1
+        max_score = max(float(v) for v in score_list)
+        if max_score < threshold:
+            counts["abstain"] += 1
+            continue
+        best_idx = max(range(len(score_list)), key=lambda i: float(score_list[i]))
+        if best_idx == 0:
+            counts["policy"] += 1
+        else:
+            key = f"expert_{best_idx}"
+            counts[key] = counts.get(key, 0) + 1
+    if total == 0:
+        return {
+            "threshold": threshold,
+            "total": 0,
+            "counts": counts,
+            "percentages": {},
+        }
+    percentages = {k: (v / total) * 100.0 for k, v in counts.items()}
+    return {
+        "threshold": threshold,
+        "total": total,
+        "counts": counts,
+        "percentages": percentages,
+    }
+
+
 def run_analysis(
     actor_glob: str,
     expert_jsonl: str,
@@ -378,7 +426,7 @@ def run_analysis(
     threshold_start: float,
     threshold_stop: float,
     threshold_step: float,
-    expert_score_key: str,
+    score_list_key: str,
     handoff_margin: float,
 ):
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -402,24 +450,29 @@ def run_analysis(
 
     threshold_values = _frange(threshold_start, threshold_stop, threshold_step)
 
-    variants = [("performance_policy_mean", "mean"), ("performance_policy_last", "last")]
+    variants = [("performance_value_head_prompt_last_all", "prompt_last")]
     base_output_path = Path(output_path)
 
     for score_key, label in variants:
         if not any(data.get(score_key) is not None for data in merged.values()):
             raise ValueError(f"No {score_key} found in actor records; cannot run {label} handoff analysis")
-        if not any(data.get(expert_score_key) is not None for data in merged.values()):
-            raise ValueError(f"No {expert_score_key} found in actor records; cannot run {label} handoff analysis")
+        if not any(_extract_expert_score(data, score_list_key) is not None for data in merged.values()):
+            raise ValueError(
+                f"No expert scores found in {score_list_key}; cannot run {label} handoff analysis"
+            )
 
         records: List[HandoffRecord] = []
         for data in merged.values():
-            policy_score = data.get(score_key)
-            expert_score = data.get(expert_score_key)
-            if policy_score is None or expert_score is None:
+            score_list = data.get(score_key)
+            if not isinstance(score_list, list) or not score_list:
+                continue
+            policy_score = float(score_list[0])
+            expert_score = _extract_expert_score(data, score_list_key)
+            if expert_score is None:
                 continue
             records.append(
                 HandoffRecord(
-                    policy_score=float(policy_score),
+                    policy_score=policy_score,
                     expert_score=float(expert_score),
                     policy_reward=_entry_reward(data["repair"]),
                     expert_reward=_entry_reward(data["expert"]),
@@ -440,10 +493,16 @@ def run_analysis(
         scores_for_hist: List[float] = []
         rewards_for_corr: List[float] = []
         for data in merged.values():
-            score = data.get(score_key)
-            if score is not None:
-                scores_for_hist.append(float(score))
-                rewards_for_corr.append(_entry_reward(data["repair"]))
+            score_list = data.get(score_key)
+            if not isinstance(score_list, list) or not score_list:
+                continue
+            policy_score = float(score_list[0])
+            expert_score = _extract_expert_score(data, score_list_key)
+            if expert_score is None:
+                continue
+            routing_score = max(policy_score, expert_score)
+            scores_for_hist.append(routing_score)
+            rewards_for_corr.append(_entry_reward(data["repair"]))
 
         hist_path = out_path.with_name(out_path.stem + f"_{label}_hist.png")
         if MATPLOTLIB_AVAILABLE and scores_for_hist:
@@ -495,11 +554,44 @@ def run_analysis(
             f"auroc_{label}": None,
             f"auprc_{label}": None,
             "handoff_margin": handoff_margin,
-            "expert_score_key": expert_score_key,
+            "score_list_key": score_list_key,
         }
         with stats_path.open("w") as handle:
             json.dump(stats_payload, handle, indent=2)
         logger.info("Saved stats to %s", stats_path)
+
+        routing_dir = out_path.with_name(out_path.stem + f"_{label}_routing")
+        routing_dir.mkdir(parents=True, exist_ok=True)
+        if not threshold_values:
+            logger.warning("No thresholds provided; skipping routing pie summaries")
+        else:
+            for threshold in threshold_values:
+                routing = _routing_summary(merged, score_list_key, float(threshold))
+                routing_path = routing_dir / f"routing_{threshold:.2f}.csv"
+                with routing_path.open("w") as fh:
+                    fh.write("label,count,percentage\n")
+                    for key, count in sorted(routing["counts"].items()):
+                        pct = routing["percentages"].get(key, 0.0)
+                        fh.write(f"{key},{count},{pct}\n")
+                if MATPLOTLIB_AVAILABLE and routing["total"] > 0:
+                    pie_path = routing_dir / f"routing_{threshold:.2f}.png"
+                    labels = []
+                    values = []
+                    for key, count in sorted(routing["counts"].items()):
+                        if count <= 0:
+                            continue
+                        labels.append(key)
+                        values.append(count)
+                    if values:
+                        plt.figure(figsize=(5, 5))
+                        plt.pie(values, labels=labels, autopct="%1.1f%%", startangle=90)
+                        plt.title(f"Routing share @ threshold {routing['threshold']:.2f}")
+                        plt.tight_layout()
+                        plt.savefig(pie_path)
+                        plt.close()
+                elif not MATPLOTLIB_AVAILABLE:
+                    logger.warning("matplotlib not available; skipping routing pies")
+                    break
 
         # Diagnostics
         bin_rows = _bin_stats(scores_for_hist, rewards_for_corr, bins=10)
@@ -610,7 +702,7 @@ def main():  # pragma: no cover
     parser.add_argument("--threshold_start", type=float, default=0.0)
     parser.add_argument("--threshold_stop", type=float, default=1.0)
     parser.add_argument("--threshold_step", type=float, default=0.05)
-    parser.add_argument("--expert_score_key", default="performance_expert_prompt_last")
+    parser.add_argument("--score_list_key", default="performance_value_head_prompt_last_all")
     parser.add_argument("--handoff_margin", type=float, default=0.0)
     args = parser.parse_args()
 
@@ -621,7 +713,7 @@ def main():  # pragma: no cover
         threshold_start=args.threshold_start,
         threshold_stop=args.threshold_stop,
         threshold_step=args.threshold_step,
-        expert_score_key=args.expert_score_key,
+        score_list_key=args.score_list_key,
         handoff_margin=args.handoff_margin,
     )
 

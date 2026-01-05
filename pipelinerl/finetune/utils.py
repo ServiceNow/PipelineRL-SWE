@@ -38,7 +38,7 @@ def create_sentinel_batch(
     zeros = [0.0] * length
     ones = [1.0] * length
 
-    performance_targets = [[0.0] * performance_value_dim for _ in range(length)]
+    performance_targets = [0.0] * performance_value_dim
     sentinel_batch = {
         "input_ids": torch.tensor(input_ids, dtype=torch.long).reshape(1, -1),
         "attention_mask": torch.tensor(attention_mask, dtype=torch.long).reshape(1, -1),
@@ -51,7 +51,7 @@ def create_sentinel_batch(
         "group_tokens": torch.tensor(ones, dtype=torch.float).reshape(1, -1),
         "num_labels": torch.tensor(ones, dtype=torch.float).reshape(1, -1),
         "overflow": torch.tensor(zeros, dtype=torch.float).reshape(1, -1),
-        "performance_targets": torch.tensor(performance_targets, dtype=torch.float).reshape(1, length, -1),
+        "performance_targets": torch.tensor(performance_targets, dtype=torch.float).reshape(1, -1),
         "seq_boundaries": torch.tensor([0, length], dtype=torch.int)
     }
 
@@ -82,7 +82,7 @@ def create_sentinel_example(
         "group_tokens": n_tokens * [1.0],
         "num_labels": n_tokens * [1.0], 
         "overflow": n_tokens * [0.0],
-        "performance_targets": n_tokens * [[0.0] * performance_value_dim],
+        "performance_targets": [0.0] * performance_value_dim,
         "model_version": model_version,
     }
     return example

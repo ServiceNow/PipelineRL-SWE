@@ -198,6 +198,9 @@ def collate(
             logger.debug(f"Skipping key '{k}' - sequences contain str/dict items")
             continue
         else:
+            if k == "performance_targets":
+                result[k] = torch.tensor(seq_list, dtype=torch.float)
+                continue
             # Handle sequence data: pad as usual
             padded_sequences = []
             pad_value = label_mask_value if k == "labels" else (0.0 if k in RL_DATA_COLUMNS else 0)
@@ -231,6 +234,8 @@ def collate_packed(
         first_targets = examples[0]["performance_targets"]
         if first_targets and isinstance(first_targets[0], list):
             performance_value_dim = len(first_targets[0])
+        elif first_targets:
+            performance_value_dim = len(first_targets)
 
     if total_length % seq_parallel != 0:
         padding = seq_parallel - (total_length % seq_parallel)
@@ -259,7 +264,7 @@ def collate_packed(
     }
 
     # initialize lists for extra keys
-    extra_keys = [col for col in RL_DATA_COLUMNS if col in examples[0]]
+    extra_keys = [col for col in RL_DATA_COLUMNS if col in examples[0] and col != "performance_targets"]
     extra_lists = {key: [] for key in extra_keys}
 
     for i, example in enumerate(examples):
@@ -289,6 +294,11 @@ def collate_packed(
     extra_tensors = default_data_collator([{k: extra_lists[k] for k in extra_keys}], return_tensors="pt")
 
     result = {**base_tensors, **extra_tensors}
+    if "performance_targets" in examples[0]:
+        result["performance_targets"] = torch.tensor(
+            [example["performance_targets"] for example in examples],
+            dtype=torch.float,
+        )
     result["model_version"] = min([example.get("model_version", 0) for example in examples])
     result["is_packed"] = True 
     result["seq_boundaries"] = seq_boundaries

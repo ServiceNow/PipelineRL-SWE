@@ -367,13 +367,39 @@ def rl_step(
             overflow_full = batch.overflow
             prompt_tokens_weights = prompt_tokens_weights * (1 - overflow_full)
 
-        assert performance_values.shape == performance_targets.shape, (
-            f"Performance values shape {performance_values.shape} does not match targets shape {performance_targets.shape}"
-        )
+        if performance_targets.dim() != 2:
+            raise ValueError(f"performance_targets should be [num_sequences, dim], got {performance_targets.shape}")
 
-        per_token_mse = torch.square(performance_values - performance_targets).mean(dim=-1)
-        performance_value_loss = 0.5 * per_token_mse * prompt_tokens_weights
-        performance_value_loss = sum_sum(performance_value_loss, performance_prompt_mask, segments)
+        if performance_prompt_mask.any():
+            if batch.is_packed:
+                seq_has_output = torch.tensor(
+                    [
+                        bool(performance_prompt_mask[0, start:end].any().item())
+                        for start, end in segments
+                    ],
+                    device=performance_targets.device,
+                )
+            else:
+                seq_has_output = performance_prompt_mask.any(dim=1)
+
+            filtered_targets = performance_targets[seq_has_output]
+            prompt_predictions = performance_values[performance_prompt_mask]
+            if prompt_predictions.shape != filtered_targets.shape:
+                raise ValueError(
+                    f"Prompt predictions shape {prompt_predictions.shape} does not match targets shape {filtered_targets.shape}"
+                )
+
+            per_seq_mse = torch.square(prompt_predictions - filtered_targets).mean(dim=-1)
+            if batch.is_packed:
+                prompt_weights = prompt_tokens_weights[performance_prompt_mask]
+            else:
+                prompt_weights = (prompt_tokens_weights * performance_prompt_mask).sum(dim=-1)
+                prompt_weights = prompt_weights[seq_has_output]
+
+            performance_value_loss = 0.5 * (per_seq_mse * prompt_weights).sum()
+        else:
+            prompt_predictions = performance_values.new_empty((0, performance_values.shape[-1]))
+            performance_value_loss = performance_values.new_tensor(0.0)
         final_loss = final_loss + config.performance_value_loss_coef * performance_value_loss
 
     # ensure loss is valid
@@ -442,9 +468,9 @@ def rl_step(
         ).item()
     if has_performance_value_head:
         stats["performance_value_loss"] = performance_value_loss.item()
-        stats["performance_value_mean"] = sum_sum(performance_values.mean(dim=-1), performance_prompt_mask, segments).item()
-        stats["performance_value_max"] = performance_values[performance_prompt_mask].max().item() if performance_prompt_mask.any() else 0.0
-        stats["performance_value_min"] = performance_values[performance_prompt_mask].min().item() if performance_prompt_mask.any() else 0.0
+        stats["performance_value_mean"] = prompt_predictions[:, 0].mean().item() if prompt_predictions.numel() else 0.0
+        stats["performance_value_max"] = prompt_predictions.max().item() if prompt_predictions.numel() else 0.0
+        stats["performance_value_min"] = prompt_predictions.min().item() if prompt_predictions.numel() else 0.0
 
     return final_loss, stats
 
@@ -601,5 +627,5 @@ def prepare_rl_fields(
             performance_targets = [reward]
         else:
             performance_targets = [reward, expert_reward]
-    encoding["performance_targets"] = [performance_targets] * len(encoding["labels"])
+    encoding["performance_targets"] = performance_targets
     return encoding

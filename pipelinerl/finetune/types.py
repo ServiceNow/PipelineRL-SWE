@@ -160,7 +160,7 @@ class PipelineBatchEncoding(BaseModel):
                 "labels": self.labels[:, bs[i]:bs[i + 1]],
                 "position_ids": self.position_ids[:, bs[i]:bs[i + 1]] if self.position_ids is not None else None,
                 "rewards": self.rewards[:, bs[i]:bs[i + 1]],
-                "performance_targets": self.performance_targets[:, bs[i]:bs[i + 1]],
+                "performance_targets": self.performance_targets,
                 "advantages": self.advantages[:, bs[i]:bs[i + 1]],
                 "ref_logprobs": self.ref_logprobs[:, bs[i]:bs[i + 1]],
                 "old_logprobs": self.old_logprobs[:, bs[i]:bs[i + 1]],
