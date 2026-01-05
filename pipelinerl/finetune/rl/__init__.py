@@ -32,7 +32,7 @@ RL_DATA_COLUMNS = [
     "advantages",
     "old_logprobs",
     "ref_logprobs",
-    "expert_rewards",
+    "performance_targets",
 ]
 
 
@@ -98,9 +98,13 @@ class RLConfig(BaseModel):
         default=0.0,
         description="Coefficient for the value loss in the final loss",
     )
-    expert_value_loss_coef: float = Field(
+    performance_value_loss_coef: float = Field(
         default=0.0,
-        description="Coefficient for the expert value loss in the final loss",
+        description="Coefficient for the performance value loss in the final loss",
+    )
+    performance_value_dim: int = Field(
+        default=2,
+        description="Number of performance scores (policy + experts).",
     )
 
 
@@ -188,7 +192,7 @@ def rl_step(
     masks_shifted = masks[:, 1:]
 
     has_value_head = hasattr(model, 'value_head') and config.value_loss_coef > 0
-    has_expert_value_head = hasattr(model, 'expert_value_head') and config.expert_value_loss_coef > 0
+    has_performance_value_head = hasattr(model, 'performance_value_head') and config.performance_value_loss_coef > 0
 
     # if we have position_ids, we are packing
     if batch.is_packed:
@@ -345,14 +349,14 @@ def rl_step(
     else:
         final_loss = policy_loss_total
 
-    if has_expert_value_head:
-        expert_values = outputs.expert_value
-        expert_labels = batch.expert_rewards if hasattr(batch, "expert_rewards") else None
-        if expert_labels is None:
-            raise ValueError("expert_rewards missing from batch while expert_value_head is present")
+    if has_performance_value_head:
+        performance_values = outputs.performance_value
+        performance_targets = batch.performance_targets if hasattr(batch, "performance_targets") else None
+        if performance_targets is None:
+            raise ValueError("performance_targets missing from batch while performance_value_head is present")
 
-        # Train expert value head on the last prompt token only (prompt-only estimate).
-        expert_prompt_mask = build_last_prompt_token_mask(batch.labels, segments)
+        # Train performance head on the last prompt token only (prompt-only estimate).
+        performance_prompt_mask = build_last_prompt_token_mask(batch.labels, segments)
 
         if config.group_normalization:
             prompt_tokens_weights = torch.ones_like(batch.group_tokens) / batch.group_tokens
@@ -363,13 +367,14 @@ def rl_step(
             overflow_full = batch.overflow
             prompt_tokens_weights = prompt_tokens_weights * (1 - overflow_full)
 
-        assert expert_values.shape == expert_labels.shape, (
-            f"Expert values shape {expert_values.shape} does not match expert labels shape {expert_labels.shape}"
+        assert performance_values.shape == performance_targets.shape, (
+            f"Performance values shape {performance_values.shape} does not match targets shape {performance_targets.shape}"
         )
 
-        expert_value_loss = 0.5 * torch.square(expert_values - expert_labels) * prompt_tokens_weights
-        expert_value_loss = sum_sum(expert_value_loss, expert_prompt_mask, segments)
-        final_loss = final_loss + config.expert_value_loss_coef * expert_value_loss
+        per_token_mse = torch.square(performance_values - performance_targets).mean(dim=-1)
+        performance_value_loss = 0.5 * per_token_mse * prompt_tokens_weights
+        performance_value_loss = sum_sum(performance_value_loss, performance_prompt_mask, segments)
+        final_loss = final_loss + config.performance_value_loss_coef * performance_value_loss
 
     # ensure loss is valid
     assert torch.isfinite(final_loss), f"Non-finite loss detected: {final_loss}"
@@ -435,11 +440,11 @@ def rl_step(
         stats["value_mse"] = sum_sum(
             torch.square(value_predictions - value_labels) / num_labels_in_seq, masks_shifted, segments
         ).item()
-    if has_expert_value_head:
-        stats["expert_value_loss"] = expert_value_loss.item()
-        stats["expert_value_mean"] = sum_sum(expert_values, expert_prompt_mask, segments).item()
-        stats["expert_value_max"] = expert_values[expert_prompt_mask].max().item() if expert_prompt_mask.any() else 0.0
-        stats["expert_value_min"] = expert_values[expert_prompt_mask].min().item() if expert_prompt_mask.any() else 0.0
+    if has_performance_value_head:
+        stats["performance_value_loss"] = performance_value_loss.item()
+        stats["performance_value_mean"] = sum_sum(performance_values.mean(dim=-1), performance_prompt_mask, segments).item()
+        stats["performance_value_max"] = performance_values[performance_prompt_mask].max().item() if performance_prompt_mask.any() else 0.0
+        stats["performance_value_min"] = performance_values[performance_prompt_mask].min().item() if performance_prompt_mask.any() else 0.0
 
     return final_loss, stats
 
@@ -590,7 +595,11 @@ def prepare_rl_fields(
     encoding["overflow"] = [0] * len(encoding["labels"])  # place holder
     encoding["group_tokens"] = [0] * len(encoding["labels"])  # place holder
     encoding["num_labels"] = [1 if label != -100 else 0 for label in encoding["labels"]]  # count only output tokens
-    # Expert reward defaults to the regular reward if not provided
-    expert_value = reward if expert_reward is None else expert_reward
-    encoding["expert_rewards"] = [expert_value] * len(encoding["labels"])
+    performance_targets = encoding.get("performance_targets")
+    if performance_targets is None:
+        if expert_reward is None:
+            performance_targets = [reward]
+        else:
+            performance_targets = [reward, expert_reward]
+    encoding["performance_targets"] = [performance_targets] * len(encoding["labels"])
     return encoding

@@ -99,7 +99,7 @@ def _collect_legacy_actor_records(actor_files: List[Path]) -> Dict[str, Dict[str
         records.setdefault(problem_id, {"dataset": meta.get("dataset"), "model_version": target_version})
         records[problem_id][stage] = entry
         if stage in {"repair", "repair_self_eval"}:
-            for score_key in ("value_score_mean", "value_score_last", "expert_value_prompt_last"):
+            for score_key in ("performance_policy_mean", "performance_policy_last", "performance_expert_prompt_last"):
                 if score_key in entry:
                     records[problem_id][score_key] = entry.get(score_key)
 
@@ -152,11 +152,11 @@ def _collect_direct_actor_records(actor_files: List[Path]) -> Dict[str, Dict[str
                             "parsing_error": entry.get("self_eval_parsing_error"),
                         },
                     }
-                if "value_score_mean" in entry or "value_score_last" in entry:
-                    record["value_score_mean"] = entry.get("value_score_mean")
-                    record["value_score_last"] = entry.get("value_score_last")
-                if "expert_value_prompt_last" in entry:
-                    record["expert_value_prompt_last"] = entry.get("expert_value_prompt_last")
+                if "performance_policy_mean" in entry or "performance_policy_last" in entry:
+                    record["performance_policy_mean"] = entry.get("performance_policy_mean")
+                    record["performance_policy_last"] = entry.get("performance_policy_last")
+                if "performance_expert_prompt_last" in entry:
+                    record["performance_expert_prompt_last"] = entry.get("performance_expert_prompt_last")
                 records[problem_id] = record
     pbar.close()
     return records
@@ -235,7 +235,7 @@ def _merge_records(actor_records: Dict[str, Dict[str, Any]], expert_records: Dic
             "repair_self_eval": data.get("repair_self_eval"),
             "expert": expert_records[problem_id],
         }
-        for key in ("value_score_mean", "value_score_last", "expert_value_prompt_last"):
+        for key in ("performance_policy_mean", "performance_policy_last", "performance_expert_prompt_last"):
             if key in data:
                 merged_entry[key] = data[key]
         merged[problem_id] = merged_entry
@@ -402,7 +402,7 @@ def run_analysis(
 
     threshold_values = _frange(threshold_start, threshold_stop, threshold_step)
 
-    variants = [("value_score_mean", "mean"), ("value_score_last", "last")]
+    variants = [("performance_policy_mean", "mean"), ("performance_policy_last", "last")]
     base_output_path = Path(output_path)
 
     for score_key, label in variants:
@@ -610,7 +610,7 @@ def main():  # pragma: no cover
     parser.add_argument("--threshold_start", type=float, default=0.0)
     parser.add_argument("--threshold_stop", type=float, default=1.0)
     parser.add_argument("--threshold_step", type=float, default=0.05)
-    parser.add_argument("--expert_score_key", default="expert_value_prompt_last")
+    parser.add_argument("--expert_score_key", default="performance_expert_prompt_last")
     parser.add_argument("--handoff_margin", type=float, default=0.0)
     args = parser.parse_args()
 

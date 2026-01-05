@@ -69,10 +69,10 @@ def validate_config(cfg: DictConfig):
     # Check for value loss coefficient constraints
     if cfg.finetune.model_class == "causal-language-modeling-with-value-head":
         has_value_coef = hasattr(cfg.finetune.rl, "value_loss_coef") and cfg.finetune.rl.value_loss_coef > 0.0
-        has_expert_value_coef = hasattr(cfg.finetune.rl, "expert_value_loss_coef") and cfg.finetune.rl.expert_value_loss_coef > 0.0
-        if not (has_value_coef or has_expert_value_coef):
+        has_performance_value_coef = hasattr(cfg.finetune.rl, "performance_value_loss_coef") and cfg.finetune.rl.performance_value_loss_coef > 0.0
+        if not (has_value_coef or has_performance_value_coef):
             raise ValueError(
-                "At least one of value_loss_coef or expert_value_loss_coef must be greater than 0 "
+                "At least one of value_loss_coef or performance_value_loss_coef must be greater than 0 "
                 "when using causal-language-modeling-with-value-head"
             )
 

@@ -122,7 +122,15 @@ def load_model(args, model_class, current_dir):
 
     logger.info(f"Loading args: {loading_args}")
     
-    model = model_cls.from_pretrained(model_to_load, **loading_args)
+    if model_cls is AutoModelForCausalLMWithValueHead:
+        performance_value_dim = args.rl.get("performance_value_dim", 2)
+        model = model_cls.from_pretrained(
+            model_to_load,
+            performance_value_dim=performance_value_dim,
+            **loading_args,
+        )
+    else:
+        model = model_cls.from_pretrained(model_to_load, **loading_args)
 
     if args.gradient_checkpointing:
         model.gradient_checkpointing_enable(

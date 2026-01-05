@@ -6,4 +6,5 @@ model_class: causal-language-modeling-with-value-head
 rl:
   value_loss_coef: 0.1
   policy_loss: ppo
-  expert_value_loss_coef: 0.1
+  performance_value_loss_coef: 0.1
+  performance_value_dim: 2

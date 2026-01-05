@@ -144,6 +144,8 @@ def preprocess_fn(
             predicted_spans,
         )
     if is_rl:
+        if "performance_targets" in entry:
+            encoding["performance_targets"] = entry["performance_targets"]
         encoding = prepare_rl_fields(
             encoding,
             entry["reward"],
@@ -204,7 +206,10 @@ def collate(
                     continue  # Skip None sequences, e.g. visual features when absent
                 if not isinstance(seq, list):
                     seq = [seq]
-                padding = [pad_value] * (seq_length - len(seq))
+                pad_item = pad_value
+                if seq and isinstance(seq[0], list):
+                    pad_item = [0.0] * len(seq[0])
+                padding = [pad_item] * (seq_length - len(seq))
                 padded = (seq + padding) if tokenizer.padding_side == "right" else (padding + seq)
                 padded_sequences.append(padded)
             result[k] = torch.tensor(padded_sequences)
@@ -221,10 +226,21 @@ def collate_packed(
 ) -> PipelineBatchEncoding:
     # pre-compute total length and create tensors in one go
     total_length = sum(len(example["input_ids"]) for example in examples)
+    performance_value_dim = 2
+    if "performance_targets" in examples[0]:
+        first_targets = examples[0]["performance_targets"]
+        if first_targets and isinstance(first_targets[0], list):
+            performance_value_dim = len(first_targets[0])
+
     if total_length % seq_parallel != 0:
         padding = seq_parallel - (total_length % seq_parallel)
         sentinel_model_version = max(example["model_version"] for example in examples)
-        sentinel_example = create_sentinel_example(padding, tokenizer=tokenizer, model_version=sentinel_model_version)
+        sentinel_example = create_sentinel_example(
+            padding,
+            tokenizer=tokenizer,
+            model_version=sentinel_model_version,
+            performance_value_dim=performance_value_dim,
+        )
         examples = examples + [sentinel_example]
         total_length = sum(len(example["input_ids"]) for example in examples)
     else: 

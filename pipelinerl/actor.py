@@ -122,7 +122,7 @@ async def schedule_rollouts(
     trainer_state: TrainerState,
     llms: list[TrainableLLM],
     scheduler_name: str,
-    expert_llm: TrainableLLM = None,
+    expert_llms: list[TrainableLLM] | None = None,
 ):
     """This courotuine does the following.
 
@@ -157,7 +157,7 @@ async def schedule_rollouts(
             llm = llms[llm_index]
             model_version = trainer_state.propagated_weight_version
             assert model_version is not None
-            rollout_result = await rollout_policy(cfg, llm, problem, session, expert_llm)
+            rollout_result = await rollout_policy(cfg, llm, problem, session, expert_llms)
             rollout_result.model_version = model_version
             # Make a group id that will be different from groups made by another rollout maker
             full_group_id = f"{scheduler_name}_{group_id}"
@@ -247,7 +247,7 @@ def rollout_maker_entrypoint(
     result_queue: SharedMemoryQueue,
     llms: list[TrainableLLM],
     scheduler_name: str,
-    expert_llm: TrainableLLM = None,
+    expert_llms: list[TrainableLLM] | None = None,
 ):
     trainer_state = TrainerState(Path(cfg.output_dir))
     if cfg.debug.mode:
@@ -258,7 +258,7 @@ def rollout_maker_entrypoint(
     loop = uvloop.new_event_loop()
     asyncio.set_event_loop(loop)
     loop.run_until_complete(
-        schedule_rollouts(cfg, attempts, problem_queue, result_queue, trainer_state, llms, scheduler_name, expert_llm)
+        schedule_rollouts(cfg, attempts, problem_queue, result_queue, trainer_state, llms, scheduler_name, expert_llms)
     )
     loop.close()
     logger.info("Rollout maker loop closed")
@@ -283,7 +283,7 @@ class ActorLoop:
         stats_stream: StreamSpec,
         trainer_state: TrainerState,
         is_training: bool = True,
-        expert_llm: TrainableLLM = None,
+        expert_llms: list[TrainableLLM] | None = None,
         exp_path: Path | None = None,
         value_model_path: str | None = None,
     ) -> None:
@@ -297,7 +297,7 @@ class ActorLoop:
         self.is_training = is_training
         self.is_scheduling_paused = False
         self.debug_mode = bool(cfg.debug.mode)
-        self.expert_llm = expert_llm
+        self.expert_llms = expert_llms or []
         self.exp_path = exp_path
         self.value_scorer = None
         self.handoff_eval_cfg = cfg.swe.get("handoff_eval", {})
@@ -341,7 +341,7 @@ class ActorLoop:
             )
             process = mp.Process(
                 target=rollout_maker_entrypoint,
-                args=(self.cfg, attempts, self.problem_queue, self.result_queue, llms, scheduler_name, self.expert_llm),
+                args=(self.cfg, attempts, self.problem_queue, self.result_queue, llms, scheduler_name, self.expert_llms),
             )
             process.start()
             self.rollout_processes.append(process)
@@ -673,8 +673,8 @@ class ActorLoop:
         stats.update({f"{split_name}{k}": v for k, v in abstention_stats.items()})
 
         if not self.is_training and self.handoff_eval_cfg.get("enabled", False):
-            policy_key = self.handoff_eval_cfg.get("policy_score_key", "repair_policy_value_mean")
-            expert_key = self.handoff_eval_cfg.get("expert_score_key", "repair_expert_value_prompt_last")
+            policy_key = self.handoff_eval_cfg.get("policy_score_key", "repair_performance_policy_mean")
+            expert_key = self.handoff_eval_cfg.get("expert_score_key", "repair_performance_expert_prompt_last")
             reward_key = "repair_reward"
             expert_reward_key = "repair_expert_reward"
 
@@ -762,30 +762,31 @@ def run_actor_loop(cfg: DictConfig):
             raise ValueError("Failed to initialize wandb run")
     llm_urls = str(cfg.me.llm_urls).split("+")
 
-    expert_llm = None
+    expert_llms: list[TrainableLLM] = []
     if cfg.swe.get('enable_expert_reward', False):
-        expert_llm_url = cfg.me.get('expert_llm_url', '')
-        if expert_llm_url:
-            expert_config = cfg.swe.get('expert_model', {})
-            if expert_config:
+        expert_configs = cfg.swe.get('expert_models') or []
+        if expert_configs:
+            for expert_config in expert_configs:
                 try:
-                    expert_llm = TrainableLLM(
-                        base_url=expert_llm_url,
-                        model_name=expert_config.get('model_name', 'expert-model'),
-                        tokenizer_name=expert_config.get('tokenizer_name', cfg.model_path),
-                        parameters=expert_config.get('parameters', {'max_tokens': 64000, 'temperature': 1.0}),
-                        use_cache=False,
-                        collect_logprobs=False,
-                        observe_llm_calls=False,
+                    expert_llms.append(
+                        TrainableLLM(
+                            base_url=expert_config.get('base_url', 'http://localhost:8280'),
+                            model_name=expert_config.get('model_name', 'expert-model'),
+                            tokenizer_name=expert_config.get('tokenizer_name', cfg.model_path),
+                            parameters=expert_config.get('parameters', {'max_tokens': 64000, 'temperature': 1.0}),
+                            use_cache=False,
+                            collect_logprobs=False,
+                            observe_llm_calls=False,
+                        )
                     )
-                    logger.info(f"Created expert LLM for expert reward regression: {expert_llm_url}")
+                    logger.info(
+                        "Created expert LLM for performance regression: %s",
+                        expert_config.get('base_url'),
+                    )
                 except Exception as e:
                     logger.error(f"Failed to create expert LLM: {e}, expert reward regression will be disabled")
-                    expert_llm = None
-            else:
-                logger.warning("Expert reward enabled but no expert_model config found")
         else:
-            logger.warning("Expert reward enabled but no expert_llm_url found in config")
+            logger.warning("Expert reward enabled but no swe.expert_models configured")
 
     stats_stream = SingleStreamSpec(exp_path=exp_path, topic="stats")
     test_stats_stream = SingleStreamSpec(exp_path=exp_path, topic="stats_test")
@@ -814,6 +815,17 @@ def run_actor_loop(cfg: DictConfig):
         actor_model_path = finetune_model_path
     else:
         actor_model_path = cfg.model_path
+
+    if expert_llms:
+        expected_dim = 1 + len(expert_llms)
+        configured_dim = cfg.finetune.rl.get("performance_value_dim", expected_dim)
+        if configured_dim != expected_dim:
+            logger.warning(
+                "performance_value_dim=%d but %d experts configured; expected %d",
+                configured_dim,
+                len(expert_llms),
+                expected_dim,
+            )
 
     handoff_cfg = cfg.swe.get("handoff_eval", {})
     value_model_path = None
@@ -847,8 +859,8 @@ def run_actor_loop(cfg: DictConfig):
 
     wait_for_inference_servers(llm_urls)
     
-    if expert_llm is not None:
-        wait_for_inference_servers([expert_llm_url])
+    if expert_llms:
+        wait_for_inference_servers([llm.base_url for llm in expert_llms])
 
     wait_for_environments(cfg)
     trainer_state = TrainerState(exp_path)
@@ -864,7 +876,7 @@ def run_actor_loop(cfg: DictConfig):
         trainer_state=trainer_state,
         stats_stream=stats_stream,
         llms=train_llms,
-        expert_llm=expert_llm,
+        expert_llms=expert_llms,
         exp_path=exp_path,
         value_model_path=value_model_path,
     )
@@ -878,7 +890,7 @@ def run_actor_loop(cfg: DictConfig):
         stats_stream=test_stats_stream,
         llms=test_llms,
         is_training=False,
-        expert_llm=expert_llm,
+        expert_llms=expert_llms,
         exp_path=exp_path,
         value_model_path=value_model_path,
     )

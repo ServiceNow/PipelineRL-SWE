@@ -33,7 +33,8 @@ finetune:
   gradient_accumulation_passes: 512  # Adjust based on your setup
   rl:
     temperature: ${...llm.parameters.temperature}
-    expert_value_loss_coef: 0.1
+    performance_value_loss_coef: 0.1
+    performance_value_dim: 2
 
 # LLM settings for localization
 llm:
@@ -74,16 +75,15 @@ swe:
   # Expert model reward regression
   enable_expert_reward: true
   
-  # Expert model configuration (port 8280)
-  expert_model:
-    base_url: "http://localhost:8280"
-    model_name: "mistralai/Devstral-Small-2505"
-    tokenizer_name: ${model_path}
-    parameters:
-      max_tokens: 8000
-      temperature: 1.0
-    timeout: 300  # seconds
-    max_retries: 3
+  expert_models:
+    - base_url: "http://localhost:8280"
+      model_name: "mistralai/Devstral-Small-2505"
+      tokenizer_name: ${model_path}
+      parameters:
+        max_tokens: 8000
+        temperature: 1.0
+      timeout: 300
+      max_retries: 3
   
   # Repository paths
   repo_path_train: /mnt/llmd/data/swegym/repos
@@ -91,8 +91,8 @@ swe:
 
   handoff_eval:
     enabled: true
-    policy_score_key: repair_policy_value_mean
-    expert_score_key: repair_expert_value_prompt_last
+    policy_score_key: repair_performance_policy_mean
+    expert_score_key: repair_performance_expert_prompt_last
     threshold_start: 0.0
     threshold_stop: 1.0
     threshold_step: 0.05

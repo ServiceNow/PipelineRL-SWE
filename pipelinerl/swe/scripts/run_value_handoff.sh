@@ -32,7 +32,7 @@ python pipelinerl/swe/scripts/analyze_handoff.py \
   --actor_glob="${ACTOR_EVAL_JSONL}" \
   --expert_jsonl="${EXPERT_JSONL}" \
   --output_path="${ANALYSIS_OUTPUT}" \
-  --expert_score_key="expert_value_prompt_last" \
+  --expert_score_key="performance_expert_prompt_last" \
   --handoff_margin=0.0
 
 if [[ ! -f "${ANALYSIS_OUTPUT}" ]]; then

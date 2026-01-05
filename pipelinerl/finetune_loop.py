@@ -299,6 +299,10 @@ def run_finetuning_loop(
     output_dir = Path(cfg.finetune.output_dir)
     num_processes = get_accelerator().state.num_processes  # type: ignore
     args = cfg.finetune if "finetune" in cfg else cfg
+    if "swe" in cfg:
+        expert_models = cfg.swe.get("expert_models") or []
+        if expert_models:
+            args.rl.performance_value_dim = 1 + len(expert_models)
     validate_packing_config(args)
 
     if not args.gradient_accumulation_passes % num_processes == 0:

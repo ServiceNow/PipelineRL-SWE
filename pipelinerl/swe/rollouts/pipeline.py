@@ -19,32 +19,47 @@ from .stages import run_localization, run_file_selection, run_repair
 logger = logging.getLogger(__name__)
 
 
-async def generate_unified_swe_rollout(cfg: DictConfig, llm: TrainableLLM, problem: dict, session, expert_llm: TrainableLLM = None):
+async def generate_unified_swe_rollout(
+    cfg: DictConfig,
+    llm: TrainableLLM,
+    problem: dict,
+    session,
+    expert_llms: list[TrainableLLM] | None = None,
+):
     """
     Generate complete SWE pipeline rollout using the streamlined architecture.
     Runs each stage once with the policy model; if an expert model is available, also runs
     the expert to collect an expert reward for auxiliary regression.
     """
-    # Create expert LLM if not provided but configured
-    if expert_llm is None and cfg.swe.get('enable_expert_reward', False):
+    # Create expert LLMs if not provided but configured
+    if expert_llms is None:
+        expert_llms = []
+    if expert_llms:
+        performance_value_dim = 1 + len(expert_llms)
+    else:
+        performance_value_dim = cfg.finetune.rl.get("performance_value_dim", 2)
+    if not expert_llms and cfg.swe.get('enable_expert_reward', False):
         try:
-            expert_config = cfg.swe.get('expert_model', {})
-            if expert_config:
-                expert_llm = TrainableLLM(
-                    base_url=expert_config.get('base_url', 'http://localhost:8280'),
-                    model_name=expert_config.get('model_name', 'expert-model'),
-                    tokenizer_name=expert_config.get('tokenizer_name', cfg.model_path),
-                    parameters=expert_config.get('parameters', {'max_tokens': 4000, 'temperature': 0.7}),
-                    use_cache=False,
-                    collect_logprobs=False,
-                    observe_llm_calls=False,
-                )
-                logger.info(f"Created expert LLM for expert reward regression: {expert_config.get('base_url')}")
+            expert_configs = cfg.swe.get('expert_models') or []
+            if expert_configs:
+                for expert_config in expert_configs:
+                    expert_llms.append(
+                        TrainableLLM(
+                            base_url=expert_config.get('base_url', 'http://localhost:8280'),
+                            model_name=expert_config.get('model_name', 'expert-model'),
+                            tokenizer_name=expert_config.get('tokenizer_name', cfg.model_path),
+                            parameters=expert_config.get('parameters', {'max_tokens': 4000, 'temperature': 0.7}),
+                            use_cache=False,
+                            collect_logprobs=False,
+                            observe_llm_calls=False,
+                        )
+                    )
+                logger.info("Created %d expert LLMs for performance regression", len(expert_llms))
             else:
-                logger.warning("Expert reward enabled but no expert_model config found, disabling expert reward")
+                logger.warning("Expert reward enabled but no swe.expert_models configured, disabling expert reward")
         except Exception as e:
-            logger.error(f"Failed to create expert LLM: {e}, disabling expert reward for this rollout")
-            expert_llm = None
+            logger.error(f"Failed to create expert LLMs: {e}, disabling expert reward for this rollout")
+            expert_llms = []
     training_texts = []
     metrics = UnifiedMetrics()
     
@@ -70,11 +85,21 @@ async def generate_unified_swe_rollout(cfg: DictConfig, llm: TrainableLLM, probl
             loc_result = await run_localization(cfg, llm, problem, session)
             if cfg.swe.get('enable_localization', False) and loc_result['training_text']:
                 # Attach expert reward if available
-                if expert_llm is not None:
-                    expert_loc_result = await run_localization(
-                        cfg, expert_llm, problem, session, collect_training_text=False
-                    )
-                    loc_result['training_text'].expert_reward = expert_loc_result.get('reward', 0.0)
+                if expert_llms:
+                    expert_rewards = []
+                    for expert_llm in expert_llms:
+                        expert_loc_result = await run_localization(
+                            cfg, expert_llm, problem, session, collect_training_text=False
+                        )
+                        expert_rewards.append(expert_loc_result.get('reward', 0.0))
+                    performance_targets = [loc_result.get('reward', 0.0), *expert_rewards]
+                    if len(performance_targets) != performance_value_dim:
+                        logger.warning(
+                            "performance_value_dim=%d but got %d targets for localization",
+                            performance_value_dim,
+                            len(performance_targets),
+                        )
+                    loc_result['training_text'].performance_targets = performance_targets
                 training_texts.append(loc_result['training_text'])
             
             # Update metrics (these are always final/post-enhancement metrics)
@@ -115,11 +140,21 @@ async def generate_unified_swe_rollout(cfg: DictConfig, llm: TrainableLLM, probl
                     logger.info("Using pure stage mode for file selection")
                     sel_result = await run_file_selection(cfg, llm, problem, enriched_context, session)
                     if cfg.swe.get('enable_file_selection', False) and sel_result['training_text']:
-                        if expert_llm is not None:
-                            expert_sel_result = await run_file_selection(
-                                cfg, expert_llm, problem, enriched_context, session, collect_training_text=False
-                            )
-                            sel_result['training_text'].expert_reward = expert_sel_result.get('reward', 0.0)
+                        if expert_llms:
+                            expert_rewards = []
+                            for expert_llm in expert_llms:
+                                expert_sel_result = await run_file_selection(
+                                    cfg, expert_llm, problem, enriched_context, session, collect_training_text=False
+                                )
+                                expert_rewards.append(expert_sel_result.get('reward', 0.0))
+                            performance_targets = [sel_result.get('reward', 0.0), *expert_rewards]
+                            if len(performance_targets) != performance_value_dim:
+                                logger.warning(
+                                    "performance_value_dim=%d but got %d targets for selection",
+                                    performance_value_dim,
+                                    len(performance_targets),
+                                )
+                            sel_result['training_text'].performance_targets = performance_targets
                         training_texts.append(sel_result['training_text'])
                     
                     files_for_repair = sel_result.get('files_for_repair', [])
@@ -170,11 +205,21 @@ async def generate_unified_swe_rollout(cfg: DictConfig, llm: TrainableLLM, probl
                 logger.info("Using pure stage mode for repair")
                 rep_result = await run_repair(cfg, llm, problem, file_contents, session)
                 if cfg.swe.get('enable_repair', False) and rep_result['training_text']:
-                    if expert_llm is not None:
-                        expert_rep_result = await run_repair(
-                            cfg, expert_llm, problem, file_contents, session, collect_training_text=False
-                        )
-                        rep_result['training_text'].expert_reward = expert_rep_result.get('reward', 0.0)
+                    if expert_llms:
+                        expert_rewards = []
+                        for expert_llm in expert_llms:
+                            expert_rep_result = await run_repair(
+                                cfg, expert_llm, problem, file_contents, session, collect_training_text=False
+                            )
+                            expert_rewards.append(expert_rep_result.get('reward', 0.0))
+                        performance_targets = [rep_result.get('reward', 0.0), *expert_rewards]
+                        if len(performance_targets) != performance_value_dim:
+                            logger.warning(
+                                "performance_value_dim=%d but got %d targets for repair",
+                                performance_value_dim,
+                                len(performance_targets),
+                            )
+                        rep_result['training_text'].performance_targets = performance_targets
                     training_texts.append(rep_result['training_text'])
 
                 # Update metrics (always final/post-enhancement)

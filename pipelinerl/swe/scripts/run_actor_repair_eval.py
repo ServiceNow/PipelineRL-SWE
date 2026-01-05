@@ -63,7 +63,7 @@ def _compute_value_scores(
     messages,
     response,
 ) -> tuple[float | None, float | None, float | None]:
-    """Return (policy_mean, policy_last, expert_prompt_last)."""
+    """Return (performance_policy_mean, performance_policy_last, performance_expert_prompt_last)."""
     if not messages or response is None:
         return None, None, None
     try:
@@ -83,16 +83,17 @@ def _compute_value_scores(
             output_hidden_states=True,
             return_dict=True,
         )
-    values = outputs.value.squeeze(0)
-    expert_values = outputs.expert_value.squeeze(0) if outputs.expert_value is not None else None
-    if values.shape[0] <= prompt_len:
+    performance_values = (
+        outputs.performance_value.squeeze(0) if outputs.performance_value is not None else None
+    )
+    if performance_values is None or performance_values.shape[0] <= prompt_len:
         return None, None, None
-    response_values = values[prompt_len:]
+    response_values = performance_values[prompt_len:, 0]
     mean_val = response_values.mean().item()
     last_val = response_values[-1].item()
     expert_prompt_last = None
-    if expert_values is not None and prompt_len > 0:
-        expert_prompt_last = expert_values[prompt_len - 1].item()
+    if prompt_len > 0 and performance_values.shape[-1] > 1:
+        expert_prompt_last = performance_values[prompt_len - 1, 1].item()
     return mean_val, last_val, expert_prompt_last
 
 
@@ -229,9 +230,9 @@ async def _evaluate_problem(
         "self_eval_latency": self_eval_latency,
         "self_eval_parsing_error": self_eval_parsing_error,
         "self_eval_prompt": self_eval_messages if eval_cfg.get("run_self_eval", True) else None,
-        "value_score_mean": mean_value,
-        "value_score_last": last_value,
-        "expert_value_prompt_last": expert_prompt_last,
+        "performance_policy_mean": mean_value,
+        "performance_policy_last": last_value,
+        "performance_expert_prompt_last": expert_prompt_last,
     }
 
     return record
@@ -404,9 +405,9 @@ async def _evaluate_reuse(cfg: DictConfig) -> None:
                             "self_eval_latency": self_eval_latency,
                             "self_eval_parsing_error": self_eval_parsing_error,
                             "self_eval_prompt": self_eval_messages,
-                            "value_score_mean": mean_value,
-                            "value_score_last": last_value,
-                            "expert_value_prompt_last": expert_prompt_last,
+                            "performance_policy_mean": mean_value,
+                            "performance_policy_last": last_value,
+                            "performance_expert_prompt_last": expert_prompt_last,
                         }
                     )
                     sink.write(json.dumps(record) + "\n")

@@ -103,4 +103,5 @@ rl:
   temperature: ${...llm.parameters.temperature}
   aggregate_loss: sum
   overlong_filtering: false
-  expert_value_loss_coef: 0.0
+  performance_value_loss_coef: 0.0
+  performance_value_dim: 2

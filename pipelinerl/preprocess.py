@@ -559,10 +559,13 @@ def run_preprocessing_loop(
                         if cfg.finetune.seq_packing:
                             if samples_per_trainer[trainer_id] == target_samples_per_lead:
                                 logger.debug(f"[inner loop] trainer {trainer_id} has all {target_samples_per_lead} samples, creating sentinel batch")
+                                expert_models = cfg.swe.get("expert_models") or []
+                                perf_dim = 1 + len(expert_models) if expert_models else cfg.finetune.rl.get("performance_value_dim", 2)
                                 sentinel_batch = create_sentinel_batch(
                                     device=None,
                                     tokenizer=tokenizer,
-                                    model_version=max_model_version
+                                    model_version=max_model_version,
+                                    performance_value_dim=perf_dim,
                                 )
                                 write_micro_batch_slices(trainer_id, data_writer, sentinel_batch, cfg.finetune.seq_parallel)
                                 trainer_id = (trainer_id + cfg.finetune.seq_parallel) % num_trainers
@@ -665,4 +668,3 @@ def run_preprocessing_loop(
                     if worker.is_alive():
                         worker.terminate()
                         worker.join(timeout=1.0)
-
