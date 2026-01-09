@@ -30,7 +30,7 @@ fi
 # 2) Run handoff analysis using value scores (mean/last)
 python pipelinerl/swe/scripts/analyze_handoff.py \
   --actor_glob="${ACTOR_EVAL_JSONL}" \
-  --expert_jsonl="${EXPERT_JSONL}" \
+  --expert_jsonls="${EXPERT_JSONL}" \
   --output_path="${ANALYSIS_OUTPUT}" \
   --score_list_key="performance_value_head_prompt_last_all" \
   --handoff_margin=0.0

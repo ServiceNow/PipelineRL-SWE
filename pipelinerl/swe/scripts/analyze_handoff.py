@@ -223,17 +223,27 @@ def _entry_reward(entry: Dict[str, Any]) -> float:
     return 0.0
 
 
-def _merge_records(actor_records: Dict[str, Dict[str, Any]], expert_records: Dict[str, Dict[str, Any]]):
+def _merge_records(
+    actor_records: Dict[str, Dict[str, Any]],
+    expert_records_list: List[Dict[str, Dict[str, Any]]],
+):
     merged = {}
     for problem_id, data in actor_records.items():
         if "repair" not in data:
             continue
-        if problem_id not in expert_records:
+        expert_entries: List[Dict[str, Any]] = []
+        missing = False
+        for expert_records in expert_records_list:
+            if problem_id not in expert_records:
+                missing = True
+                break
+            expert_entries.append(expert_records[problem_id])
+        if missing:
             continue
         merged_entry: Dict[str, Any] = {
             "repair": data["repair"],
             "repair_self_eval": data.get("repair_self_eval"),
-            "expert": expert_records[problem_id],
+            "experts": expert_entries,
         }
         if "performance_value_head_prompt_last_all" in data:
             merged_entry["performance_value_head_prompt_last_all"] = data["performance_value_head_prompt_last_all"]
@@ -250,6 +260,13 @@ def _extract_expert_score(
         expert_values = [float(v) for v in value[1:]]
         return max(expert_values) if expert_values else None
     return None
+
+
+def _best_expert_index(score_list: List[float]) -> int | None:
+    if len(score_list) < 2:
+        return None
+    best_offset = max(range(1, len(score_list)), key=lambda i: float(score_list[i]))
+    return best_offset - 1
 
 
 def _pearson(x: List[float], y: List[float]) -> float | None:
@@ -421,7 +438,7 @@ def _routing_summary(
 
 def run_analysis(
     actor_glob: str,
-    expert_jsonl: str,
+    expert_jsonls: List[str],
     output_path: str,
     threshold_start: float,
     threshold_stop: float,
@@ -441,11 +458,14 @@ def run_analysis(
     if not actor_records:
         raise ValueError("No repair entries found in actor traces for the latest model version")
 
-    expert_path = Path(expert_jsonl)
-    expert_records = _load_expert_records(expert_path)
-    logger.info("Loaded %d expert records from %s", len(expert_records), expert_path)
+    expert_records_list = []
+    for expert_jsonl in expert_jsonls:
+        expert_path = Path(expert_jsonl)
+        expert_records = _load_expert_records(expert_path)
+        logger.info("Loaded %d expert records from %s", len(expert_records), expert_path)
+        expert_records_list.append(expert_records)
 
-    merged = _merge_records(actor_records, expert_records)
+    merged = _merge_records(actor_records, expert_records_list)
     logger.info("Overlap contains %d problems", len(merged))
 
     threshold_values = _frange(threshold_start, threshold_stop, threshold_step)
@@ -468,14 +488,19 @@ def run_analysis(
                 continue
             policy_score = float(score_list[0])
             expert_score = _extract_expert_score(data, score_list_key)
-            if expert_score is None:
+            best_expert_index = _best_expert_index(score_list)
+            if expert_score is None or best_expert_index is None:
                 continue
+            experts = data.get("experts") or []
+            if best_expert_index >= len(experts):
+                continue
+            expert_reward = _entry_reward(experts[best_expert_index])
             records.append(
                 HandoffRecord(
                     policy_score=policy_score,
                     expert_score=float(expert_score),
                     policy_reward=_entry_reward(data["repair"]),
-                    expert_reward=_entry_reward(data["expert"]),
+                    expert_reward=expert_reward,
                 )
             )
 
@@ -638,7 +663,18 @@ def run_analysis(
             logger.info("Saved ROC/PR data to %s and %s", roc_path, pr_path)
 
         actor_rewards = [_entry_reward(val["repair"]) for val in merged.values()]
-        expert_rewards = [_entry_reward(val["expert"]) for val in merged.values()]
+        expert_rewards = []
+        for val in merged.values():
+            score_list = val.get(score_key)
+            if not isinstance(score_list, list) or not score_list:
+                continue
+            best_expert_index = _best_expert_index(score_list)
+            if best_expert_index is None:
+                continue
+            experts = val.get("experts") or []
+            if best_expert_index >= len(experts):
+                continue
+            expert_rewards.append(_entry_reward(experts[best_expert_index]))
 
         actor_hist_path = out_path.with_name(out_path.stem + f"_{label}_actor_reward_hist.png")
         if MATPLOTLIB_AVAILABLE and actor_rewards:
@@ -697,7 +733,11 @@ def run_analysis(
 def main():  # pragma: no cover
     parser = argparse.ArgumentParser(description="Analyze handoff using policy/expert value scores.")
     parser.add_argument("--actor_glob", required=True, help="Glob to actor JSONL shards")
-    parser.add_argument("--expert_jsonl", required=True, help="Path to expert JSONL")
+    parser.add_argument(
+        "--expert_jsonls",
+        required=True,
+        help="Comma-separated list of expert JSONL paths (one per expert, in order)",
+    )
     parser.add_argument("--output_path", required=True, help="Base output path for analysis JSON")
     parser.add_argument("--threshold_start", type=float, default=0.0)
     parser.add_argument("--threshold_stop", type=float, default=1.0)
@@ -706,9 +746,10 @@ def main():  # pragma: no cover
     parser.add_argument("--handoff_margin", type=float, default=0.0)
     args = parser.parse_args()
 
+    expert_jsonls = [p.strip() for p in args.expert_jsonls.split(",") if p.strip()]
     run_analysis(
         actor_glob=args.actor_glob,
-        expert_jsonl=args.expert_jsonl,
+        expert_jsonls=expert_jsonls,
         output_path=args.output_path,
         threshold_start=args.threshold_start,
         threshold_stop=args.threshold_stop,
