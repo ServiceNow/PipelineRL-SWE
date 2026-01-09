@@ -34,7 +34,6 @@ finetune:
   rl:
     temperature: ${...llm.parameters.temperature}
     performance_value_loss_coef: 0.1
-    performance_value_dim: 2
 
 # LLM settings for localization
 llm:
@@ -84,6 +83,15 @@ swe:
         temperature: 1.0
       timeout: 300
       max_retries: 3
+    - base_url: ${oc.env:EXTERNAL_VLLM_URL,https://EXTERNAL_VLLM_URL}
+      model_name: "openai/gpt-oss-120b"
+      tokenizer_name: ${model_path}
+      parameters:
+        max_tokens: 8000
+        temperature: 0.7
+      timeout: 300
+      max_retries: 3
+      api_key: ${oc.env:EXTERNAL_VLLM_TOKEN}
   
   # Repository paths
   repo_path_train: /mnt/llmd/data/swegym/repos

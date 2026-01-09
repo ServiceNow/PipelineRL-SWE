@@ -31,35 +31,13 @@ async def generate_unified_swe_rollout(
     Runs each stage once with the policy model; if an expert model is available, also runs
     the expert to collect an expert reward for auxiliary regression.
     """
-    # Create expert LLMs if not provided but configured
+    # Expect expert LLMs to be constructed by the caller (actor loop).
     if expert_llms is None:
         expert_llms = []
     if expert_llms:
         performance_value_dim = 1 + len(expert_llms)
     else:
         performance_value_dim = cfg.finetune.rl.get("performance_value_dim", 2)
-    if not expert_llms and cfg.swe.get('enable_expert_reward', False):
-        try:
-            expert_configs = cfg.swe.get('expert_models') or []
-            if expert_configs:
-                for expert_config in expert_configs:
-                    expert_llms.append(
-                        TrainableLLM(
-                            base_url=expert_config.get('base_url', 'http://localhost:8280'),
-                            model_name=expert_config.get('model_name', 'expert-model'),
-                            tokenizer_name=expert_config.get('tokenizer_name', cfg.model_path),
-                            parameters=expert_config.get('parameters', {'max_tokens': 4000, 'temperature': 0.7}),
-                            use_cache=False,
-                            collect_logprobs=False,
-                            observe_llm_calls=False,
-                        )
-                    )
-                logger.info("Created %d expert LLMs for performance regression", len(expert_llms))
-            else:
-                logger.warning("Expert reward enabled but no swe.expert_models configured, disabling expert reward")
-        except Exception as e:
-            logger.error(f"Failed to create expert LLMs: {e}, disabling expert reward for this rollout")
-            expert_llms = []
     training_texts = []
     metrics = UnifiedMetrics()
     

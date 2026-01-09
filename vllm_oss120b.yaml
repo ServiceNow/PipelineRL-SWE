@@ -1,0 +1,31 @@
+image: vllm/vllm-openai:latest
+interactive: false
+data:
+  - 'snow.research.tapes.transformers_cache:/transformers_cache:rw'
+  - 'snow.research.tapes.base_models:/mnt/llmd/base_models:ro'
+command:
+  - python3
+  - '-m'
+  - vllm.entrypoints.openai.api_server
+  - '--model'
+  - openai/gpt-oss-120b
+  - '--tensor-parallel-size'
+  - '4'
+  - '--dtype'
+  - bfloat16
+  - '--enable-prefix-caching'
+  - '--max-model-len'
+  - '26720'
+  - '--gpu-memory-utilization'
+  - '0.9'
+  - '--port'
+  - '8080'
+resources:
+  cpu: 16
+  gpu: 4
+  gpuMem: 80
+  mem: 256
+restartable: true
+environmentVars:
+  - HUGGINGFACE_HUB_CACHE=/transformers_cache
+  - PORT=8080
