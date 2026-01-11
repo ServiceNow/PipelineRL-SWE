@@ -382,6 +382,16 @@ def rl_step(
             else:
                 seq_has_output = performance_prompt_mask.any(dim=1)
 
+            if seq_has_output.shape[0] != performance_targets.shape[0]:
+                logger.error(
+                    "Performance head mismatch: is_packed=%s labels=%s performance_targets=%s seq_has_output=%s segments=%s",
+                    batch.is_packed,
+                    tuple(batch.labels.shape),
+                    tuple(performance_targets.shape),
+                    tuple(seq_has_output.shape),
+                    segments if batch.is_packed else None,
+                )
+
             filtered_targets = performance_targets[seq_has_output]
             prompt_predictions = performance_values[performance_prompt_mask]
             if prompt_predictions.shape != filtered_targets.shape:
