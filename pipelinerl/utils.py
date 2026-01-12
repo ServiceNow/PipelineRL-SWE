@@ -269,14 +269,28 @@ def get_tokens_from_hf_tokenizer(tokenizer: PreTrainedTokenizer | None, prompt: 
     return output_tokens
 
 
-def wait_for_inference_servers(urls: list[str]):
+def wait_for_inference_servers(servers: list):
     logger.info("Waiting for inference servers to be up")
     while True:
         all_servers_up = True
         still_not_up = None
-        for url in urls:
+        for entry in servers:
+            token = None
+            if isinstance(entry, dict):
+                url = entry.get("url")
+                token = entry.get("token")
+            elif isinstance(entry, (tuple, list)):
+                url = entry[0] if entry else None
+                token = entry[1] if len(entry) > 1 else None
+            else:
+                url = entry
+            if not url:
+                continue
+            headers = {"Content-Type": "application/json"}
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
             try:
-                response = requests.get(f"{url}/health")
+                response = requests.get(f"{url}/health", headers=headers, verify=False)
                 if response.status_code != 200:
                     all_servers_up = False
                     still_not_up = url

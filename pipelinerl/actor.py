@@ -766,7 +766,7 @@ def run_actor_loop(cfg: DictConfig):
     wait_for_inference_servers(llm_urls)
     
     if expert_llms:
-        wait_for_inference_servers([llm.base_url for llm in expert_llms])
+        wait_for_inference_servers([(llm.base_url, llm.api_token) for llm in expert_llms])
 
     wait_for_environments(cfg)
     trainer_state = TrainerState(exp_path)
