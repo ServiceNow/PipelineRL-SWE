@@ -286,6 +286,7 @@ def wait_for_inference_servers(servers: list):
                 url = entry
             if not url:
                 continue
+            url = url.rstrip("/")
             headers = {"Content-Type": "application/json"}
             if token:
                 headers["Authorization"] = f"Bearer {token}"
