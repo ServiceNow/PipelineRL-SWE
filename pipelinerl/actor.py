@@ -675,21 +675,22 @@ def run_actor_loop(cfg: DictConfig):
         if expert_configs:
             for expert_config in expert_configs:
                 try:
-                    expert_llms.append(
-                        TrainableLLM(
-                            base_url=expert_config.get('base_url', 'http://localhost:8280'),
-                            model_name=expert_config.get('model_name', 'expert-model'),
-                            tokenizer_name=expert_config.get('tokenizer_name', cfg.model_path),
-                            parameters=expert_config.get('parameters', {'max_tokens': 64000, 'temperature': 1.0}),
-                            api_token=expert_config.get('api_key'),
-                            max_retries=expert_config.get('max_retries', 5),
-                            max_parallel_requests=expert_config.get('max_parallel_requests', 32),
-                            base_delay=expert_config.get('base_delay', 0.5),
-                            use_cache=False,
-                            collect_logprobs=False,
-                            observe_llm_calls=False,
-                        )
+                    expert_llm = TrainableLLM(
+                        base_url=expert_config.get('base_url', 'http://localhost:8280'),
+                        model_name=expert_config.get('model_name', 'expert-model'),
+                        tokenizer_name=expert_config.get('tokenizer_name', cfg.model_path),
+                        parameters=expert_config.get('parameters', {'max_tokens': 64000, 'temperature': 1.0}),
+                        api_token=expert_config.get('api_key'),
+                        max_retries=expert_config.get('max_retries', 5),
+                        max_parallel_requests=expert_config.get('max_parallel_requests', 32),
+                        base_delay=expert_config.get('base_delay', 0.5),
+                        use_cache=False,
+                        collect_logprobs=False,
+                        observe_llm_calls=False,
                     )
+                    if expert_config.get('api_key'):
+                        expert_llm.api_token = expert_config.get('api_key')
+                    expert_llms.append(expert_llm)
                     logger.info(
                         "Created expert LLM for performance regression: %s",
                         expert_config.get('base_url'),
