@@ -83,7 +83,7 @@ swe:
         temperature: 1.0
       timeout: 300
       max_retries: 3
-    - base_url: ${oc.env:EXTERNAL_VLLM_URL,https://EXTERNAL_VLLM_URL}
+    - base_url: "http://localhost:8380"
       model_name: "openai/gpt-oss-120b"
       tokenizer_name: ${model_path}
       parameters:
@@ -91,7 +91,6 @@ swe:
         temperature: 0.7
       timeout: 300
       max_retries: 3
-      api_key: ${oc.env:EXTERNAL_VLLM_TOKEN}
   
   # Repository paths
   repo_path_train: /mnt/llmd/data/swegym/repos
@@ -114,11 +113,18 @@ swe_preprocessor_args:
   hf_split_name: train
 
 world:
-  expert_llm:
-    enabled: true
-    model_path: mistralai/Devstral-Small-2505
-    vllm_kwargs:
-      tokenizer_mode: mistral
-      config_format: mistral
-      load_format: mistral
-      max_model_len: 32000
+  expert_llms:
+    - enabled: true
+      model_path: mistralai/Devstral-Small-2505
+      port: 8280
+      vllm_kwargs:
+        tensor-parallel-size: 1
+        tokenizer_mode: mistral
+        config_format: mistral
+        load_format: mistral
+        max_model_len: 32000
+    - enabled: true
+      model_path: openai/gpt-oss-120b
+      port: 8380
+      vllm_kwargs:
+        tensor-parallel-size: 4

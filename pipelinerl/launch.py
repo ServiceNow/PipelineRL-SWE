@@ -118,19 +118,25 @@ def run_ref_llm(cfg: DictConfig, preprocessor_llm_idx: int, local_idx: int, gpus
         )
 
 
-def run_expert_llm(cfg: DictConfig, local_idx: int, gpus: list[int], exp_dir: Path):
+def run_expert_llm(cfg: DictConfig, local_idx: int, gpus: list[int], exp_dir: Path, expert_idx: int = 0):
     """Launch the expert LLM for on-demand consultation."""
-    log_dir = exp_dir / "expert_llm"
+    log_dir = exp_dir / f"expert_llm_{expert_idx}"
     os.makedirs(log_dir, exist_ok=True)
+
+    expert_configs = cfg.world.get("expert_llms")
+    if expert_configs:
+        expert_cfg = expert_configs[expert_idx]
+    else:
+        expert_cfg = cfg.world.expert_llm
 
     cmd = [
         "python",
         "-m",
         "vllm.entrypoints.openai.api_server",
         "--model",
-        str(cfg.world.expert_llm.model_path),
+        str(expert_cfg.model_path),
         "--port",
-        "8280",
+        str(expert_cfg.get("port", 8280 + expert_idx)),
         "--host",
         "0.0.0.0",
         "--seed",
@@ -138,14 +144,14 @@ def run_expert_llm(cfg: DictConfig, local_idx: int, gpus: list[int], exp_dir: Pa
     ]
 
     # Add expert-specific vLLM kwargs
-    expert_kwargs = cfg.world.expert_llm.get('vllm_kwargs', {})
+    expert_kwargs = expert_cfg.get('vllm_kwargs', {})
     for k, v in expert_kwargs.items():
         cmd.append(f"--{k}")
         if v not in [None, ""]:
             cmd.append(str(v))
 
     gpu_str = ",".join([str(gpu) for gpu in gpus])
-    logger.info(f"Running expert LLM with command: {' '.join(cmd)} on GPU: {gpu_str}")
+    logger.info(f"Running expert LLM {expert_idx} with command: {' '.join(cmd)} on GPU: {gpu_str}")
     save_command(log_dir, cmd)
     
     log_file_path = os.path.join(log_dir, "stdout.log")
@@ -539,7 +545,7 @@ def launch_jobs(cfg: DictConfig, world_map: WorldMap, job_kind_filter: list | No
         elif job.kind == "expert_llm":
             if cfg.debug.use_existing_llms:
                 continue
-            processes.extend(run_expert_llm(cfg, job.local_idx, job.gpus, exp_dir))
+            processes.extend(run_expert_llm(cfg, job.local_idx, job.gpus, exp_dir, job.replica_idx))
         elif job.kind == "finetune":
             processes.extend(run_finetune(cfg, world_map, job.gpus, exp_dir))
         else:

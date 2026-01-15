@@ -132,7 +132,18 @@ class WorldMap:
 
     def _split_gpus_by_purpose(self, cfg):
         # Reserve GPU for expert LLM BEFORE calculating other allocations
-        expert_llm_gpus = 1 if cfg.world.get('expert_llm', {}).get('enabled', False) else 0
+        expert_llm_configs = cfg.world.get('expert_llms')
+        if expert_llm_configs:
+            expert_llm_gpus = 0
+            for cfg_entry in expert_llm_configs:
+                if not cfg_entry.get('enabled', True):
+                    continue
+                vllm_kwargs = cfg_entry.get("vllm_kwargs", {})
+                tp = int(vllm_kwargs.get("tensor-parallel-size", 1))
+                pp = int(vllm_kwargs.get("pipeline-parallel-size", 1))
+                expert_llm_gpus += max(tp * pp, 1)
+        else:
+            expert_llm_gpus = 1 if cfg.world.get('expert_llm', {}).get('enabled', False) else 0
         
         fraction_sum = cfg.world.actor_fraction + cfg.world.preprocessor_fraction + cfg.world.finetune_fraction
         actor_fraction = cfg.world.actor_fraction / fraction_sum
@@ -253,23 +264,33 @@ class WorldMap:
 
         # Place expert LLM if enabled
         if self.expert_llm_gpus > 0:
-            node = next(
-                (node for node in self.available_gpus if len(self.available_gpus[node]) >= 1), None
-            )
-            if node is None:
-                raise ValueError("Not enough GPUs to place expert LLM")
-            
-            gpu = self.available_gpus[node].pop()
-            expert_url = f"http://{self.address_map[node]}:8280"
-            self.add_job(
-                kind="expert_llm",
-                replica_idx=0,  # Only one expert LLM
-                local_idx=gpu,
-                node_rank=node,
-                gpus=[gpu],
-                port=8280,
-                url=expert_url,
-            )
+            expert_llm_configs = cfg.world.get('expert_llms')
+            if not expert_llm_configs:
+                expert_llm_configs = [cfg.world.get('expert_llm', {})]
+            for expert_idx, expert_cfg in enumerate(expert_llm_configs):
+                if not expert_cfg.get('enabled', True):
+                    continue
+                vllm_kwargs = expert_cfg.get("vllm_kwargs", {})
+                tp = int(vllm_kwargs.get("tensor-parallel-size", 1))
+                pp = int(vllm_kwargs.get("pipeline-parallel-size", 1))
+                gpus_needed = max(tp * pp, 1)
+                node = next(
+                    (node for node in self.available_gpus if len(self.available_gpus[node]) >= gpus_needed), None
+                )
+                if node is None:
+                    raise ValueError("Not enough GPUs to place expert LLM")
+                gpus = [self.available_gpus[node].pop() for _ in range(gpus_needed)]
+                port = int(expert_cfg.get("port", 8280 + expert_idx))
+                expert_url = f"http://{self.address_map[node]}:{port}"
+                self.add_job(
+                    kind="expert_llm",
+                    replica_idx=expert_idx,
+                    local_idx=min(gpus),
+                    node_rank=node,
+                    gpus=gpus,
+                    port=port,
+                    url=expert_url,
+                )
 
     def get_least_busy_node(self):
         """Get the node with the least number of CPU-heavy jobs."""
@@ -301,3 +322,6 @@ class WorldMap:
         """Get the expert LLM URL if it exists."""
         expert_jobs = [job for job in self.get_all_jobs() if job.kind == "expert_llm"]
         return expert_jobs[0].url if expert_jobs else ""
+
+    def get_expert_llm_urls(self) -> list[str]:
+        return [job.url for job in self.get_all_jobs() if job.kind == "expert_llm"]
