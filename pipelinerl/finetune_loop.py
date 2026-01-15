@@ -27,7 +27,7 @@ from transformers import PreTrainedTokenizerFast, get_scheduler, set_seed
 from ring_flash_attn import substitute_hf_flash_attn, update_ring_flash_attn_params
 
 from pipelinerl.finetune.value_model import AutoModelForCausalLMWithValueHead
-import pipelinerl.torch_utils
+from pipelinerl.torch_utils import stateless_init_process_group
 from pipelinerl.finetune.types import PipelineBatchEncoding
 from pipelinerl.finetune.checkpoints import (
     load_model,
@@ -87,8 +87,6 @@ def gather_rl_metrics(rl_metrics: Dict[str, List]) -> Dict[str, List]:
     return aggregated_metrics
 
 
-
-
 def run_data_loader(
     data_stream: SingleStreamSpec,
     batch_queue: Queue[PipelineBatchEncoding | Exception],
@@ -137,13 +135,19 @@ class WeightUpdateSuccess(BaseModel):
     version: int
     timestamp: float = time.time()
 
- 
+
 class SamplesProcessed(BaseModel):
     kind: Literal["samples_processed"] = "samples_processed"
     samples_processed: int
     timestamp: float = time.time()
 
-TrainerMessage = WeightUpdateRequest | WeightUpdateSuccess | SamplesProcessed
+
+class TrainingDone(BaseModel):
+    kind: Literal["training_done"] = "training_done"
+    timestamp: float = time.time()
+
+
+TrainerMessage = WeightUpdateRequest | WeightUpdateSuccess | SamplesProcessed | TrainingDone
 
 
 class WeightUpdateManager:
@@ -153,6 +157,7 @@ class WeightUpdateManager:
         self.update_stream = update_stream
         self.actor_update_group = actor_update_group
         self.thread_pool = ThreadPoolExecutor(max_workers=len(llm_urls))
+        self._shutdown = False
 
     def _request_weight_update(self, url: str, message: WeightUpdateRequest):
         response = None
@@ -170,6 +175,11 @@ class WeightUpdateManager:
         for url in self.llm_urls:
             futures.append(self.thread_pool.submit(self._request_weight_update, url, message))
         return futures
+
+    def shutdown(self):
+        if not self._shutdown:
+            self.thread_pool.shutdown(wait=True)
+            self._shutdown = True
 
     def send_weight_update(
         self,
@@ -192,7 +202,7 @@ class WeightUpdateManager:
             if get_accelerator().is_main_process:
                 parameters_info = [
                     # assume DeepSpeed Stage 3
-                    ParameterInfo(name=name, shape=list(parameter.ds_shape), dtype=str(torch.bfloat16))
+                    ParameterInfo(name=name, shape=list(parameter.ds_shape), dtype=str(parameter.dtype))
                     for name, parameter in named_parameters.items()
                 ]
                 message = WeightUpdateRequest(version=version, parameters_info=parameters_info)
@@ -202,7 +212,8 @@ class WeightUpdateManager:
             for name, parameter in named_parameters.items():
                 with deepspeed.zero.GatheredParameters([parameter]):
                     if get_accelerator().is_main_process:
-                        dist.broadcast(parameter.data.bfloat16(), src=0, group=self.actor_update_group)
+                        # Use PyNcclCommunicator's broadcast method instead of torch.distributed
+                        self.actor_update_group.broadcast(parameter.data, src=0, stream=torch.cuda.current_stream())
             if get_accelerator().is_main_process:
                 logger.info("Wait for HTTP requests")
                 for future in futures:  # type: ignore
@@ -237,15 +248,15 @@ class WeightUpdateManager:
                 assert self.update_stream is not None
                 parameters_info = [
                     # assume DeepSpeed Stage 3
-                    ParameterInfo(name=name, shape=list(parameter.shape), dtype=str(torch.bfloat16))
+                    ParameterInfo(name=name, shape=list(parameter.shape), dtype=str(parameter.dtype))
                     for name, parameter in named_parameters.items()
                 ]
                 messages = WeightUpdateRequest(version=version, parameters_info=parameters_info)
                 futures = self.request_weight_updates(messages)
                 logger.info(f"Published weight update request for version {version}")
                 for _, parameter in named_parameters.items():
-                    dist.broadcast(parameter.data.bfloat16(), src=0, group=self.actor_update_group)
-                dist.barrier(self.actor_update_group)
+                    # Use PyNcclCommunicator's broadcast method instead of torch.distributed
+                    self.actor_update_group.broadcast(parameter.data, src=0, stream=torch.cuda.current_stream())
                 for future in futures:
                     future.result()
                 logger.info("Finished broadcasting weights")
@@ -402,13 +413,18 @@ def run_finetuning_loop(
     get_accelerator().wait_for_everyone()
 
     if get_accelerator().is_main_process and args.send_weight_updates:
-        logger.info("Initializing actor process group")
-        actor_update_group = pipelinerl.torch_utils.init_extra_process_group(
-            group_name="actor",
-            backend="nccl",
+        logger.info("Initializing actor process group using StatelessProcessGroup")
+
+        # Explicitly set CUDA device before creating NCCL process group
+        current_device = get_accelerator().device
+        torch.cuda.set_device(current_device)
+        logger.info(f"Set CUDA device to {current_device} for actor process group (rank 0)")
+
+        actor_update_group = stateless_init_process_group(
             init_method=cfg.me.weight_update_group_init_method,
             rank=0,
             world_size=cfg.me.weight_update_group_world_size,
+            device=current_device,
         )
         logger.info("Actor process group initialized")
     else:
@@ -452,7 +468,7 @@ def run_finetuning_loop(
         data_stream=data_stream,
         batch_queue=batch_queue,
     )
-    data_loader_thread = threading.Thread(target=data_loader_worker_fn, args=())
+    data_loader_thread = threading.Thread(target=data_loader_worker_fn, args=(), daemon=True)
 
     get_accelerator().wait_for_everyone()
     model.train()
@@ -485,8 +501,9 @@ def run_finetuning_loop(
             seq_parallel_group, 
         )
     finally:
-        if actor_update_group:
-            dist.destroy_process_group(actor_update_group)
+        if weight_update_manager is not None:
+            weight_update_manager.shutdown()
+        # PyNcclCommunicator doesn't need explicit destroy like torch.distributed process groups
 
 
 def rl_finetuning_worker(
@@ -537,6 +554,11 @@ def rl_finetuning_worker(
     final_train_steps = calculate_train_steps(args, args.interrupt_train_steps)
     if training_metrics.completed_steps == final_train_steps:
         logger.info("Training is already completed")
+        # need to inform inference servers even if training was already completed
+        if get_accelerator().is_main_process:
+            logger.info("Signaling training completion to inference servers...")
+            with write_to_streams(weight_update_stream) as writer:
+                writer.write(TrainingDone())
         return
 
     first_pass = True
@@ -639,12 +661,15 @@ def rl_finetuning_worker(
                 model.set_gradient_accumulation_boundary(True)
                 model.step()
                 grad_norm = model.get_global_grad_norm() if hasattr(model, "get_global_grad_norm") else None
-                if isinstance(training_metrics.grad_norm, torch.Tensor):
+                if isinstance(grad_norm, torch.Tensor):
                     grad_norm = grad_norm.item()
                 training_metrics.grad_norm = grad_norm if grad_norm is not None else -1.0
             else:
                 max_grad_norm = args.get("gradient_clipping_threshold", None)
-                training_metrics.grad_norm = get_accelerator().clip_grad_norm_(model.parameters(), max_grad_norm)
+                grad_norm = get_accelerator().clip_grad_norm_(model.parameters(), max_grad_norm)
+                if isinstance(grad_norm, torch.Tensor):
+                    grad_norm = grad_norm.item()
+                training_metrics.grad_norm = grad_norm
                 optimizer.step()
                 optimizer.zero_grad()
         
@@ -663,7 +688,12 @@ def rl_finetuning_worker(
                 assert batch.seq_boundaries is not None
                 update_ring_flash_attn_params(batch.seq_boundaries, seq_parallel_group)
             loss, this_step_rl_metrics = rl_step(
-                model, batch, training_metrics.completed_steps, final_train_steps, rl_config
+                model,
+                batch,
+                training_metrics.completed_steps,
+                final_train_steps,
+                rl_config,
+                seq_parallel_group=seq_parallel_group,
             )
             if is_sentinel_batch:
                 # zero out the loss and do not update the metrics
@@ -672,8 +702,6 @@ def rl_finetuning_worker(
                 # update the metrics
                 for k, v in this_step_rl_metrics.items():
                     rl_metrics[k].append(v)
-
-                training_metrics.lr = optimizer.param_groups[0]["lr"]
 
             backward(loss, is_final_micro_batch=do_optimizer_step)
 
@@ -726,6 +754,7 @@ def rl_finetuning_worker(
         
         if time_to_log or time_to_save:
             dt = log_time(dt, time_stats, "finetune/interim_eval")
+            training_metrics.lr = optimizer.param_groups[0]["lr"]
             metrics_dict.update(
                 {
                     "stats/lr": training_metrics.lr,
@@ -867,6 +896,11 @@ def rl_finetuning_worker(
             json.dump(asdict(training_metrics), wf, indent=4, sort_keys=True)
         with open(output_dir / "rl_summary.json", "w") as wf:
             json.dump(rl_metrics, wf, indent=4, sort_keys=True)
+
+        # notify inference nodes that training is finished
+        logger.info("Signaling training completion to inference servers...")
+        with write_to_streams(weight_update_stream) as writer:
+            writer.write(TrainingDone())
 
     torch.cuda.empty_cache()
 

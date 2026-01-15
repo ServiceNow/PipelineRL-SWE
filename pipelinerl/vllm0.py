@@ -1,3 +1,36 @@
+"""
+DEPRECATED - Kept only for backward compatibility with older vLLM versions.
+
+This module provides a custom vLLM inference server with dynamic weight updates using the legacy V0 engine architecture.
+
+Compatibility:
+    - vLLM versions <= 0.8.x only
+    - The V0 engine was removed in vLLM 0.11.0
+    - Use vllm1.py instead
+"""
+import warnings
+from packaging import version as version_parser
+import vllm
+
+# Check vLLM version compatibility
+vllm_version = version_parser.parse(vllm.__version__)
+
+if vllm_version >= version_parser.parse("0.9.0"):
+    raise ImportError(
+        f"pipelinerl.vllm0 is not compatible with vLLM {vllm.__version__}. "
+        "This module only works with vLLM <= 0.8.x. "
+        "Please use pipelinerl.vllm1 for vLLM >= 0.11.0 instead."
+    )
+
+# Only show deprecation warning for compatible versions
+warnings.warn(
+    "pipelinerl.vllm0 is DEPRECATED and will be removed in a future version. "
+    "This module only works with vLLM <= 0.8.x. "
+    "Please use pipelinerl.vllm1 as it is actively maintained.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
 import asyncio
 import json
 import logging
@@ -14,7 +47,6 @@ from vllm.entrypoints.openai.cli_args import (
 )
 from vllm.entrypoints.launcher import serve_http
 from vllm.entrypoints.openai.api_server import (
-    run_server,
     create_server_socket,
     build_app,
     init_app_state,
@@ -35,7 +67,9 @@ from vllm.worker.multi_step_model_runner import MultiStepModelRunner
 
 import torch.distributed as dist
 from pipelinerl.finetune_loop import TrainerMessage, WeightUpdateRequest
+from pipelinerl.vllm_quantization import string_to_dtype  # reuse dtype mapping
 import pipelinerl.torch_utils
+import pipelinerl.vllm_quantization  # Register bf16_last_layer_fp32 quantization config
 
 logger = logging.getLogger(__name__)
 # configure this logger individually, in order to avoid messign
@@ -80,12 +114,12 @@ def make_worker_class(multi_step: bool):
 
         def receive_weight_update(self, request: WeightUpdateRequest):
             torch.cuda.synchronize(self.device)
+            expected_dtypes = (torch.bfloat16, torch.float32, torch.float16)
             for info in request.parameters_info:
-                model_dtype = self.model_config.dtype
-                assert info.dtype == str(model_dtype), (
-                    f"mismatch dtype: src {info.dtype},\ dst {self.model_config.dtype}"
-                )
-                buffer = torch.empty(tuple(info.shape), dtype=model_dtype, device=self.device)
+                target_dtype = string_to_dtype(info.dtype)
+                if target_dtype not in expected_dtypes:
+                    logger.warning(f"Unexpected dtype for {info.name}: {info.dtype}")
+                buffer = torch.empty(tuple(info.shape), dtype=target_dtype, device=self.device)
                 torch.distributed.broadcast(buffer, src=0, group=self.process_group)
                 if isinstance(self.model_runner, MultiStepModelRunner):
                     loaded_params = self.model_runner._base_model_runner.model.load_weights(
@@ -95,6 +129,7 @@ def make_worker_class(multi_step: bool):
                     loaded_params = self.model_runner.model.load_weights(weights=[(info.name, buffer)])
                 if len(loaded_params) != 1:
                     raise ValueError(f"model {info.name} not found in model state dict")
+            pipelinerl.vllm_quantization.invalidate_fp32_cache()
             logger.info("Weight update received")
 
     return NewWorkerClass
@@ -168,8 +203,8 @@ class WeightUpdateManager:
 
 async def run_server(args, **uvicorn_kwargs) -> None:
     # COPIED FROM vllm/entrypoints/openai/api_server.py, vllm version 0.6.6.post1
-    logger.info("vLLM API server version %s", version)
-    logger.info("args: %s", args)
+    logger.info(f"vLLM API server version {version}")
+    logger.info(f"args: {args}")
 
     if args.tool_parser_plugin and len(args.tool_parser_plugin) > 3:
         ToolParserManager.import_tool_parser(args.tool_parser_plugin)

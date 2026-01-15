@@ -55,6 +55,8 @@ class PipelineBatchEncoding(BaseModel):
     attention_mask: torch.LongTensor
     labels: torch.LongTensor
     position_ids: torch.LongTensor | None = None  # Required when seq_packing=True
+    # Unique per-token segment identifier (e.g., original sequence id when packed)
+    segment_ids: torch.LongTensor | None = None
     
     rewards: torch.FloatTensor
     advantages: torch.FloatTensor
@@ -75,7 +77,7 @@ class PipelineBatchEncoding(BaseModel):
     pixel_values: torch.FloatTensor | None = None
     image_grid_thw: torch.LongTensor | None = None
     
-    @field_validator('input_ids', 'attention_mask', 'labels', 'position_ids', 'image_grid_thw', mode='before')
+    @field_validator('input_ids', 'attention_mask', 'labels', 'position_ids', 'image_grid_thw', 'segment_ids', mode='before')
     @classmethod
     def convert_to_long_tensor(cls, v: List[int] | torch.Tensor | None) -> torch.LongTensor | None:
         """Handle initialization of long tensors from different types."""
@@ -159,6 +161,7 @@ class PipelineBatchEncoding(BaseModel):
                 "attention_mask": self.attention_mask[:, bs[i]:bs[i + 1]],
                 "labels": self.labels[:, bs[i]:bs[i + 1]],
                 "position_ids": self.position_ids[:, bs[i]:bs[i + 1]] if self.position_ids is not None else None,
+                "segment_ids": self.segment_ids[:, bs[i]:bs[i + 1]] if self.segment_ids is not None else None,
                 "rewards": self.rewards[:, bs[i]:bs[i + 1]],
                 "performance_targets": self.performance_targets,
                 "advantages": self.advantages[:, bs[i]:bs[i + 1]],
