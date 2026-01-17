@@ -161,14 +161,11 @@ class WorldMap:
             desired_preprocessor_gpu_share = int(fixed_preprocessor)
             desired_finetune_gpu_share = int(fixed_finetune)
             expert_llm_gpus = int(fixed_expert)
-            if cfg.finetune.seq_parallel != desired_finetune_gpu_share:
-                logger.warning(
-                    "fixed_gpus.finetune=%d; setting seq_parallel=%d (was %d)",
-                    desired_finetune_gpu_share,
-                    desired_finetune_gpu_share,
-                    cfg.finetune.seq_parallel,
+            if cfg.finetune.seq_parallel and desired_finetune_gpu_share % cfg.finetune.seq_parallel != 0:
+                raise ValueError(
+                    "fixed_gpus.finetune=%d is not divisible by seq_parallel=%d"
+                    % (desired_finetune_gpu_share, cfg.finetune.seq_parallel)
                 )
-                cfg.finetune.seq_parallel = desired_finetune_gpu_share
         else:
             fraction_sum = cfg.world.actor_fraction + cfg.world.preprocessor_fraction + cfg.world.finetune_fraction
             actor_fraction = cfg.world.actor_fraction / fraction_sum
