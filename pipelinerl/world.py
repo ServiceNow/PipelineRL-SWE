@@ -131,6 +131,13 @@ class WorldMap:
 
 
     def _split_gpus_by_purpose(self, cfg):
+        fixed = cfg.world.get("fixed_gpus", {})
+        fixed_actor = fixed.get("actor")
+        fixed_preprocessor = fixed.get("preprocessor")
+        fixed_finetune = fixed.get("finetune")
+        fixed_expert = fixed.get("expert")
+        use_fixed = any(v is not None for v in (fixed_actor, fixed_preprocessor, fixed_finetune, fixed_expert))
+
         # Reserve GPU for expert LLM BEFORE calculating other allocations
         expert_llm_configs = cfg.world.get('expert_llms')
         if expert_llm_configs:
@@ -145,19 +152,26 @@ class WorldMap:
         else:
             expert_llm_gpus = 1 if cfg.world.get('expert_llm', {}).get('enabled', False) else 0
         
-        fraction_sum = cfg.world.actor_fraction + cfg.world.preprocessor_fraction + cfg.world.finetune_fraction
-        actor_fraction = cfg.world.actor_fraction / fraction_sum
-        preprocessor_fraction = cfg.world.preprocessor_fraction / fraction_sum
-
         # TODO: support nodes with less than 8 GPUs available
         total_gpus = self.world_size * self.node_size
-        available_for_pipeline = total_gpus - expert_llm_gpus  # Reduce available pool
-        
-        desired_actor_gpu_share = max(int(available_for_pipeline * actor_fraction), self.gpus_per_llm)
-        desired_preprocessor_gpu_share = (
-            max(int(available_for_pipeline * preprocessor_fraction), self.gpus_per_llm) if cfg.world.preprocessor_fraction else 0
-        )
-        desired_finetune_gpu_share = available_for_pipeline - desired_actor_gpu_share - desired_preprocessor_gpu_share
+        if use_fixed:
+            if fixed_actor is None or fixed_preprocessor is None or fixed_finetune is None or fixed_expert is None:
+                raise ValueError("When using world.fixed_gpus, actor/preprocessor/finetune/expert must all be set")
+            desired_actor_gpu_share = int(fixed_actor)
+            desired_preprocessor_gpu_share = int(fixed_preprocessor)
+            desired_finetune_gpu_share = int(fixed_finetune)
+            expert_llm_gpus = int(fixed_expert)
+        else:
+            fraction_sum = cfg.world.actor_fraction + cfg.world.preprocessor_fraction + cfg.world.finetune_fraction
+            actor_fraction = cfg.world.actor_fraction / fraction_sum
+            preprocessor_fraction = cfg.world.preprocessor_fraction / fraction_sum
+
+            available_for_pipeline = total_gpus - expert_llm_gpus  # Reduce available pool
+            desired_actor_gpu_share = max(int(available_for_pipeline * actor_fraction), self.gpus_per_llm)
+            desired_preprocessor_gpu_share = (
+                max(int(available_for_pipeline * preprocessor_fraction), self.gpus_per_llm) if cfg.world.preprocessor_fraction else 0
+            )
+            desired_finetune_gpu_share = available_for_pipeline - desired_actor_gpu_share - desired_preprocessor_gpu_share
         self._log_info(
             f"Desired GPU share: {desired_actor_gpu_share} for actors,"
             f"{desired_preprocessor_gpu_share} for preprocessors, {desired_finetune_gpu_share} for finetune, "
@@ -165,11 +179,17 @@ class WorldMap:
         )
 
         gpus_per_actor = int(desired_actor_gpu_share / cfg.world.replicas) if cfg.world.replicas > 0 else 0
-        gpus_per_actor = gpus_per_actor - (gpus_per_actor % self.gpus_per_llm)
+        if gpus_per_actor % self.gpus_per_llm != 0:
+            raise ValueError(
+                f"Actor GPUs per replica {gpus_per_actor} must be divisible by gpus_per_llm {self.gpus_per_llm}"
+            )
         gpus_per_preprocessor = (
             int(desired_preprocessor_gpu_share / cfg.world.replicas) if cfg.world.replicas > 0 else 0
         )
-        gpus_per_preprocessor = gpus_per_preprocessor - (gpus_per_preprocessor % self.gpus_per_llm)
+        if gpus_per_preprocessor % self.gpus_per_llm != 0:
+            raise ValueError(
+                f"Preprocessor GPUs per replica {gpus_per_preprocessor} must be divisible by gpus_per_llm {self.gpus_per_llm}"
+            )
         self.llms_per_actor = max(int(gpus_per_actor / self.gpus_per_llm), 1) if gpus_per_actor > 0 else 0
         self.total_actor_llms = self.llms_per_actor * cfg.world.replicas
         self.llms_per_preprocessor = (
@@ -180,7 +200,15 @@ class WorldMap:
 
         total_actor_gpus = cfg.world.replicas * gpus_per_actor
         total_preprocessor_gpus = cfg.world.replicas * gpus_per_preprocessor
-        self.total_finetune_gpus = available_for_pipeline - total_actor_gpus - total_preprocessor_gpus
+        if use_fixed:
+            self.total_finetune_gpus = desired_finetune_gpu_share
+            total_required = total_actor_gpus + total_preprocessor_gpus + self.total_finetune_gpus + expert_llm_gpus
+            if total_required > total_gpus:
+                raise ValueError(
+                    f"Requested fixed GPUs {total_required} exceeds available {total_gpus}"
+                )
+        else:
+            self.total_finetune_gpus = available_for_pipeline - total_actor_gpus - total_preprocessor_gpus
         self._log_info(
             f"The configuration required:\n"
             f"{desired_actor_gpu_share} for actors, {desired_preprocessor_gpu_share} for preprocessors, {self.total_finetune_gpus} for finetune, {expert_llm_gpus} for expert LLM,\n"

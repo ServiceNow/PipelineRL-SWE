@@ -129,7 +129,9 @@ world:
       vllm_kwargs:
         tensor-parallel-size: 4
   replicas: 2
-  actor_fraction: 4
-  preprocessor_fraction: 0
-  finetune_fraction: 4
   env_replicas: 1
+  fixed_gpus:
+    actor: 6
+    preprocessor: 0
+    finetune: 5
+    expert: 5

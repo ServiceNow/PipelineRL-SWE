@@ -81,6 +81,12 @@ vllm_config:
 
 world:
   replicas: 1
+
+  fixed_gpus:
+    actor: null
+    preprocessor: null
+    finetune: null
+    expert: null
   
   actor_fraction: 4
   preprocessor_fraction: 0
@@ -146,4 +152,3 @@ wandb:
   wandb_dir: null
   # Comma-separated list of keywords to tag the run.
   tags: []
-

@@ -1,0 +1,18 @@
+image: registry.toolkit-sp.yul201.service-now.com/snow.research.tapes/interactive-toolkit:throughput
+resources:
+  cpu: 128
+  gpu: 8
+  mem: 1536
+options:
+  infiniband: true
+  internal-dns:
+      name: ""
+      ports:
+      - port: 9001 # deepspeed rendez-vous, Toolkit will automatically use this port as MASTER_PORT
+        target-port: 9001
+        protocol: TCP
+      - port: 9000 # agent rendez-vous
+        target-port: 9000
+        protocol: TCP
+preemptable: true
+restartable: true
