@@ -292,9 +292,6 @@ def run_actor(world_map: WorldMap, actor_idx: int, exp_dir: Path):
         raise NotImplementedError("Can only do 1 actor yet")
     llm_urls = "+".join(world_map.get_actor_urls())
     
-    # Pass expert LLM URL to actor if available
-    expert_url = world_map.get_expert_llm_url()
-    
     cmd = [
         "python",
         "-m",
@@ -307,9 +304,6 @@ def run_actor(world_map: WorldMap, actor_idx: int, exp_dir: Path):
         f"hydra.run.dir={exp_dir}/actor",
         f"+me.llm_urls={llm_urls}",
     ]
-    
-    if expert_url:
-        cmd.append(f"+me.expert_llm_url={expert_url}")
     
     logger.info(f"Running actor with command: {' '.join(cmd)}")
     save_command(exp_dir / "actor", cmd)

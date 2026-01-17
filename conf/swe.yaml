@@ -129,7 +129,7 @@ world:
       port: 8380
       vllm_kwargs:
         tensor-parallel-size: 4
-  replicas: 2
+  replicas: 1
   env_replicas: 1
   fixed_gpus:
     actor: 6
