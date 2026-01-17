@@ -213,12 +213,14 @@ def run_expert_llm(cfg: DictConfig, local_idx: int, gpus: list[int], exp_dir: Pa
     log_file_path = os.path.join(log_dir, "stdout.log")
     err_file_path = os.path.join(log_dir, "stderr.log")
     with open(log_file_path, "a") as log_file, open(err_file_path, "a") as err_file:
-        yield _popen(
+        proc = _popen(
             cmd,
             env={**os.environ, "CUDA_VISIBLE_DEVICES": gpu_str},
             stdout=log_file,
             stderr=err_file,
         )
+    if proc is not None:
+        yield LaunchedProcess(kind="expert_llm", handle=proc)
 
 
 def run_actor_llm(
@@ -613,31 +615,38 @@ def launch_jobs(cfg: DictConfig, world_map: WorldMap, job_kind_filter: list | No
     all_job_kinds = ["actor", "environment", "actor_llm", "preprocessor", "preprocessor_llm", "finetune", "expert_llm"]
     if job_kind_filter is None:
         job_kind_filter = all_job_kinds
+    def _extend(kind: str, procs):
+        for proc in procs:
+            if proc is None:
+                continue
+            if not isinstance(proc, LaunchedProcess):
+                raise TypeError(f"Expected LaunchedProcess, got {type(proc)}")
+            processes.append(proc)
     for job in world_map.my_jobs():
         if job.kind not in all_job_kinds:
             raise ValueError(f"Unknown job kind {job.kind}")
         if job.kind not in job_kind_filter:
             continue
         if job.kind == "actor":
-            processes.extend(run_actor(world_map, job.replica_idx, exp_dir))
+            _extend("actor", run_actor(world_map, job.replica_idx, exp_dir))
         elif job.kind == "environment":
-            processes.extend(run_environment(cfg, job))
+            _extend("environment", run_environment(cfg, job))
         elif job.kind == "actor_llm":
             if cfg.debug.use_existing_llms:
                 continue
-            processes.extend(run_actor_llm(cfg, world_map, job.replica_idx, job.local_idx, job.gpus, exp_dir))
+            _extend("actor_llm", run_actor_llm(cfg, world_map, job.replica_idx, job.local_idx, job.gpus, exp_dir))
         elif job.kind == "preprocessor":
-            processes.extend(run_preprocess(world_map, job.replica_idx, exp_dir))
+            _extend("preprocessor", run_preprocess(world_map, job.replica_idx, exp_dir))
         elif job.kind == "preprocessor_llm":
             if cfg.debug.use_existing_llms:
                 continue            
-            processes.extend(run_ref_llm(cfg, job.replica_idx, job.local_idx, job.gpus, exp_dir))
+            _extend("preprocessor_llm", run_ref_llm(cfg, job.replica_idx, job.local_idx, job.gpus, exp_dir))
         elif job.kind == "expert_llm":
             if cfg.debug.use_existing_llms:
                 continue
-            processes.extend(run_expert_llm(cfg, job.local_idx, job.gpus, exp_dir, job.replica_idx))
+            _extend("expert_llm", run_expert_llm(cfg, job.local_idx, job.gpus, exp_dir, job.replica_idx))
         elif job.kind == "finetune":
-            processes.extend(run_finetune(cfg, world_map, job.gpus, exp_dir))
+            _extend("finetune", run_finetune(cfg, world_map, job.gpus, exp_dir))
         else:
             raise ValueError(f"Unknown job kind {job.kind}")
     return processes
