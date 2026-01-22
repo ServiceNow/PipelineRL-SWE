@@ -30,7 +30,7 @@ else
    $(error Unsupported TOOLKIT_PROFILE: $(TOOLKIT_PROFILE))
 endif
 
-JOB_ACCOUNT ?= $(ORG).$(ACCOUNT) # snow_infiniband.pyllmd
+JOB_ACCOUNT ?= snow.research.rlar
 BID ?= 1
 
 
