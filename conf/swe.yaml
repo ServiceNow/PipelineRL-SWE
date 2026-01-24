@@ -118,6 +118,8 @@ world:
     - enabled: true
       model_path: mistralai/Devstral-Small-2505
       port: 8280
+      # Optional: run expert server in a different conda env.
+      conda_env: vllm-env
       vllm_kwargs:
         tensor-parallel-size: 1
         tokenizer_mode: mistral

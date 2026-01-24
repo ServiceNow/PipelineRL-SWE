@@ -185,8 +185,12 @@ def run_expert_llm(cfg: DictConfig, local_idx: int, gpus: list[int], exp_dir: Pa
     else:
         expert_cfg = cfg.world.expert_llm
 
-    cmd = [
-        "python",
+    conda_env = expert_cfg.get("conda_env")
+    if conda_env:
+        cmd = ["conda", "run", "--no-capture-output", "-n", str(conda_env), "python"]
+    else:
+        cmd = ["python"]
+    cmd += [
         "-m",
         "vllm.entrypoints.openai.api_server",
         "--model",
