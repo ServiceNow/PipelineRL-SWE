@@ -127,6 +127,7 @@ world:
         load_format: mistral
         max_model_len: 32000
     - enabled: true
+      conda_env: vllm-env
       model_path: openai/gpt-oss-120b
       port: 8380
       vllm_kwargs:
