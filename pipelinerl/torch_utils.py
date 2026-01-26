@@ -1,4 +1,6 @@
 import logging
+import os
+import socket
 from datetime import timedelta
 from typing import Any, Optional, Union
 from urllib.parse import urlparse
@@ -39,11 +41,65 @@ def stateless_init_process_group(init_method, rank, world_size, device):
     parsed = urlparse(init_method)
     master_address = parsed.hostname or "localhost"
     master_port = parsed.port or 9000
-    logger.debug(f"Parsed master_address: {master_address}, master_port: {master_port}")
-
-    pg = StatelessProcessGroup.create(
-        host=master_address, port=master_port, rank=rank, world_size=world_size
+    logger.info(
+        "Initializing StatelessProcessGroup: init_method=%s host=%s port=%s rank=%s world_size=%s device=%s",
+        init_method,
+        master_address,
+        master_port,
+        rank,
+        world_size,
+        device,
     )
+    logger.info(
+        "Env: MASTER_ADDR=%s MASTER_PORT=%s RANK=%s WORLD_SIZE=%s HOSTNAME=%s",
+        os.environ.get("MASTER_ADDR"),
+        os.environ.get("MASTER_PORT"),
+        os.environ.get("RANK"),
+        os.environ.get("WORLD_SIZE"),
+        socket.gethostname(),
+    )
+    resolved_addrs = set()
+    try:
+        for info in socket.getaddrinfo(master_address, None):
+            resolved_addrs.add(info[4][0])
+    except OSError as exc:
+        logger.warning("Failed to resolve master_address=%s: %s", master_address, exc)
+    local_addrs = set()
+    try:
+        import psutil  # type: ignore
+
+        for if_name, addrs in psutil.net_if_addrs().items():
+            for addr in addrs:
+                if addr.family in (socket.AF_INET, socket.AF_INET6):
+                    local_addrs.add(addr.address)
+    except Exception as exc:
+        try:
+            local_addrs.update(socket.gethostbyname_ex(socket.gethostname())[2])
+        except OSError:
+            pass
+        logger.debug("Unable to read full local interface list: %s", exc)
+    if resolved_addrs:
+        logger.info("Resolved master_address=%s to %s", master_address, sorted(resolved_addrs))
+    if local_addrs:
+        logger.info("Local IPs: %s", sorted(local_addrs))
+    if resolved_addrs and local_addrs and not (resolved_addrs & local_addrs):
+        logger.warning(
+            "master_address does not appear to be local on this node. "
+            "If you see Errno 99 (Cannot assign requested address), the bind host is likely wrong."
+        )
+
+    try:
+        pg = StatelessProcessGroup.create(
+            host=master_address, port=master_port, rank=rank, world_size=world_size
+        )
+    except OSError as exc:
+        logger.error(
+            "Failed to create StatelessProcessGroup with host=%s port=%s: %s",
+            master_address,
+            master_port,
+            exc,
+        )
+        raise
     pynccl = PyNcclCommunicator(pg, device=device)
     return pynccl
 
