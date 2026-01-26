@@ -372,6 +372,14 @@ def run_finetune(cfg: DictConfig, world_map: WorldMap, gpus: list[int], exp_dir:
                     filter_parts.append(f"{hosts[rank]}:{','.join(map(str, job.gpus))}")
         deepspeed_include_filter = "@".join(filter_parts)
         logger.info(f"Deepspeed include filter: {deepspeed_include_filter}")
+        logger.info(
+            "Finetune placement: my_rank=%s master_addr=%s nodes_with_finetuning=%s my_finetuning_rank=%s hosts=%s",
+            world_map.my_rank,
+            world_map.master_addr,
+            world_map.nodes_with_finetuning(),
+            world_map.my_finetuning_rank(),
+            hosts,
+        )
         # Orchestrator rank must have already created hostfile.txt
         hostfile_path = str(exp_dir / "hostfile.txt")
         cmd += [
