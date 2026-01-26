@@ -294,6 +294,13 @@ def wait_for_inference_servers(urls: list[str]):
                     if host:
                         addrs = {info[4][0] for info in socket.getaddrinfo(host, None)}
                         logger.warning("Resolved %s to %s", host, sorted(addrs))
+                        for addr in sorted(addrs):
+                            try:
+                                sock = socket.create_connection((addr, urlparse(url).port or 80), timeout=5.0)
+                                sock.close()
+                                logger.warning("TCP connect to %s:%s succeeded", addr, urlparse(url).port or 80)
+                            except Exception as conn_exc:
+                                logger.warning("TCP connect to %s:%s failed: %s", addr, urlparse(url).port or 80, conn_exc)
                 except Exception as dns_exc:
                     logger.warning("Failed to resolve host for %s: %s", url, dns_exc)
                 break
