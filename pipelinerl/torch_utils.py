@@ -19,6 +19,7 @@ from torch.distributed.distributed_c10d import (
 )
 from vllm.distributed.device_communicators.pynccl import PyNcclCommunicator
 from vllm.distributed.utils import StatelessProcessGroup
+from torch.distributed import TCPStore
 
 logger = logging.getLogger(__name__)
 
@@ -88,16 +89,47 @@ def stateless_init_process_group(init_method, rank, world_size, device):
         logger.info("Resolved master_address=%s to %s", master_address, sorted(resolved_addrs))
     if local_addrs:
         logger.info("Local IPs: %s", sorted(local_addrs))
-    if resolved_addrs and local_addrs and not (resolved_addrs & local_addrs):
+    host_is_local = bool(resolved_addrs & local_addrs)
+    if resolved_addrs and local_addrs and not host_is_local:
         logger.warning(
             "master_address does not appear to be local on this node. "
             "If you see Errno 99 (Cannot assign requested address), the bind host is likely wrong."
         )
 
     try:
-        pg = StatelessProcessGroup.create(
-            host=master_address, port=master_port, rank=rank, world_size=world_size
-        )
+        if rank == 0 and resolved_addrs and local_addrs and not host_is_local:
+            # Bind locally but keep master_address for clients to connect.
+            bind_host = "0.0.0.0"
+            logger.warning(
+                "Rank 0 will bind to %s while advertising master_address=%s for TCPStore.",
+                bind_host,
+                master_address,
+            )
+            listen_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            listen_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            listen_socket.bind((bind_host, master_port))
+            listen_socket.listen()
+            listen_fd = listen_socket.fileno()
+            store = TCPStore(
+                host_name=master_address,
+                port=master_port,
+                world_size=world_size,
+                is_master=True,
+                timeout=timedelta(seconds=300),
+                use_libuv=False,
+                master_listen_fd=listen_fd,
+            )
+            pg = StatelessProcessGroup(
+                rank=rank,
+                world_size=world_size,
+                store=store,
+                socket=listen_socket,
+                data_expiration_seconds=3600,
+            )
+        else:
+            pg = StatelessProcessGroup.create(
+                host=master_address, port=master_port, rank=rank, world_size=world_size
+            )
     except OSError as exc:
         logger.error(
             "Failed to create StatelessProcessGroup with host=%s port=%s: %s",
