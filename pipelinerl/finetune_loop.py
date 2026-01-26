@@ -418,6 +418,11 @@ def run_finetuning_loop(
         torch.cuda.set_device(current_device)
         logger.info("Initializing actor process group using StatelessProcessGroup")
         logger.info(f"Set CUDA device to {current_device} for actor process group (rank 0)")
+        logger.info(
+            "Actor update init: method=%s world_size=%s",
+            cfg.me.weight_update_group_init_method,
+            cfg.me.weight_update_group_world_size,
+        )
         actor_update_group = torch_utils.stateless_init_process_group(
             init_method=cfg.me.weight_update_group_init_method,
             rank=0,

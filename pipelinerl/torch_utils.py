@@ -51,12 +51,13 @@ def stateless_init_process_group(init_method, rank, world_size, device):
         device,
     )
     logger.info(
-        "Env: MASTER_ADDR=%s MASTER_PORT=%s RANK=%s WORLD_SIZE=%s HOSTNAME=%s",
+        "Env: MASTER_ADDR=%s MASTER_PORT=%s RANK=%s WORLD_SIZE=%s HOSTNAME=%s FQDN=%s",
         os.environ.get("MASTER_ADDR"),
         os.environ.get("MASTER_PORT"),
         os.environ.get("RANK"),
         os.environ.get("WORLD_SIZE"),
         socket.gethostname(),
+        socket.getfqdn(),
     )
     resolved_addrs = set()
     try:
@@ -68,10 +69,15 @@ def stateless_init_process_group(init_method, rank, world_size, device):
     try:
         import psutil  # type: ignore
 
+        iface_addrs = {}
         for if_name, addrs in psutil.net_if_addrs().items():
+            iface_addrs[if_name] = []
             for addr in addrs:
                 if addr.family in (socket.AF_INET, socket.AF_INET6):
                     local_addrs.add(addr.address)
+                    iface_addrs[if_name].append(addr.address)
+        if iface_addrs:
+            logger.info("Interface addresses: %s", iface_addrs)
     except Exception as exc:
         try:
             local_addrs.update(socket.gethostbyname_ex(socket.gethostname())[2])

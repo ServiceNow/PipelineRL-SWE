@@ -24,6 +24,7 @@ import logging
 import signal
 import torch
 import uvloop
+import socket
 from vllm import AsyncLLMEngine
 from vllm.utils import FlexibleArgumentParser, set_ulimit
 from vllm.entrypoints.openai.cli_args import (
@@ -76,6 +77,12 @@ def make_worker_class(multi_step: bool):
             weight_update_group_init_method: str,
             weight_update_group_world_size: int,
         ):
+            logger.info(
+                "[INIT_ACTOR_UPDATE_GROUP]: method=%s world_size=%s hostname=%s",
+                weight_update_group_init_method,
+                weight_update_group_world_size,
+                socket.gethostname(),
+            )
             self.pg_rank = 1 + actor_idx * actor_ngpus + self.rank
             # log all you know
             prefix = "[INIT_ACTOR_UPDATE_GROUP]: "
