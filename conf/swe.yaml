@@ -130,8 +130,8 @@ world:
       conda_env: vllm-env
       model_path: openai/gpt-oss-120b
       port: 8380
-      vllm_kwargs:
-        tensor-parallel-size: 4
+      #vllm_kwargs:
+      #  tensor-parallel-size: 4
   replicas: 1
   env_replicas: 1
   fixed_gpus:
