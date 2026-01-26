@@ -67,6 +67,7 @@ class WorldMap:
         self.cpu_heavy_jobs = {i: 0 for i in range(self.world_size)} 
         self.job_map = {i: [] for i in range(self.world_size)}
         self.total_jobs = 0
+        self._reserved_expert_jobs: list[Job] = []
 
         if place_inference_jobs:
             self._place_inference_jobs(cfg)
@@ -99,6 +100,11 @@ class WorldMap:
                         f"Sequence parallel ranks {leader_idx} and {leader_idx + offset} are on different nodes: "
                         f"{finetune_rank_node[leader_idx]} and {finetune_rank_node[leader_idx + offset]}"
                     )
+
+        # Place expert LLMs after finetune placement (GPUs were reserved earlier).
+        for job in self._reserved_expert_jobs:
+            self.job_map[job.node_rank].append(job)
+            self.total_jobs += 1
 
 
         # Pretty-log the world map
@@ -295,7 +301,7 @@ class WorldMap:
                     url=ref_url,
                 )
 
-        # Place expert LLM if enabled
+        # Reserve expert LLM GPUs now; place jobs after finetune placement.
         if self.expert_llm_gpus > 0:
             expert_llm_configs = cfg.world.get('expert_llms')
             if not expert_llm_configs:
@@ -311,19 +317,22 @@ class WorldMap:
                     (node for node in self.available_gpus if len(self.available_gpus[node]) >= gpus_needed), None
                 )
                 if node is None:
-                    raise ValueError("Not enough GPUs to place expert LLM")
+                    raise ValueError("Not enough GPUs to reserve expert LLM")
                 gpus = [self.available_gpus[node].pop() for _ in range(gpus_needed)]
                 port = int(expert_cfg.get("port", 8280 + expert_idx))
                 expert_url = f"http://{self.address_map[node]}:{port}"
-                self.add_job(
+                job = Job(
                     kind="expert_llm",
+                    idx=self.total_jobs + len(self._reserved_expert_jobs),
                     replica_idx=expert_idx,
                     local_idx=min(gpus),
                     node_rank=node,
-                    gpus=gpus,
+                    hostname=self.address_map[node],
                     port=port,
+                    gpus=gpus,
                     url=expert_url,
                 )
+                self._reserved_expert_jobs.append(job)
 
     def get_least_busy_node(self):
         """Get the node with the least number of CPU-heavy jobs."""
