@@ -277,14 +277,35 @@ def wait_for_inference_servers(urls: list[str]):
         still_not_up = None
         for url in urls:
             try:
-                response = requests.get(f"{url}/health")
+                response = requests.get(f"{url}/health", timeout=5.0)
                 if response.status_code != 200:
                     all_servers_up = False
                     still_not_up = url
                     break
-            except requests.exceptions.ConnectionError:
+            except requests.exceptions.ConnectionError as exc:
                 all_servers_up = False
                 still_not_up = url
+                logger.warning("Health check connection error for %s: %s", url, exc)
+                try:
+                    from urllib.parse import urlparse
+                    import socket
+
+                    host = urlparse(url).hostname
+                    if host:
+                        addrs = {info[4][0] for info in socket.getaddrinfo(host, None)}
+                        logger.warning("Resolved %s to %s", host, sorted(addrs))
+                except Exception as dns_exc:
+                    logger.warning("Failed to resolve host for %s: %s", url, dns_exc)
+                break
+            except requests.exceptions.Timeout as exc:
+                all_servers_up = False
+                still_not_up = url
+                logger.warning("Health check timeout for %s: %s", url, exc)
+                break
+            except Exception as exc:
+                all_servers_up = False
+                still_not_up = url
+                logger.warning("Health check error for %s: %s", url, exc)
                 break
         if all_servers_up:
             break
