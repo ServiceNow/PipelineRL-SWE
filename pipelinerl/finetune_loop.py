@@ -2,6 +2,7 @@ import contextlib
 import json
 import logging
 import os
+import socket
 import threading
 import time
 from collections import defaultdict
@@ -412,6 +413,16 @@ def run_finetuning_loop(
     logger.info(f"After accelerator.prepare() the optimizer's parameters had dtypes {after_dtype}")
 
     get_accelerator().wait_for_everyone()
+
+    logger.info(
+        "Finetune rank info: global_rank=%s local_rank=%s world_size=%s node_rank=%s host=%s fqdn=%s",
+        os.environ.get("RANK"),
+        os.environ.get("LOCAL_RANK"),
+        os.environ.get("WORLD_SIZE"),
+        os.environ.get("NODE_RANK"),
+        socket.gethostname(),
+        socket.getfqdn(),
+    )
 
     if get_accelerator().is_main_process and args.send_weight_updates:
         current_device = get_accelerator().device
