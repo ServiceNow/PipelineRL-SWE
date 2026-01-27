@@ -62,31 +62,35 @@ class WorldMap:
             # placeholder value, wont't be used
             self.weight_update_group_size = 1
 
-        # Place jobs on nodes in a reverse order to make sure that last node has a finetuning job going on
-        self.available_gpus = {i: set(range(self.node_size)) for i in reversed(range(self.world_size))}
+        # Track available GPUs per node (prefer lower-ranked nodes for finetune placement).
+        self.available_gpus = {i: set(range(self.node_size)) for i in range(self.world_size)}
         self.cpu_heavy_jobs = {i: 0 for i in range(self.world_size)} 
         self.job_map = {i: [] for i in range(self.world_size)}
         self.total_jobs = 0
         self._reserved_expert_jobs: list[Job] = []
 
-        if place_inference_jobs:
-            self._place_inference_jobs(cfg)
-        self._place_pipeline_stages(cfg)
-        if cfg.environment:
-            self._place_environments(cfg)
-
-        # Place the finetune workers on the remaining gpus, take all remaining GPUs
+        # Place finetune jobs first on the initial nodes.
         current_finetune_rank = 0
         finetune_rank_node = {}
-        for node, remaining_gpus in self.available_gpus.items():
-            gpus = list(remaining_gpus)
-            if gpus:
-                self.add_job(node_rank=node, kind="finetune", replica_idx=node, gpus=gpus)
-                for _ in remaining_gpus:
-                    finetune_rank_node[current_finetune_rank] = node
-                    current_finetune_rank += 1
+        finetune_gpus_left = self.total_finetune_gpus
+        for node in range(self.world_size):
+            if finetune_gpus_left <= 0:
+                break
+            available = self.available_gpus[node]
+            if not available:
+                continue
+            take = min(len(available), finetune_gpus_left)
+            gpus = [available.pop() for _ in range(take)]
+            self.add_job(node_rank=node, kind="finetune", replica_idx=node, gpus=gpus)
+            for _ in gpus:
+                finetune_rank_node[current_finetune_rank] = node
+                current_finetune_rank += 1
+            finetune_gpus_left -= take
 
-        assert current_finetune_rank == self.total_finetune_gpus
+        if current_finetune_rank != self.total_finetune_gpus:
+            raise ValueError(
+                f"Expected to allocate {self.total_finetune_gpus} finetune GPUs, got {current_finetune_rank}"
+            )
         if self.total_finetune_gpus % cfg.finetune.seq_parallel != 0:
             raise ValueError(
                 f"Total finetune GPUs {self.total_finetune_gpus} is not divisible by seq_parallel {cfg.finetune.seq_parallel}"
@@ -100,6 +104,12 @@ class WorldMap:
                         f"Sequence parallel ranks {leader_idx} and {leader_idx + offset} are on different nodes: "
                         f"{finetune_rank_node[leader_idx]} and {finetune_rank_node[leader_idx + offset]}"
                     )
+
+        if place_inference_jobs:
+            self._place_inference_jobs(cfg)
+        self._place_pipeline_stages(cfg)
+        if cfg.environment:
+            self._place_environments(cfg)
 
         # Place expert LLMs after finetune placement (GPUs were reserved earlier).
         for job in self._reserved_expert_jobs:
