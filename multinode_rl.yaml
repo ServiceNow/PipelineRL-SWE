@@ -8,11 +8,77 @@ options:
   internal-dns:
       name: ""
       ports:
-      - port: 9001 # deepspeed rendez-vous, Toolkit will automatically use this port as MASTER_PORT
+      # deepspeed rendez-vous, Toolkit will automatically use this port as MASTER_PORT
+      - port: 9001 
         target-port: 9001
         protocol: TCP
-      - port: 9000 # agent rendez-vous
+      # agent rendez-vous
+      - port: 9000 
         target-port: 9000
+        protocol: TCP
+      # redis
+      - port: 11000
+        target-port: 11000
+        protocol: TCP
+      # actor llms
+      - port: 8080
+        target-port: 8080
+        protocol: TCP
+      - port: 8081
+        target-port: 8081
+        protocol: TCP
+      - port: 8082
+        target-port: 8082
+        protocol: TCP
+      - port: 8083
+        target-port: 8083
+        protocol: TCP
+      - port: 8084
+        target-port: 8084
+        protocol: TCP
+      - port: 8085
+        target-port: 8085
+        protocol: TCP
+      - port: 8086
+        target-port: 8086
+        protocol: TCP
+      - port: 8087
+        target-port: 8087
+        protocol: TCP
+      # preprocessor llms
+      - port: 8180
+        target-port: 8180
+        protocol: TCP
+      - port: 8181
+        target-port: 8181
+        protocol: TCP
+      - port: 8182
+        target-port: 8182
+        protocol: TCP
+      - port: 8183
+        target-port: 8183
+        protocol: TCP
+      - port: 8184
+        target-port: 8184
+        protocol: TCP
+      - port: 8185
+        target-port: 8185
+        protocol: TCP
+      - port: 8186
+        target-port: 8186
+        protocol: TCP
+      - port: 8187
+        target-port: 8187
+      # environments
+      - port: 7777
+        target-port: 7777
+        protocol: TCP
+      - port: 7778
+        target-port: 7778
+        protocol: TCP
+      - port: 7779
+        target-port: 7779
         protocol: TCP
 preemptable: true
 restartable: true
+
