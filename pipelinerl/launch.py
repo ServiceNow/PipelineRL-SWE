@@ -244,7 +244,6 @@ def run_actor_llm(
         if cfg.vllm_config.use_v1 else 
         "pipelinerl.entrypoints.run_vllm0"
     )
-    master_addr = os.environ.get("HOSTNAME", os.environ.get("MASTER_ADDR", world_map.master_addr))
     cmd = [
         "python",
         "-m",
@@ -260,7 +259,7 @@ def run_actor_llm(
         "--actor-llm-idx",
         str(actor_llm_idx),
         "--weight-update-group-init-method",
-        f"tcp://{master_addr}:{cfg.world.actor_group_port}",
+        f"tcp://{world_map.master_addr}:{cfg.world.actor_group_port}",
         "--weight-update-group-world-size",
         str(world_map.weight_update_group_size),
     ]
@@ -441,7 +440,7 @@ def run_finetune(cfg: DictConfig, world_map: WorldMap, gpus: list[int], exp_dir:
         f"hydra.run.dir={exp_dir}/finetune",
         # TODO: figure out why we can't build WorldMap in run_finetune.py
         # Current workaround: pass the essential information as follows:
-        f"+me.weight_update_group_init_method=tcp://{os.environ.get('HOSTNAME', os.environ.get('MASTER_ADDR', world_map.master_addr))}:{cfg.world.actor_group_port}",
+        f"+me.weight_update_group_init_method=tcp://{world_map.master_addr}:{cfg.world.actor_group_port}",
         f"+me.weight_update_group_world_size={world_map.weight_update_group_size}",
         f"+me.llm_urls={'+'.join(world_map.get_actor_urls())}",
     ]
