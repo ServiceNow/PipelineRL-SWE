@@ -755,17 +755,6 @@ def run_actor_loop(cfg: DictConfig):
     else:
         actor_model_path = cfg.model_path
 
-    if expert_llms:
-        expected_dim = 1 + len(expert_llms)
-        configured_dim = cfg.finetune.rl.get("performance_value_dim", expected_dim)
-        if configured_dim != expected_dim:
-            logger.warning(
-                "performance_value_dim=%d but %d experts configured; expected %d",
-                configured_dim,
-                len(expert_llms),
-                expected_dim,
-            )
-
     train_llms = [
         TrainableLLM(
             base_url=url,

@@ -18,7 +18,7 @@ def create_sentinel_batch(
     device,
     tokenizer=None,
     model_version=0,
-    performance_value_dim: int = 2,
+    performance_value_dim: int = 1,
 ) -> PipelineBatchEncoding:
     """
     Create a sentinel batch that matches the format expected by rl_step and works with sequence packing.
@@ -70,7 +70,7 @@ def create_sentinel_example(
     n_tokens: int,
     tokenizer=None,
     model_version=0,
-    performance_value_dim: int = 2,
+    performance_value_dim: int = 1,
 ) -> dict:
     eos_token_id = tokenizer.eos_token_id # type: ignore
     example = {

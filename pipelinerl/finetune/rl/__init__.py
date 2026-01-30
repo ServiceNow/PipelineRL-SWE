@@ -104,10 +104,6 @@ class RLConfig(BaseModel):
         default=0.0,
         description="Coefficient for the performance value loss in the final loss",
     )
-    performance_value_dim: int = Field(
-        default=2,
-        description="Number of performance scores (policy + experts).",
-    )
 
 
 def make_rl_data_callback(args, current_dir, rl_config, model):

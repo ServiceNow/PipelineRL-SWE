@@ -109,4 +109,3 @@ rl:
   aggregate_loss: sum
   overlong_filtering: false
   performance_value_loss_coef: 0.0
-  performance_value_dim: 2

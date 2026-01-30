@@ -229,7 +229,7 @@ def collate_packed(
 ) -> PipelineBatchEncoding:
     # pre-compute total length and create tensors in one go
     total_length = sum(len(example["input_ids"]) for example in examples)
-    performance_value_dim = 2
+    performance_value_dim = 1
     if "performance_targets" in examples[0]:
         first_targets = examples[0]["performance_targets"]
         if first_targets and isinstance(first_targets[0], list):

@@ -74,7 +74,7 @@ class AutoModelForCausalLMWithValueHead(nn.Module):
     A wrapper around a causal language model that adds a value head for PPO training.
     """
 
-    def __init__(self, pretrained_model, performance_value_dim: int = 2):
+    def __init__(self, pretrained_model, performance_value_dim: int = 1):
         super().__init__()
         self.pretrained_model = pretrained_model
         self.config = pretrained_model.config
@@ -214,7 +214,7 @@ class AutoModelForCausalLMWithValueHead(nn.Module):
             if weight is not None:
                 performance_value_dim = weight.shape[0]
         if performance_value_dim is None:
-            performance_value_dim = 2
+            performance_value_dim = 1
 
         # Load the base model
         pretrained_model = AutoModelForCausalLM.from_pretrained(

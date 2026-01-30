@@ -8,4 +8,3 @@ rl:
   value_loss_coef: 0.1
   policy_loss: ppo
   performance_value_loss_coef: 0.1
-  performance_value_dim: 2

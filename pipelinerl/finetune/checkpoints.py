@@ -148,7 +148,7 @@ def load_processor(config_name):
         return None
 
 
-def load_model(args, model_class, current_dir):
+def load_model(args, model_class, current_dir, performance_value_dim: int | None = None):
     get_accelerator().wait_for_everyone()
 
     assert not (
@@ -199,7 +199,8 @@ def load_model(args, model_class, current_dir):
     logger.info(f"Loading args: {loading_args}")
     
     if model_cls is AutoModelForCausalLMWithValueHead:
-        performance_value_dim = args.rl.get("performance_value_dim", 2)
+        if performance_value_dim is None:
+            performance_value_dim = 1
         model = model_cls.from_pretrained(
             model_to_load,
             performance_value_dim=performance_value_dim,

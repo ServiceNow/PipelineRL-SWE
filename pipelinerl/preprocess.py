@@ -18,6 +18,7 @@ import datasets
 import transformers
 from litellm import BaseModel, Field
 
+from pipelinerl.config_utils import get_performance_value_dim
 from pipelinerl.finetune.logging_ import flatten_dict_config
 from pipelinerl.finetune_loop import calculate_train_steps
 from pipelinerl.shared_memory_array import SharedMemoryQueue
@@ -576,8 +577,7 @@ def run_preprocessing_loop(
                         if cfg.finetune.seq_packing:
                             if samples_per_trainer[trainer_id] == target_samples_per_lead:
                                 logger.debug(f"[inner loop] trainer {trainer_id} has all {target_samples_per_lead} samples, creating sentinel batch")
-                                expert_models = cfg.swe.get("expert_models") or []
-                                perf_dim = 1 + len(expert_models) if expert_models else cfg.finetune.rl.get("performance_value_dim", 2)
+                                perf_dim = get_performance_value_dim(cfg)
                                 sentinel_batch = create_sentinel_batch(
                                     device=None,
                                     tokenizer=tokenizer,

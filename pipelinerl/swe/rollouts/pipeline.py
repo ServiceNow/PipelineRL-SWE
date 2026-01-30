@@ -11,6 +11,7 @@ from omegaconf import DictConfig
 from tapeagents.llms.trainable import TrainableLLM
 
 from pipelinerl.rollouts import RolloutResult
+from pipelinerl.config_utils import get_performance_value_dim
 from pipelinerl.swe.metrics import UnifiedMetrics
 from pipelinerl.swe.utils.file_context_enricher import FileContextEnricher
 from pipelinerl.swe.utils.localization_utils import parse_patch_for_gold_files
@@ -37,7 +38,7 @@ async def generate_unified_swe_rollout(
     if expert_llms:
         performance_value_dim = 1 + len(expert_llms)
     else:
-        performance_value_dim = cfg.finetune.rl.get("performance_value_dim", 2)
+        performance_value_dim = get_performance_value_dim(cfg)
     training_texts = []
     metrics = UnifiedMetrics()
     

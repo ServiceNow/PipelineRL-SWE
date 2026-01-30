@@ -49,6 +49,7 @@ from pipelinerl.finetune.rl import (
 )
 from pipelinerl.finetune.rl.utils import aggregate_rl_stats
 from pipelinerl.finetune.types import TrainingMetrics
+from pipelinerl.config_utils import get_performance_value_dim
 from pipelinerl.finetune.utils import create_sentinel_batch
 from pipelinerl.streams import (
     SingleStreamSpec,
@@ -312,10 +313,7 @@ def run_finetuning_loop(
     output_dir = Path(cfg.finetune.output_dir)
     num_processes = get_accelerator().state.num_processes  # type: ignore
     args = cfg.finetune if "finetune" in cfg else cfg
-    if "swe" in cfg:
-        expert_models = cfg.swe.get("expert_models") or []
-        if expert_models:
-            args.rl.performance_value_dim = 1 + len(expert_models)
+    performance_value_dim = get_performance_value_dim(cfg)
     validate_packing_config(args)
 
     if not args.gradient_accumulation_passes % num_processes == 0:
@@ -356,7 +354,7 @@ def run_finetuning_loop(
 
     tokenizer = load_tokenizer(args.config_name)
     logger.info("About to load model")
-    model = load_model(args, args.model_class, current_dir)
+    model = load_model(args, args.model_class, current_dir, performance_value_dim=performance_value_dim)
     logger.info(f"Model loaded in dtype {model.dtype}")
 
     dt = log_time(dt, time_stats, "finetune/model_load")
