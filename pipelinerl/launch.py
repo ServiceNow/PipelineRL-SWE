@@ -450,10 +450,6 @@ def run_finetune(cfg: DictConfig, world_map: WorldMap, gpus: list[int], exp_dir:
     logger.info(f"Running finetune with command: {' '.join(cmd)}")
     save_command(exp_dir / "finetune", cmd)
     env = dict(os.environ)
-    # Ensure Accelerate/DeepSpeed sees a stable node rank for finetune placement.
-    env["NODE_RANK"] = str(world_map.my_finetuning_rank())
-    env["MASTER_ADDR"] = str(os.environ.get("MASTER_ADDR", world_map.master_addr))
-    env["MASTER_PORT"] = str(os.environ.get("MASTER_PORT", os.environ.get("MASTER_PORT", "9001")))
     env["DS_ENV_FILE"] = str(exp_dir / ".deepspeed_env")
     proc = _popen(cmd, env=env)
     if proc is not None:

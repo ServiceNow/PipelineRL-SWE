@@ -62,30 +62,34 @@ class WorldMap:
             # placeholder value, wont't be used
             self.weight_update_group_size = 1
 
-        # Track available GPUs per node (prefer lower-ranked nodes for finetune placement).
-        self.available_gpus = {i: set(range(self.node_size)) for i in range(self.world_size)}
+        # Track available GPUs per node (prefer higher-ranked nodes for inference placement like ORIG).
+        self.available_gpus = {i: set(range(self.node_size)) for i in reversed(range(self.world_size))}
         self.cpu_heavy_jobs = {i: 0 for i in range(self.world_size)} 
         self.job_map = {i: [] for i in range(self.world_size)}
         self.total_jobs = 0
         self._reserved_expert_jobs: list[Job] = []
 
-        # Place finetune jobs first on the initial nodes.
+        if place_inference_jobs:
+            self._place_inference_jobs(cfg)
+        self._place_pipeline_stages(cfg)
+        if cfg.environment:
+            self._place_environments(cfg)
+
+        # Place expert LLMs after inference placement (GPUs were reserved earlier).
+        for job in self._reserved_expert_jobs:
+            self.job_map[job.node_rank].append(job)
+            self.total_jobs += 1
+
+        # Place the finetune workers on the remaining gpus, take all remaining GPUs.
         current_finetune_rank = 0
         finetune_rank_node = {}
-        finetune_gpus_left = self.total_finetune_gpus
-        for node in range(self.world_size):
-            if finetune_gpus_left <= 0:
-                break
-            available = self.available_gpus[node]
-            if not available:
-                continue
-            take = min(len(available), finetune_gpus_left)
-            gpus = [available.pop() for _ in range(take)]
-            self.add_job(node_rank=node, kind="finetune", replica_idx=node, gpus=gpus)
-            for _ in gpus:
-                finetune_rank_node[current_finetune_rank] = node
-                current_finetune_rank += 1
-            finetune_gpus_left -= take
+        for node, remaining_gpus in self.available_gpus.items():
+            gpus = list(remaining_gpus)
+            if gpus:
+                self.add_job(node_rank=node, kind="finetune", replica_idx=node, gpus=gpus)
+                for _ in remaining_gpus:
+                    finetune_rank_node[current_finetune_rank] = node
+                    current_finetune_rank += 1
 
         if current_finetune_rank != self.total_finetune_gpus:
             raise ValueError(
@@ -104,17 +108,6 @@ class WorldMap:
                         f"Sequence parallel ranks {leader_idx} and {leader_idx + offset} are on different nodes: "
                         f"{finetune_rank_node[leader_idx]} and {finetune_rank_node[leader_idx + offset]}"
                     )
-
-        if place_inference_jobs:
-            self._place_inference_jobs(cfg)
-        self._place_pipeline_stages(cfg)
-        if cfg.environment:
-            self._place_environments(cfg)
-
-        # Place expert LLMs after finetune placement (GPUs were reserved earlier).
-        for job in self._reserved_expert_jobs:
-            self.job_map[job.node_rank].append(job)
-            self.total_jobs += 1
 
 
         # Pretty-log the world map
