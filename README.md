@@ -195,9 +195,8 @@ cd PipelineRL
 
 Create the environments with dependencies.
 ```bash
-conda create -n pipeline-rl -y python=3.12
+conda create -n pipeline-rl -y python=3.11
 conda run --no-capture-output -n pipeline-rl pip install -e .
-conda run --no-capture-output -n pipeline-rl pip install flash-attn==2.8.3 --no-build-isolation
 ```
 
 Alternatively for `flash-attn`, you can install it via prebuilt packages (on Linux):
