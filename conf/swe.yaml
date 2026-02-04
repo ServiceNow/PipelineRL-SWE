@@ -76,16 +76,14 @@ swe:
   enable_expert_reward: true
   
   expert_models:
-    - base_url: "http://localhost:8280"
-      model_name: "mistralai/Devstral-Small-2505"
+    - model_name: "mistralai/Devstral-Small-2505"
       tokenizer_name: ${model_path}
       parameters:
         max_tokens: 8000
         temperature: 1.0
       timeout: 300
       max_retries: 3
-    - base_url: "http://localhost:8380"
-      model_name: "openai/gpt-oss-120b"
+    - model_name: "openai/gpt-oss-120b"
       tokenizer_name: ${model_path}
       parameters:
         max_tokens: 8000

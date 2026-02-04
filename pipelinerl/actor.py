@@ -698,15 +698,25 @@ def run_actor_loop(cfg: DictConfig):
         if run is None:
             raise ValueError("Failed to initialize wandb run")
     llm_urls = str(cfg.me.llm_urls).split("+")
+    expert_llm_urls = str(cfg.me.get("expert_llm_urls", "")).split("+") if cfg.me.get("expert_llm_urls") else []
 
     expert_llms: list[TrainableLLM] = []
     if cfg.swe.get('enable_expert_reward', False):
         expert_configs = cfg.swe.get('expert_models') or []
+        if not expert_llm_urls:
+            raise ValueError("swe.enable_expert_reward=true but no runtime expert URLs found in me.expert_llm_urls")
+        logger.info("Using runtime expert URLs: %s", expert_llm_urls)
+        if expert_configs and len(expert_llm_urls) != len(expert_configs):
+            raise ValueError(
+                "expert URL count (%s) does not match swe.expert_models count (%s)"
+                % (len(expert_llm_urls), len(expert_configs))
+            )
         if expert_configs:
-            for expert_config in expert_configs:
+            for idx, expert_config in enumerate(expert_configs):
                 try:
+                    resolved_url = expert_llm_urls[idx]
                     expert_llm = TrainableLLM(
-                        base_url=expert_config.get('base_url', 'http://localhost:8280'),
+                        base_url=resolved_url,
                         model_name=expert_config.get('model_name', 'expert-model'),
                         tokenizer_name=expert_config.get('tokenizer_name', cfg.model_path),
                         parameters=expert_config.get('parameters', {'max_tokens': 64000, 'temperature': 1.0}),
@@ -720,7 +730,7 @@ def run_actor_loop(cfg: DictConfig):
                     expert_llms.append(expert_llm)
                     logger.info(
                         "Created expert LLM for performance regression: %s",
-                        expert_config.get('base_url'),
+                        resolved_url,
                     )
                 except Exception as e:
                     logger.error(f"Failed to create expert LLM: {e}, expert reward regression will be disabled")

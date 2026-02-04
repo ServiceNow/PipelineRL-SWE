@@ -74,7 +74,7 @@ options:
       - port: 8280
         target-port: 8280
         protocol: TCP
-      - port: 8281
+      - port: 8380
         target-port: 8281
         protocol: TCP
       # environments

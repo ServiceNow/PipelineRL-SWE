@@ -129,6 +129,8 @@ debug:
 me:
   # Which job is this one? This will be autopopulated
   job_idx: null
+  # Populated at launch with DNS-resolved expert vLLM URLs.
+  expert_llm_urls: ""
 
 hydra:
   run:
