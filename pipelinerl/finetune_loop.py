@@ -215,6 +215,8 @@ class WeightUpdateManager:
             for name, parameter in named_parameters.items():
                 with deepspeed.zero.GatheredParameters([parameter]):
                     if get_accelerator().is_main_process:
+                        # Use PyNcclCommunicator's broadcast method as torch.distributed does not work since vLLM disabled that transfer path
+                        # REVERTED: self.actor_update_group.broadcast(parameter.data, src=0, stream=torch.cuda.current_stream())
                         dist.broadcast(parameter.data, src=0, group=self.actor_update_group)
             if get_accelerator().is_main_process:
                 logger.info("Wait for HTTP requests")
@@ -257,6 +259,8 @@ class WeightUpdateManager:
                 futures = self.request_weight_updates(messages)
                 logger.info(f"Published weight update request for version {version}")
                 for _, parameter in named_parameters.items():
+                    # Use PyNcclCommunicator's broadcast method as torch.distributed does not work since vLLM disabled that transfer path
+                    # REVERTED: self.actor_update_group.broadcast(parameter.data, src=0, stream=torch.cuda.current_stream())
                     dist.broadcast(parameter.data, src=0, group=self.actor_update_group)
                 dist.barrier(self.actor_update_group)
                 for future in futures:
@@ -422,20 +426,19 @@ def run_finetuning_loop(
     )
 
     if get_accelerator().is_main_process and args.send_weight_updates:
-        current_device = get_accelerator().device
-        torch.cuda.set_device(current_device)
-        logger.info("Initializing actor process group using StatelessProcessGroup")
-        logger.info(f"Set CUDA device to {current_device} for actor process group (rank 0)")
-        logger.info(
-            "Actor update init: method=%s world_size=%s",
-            cfg.me.weight_update_group_init_method,
-            cfg.me.weight_update_group_world_size,
-        )
-        actor_update_group = torch_utils.stateless_init_process_group(
+        # current_device = get_accelerator().device
+        # torch.cuda.set_device(current_device)
+        # logger.info("Initializing actor process group using StatelessProcessGroup")
+        # logger.info(f"Set CUDA device to {current_device} for actor process group (rank 0)")
+        # actor_update_group = torch_utils.stateless_init_process_group(
+        logger.info("Initializing actor process group")
+        actor_update_group = torch_utils.init_extra_process_group(
+            group_name="actor",
+            backend="nccl",
             init_method=cfg.me.weight_update_group_init_method,
             rank=0,
             world_size=cfg.me.weight_update_group_world_size,
-            device=current_device,
+            # device=current_device,
         )
         logger.info("Actor process group initialized")
     else:
@@ -515,6 +518,8 @@ def run_finetuning_loop(
         if weight_update_manager is not None:
             weight_update_manager.shutdown()
         # PyNcclCommunicator doesn't need explicit destroy like torch.distributed process groups
+        if actor_update_group:
+            dist.destroy_process_group(actor_update_group)
 
 
 def rl_finetuning_worker(
