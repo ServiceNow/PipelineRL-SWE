@@ -34,6 +34,13 @@ async def run_localization(
     collect_training_text: bool = True,
 ):
     """Run core localization stage with optional expert feedback."""
+    logger.info(
+        "Localization LLM type=%s module=%s model_name=%s base_url=%s",
+        type(llm).__name__,
+        type(llm).__module__,
+        getattr(llm, "model_name", None),
+        getattr(llm, "base_url", None),
+    )
     agent = LocalizationAgent.create(
         llm=llm,
         max_prompt_length=getattr(cfg.agent, 'max_prompt_length', 8000)
@@ -164,6 +171,13 @@ async def run_file_selection(
     collect_training_text: bool = True,
 ):
     """Run core file selection stage with optional expert feedback."""
+    logger.info(
+        "FileSelection LLM type=%s module=%s model_name=%s base_url=%s",
+        type(llm).__name__,
+        type(llm).__module__,
+        getattr(llm, "model_name", None),
+        getattr(llm, "base_url", None),
+    )
     agent = FileSelectionAgent.create(
         llm=llm,
         max_prompt_length=getattr(cfg.agent, 'selection_max_prompt_length', 16000)
@@ -270,6 +284,13 @@ async def run_repair(
     collect_training_text: bool = True,
 ):
     """Run core repair stage with optional expert feedback."""
+    logger.info(
+        "Repair LLM type=%s module=%s model_name=%s base_url=%s",
+        type(llm).__name__,
+        type(llm).__module__,
+        getattr(llm, "model_name", None),
+        getattr(llm, "base_url", None),
+    )
     agent = RepairAgent.create(
         llm=llm,
         max_prompt_length=getattr(cfg.agent, 'repair_max_prompt_length', 16000)
