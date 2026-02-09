@@ -15,6 +15,7 @@ from typing import Dict, List
 import aiohttp
 import hydra
 import uvloop
+import requests
 from omegaconf import DictConfig
 from pydantic import BaseModel, Field
 
@@ -790,6 +791,33 @@ def run_actor_loop(cfg: DictConfig):
     
     if expert_llms:
         wait_for_inference_servers([llm.base_url for llm in expert_llms])
+        for expert_llm in expert_llms:
+            try:
+                resp = requests.get(f"{expert_llm.base_url}/v1/models", timeout=5.0)
+                if not resp.ok:
+                    logger.warning(
+                        "Expert model check failed: url=%s status=%s body=%s",
+                        expert_llm.base_url,
+                        resp.status_code,
+                        resp.text,
+                    )
+                    continue
+                payload = resp.json()
+                models = payload.get("data") or []
+                advertised = models[0].get("id") if models and isinstance(models[0], dict) else None
+                logger.info(
+                    "Expert model check: url=%s configured_model=%s advertised_model=%s",
+                    expert_llm.base_url,
+                    expert_llm.model_name,
+                    advertised,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Expert model check error: url=%s configured_model=%s err=%s",
+                    expert_llm.base_url,
+                    expert_llm.model_name,
+                    exc,
+                )
 
     wait_for_environments(cfg)
     trainer_state = TrainerState(exp_path)
