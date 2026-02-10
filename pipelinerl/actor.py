@@ -703,7 +703,8 @@ def run_actor_loop(cfg: DictConfig):
 
     expert_llms: list[TrainableLLM] = []
     if cfg.swe.get('enable_expert_reward', False):
-        expert_configs = cfg.swe.get('expert_models') or []
+        expert_configs = list(cfg.swe.get('expert_models') or [])
+        expert_configs.sort(key=lambda c: int(c.get("expert_rank", 0)))
         if not expert_llm_urls:
             raise ValueError("swe.enable_expert_reward=true but no runtime expert URLs found in me.expert_llm_urls")
         logger.info("Using runtime expert URLs: %s", expert_llm_urls)
@@ -713,12 +714,49 @@ def run_actor_loop(cfg: DictConfig):
                 % (len(expert_llm_urls), len(expert_configs))
             )
         if expert_configs:
-            for idx, expert_config in enumerate(expert_configs):
+            advertised_by_url: dict[str, str | None] = {}
+            for url in expert_llm_urls:
                 try:
-                    resolved_url = expert_llm_urls[idx]
+                    resp = requests.get(f"{url}/v1/models", timeout=5.0)
+                    if resp.ok:
+                        payload = resp.json()
+                        models = payload.get("data") or []
+                        advertised = models[0].get("id") if models and isinstance(models[0], dict) else None
+                        advertised_by_url[url] = advertised
+                        logger.info(
+                            "Expert model check: url=%s advertised_model=%s",
+                            url,
+                            advertised,
+                        )
+                    else:
+                        advertised_by_url[url] = None
+                        logger.warning(
+                            "Expert model check failed: url=%s status=%s body=%s",
+                            url,
+                            resp.status_code,
+                            resp.text,
+                        )
+                except Exception as exc:
+                    advertised_by_url[url] = None
+                    logger.warning("Expert model check error: url=%s err=%s", url, exc)
+
+            url_by_model: dict[str, str] = {}
+            for url, advertised in advertised_by_url.items():
+                if advertised:
+                    url_by_model[advertised] = url
+
+            for expert_config in expert_configs:
+                model_name = expert_config.get('model_name', 'expert-model')
+                resolved_url = url_by_model.get(model_name)
+                if not resolved_url:
+                    raise ValueError(
+                        "No expert URL advertises model '%s'. advertised=%s"
+                        % (model_name, sorted(url_by_model.keys()))
+                    )
+                try:
                     expert_llm = TrainableLLM(
                         base_url=resolved_url,
-                        model_name=expert_config.get('model_name', 'expert-model'),
+                        model_name=model_name,
                         tokenizer_name=expert_config.get('tokenizer_name', cfg.model_path),
                         parameters=expert_config.get('parameters', {'max_tokens': 64000, 'temperature': 1.0}),
                         max_retries=expert_config.get('max_retries', 5),
@@ -730,8 +768,10 @@ def run_actor_loop(cfg: DictConfig):
                     )
                     expert_llms.append(expert_llm)
                     logger.info(
-                        "Created expert LLM for performance regression: %s",
+                        "Created expert LLM for performance regression: url=%s model=%s rank=%s",
                         resolved_url,
+                        model_name,
+                        expert_config.get("expert_rank"),
                     )
                 except Exception as e:
                     logger.error(f"Failed to create expert LLM: {e}, expert reward regression will be disabled")

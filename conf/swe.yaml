@@ -76,14 +76,16 @@ swe:
   enable_expert_reward: true
   
   expert_models:
-    - model_name: "mistralai/Devstral-Small-2505"
+    - expert_rank: 0
+      model_name: "mistralai/Devstral-Small-2505"
       tokenizer_name: ${model_path}
       parameters:
         max_tokens: 15000
         temperature: 1.0
       timeout: 300
       max_retries: 3
-    - model_name: "openai/gpt-oss-120b"
+    - expert_rank: 1
+      model_name: "openai/gpt-oss-120b"
       tokenizer_name: ${model_path}
       parameters:
         max_tokens: 15000
