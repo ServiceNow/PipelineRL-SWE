@@ -42,6 +42,11 @@ llm:
     max_tokens: 2000  # Short outputs for search queries
     temperature: 1.0
 
+# Policy vLLM settings (override base max_model_len=10000)
+vllm_config:
+  vllm_kwargs:
+    max_model_len: 32000
+
 test_llm:
   parameters:
     max_tokens: 2000
