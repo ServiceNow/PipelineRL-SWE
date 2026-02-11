@@ -195,26 +195,33 @@ def rl_step(
 
     # if we have position_ids, we are packing
     if batch.is_packed:
-        position_ids = batch.position_ids[0]
-        is_sequence_start = position_ids == 0
-        # For computing the loss we will consider the first token the beginning of the sequence,
-        # even if currently we are in the middle of a sequence.
-        is_sequence_start[0] = True 
-        sequence_starts = torch.where(is_sequence_start)[0]
-        seq_boundaries = torch.cat(
-            [
-                sequence_starts,
-                torch.tensor([position_ids.shape[0]], device=position_ids.device),
-            ]
-        )
-        num_sequences = len(sequence_starts)
+        if batch.seq_boundaries is not None:
+            seq_boundaries = batch.seq_boundaries.to(device=batch.position_ids.device)
+            num_sequences = seq_boundaries.shape[0] - 1
+            assert num_sequences > 0, "No sequences found in packed batch"
+            assert seq_boundaries[-1] == batch.position_ids.shape[1], "Sequence boundaries don't match input length"
+            segments = list(zip(seq_boundaries[:-1], seq_boundaries[1:]))
+        else:
+            position_ids = batch.position_ids[0]
+            is_sequence_start = position_ids == 0
+            # For computing the loss we will consider the first token the beginning of the sequence,
+            # even if currently we are in the middle of a sequence.
+            is_sequence_start[0] = True
+            sequence_starts = torch.where(is_sequence_start)[0]
+            seq_boundaries = torch.cat(
+                [
+                    sequence_starts,
+                    torch.tensor([position_ids.shape[0]], device=position_ids.device),
+                ]
+            )
+            num_sequences = len(sequence_starts)
 
-        # ensure we have valid sequence boundaries
-        assert num_sequences > 0, "No sequences found in packed batch"
-        assert seq_boundaries[-1] == position_ids.shape[0], "Sequence boundaries don't match input length"
+            # ensure we have valid sequence boundaries
+            assert num_sequences > 0, "No sequences found in packed batch"
+            assert seq_boundaries[-1] == position_ids.shape[0], "Sequence boundaries don't match input length"
 
-        # pre-compute segment boundaries
-        segments = list(zip(seq_boundaries[:-1], seq_boundaries[1:]))
+            # pre-compute segment boundaries
+            segments = list(zip(seq_boundaries[:-1], seq_boundaries[1:]))
     else:
         num_sequences = masks.shape[0]
         segments = None
