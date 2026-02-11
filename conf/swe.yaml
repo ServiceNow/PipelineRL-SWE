@@ -29,7 +29,7 @@ agent:
 
 # Finetune settings optimized for localization
 finetune:
-  seq_parallel: 1
+  seq_parallel: 2
   seq_length: 48000  # Shorter sequences for query generation
   gradient_accumulation_passes: 512  # Adjust based on your setup
   rl:
@@ -45,7 +45,7 @@ llm:
 # Policy vLLM settings (override base max_model_len=10000)
 vllm_config:
   vllm_kwargs:
-    max_model_len: 13000
+    max_model_len: 16000
 
 test_llm:
   parameters:
@@ -141,7 +141,7 @@ world:
   replicas: 1
   env_replicas: 1
   fixed_gpus:
-    actor: 6
+    actor: 5
     preprocessor: 0
-    finetune: 5
+    finetune: 6
     expert: 5
