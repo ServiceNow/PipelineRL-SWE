@@ -45,7 +45,7 @@ llm:
 # Policy vLLM settings (override base max_model_len=10000)
 vllm_config:
   vllm_kwargs:
-    max_model_len: 16000
+    max_model_len: 13000
 
 test_llm:
   parameters:
