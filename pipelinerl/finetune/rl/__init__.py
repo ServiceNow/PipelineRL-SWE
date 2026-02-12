@@ -199,6 +199,16 @@ def rl_step(
             seq_boundaries = batch.seq_boundaries.to(device=batch.position_ids.device)
             num_sequences = seq_boundaries.shape[0] - 1
             assert num_sequences > 0, "No sequences found in packed batch"
+            if seq_boundaries[-1] != batch.position_ids.shape[1]:
+                logger.error(
+                    "Sequence boundaries don't match input length: last=%s len=%s seq_boundaries=%s position_ids_shape=%s labels_shape=%s padding=%s",
+                    int(seq_boundaries[-1].item()),
+                    int(batch.position_ids.shape[1]),
+                    seq_boundaries.tolist(),
+                    tuple(batch.position_ids.shape),
+                    tuple(batch.labels.shape),
+                    getattr(batch, "padding", None),
+                )
             assert seq_boundaries[-1] == batch.position_ids.shape[1], "Sequence boundaries don't match input length"
             segments = list(zip(seq_boundaries[:-1], seq_boundaries[1:]))
         else:
