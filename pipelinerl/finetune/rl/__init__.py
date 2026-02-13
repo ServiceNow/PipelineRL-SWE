@@ -164,6 +164,24 @@ def build_last_prompt_token_mask(
     return mask
 
 
+def build_local_segments_from_segment_ids(segment_ids: torch.Tensor) -> list[tuple[int, int]]:
+    """Derive local contiguous token segments from packed segment ids."""
+    if segment_ids.dim() != 2 or segment_ids.shape[0] != 1:
+        raise ValueError(f"Expected segment_ids shaped [1, L], got {tuple(segment_ids.shape)}")
+    if segment_ids.shape[1] == 0:
+        return []
+    ids = segment_ids[0]
+    change_points = (ids[1:] != ids[:-1]).nonzero(as_tuple=True)[0] + 1
+    boundaries = torch.cat(
+        [
+            torch.tensor([0], device=ids.device, dtype=torch.long),
+            change_points.to(dtype=torch.long),
+            torch.tensor([ids.shape[0]], device=ids.device, dtype=torch.long),
+        ]
+    )
+    return [(int(start.item()), int(end.item())) for start, end in zip(boundaries[:-1], boundaries[1:])]
+
+
 def rl_step(
     model: PreTrainedModel,
     batch: PipelineBatchEncoding,
@@ -195,21 +213,28 @@ def rl_step(
 
     # if we have position_ids, we are packing
     if batch.is_packed:
-        if batch.seq_boundaries is not None:
+        if batch.segment_ids is not None:
+            segments = build_local_segments_from_segment_ids(batch.segment_ids)
+            num_sequences = len(segments)
+            assert num_sequences > 0, "No sequences found in packed batch"
+            if (
+                batch.seq_boundaries is not None
+                and int(batch.seq_boundaries[-1].item()) != int(batch.position_ids.shape[1])
+            ):
+                logger.debug(
+                    "Packed batch uses global seq_boundaries (last=%s) with local shard length=%s; using local segments from segment_ids",
+                    int(batch.seq_boundaries[-1].item()),
+                    int(batch.position_ids.shape[1]),
+                )
+        elif batch.seq_boundaries is not None:
             seq_boundaries = batch.seq_boundaries.to(device=batch.position_ids.device)
             num_sequences = seq_boundaries.shape[0] - 1
             assert num_sequences > 0, "No sequences found in packed batch"
             if seq_boundaries[-1] != batch.position_ids.shape[1]:
-                logger.error(
-                    "Sequence boundaries don't match input length: last=%s len=%s seq_boundaries=%s position_ids_shape=%s labels_shape=%s padding=%s",
-                    int(seq_boundaries[-1].item()),
-                    int(batch.position_ids.shape[1]),
-                    seq_boundaries.tolist(),
-                    tuple(batch.position_ids.shape),
-                    tuple(batch.labels.shape),
-                    getattr(batch, "padding", None),
+                raise ValueError(
+                    "Packed batch is missing segment_ids and has incompatible seq_boundaries for this shard: "
+                    f"last={int(seq_boundaries[-1].item())} shard_len={int(batch.position_ids.shape[1])}"
                 )
-            assert seq_boundaries[-1] == batch.position_ids.shape[1], "Sequence boundaries don't match input length"
             segments = list(zip(seq_boundaries[:-1], seq_boundaries[1:]))
         else:
             position_ids = batch.position_ids[0]
@@ -371,8 +396,20 @@ def rl_step(
                 min_terms = torch.min(surr1, surr2) * mask_float * sequence_weights
                 policy_loss_total = -min_terms.sum()
             expanded_indicators = torch.zeros_like(masks_shifted, dtype=torch.float)
-            for (start, end), val in zip(segments, clamp_log_ratio_new_old_indicators.flatten()):
-                expanded_indicators[0, start:end] = float(val)
+            if batch.segment_ids is None:
+                raise ValueError("segment_ids must be provided for GSPO indicator expansion")
+            segment_ids_shifted = batch.segment_ids[:, 1:].to(device=expanded_indicators.device, dtype=torch.long)
+            if segment_ids_shifted.numel() > 0:
+                segment_indicators = clamp_log_ratio_new_old_indicators.flatten().to(dtype=expanded_indicators.dtype)
+                if int(segment_ids_shifted.min().item()) < 0 or int(segment_ids_shifted.max().item()) >= int(
+                    segment_indicators.shape[0]
+                ):
+                    raise IndexError(
+                        "segment_ids out of bounds for GSPO indicators: "
+                        f"min={int(segment_ids_shifted.min().item())} max={int(segment_ids_shifted.max().item())} "
+                        f"num_indicators={int(segment_indicators.shape[0])}"
+                    )
+                expanded_indicators[:, : segment_ids_shifted.shape[1]] = segment_indicators[segment_ids_shifted]
             clamp_log_ratio_new_old_indicators = expanded_indicators
         case _:
             raise ValueError(f"Unknown algorithm {config.policy_loss}")
@@ -428,27 +465,23 @@ def rl_step(
 
         if performance_prompt_mask.any():
             if batch.is_packed:
-                seq_has_output = torch.tensor(
-                    [
-                        bool(performance_prompt_mask[0, start:end].any().item())
-                        for start, end in segments
-                    ],
-                    device=performance_targets.device,
+                if batch.segment_ids is None:
+                    raise ValueError("segment_ids missing from packed batch for performance head alignment")
+                prompt_segment_ids = batch.segment_ids[performance_prompt_mask].to(
+                    device=performance_targets.device, dtype=torch.long
                 )
+                if int(prompt_segment_ids.min().item()) < 0 or int(prompt_segment_ids.max().item()) >= int(
+                    performance_targets.shape[0]
+                ):
+                    raise IndexError(
+                        "Prompt segment ids out of bounds for performance targets: "
+                        f"min={int(prompt_segment_ids.min().item())} max={int(prompt_segment_ids.max().item())} "
+                        f"num_targets={int(performance_targets.shape[0])}"
+                    )
+                filtered_targets = performance_targets[prompt_segment_ids]
             else:
                 seq_has_output = performance_prompt_mask.any(dim=1)
-
-            if seq_has_output.shape[0] != performance_targets.shape[0]:
-                logger.error(
-                    "Performance head mismatch: is_packed=%s labels=%s performance_targets=%s seq_has_output=%s segments=%s",
-                    batch.is_packed,
-                    tuple(batch.labels.shape),
-                    tuple(performance_targets.shape),
-                    tuple(seq_has_output.shape),
-                    segments if batch.is_packed else None,
-                )
-
-            filtered_targets = performance_targets[seq_has_output]
+                filtered_targets = performance_targets[seq_has_output]
             prompt_predictions = performance_values[performance_prompt_mask]
             if prompt_predictions.shape != filtered_targets.shape:
                 raise ValueError(
