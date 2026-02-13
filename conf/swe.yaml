@@ -30,7 +30,7 @@ agent:
 # Finetune settings optimized for localization
 finetune:
   seq_parallel: 2
-  seq_length: 48000  # Shorter sequences for query generation
+  seq_length: 32000  # Shorter sequences for query generation
   gradient_accumulation_passes: 512  # Adjust based on your setup
   rl:
     temperature: ${...llm.parameters.temperature}
