@@ -345,10 +345,9 @@ def run_finetuning_loop(
     weight_update_stream = SingleStreamSpec(exp_path=exp_root_dir, topic="weight_update_request")
 
     # Logging
-    if get_accelerator().is_main_process:
-        setup_logging(cfg, output_dir)
-    else:
-        logger.info(f"Last logging message from {get_accelerator().process_index}, will be quiet from now on")
+    setup_logging(cfg, output_dir)
+    # Keep non-main ranks quiet by default, but still allow warnings/errors into per-rank log files.
+    if not get_accelerator().is_main_process and os.environ.get("PIPELINERL_FINETUNE_QUIET_NON_MAIN", "1") == "1":
         logging.disable(logging.INFO)
 
     logger.info(get_accelerator().state)

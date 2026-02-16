@@ -454,7 +454,19 @@ def run_finetune(cfg: DictConfig, world_map: WorldMap, gpus: list[int], exp_dir:
     save_command(exp_dir / "finetune", cmd)
     env = dict(os.environ)
     env["DS_ENV_FILE"] = str(exp_dir / ".deepspeed_env")
-    proc = _popen(cmd, env=env)
+    finetune_dir = exp_dir / "finetune"
+    os.makedirs(finetune_dir, exist_ok=True)
+    finetune_rank = world_map.my_finetuning_rank()
+    stdout_path = finetune_dir / f"launcher_stdout_rank{finetune_rank}.log"
+    stderr_path = finetune_dir / f"launcher_stderr_rank{finetune_rank}.log"
+    logger.info(f"Finetune launcher logs: stdout={stdout_path} stderr={stderr_path}")
+    with open(stdout_path, "a") as stdout_file, open(stderr_path, "a") as stderr_file:
+        proc = _popen(
+            cmd,
+            env=env,
+            stdout=stdout_file,
+            stderr=stderr_file,
+        )
     if proc is not None:
         yield LaunchedProcess(kind="finetune", handle=proc)
 
