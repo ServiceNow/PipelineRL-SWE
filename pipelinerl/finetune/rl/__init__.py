@@ -463,42 +463,39 @@ def rl_step(
         if performance_targets.dim() != 2:
             raise ValueError(f"performance_targets should be [num_sequences, dim], got {performance_targets.shape}")
 
-        if performance_prompt_mask.any():
-            if batch.is_packed:
-                if batch.segment_ids is None:
-                    raise ValueError("segment_ids missing from packed batch for performance head alignment")
-                prompt_segment_ids = batch.segment_ids[performance_prompt_mask].to(
-                    device=performance_targets.device, dtype=torch.long
-                )
-                if int(prompt_segment_ids.min().item()) < 0 or int(prompt_segment_ids.max().item()) >= int(
+        # Keep a rank-invariant autograd path: even if this shard has no prompt anchors,
+        # we still build an empty-tensor loss connected to performance_values.
+        if batch.is_packed:
+            if batch.segment_ids is None:
+                raise ValueError("segment_ids missing from packed batch for performance head alignment")
+            prompt_target_ids = batch.segment_ids[performance_prompt_mask].to(
+                device=performance_targets.device, dtype=torch.long
+            )
+            if prompt_target_ids.numel() > 0:
+                if int(prompt_target_ids.min().item()) < 0 or int(prompt_target_ids.max().item()) >= int(
                     performance_targets.shape[0]
                 ):
                     raise IndexError(
                         "Prompt segment ids out of bounds for performance targets: "
-                        f"min={int(prompt_segment_ids.min().item())} max={int(prompt_segment_ids.max().item())} "
+                        f"min={int(prompt_target_ids.min().item())} max={int(prompt_target_ids.max().item())} "
                         f"num_targets={int(performance_targets.shape[0])}"
                     )
-                filtered_targets = performance_targets[prompt_segment_ids]
-            else:
-                seq_has_output = performance_prompt_mask.any(dim=1)
-                filtered_targets = performance_targets[seq_has_output]
-            prompt_predictions = performance_values[performance_prompt_mask]
-            if prompt_predictions.shape != filtered_targets.shape:
-                raise ValueError(
-                    f"Prompt predictions shape {prompt_predictions.shape} does not match targets shape {filtered_targets.shape}"
-                )
-
-            per_seq_mse = torch.square(prompt_predictions - filtered_targets).mean(dim=-1)
-            if batch.is_packed:
-                prompt_weights = prompt_tokens_weights[performance_prompt_mask]
-            else:
-                prompt_weights = (prompt_tokens_weights * performance_prompt_mask).sum(dim=-1)
-                prompt_weights = prompt_weights[seq_has_output]
-
-            performance_value_loss = 0.5 * (per_seq_mse * prompt_weights).sum()
+            filtered_targets = performance_targets[prompt_target_ids]
         else:
-            prompt_predictions = performance_values.new_empty((0, performance_values.shape[-1]))
-            performance_value_loss = performance_values.new_tensor(0.0)
+            prompt_target_ids = performance_prompt_mask.nonzero(as_tuple=True)[0].to(
+                device=performance_targets.device, dtype=torch.long
+            )
+            filtered_targets = performance_targets[prompt_target_ids]
+
+        prompt_predictions = performance_values[performance_prompt_mask]
+        if prompt_predictions.shape != filtered_targets.shape:
+            raise ValueError(
+                f"Prompt predictions shape {prompt_predictions.shape} does not match targets shape {filtered_targets.shape}"
+            )
+
+        per_seq_mse = torch.square(prompt_predictions - filtered_targets).mean(dim=-1)
+        prompt_weights = prompt_tokens_weights[performance_prompt_mask]
+        performance_value_loss = 0.5 * (per_seq_mse * prompt_weights).sum()
         final_loss = final_loss + config.performance_value_loss_coef * performance_value_loss
 
     # ensure loss is valid
