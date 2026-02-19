@@ -105,6 +105,12 @@ swe:
   abstain:
     quality_threshold: null
     handoff_margin: 0.0
+
+  router_trace:
+    enabled: true
+    include_outputs: true
+    include_policy_token_ids: false
+    include_file_contents: false
   
 
 swe_preprocessor_args:

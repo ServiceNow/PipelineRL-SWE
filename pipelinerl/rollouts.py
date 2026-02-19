@@ -62,6 +62,7 @@ class RolloutResult(BaseModel):
     training_texts: list[TrainingText]
     metrics: BaseMetrics
     latency: float
+    router_trace: dict | None = None
     # optional so fields that it can be filled later after RolloutResult is created
     model_version: int | None = None
     dataset_name: str | None = None

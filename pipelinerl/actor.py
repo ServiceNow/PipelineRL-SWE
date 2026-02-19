@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import nullcontext
 import logging
 import math
 import multiprocessing as mp
@@ -10,7 +11,7 @@ from collections import defaultdict
 from multiprocessing.managers import SharedMemoryManager
 from pathlib import Path
 from queue import Empty
-from typing import Dict, List
+from typing import Any, Dict, List
 
 import aiohttp
 import hydra
@@ -296,6 +297,7 @@ class ActorLoop:
         llms: list[TrainableLLM],
         data_stream: StreamSpec,
         stats_stream: StreamSpec,
+        router_trace_stream: StreamSpec | None,
         trainer_state: TrainerState,
         is_training: bool = True,
         expert_llms: list[TrainableLLM] | None = None,
@@ -304,6 +306,7 @@ class ActorLoop:
         self.data_stream = data_stream
         self.trainer_state = trainer_state
         self.stats_stream = stats_stream
+        self.router_trace_stream = router_trace_stream
         self.sliding_aggregator = SlidingWindowAggregator(window_size=cfg.actor.throughput_window_size)
         self.llms = llms
         self.loop_start_time = -1
@@ -487,6 +490,24 @@ class ActorLoop:
         
         return abstention_stats
 
+    def collect_router_traces(self, rollout_results: List[RolloutResult]) -> list[dict[str, Any]]:
+        traces: list[dict[str, Any]] = []
+        split = "train" if self.is_training else "test"
+        for result in rollout_results:
+            if not result.router_trace:
+                continue
+            trace = dict(result.router_trace)
+            trace["split"] = split
+            trace["is_training"] = self.is_training
+            trace["model_version"] = result.model_version
+            trace["group_id"] = result.group_id
+            if result.training_texts:
+                first_metadata = result.training_texts[0].metadata or {}
+                trace["rollout_index"] = first_metadata.get("rollout_index")
+                trace["step_index"] = first_metadata.get("step_index")
+            traces.append(trace)
+        return traces
+
     def run(self, dataset: list[tuple[str, dict]]):
         loop_start_time = time.time()
         self.init_stats()
@@ -537,9 +558,13 @@ class ActorLoop:
             can_submit_before_update = math.inf
 
         logger.info(f"Start {'train' if self.is_training else 'test'} actor loop")
+        router_trace_context = (
+            write_to_streams(self.router_trace_stream, "a") if self.router_trace_stream else nullcontext(None)
+        )
         with (
             write_to_streams(self.data_stream, "a") as data_stream_writer,
             write_to_streams(self.stats_stream, "a") as stats_writer,
+            router_trace_context as router_trace_writer,
         ):
             while True:
                 # the user function must do next(...) to run each iteration
@@ -601,11 +626,17 @@ class ActorLoop:
                     for text in r.training_texts:
                         all_text_dumps.append(text.model_dump())
                 data_stream_writer.write(all_text_dumps)
+                router_traces = []
+                if router_trace_writer is not None:
+                    router_traces = self.collect_router_traces(rollout_results)
+                    for trace in router_traces:
+                        router_trace_writer.write(trace)
                 in_progress = submitted_groups - finished_groups
+                trace_suffix = f", wrote {len(router_traces)} router traces" if router_trace_writer is not None else ""
                 logger.info(
                     f"Published {group_samples} {'train' if self.is_training else 'test'} samples"
                     f" to {self.data_stream}, total {published_samples} samples so far, {samples_in_queue} samples in the result queue,"
-                    f" {in_progress} groups in progress"
+                    f" {in_progress} groups in progress{trace_suffix}"
                 )
 
                 self.update_stats(rollout_results=rollout_results)
@@ -783,6 +814,16 @@ def run_actor_loop(cfg: DictConfig):
     test_stats_stream = SingleStreamSpec(exp_path=exp_path, topic="stats_test")
     data_stream = SingleStreamSpec(exp_path=exp_path, topic="actor")
     test_data_stream = SingleStreamSpec(exp_path=exp_path, topic="actor_test")
+    trace_cfg = cfg.swe.get("router_trace", {}) or {}
+    trace_enabled = bool(trace_cfg.get("enabled", False))
+    trace_stream = SingleStreamSpec(exp_path=exp_path, topic="router_trace") if trace_enabled else None
+    trace_test_stream = SingleStreamSpec(exp_path=exp_path, topic="router_trace_test") if trace_enabled else None
+    if trace_enabled:
+        logger.info(
+            "Router trace logging enabled: train_stream=%s test_stream=%s",
+            trace_stream,
+            trace_test_stream,
+        )
 
     dataset_loader = hydra.utils.get_method(cfg.dataset_loader)
     # Get dataset loader parameters if they exist in config, otherwise use empty dict
@@ -843,6 +884,7 @@ def run_actor_loop(cfg: DictConfig):
         cfg=cfg,
         trainer_state=trainer_state,
         stats_stream=stats_stream,
+        router_trace_stream=trace_stream,
         llms=train_llms,
         expert_llms=expert_llms,
         exp_path=exp_path,
@@ -855,6 +897,7 @@ def run_actor_loop(cfg: DictConfig):
         cfg=cfg,
         trainer_state=trainer_state,
         stats_stream=test_stats_stream,
+        router_trace_stream=trace_test_stream,
         llms=test_llms,
         is_training=False,
         expert_llms=expert_llms,

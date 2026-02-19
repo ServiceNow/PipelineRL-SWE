@@ -312,6 +312,7 @@ async def run_repair(
         
         if isinstance(llm_call, dict):
             llm_call = LLMCall(**llm_call)
+        raw_output = llm_call.output.content if llm_call and llm_call.output else ""
         
         edits = []
         for step in new_tape.steps:
@@ -352,6 +353,7 @@ async def run_repair(
         return {
             'training_text': training_text,
             'repair_edits': edits,
+            'repair_output': raw_output,
             'metrics': metrics_dict,
             'reward': reward if (reward is not None and not math.isnan(reward)) else 0.0,
             'latency': latency,
@@ -363,7 +365,7 @@ async def run_repair(
     except Exception as e:
         logger.error(f"Repair error: {e}")
         return {
-            'training_text': None, 'repair_edits': [], 'metrics': {"error": str(e)},
+            'training_text': None, 'repair_edits': [], 'repair_output': '', 'metrics': {"error": str(e)},
             'latency': time.time() - start_time, 'prompt_tokens': 0, 'output_tokens': 0, 
             'success': False
         }

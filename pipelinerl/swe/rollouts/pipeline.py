@@ -6,6 +6,7 @@ Now runs policy + optional expert model (for reward regression) without A2A/self
 
 import logging
 from pathlib import Path
+import time
 
 from omegaconf import DictConfig
 from tapeagents.llms.trainable import TrainableLLM
@@ -55,6 +56,13 @@ async def generate_unified_swe_rollout(
         base_repo_path = cfg.swe.get('repo_path_test', '/mnt/llmd/data/swebench_lite/repos')
     else:
         base_repo_path = '/tmp'
+
+    trace_cfg = cfg.swe.get("router_trace", {}) or {}
+    trace_enabled = bool(trace_cfg.get("enabled", False))
+    trace_include_outputs = bool(trace_cfg.get("include_outputs", True))
+    trace_include_policy_token_ids = bool(trace_cfg.get("include_policy_token_ids", False))
+    trace_include_file_contents = bool(trace_cfg.get("include_file_contents", False))
+    router_trace = None
     
     try:
         # Stage 1: Localization
@@ -183,14 +191,16 @@ async def generate_unified_swe_rollout(
             if file_contents:
                 logger.info("Using pure stage mode for repair")
                 rep_result = await run_repair(cfg, llm, problem, file_contents, session)
+                expert_rep_results = []
+                if expert_llms:
+                    for expert_idx, expert_llm in enumerate(expert_llms):
+                        expert_rep_result = await run_repair(
+                            cfg, expert_llm, problem, file_contents, session, collect_training_text=False
+                        )
+                        expert_rep_results.append((expert_idx, expert_llm, expert_rep_result))
                 if cfg.swe.get('enable_repair', False) and rep_result['training_text']:
-                    if expert_llms:
-                        expert_rewards = []
-                        for expert_llm in expert_llms:
-                            expert_rep_result = await run_repair(
-                                cfg, expert_llm, problem, file_contents, session, collect_training_text=False
-                            )
-                            expert_rewards.append(expert_rep_result.get('reward', 0.0))
+                    if expert_rep_results:
+                        expert_rewards = [result.get('reward', 0.0) for _, _, result in expert_rep_results]
                         performance_targets = [rep_result.get('reward', 0.0), *expert_rewards]
                         if len(performance_targets) != performance_value_dim:
                             logger.warning(
@@ -200,6 +210,61 @@ async def generate_unified_swe_rollout(
                             )
                         rep_result['training_text'].performance_targets = performance_targets
                     training_texts.append(rep_result['training_text'])
+
+                if trace_enabled:
+                    policy_training_text = rep_result.get("training_text")
+                    policy_trace = {
+                        "model_name": getattr(llm, "model_name", None),
+                        "base_url": getattr(llm, "base_url", None),
+                        "reward": rep_result.get("reward", 0.0),
+                        "success": rep_result.get("success", False),
+                        "latency": rep_result.get("latency", 0.0),
+                        "prompt_tokens": rep_result.get("prompt_tokens", 0),
+                        "output_tokens": rep_result.get("output_tokens", 0),
+                    }
+                    if trace_include_outputs:
+                        policy_trace["repair_output"] = rep_result.get("repair_output", "")
+                    if policy_training_text is not None:
+                        policy_trace["prompt_text"] = policy_training_text.prompt_text
+                        policy_trace["output_text"] = policy_training_text.output_text
+                        if trace_include_policy_token_ids:
+                            policy_trace["input_ids"] = policy_training_text.input_ids
+                            policy_trace["labels"] = policy_training_text.labels
+
+                    experts_trace = []
+                    for expert_idx, expert_llm, expert_result in expert_rep_results:
+                        expert_trace = {
+                            "expert_rank": expert_idx,
+                            "model_name": getattr(expert_llm, "model_name", None),
+                            "base_url": getattr(expert_llm, "base_url", None),
+                            "reward": expert_result.get("reward", 0.0),
+                            "success": expert_result.get("success", False),
+                            "latency": expert_result.get("latency", 0.0),
+                            "prompt_tokens": expert_result.get("prompt_tokens", 0),
+                            "output_tokens": expert_result.get("output_tokens", 0),
+                        }
+                        if trace_include_outputs:
+                            expert_trace["repair_output"] = expert_result.get("repair_output", "")
+                        experts_trace.append(expert_trace)
+
+                    router_trace = {
+                        "schema_version": 1,
+                        "generated_at_unix": time.time(),
+                        "dataset": problem.get("dataset"),
+                        "problem_id": problem.get("problem_id") or problem.get("instance_id"),
+                        "instance_id": problem.get("instance_id"),
+                        "repo": problem.get("repo"),
+                        "base_commit": problem.get("base_commit"),
+                        "files_for_repair": files_for_repair,
+                        "performance_targets": [
+                            rep_result.get("reward", 0.0),
+                            *[expert_result.get("reward", 0.0) for _, _, expert_result in expert_rep_results],
+                        ],
+                        "policy": policy_trace,
+                        "experts": experts_trace,
+                    }
+                    if trace_include_file_contents:
+                        router_trace["file_contents"] = file_contents
 
                 # Update metrics (always final/post-enhancement)
                 rep_metrics = rep_result['metrics']
@@ -221,6 +286,7 @@ async def generate_unified_swe_rollout(
             training_texts=training_texts,
             metrics=metrics,
             latency=total_latency,
+            router_trace=router_trace,
             dataset_name=problem.get("dataset"),
             prompt_tokens=all_prompt_tokens,
             output_tokens=all_output_tokens,
@@ -240,6 +306,7 @@ async def generate_unified_swe_rollout(
             training_texts=training_texts,
             metrics=failed_metrics,
             latency=total_latency,
+            router_trace=router_trace,
             dataset_name=problem.get("dataset"),
             prompt_tokens=all_prompt_tokens,
             output_tokens=all_output_tokens,

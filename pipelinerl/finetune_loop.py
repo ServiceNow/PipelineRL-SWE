@@ -2,6 +2,7 @@ import contextlib
 import json
 import logging
 import os
+import re
 import socket
 import threading
 import time
@@ -88,6 +89,82 @@ def gather_rl_metrics(rl_metrics: Dict[str, List]) -> Dict[str, List]:
                 aggregated_metrics[key].extend([v for v in values if np.isfinite(v)])
     
     return aggregated_metrics
+
+
+def to_metric_slug(name: str) -> str:
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("_")
+    if not slug:
+        return "unknown_model"
+    # Keep W&B metric keys readable and bounded.
+    return slug[:96]
+
+
+def build_performance_dim_model_slugs(cfg: DictConfig) -> list[str]:
+    slugs = [to_metric_slug(str(cfg.get("model_path", "policy")))]
+    expert_cfgs = list(cfg.get("swe", {}).get("expert_models", []) or [])
+    expert_cfgs.sort(key=lambda expert: int(expert.get("expert_rank", 0)))
+    for expert in expert_cfgs:
+        slugs.append(to_metric_slug(str(expert.get("model_name", "expert"))))
+    return slugs
+
+
+def add_performance_value_derived_metrics(
+    metrics: dict[str, float],
+    performance_dim_model_slugs: list[str] | None = None,
+) -> None:
+    """Add per-dimension mean target/prediction/error metrics from summed RL stats."""
+    anchor_key = "rl/performance_value_anchor_count_sum"
+    if anchor_key not in metrics:
+        return
+
+    anchor_count = metrics.get(anchor_key, 0.0)
+    if not isinstance(anchor_count, (int, float)) or anchor_count <= 0:
+        return
+
+    dim_indices = set()
+    prefix = "rl/performance_value_dim_"
+    suffix = "_pred_sum"
+    for key in metrics:
+        if key.startswith(prefix) and key.endswith(suffix):
+            dim_str = key[len(prefix) : -len(suffix)]
+            if dim_str.isdigit():
+                dim_indices.add(int(dim_str))
+
+    for dim_idx in sorted(dim_indices):
+        pred_sum = metrics.get(f"rl/performance_value_dim_{dim_idx}_pred_sum", 0.0)
+        target_sum = metrics.get(f"rl/performance_value_dim_{dim_idx}_target_sum", 0.0)
+        sq_error_sum = metrics.get(f"rl/performance_value_dim_{dim_idx}_sq_error_sum", 0.0)
+        abs_error_sum = metrics.get(f"rl/performance_value_dim_{dim_idx}_abs_error_sum", 0.0)
+
+        pred_mean = pred_sum / anchor_count
+        target_mean = target_sum / anchor_count
+        mse = sq_error_sum / anchor_count
+        mae = abs_error_sum / anchor_count
+
+        metrics[f"rl/performance_value_dim_{dim_idx}_pred_mean"] = pred_mean
+        metrics[f"rl/performance_value_dim_{dim_idx}_target_mean"] = target_mean
+        metrics[f"rl/performance_value_dim_{dim_idx}_mse"] = mse
+        metrics[f"rl/performance_value_dim_{dim_idx}_mae"] = mae
+
+        # Dim 0 is policy, dims 1..N are experts in order.
+        generic_name = "policy" if dim_idx == 0 else f"expert_{dim_idx - 1}"
+        model_slug = None
+        if performance_dim_model_slugs and dim_idx < len(performance_dim_model_slugs):
+            model_slug = performance_dim_model_slugs[dim_idx]
+        dim_loss_key = f"rl/performance_value_dim_{dim_idx}_loss"
+        if dim_loss_key in metrics:
+            metrics[f"rl/performance_value_{generic_name}_loss"] = metrics[dim_loss_key]
+            if model_slug:
+                metrics[f"rl/performance_value_model_{model_slug}_loss"] = metrics[dim_loss_key]
+        metrics[f"rl/performance_value_{generic_name}_pred_mean"] = pred_mean
+        metrics[f"rl/performance_value_{generic_name}_target_mean"] = target_mean
+        metrics[f"rl/performance_value_{generic_name}_mse"] = mse
+        metrics[f"rl/performance_value_{generic_name}_mae"] = mae
+        if model_slug:
+            metrics[f"rl/performance_value_model_{model_slug}_pred_mean"] = pred_mean
+            metrics[f"rl/performance_value_model_{model_slug}_target_mean"] = target_mean
+            metrics[f"rl/performance_value_model_{model_slug}_mse"] = mse
+            metrics[f"rl/performance_value_model_{model_slug}_mae"] = mae
 
 
 def run_data_loader(
@@ -501,6 +578,8 @@ def run_finetuning_loop(
 
     try:
         logger.info("Start training")
+        performance_dim_model_slugs = build_performance_dim_model_slugs(cfg)
+        logger.info("Performance-head W&B model slug mapping (dim order): %s", performance_dim_model_slugs)
         rl_finetuning_worker(
             args,
             model,
@@ -511,7 +590,8 @@ def run_finetuning_loop(
             training_metrics,
             batch_queue,
             weight_update_stream,
-            seq_parallel_group, 
+            seq_parallel_group,
+            performance_dim_model_slugs,
         )
     finally:
         if weight_update_manager is not None:
@@ -533,6 +613,7 @@ def rl_finetuning_worker(
     batch_queue: Queue[PipelineBatchEncoding | Exception],
     weight_update_stream: SingleStreamSpec | None = None,
     seq_parallel_group = None,
+    performance_dim_model_slugs: list[str] | None = None,
 ):
     local_samples = torch.tensor([0], device=get_accelerator().device)
     # Create a list of tensors with matching dtype (int64)
@@ -816,6 +897,10 @@ def rl_finetuning_worker(
             time_waiting_for_data = 0.0
 
             average_rl_metrics = aggregate_rl_stats(gathered_rl_metrics, samples_per_step)
+            add_performance_value_derived_metrics(
+                average_rl_metrics,
+                performance_dim_model_slugs=performance_dim_model_slugs,
+            )
             ess = (
                 average_rl_metrics["rl/ratio_new_old_sum"] ** 2
                 / average_rl_metrics["rl/ratio_new_old_squared_sum"]

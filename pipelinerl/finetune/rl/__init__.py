@@ -210,6 +210,11 @@ def rl_step(
 
     has_value_head = hasattr(model, 'value_head') and config.value_loss_coef > 0
     has_performance_value_head = hasattr(model, 'performance_value_head') and config.performance_value_loss_coef > 0
+    performance_dim_losses = None
+    performance_sq_error = None
+    performance_abs_error = None
+    performance_predictions = None
+    performance_targets_filtered = None
 
     # if we have position_ids, we are packing
     if batch.is_packed:
@@ -493,9 +498,19 @@ def rl_step(
                 f"Prompt predictions shape {prompt_predictions.shape} does not match targets shape {filtered_targets.shape}"
             )
 
+        performance_predictions = prompt_predictions
+        performance_targets_filtered = filtered_targets
+        performance_sq_error = torch.square(prompt_predictions - filtered_targets)
+        performance_abs_error = torch.abs(prompt_predictions - filtered_targets)
         per_seq_mse = torch.square(prompt_predictions - filtered_targets).mean(dim=-1)
         prompt_weights = prompt_tokens_weights[performance_prompt_mask]
         performance_value_loss = 0.5 * (per_seq_mse * prompt_weights).sum()
+        if prompt_predictions.numel() > 0:
+            performance_dim_losses = 0.5 * (
+                performance_sq_error * prompt_weights.unsqueeze(-1)
+            ).sum(dim=0)
+        else:
+            performance_dim_losses = performance_values.new_zeros((performance_values.shape[-1],))
         final_loss = final_loss + config.performance_value_loss_coef * performance_value_loss
 
     # ensure loss is valid
@@ -564,6 +579,32 @@ def rl_step(
         stats["performance_value_mean"] = prompt_predictions[:, 0].mean().item() if prompt_predictions.numel() else 0.0
         stats["performance_value_max"] = prompt_predictions.max().item() if prompt_predictions.numel() else 0.0
         stats["performance_value_min"] = prompt_predictions.min().item() if prompt_predictions.numel() else 0.0
+        anchor_count = (
+            float(performance_predictions.shape[0]) if performance_predictions is not None else 0.0
+        )
+        stats["performance_value_anchor_count_sum"] = anchor_count
+        if (
+            performance_predictions is not None
+            and performance_targets_filtered is not None
+            and performance_sq_error is not None
+            and performance_abs_error is not None
+            and performance_dim_losses is not None
+        ):
+            dim = performance_predictions.shape[-1]
+            for idx in range(dim):
+                stats[f"performance_value_dim_{idx}_loss"] = performance_dim_losses[idx].item()
+                stats[f"performance_value_dim_{idx}_pred_sum"] = (
+                    performance_predictions[:, idx].sum().item() if anchor_count > 0 else 0.0
+                )
+                stats[f"performance_value_dim_{idx}_target_sum"] = (
+                    performance_targets_filtered[:, idx].sum().item() if anchor_count > 0 else 0.0
+                )
+                stats[f"performance_value_dim_{idx}_sq_error_sum"] = (
+                    performance_sq_error[:, idx].sum().item() if anchor_count > 0 else 0.0
+                )
+                stats[f"performance_value_dim_{idx}_abs_error_sum"] = (
+                    performance_abs_error[:, idx].sum().item() if anchor_count > 0 else 0.0
+                )
 
     return final_loss, stats
 
