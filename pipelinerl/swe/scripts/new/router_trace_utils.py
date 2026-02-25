@@ -56,9 +56,11 @@ def iter_jsonl_dicts(paths: Iterable[Path]):
                     logger.warning("Skipping non-dict JSON entry in %s:%d", path, lineno)
 
 
-def _problem_key(trace: dict[str, Any]) -> str:
+def _problem_key(trace: dict[str, Any]) -> str | None:
     dataset = trace.get("dataset") or ""
-    problem_id = trace.get("problem_id") or trace.get("instance_id") or ""
+    problem_id = trace.get("problem_id") or trace.get("instance_id") or trace.get("id")
+    if not problem_id:
+        return None
     return f"{dataset}::{problem_id}"
 
 
@@ -73,14 +75,46 @@ def select_latest_model_version(traces: list[dict[str, Any]]) -> list[dict[str, 
     versions = [_as_model_version(t.get("model_version")) for t in traces if t.get("model_version") is not None]
     if not versions:
         return traces
-    latest_version = max(versions)
+    counts: dict[int, int] = {}
+    for version in versions:
+        counts[version] = counts.get(version, 0) + 1
+
+    ordered_versions = sorted(counts.keys())
+    latest_version = ordered_versions[-1]
+    latest_count = counts[latest_version]
+    recent_versions = ordered_versions[-10:]
+    recent_max_count = max(counts[version] for version in recent_versions)
+
+    # During active training/eval, the newest model version can be partially written.
+    # Use the newest "full" recent version by count in that case.
+    if latest_count < recent_max_count:
+        candidate_versions = [
+            version for version in recent_versions if counts[version] == recent_max_count
+        ]
+        chosen_version = max(candidate_versions)
+        logger.warning(
+            "Latest model_version=%s has %s traces, but recent full versions have %s traces; using model_version=%s.",
+            latest_version,
+            latest_count,
+            recent_max_count,
+            chosen_version,
+        )
+        latest_version = chosen_version
+
     return [t for t in traces if _as_model_version(t.get("model_version")) == latest_version]
 
 
 def dedupe_latest_by_problem(traces: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if any(_problem_key(trace) is None for trace in traces):
+        logger.warning(
+            "Some traces are missing problem ids (problem_id/instance_id/id); skipping deduplication for this input."
+        )
+        return traces
+
     latest: dict[str, dict[str, Any]] = {}
     for trace in traces:
         key = _problem_key(trace)
+        assert key is not None
         previous = latest.get(key)
         if previous is None or _trace_sort_key(trace) >= _trace_sort_key(previous):
             latest[key] = trace
