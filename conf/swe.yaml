@@ -34,7 +34,9 @@ finetune:
   gradient_accumulation_passes: 512  # Adjust based on your setup
   rl:
     temperature: ${...llm.parameters.temperature}
-    performance_value_loss_coef: 0.1
+    performance_value_loss_coef: 0.05
+    performance_value_dynamic_scale: true
+    performance_value_dynamic_max_multiplier: 0
 
 # LLM settings for localization
 llm:

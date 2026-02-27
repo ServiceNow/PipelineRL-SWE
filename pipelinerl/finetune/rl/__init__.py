@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 import numpy as np
 import pandas as pd
 import torch
+import torch.distributed as dist
 import torch.nn.functional as F
 from datasets import Dataset
 from transformers import PreTrainedModel
@@ -103,6 +104,24 @@ class RLConfig(BaseModel):
     performance_value_loss_coef: float = Field(
         default=0.0,
         description="Coefficient for the performance value loss in the final loss",
+    )
+    performance_value_dynamic_scale: bool = Field(
+        default=False,
+        description=(
+            "If true, scale performance_value_loss_coef by "
+            "(global_output_token_count / global_performance_anchor_count) each pass."
+        ),
+    )
+    performance_value_dynamic_min_multiplier: float = Field(
+        default=0.0,
+        description="Lower bound for dynamic performance loss multiplier.",
+    )
+    performance_value_dynamic_max_multiplier: float = Field(
+        default=0.0,
+        description=(
+            "Upper bound for dynamic performance loss multiplier. "
+            "Set <= 0 to disable max clipping."
+        ),
     )
 
 
@@ -215,6 +234,10 @@ def rl_step(
     performance_abs_error = None
     performance_predictions = None
     performance_targets_filtered = None
+    effective_performance_coef = config.performance_value_loss_coef
+    performance_dynamic_multiplier = 1.0
+    performance_dynamic_output_tokens = 0.0
+    performance_dynamic_anchor_count = 0.0
 
     # if we have position_ids, we are packing
     if batch.is_packed:
@@ -511,7 +534,26 @@ def rl_step(
             ).sum(dim=0)
         else:
             performance_dim_losses = performance_values.new_zeros((performance_values.shape[-1],))
-        final_loss = final_loss + config.performance_value_loss_coef * performance_value_loss
+        if config.performance_value_dynamic_scale:
+            output_token_count = masks_shifted.sum().to(device=performance_values.device, dtype=torch.float32)
+            anchor_count = performance_prompt_mask.sum().to(device=performance_values.device, dtype=torch.float32)
+
+            if dist.is_available() and dist.is_initialized():
+                dist.all_reduce(output_token_count, op=dist.ReduceOp.SUM)
+                dist.all_reduce(anchor_count, op=dist.ReduceOp.SUM)
+
+            denom = torch.clamp(anchor_count, min=1.0)
+            dynamic_multiplier = (output_token_count / denom).item()
+            if config.performance_value_dynamic_min_multiplier > 0:
+                dynamic_multiplier = max(dynamic_multiplier, config.performance_value_dynamic_min_multiplier)
+            if config.performance_value_dynamic_max_multiplier > 0:
+                dynamic_multiplier = min(dynamic_multiplier, config.performance_value_dynamic_max_multiplier)
+            performance_dynamic_multiplier = dynamic_multiplier
+            performance_dynamic_output_tokens = output_token_count.item()
+            performance_dynamic_anchor_count = anchor_count.item()
+            effective_performance_coef *= dynamic_multiplier
+
+        final_loss = final_loss + effective_performance_coef * performance_value_loss
 
     # ensure loss is valid
     assert torch.isfinite(final_loss), f"Non-finite loss detected: {final_loss}"
@@ -576,6 +618,12 @@ def rl_step(
         ).item()
     if has_performance_value_head:
         stats["performance_value_loss"] = performance_value_loss.item()
+        stats["max_performance_value_coef_effective"] = effective_performance_coef
+        stats["min_performance_value_coef_effective"] = effective_performance_coef
+        stats["max_performance_value_dynamic_multiplier"] = performance_dynamic_multiplier
+        stats["min_performance_value_dynamic_multiplier"] = performance_dynamic_multiplier
+        stats["performance_value_dynamic_output_tokens_sum"] = performance_dynamic_output_tokens
+        stats["performance_value_dynamic_anchor_count_sum"] = performance_dynamic_anchor_count
         stats["performance_value_mean"] = prompt_predictions[:, 0].mean().item() if prompt_predictions.numel() else 0.0
         stats["performance_value_max"] = prompt_predictions.max().item() if prompt_predictions.numel() else 0.0
         stats["performance_value_min"] = prompt_predictions.min().item() if prompt_predictions.numel() else 0.0
