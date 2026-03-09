@@ -36,6 +36,7 @@ def load_local_swe_dataset(
     shuffle: bool = True,
     seed: int = 42,
     dataset_label: str | None = None,
+    max_samples: int | None = None,
 ) -> List[Dict]:
     """
     Load preprocessed SWE datasets from filesystem path.
@@ -101,6 +102,10 @@ def load_local_swe_dataset(
             random.shuffle(samples)
             logger.info(f"Shuffled {len(samples)} samples with seed {seed}")
             
+        if max_samples is not None and max_samples > 0 and len(samples) > max_samples:
+            samples = samples[:max_samples]
+            logger.info(f"Trimmed dataset to max_samples={max_samples}")
+
         logger.info(f"Processed {len(samples)} valid samples")
         return samples
         
