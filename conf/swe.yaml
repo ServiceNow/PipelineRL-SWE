@@ -17,9 +17,9 @@ actor:
 # Use SWE dataset loader
 dataset_loader: pipelinerl.swe.load_datasets.load_local_swe_dataset
 train_dataset_names:
-  - swegym
+  - swe_smith_train
 test_dataset_names:
-  - swebench_lite
+  - swe_smith_test
 
 # Agent-specific settings
 agent:
@@ -30,7 +30,7 @@ agent:
 # Finetune settings optimized for localization
 finetune:
   seq_parallel: 2
-  seq_length: 16000
+  seq_length: 32000
   gradient_accumulation_passes: 512  # Adjust based on your setup
   rl:
     temperature: ${...llm.parameters.temperature}
@@ -47,7 +47,7 @@ llm:
 # Policy vLLM settings (override base max_model_len=10000)
 vllm_config:
   vllm_kwargs:
-    max_model_len: 16000
+    max_model_len: 32000
 
 test_llm:
   parameters:
@@ -59,8 +59,8 @@ environment: null
 
 # SWE-specific dataset parameters
 dataset_loader_params:
-  dataset_path: /mnt/llmd/data/swegym/ds
-  test_dataset_path: /mnt/llmd/data/swebench_lite/ds
+  dataset_path: /mnt/llmd/data/swe_smith/ds_train
+  test_dataset_path: /mnt/llmd/data/swe_smith/ds_test
 
 # Model path - use a coding-focused model if available
 model_path: Qwen/Qwen2.5-Coder-7B-Instruct
@@ -101,8 +101,7 @@ swe:
       max_retries: 3
   
   # Repository paths
-  repo_path_train: /mnt/llmd/data/swegym/repos
-  repo_path_test: /mnt/llmd/data/swebench_lite/repos
+  repo_path_default: /mnt/llmd/data/swe_smith/repos
 
   abstain:
     quality_threshold: null
@@ -116,14 +115,14 @@ swe:
   
 
 swe_preprocessor_args:
-  repo_path: /mnt/llmd/data/swegym/repos
-  dataset_path: /mnt/llmd/data/swegym/ds
+  repo_path: /mnt/llmd/data/swe_smith/repos
+  dataset_path: /mnt/llmd/data/swe_smith/ds_train
   min_token_threshold: 10
   max_token_threshold: 5000
   num_map_processes: 32
   tokenizer_model: Qwen/Qwen2.5-Coder-7B-Instruct
   force_reprocess: false
-  hf_dataset_name: SWE-Gym/SWE-Gym
+  hf_dataset_name: SWE-bench/SWE-smith-py
   hf_split_name: train
 
 world:

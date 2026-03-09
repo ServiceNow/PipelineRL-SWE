@@ -2,6 +2,7 @@
 import argparse
 import csv
 import importlib.util
+import itertools
 import json
 import logging
 import math
@@ -442,6 +443,89 @@ def _variance(values: list[float]) -> float:
     return sum((value - mean) ** 2 for value in values) / len(values)
 
 
+def _pearson_corr(x: list[float], y: list[float]) -> float | None:
+    if not x or not y or len(x) != len(y):
+        return None
+    n = len(x)
+    mx = sum(x) / n
+    my = sum(y) / n
+    cov = sum((x[i] - mx) * (y[i] - my) for i in range(n))
+    vx = sum((value - mx) ** 2 for value in x)
+    vy = sum((value - my) ** 2 for value in y)
+    if vx <= 1e-12 or vy <= 1e-12:
+        return None
+    return cov / math.sqrt(vx * vy)
+
+
+def _average_ranks(values: list[float]) -> list[float]:
+    indexed = sorted(enumerate(values), key=lambda it: it[1])
+    ranks = [0.0 for _ in values]
+    pos = 0
+    while pos < len(indexed):
+        start = pos
+        current = indexed[pos][1]
+        while pos + 1 < len(indexed) and abs(indexed[pos + 1][1] - current) <= 1e-12:
+            pos += 1
+        end = pos
+        avg_rank = (start + end) / 2.0 + 1.0
+        for slot in range(start, end + 1):
+            original_idx = indexed[slot][0]
+            ranks[original_idx] = avg_rank
+        pos += 1
+    return ranks
+
+
+def _spearman_corr(x: list[float], y: list[float]) -> float | None:
+    if not x or not y or len(x) != len(y):
+        return None
+    return _pearson_corr(_average_ranks(x), _average_ranks(y))
+
+
+def _roc_auc_binary(labels: list[int], scores: list[float]) -> float | None:
+    if not labels or not scores or len(labels) != len(scores):
+        return None
+    positives = sum(1 for value in labels if value == 1)
+    negatives = len(labels) - positives
+    if positives == 0 or negatives == 0:
+        return None
+
+    order = sorted(range(len(scores)), key=lambda i: scores[i])
+    ranks = [0.0 for _ in scores]
+    pos = 0
+    while pos < len(order):
+        start = pos
+        cur = scores[order[pos]]
+        while pos + 1 < len(order) and abs(scores[order[pos + 1]] - cur) <= 1e-12:
+            pos += 1
+        end = pos
+        avg_rank = (start + end) / 2.0 + 1.0
+        for slot in range(start, end + 1):
+            ranks[order[slot]] = avg_rank
+        pos += 1
+
+    rank_sum_pos = sum(ranks[i] for i in range(len(labels)) if labels[i] == 1)
+    u_stat = rank_sum_pos - positives * (positives + 1) / 2.0
+    return u_stat / (positives * negatives)
+
+
+def _precision_recall_from_scores(labels: list[int], scores: list[float], threshold: float = 0.0) -> tuple[float, float]:
+    if not labels or not scores or len(labels) != len(scores):
+        return (0.0, 0.0)
+    tp = fp = fn = 0
+    for idx in range(len(labels)):
+        pred_pos = scores[idx] > threshold
+        true_pos = labels[idx] == 1
+        if pred_pos and true_pos:
+            tp += 1
+        elif pred_pos and not true_pos:
+            fp += 1
+        elif (not pred_pos) and true_pos:
+            fn += 1
+    precision = tp / (tp + fp) if (tp + fp) else 0.0
+    recall = tp / (tp + fn) if (tp + fn) else 0.0
+    return precision, recall
+
+
 def _compute_best_expert_identity_stats(
     traces: list[dict[str, Any]],
     route_labels: list[str],
@@ -657,11 +741,12 @@ def _evaluate_oracle_predictor_regret(
     mean_util_pred = util_pred_sum / scored
     mean_util_base: float | None = None
     capture: float | None = None
+    utility_gap: float | None = None
     if baseline_count > 0:
         mean_util_base = util_base_sum / baseline_count
-        denom = mean_util_oracle - mean_util_base
-        if abs(denom) > 1e-12:
-            capture = (mean_util_pred - mean_util_base) / denom
+        utility_gap = mean_util_oracle - mean_util_base
+        if abs(utility_gap) > 1e-12:
+            capture = (mean_util_pred - mean_util_base) / utility_gap
 
     return {
         "lambda": lambda_cost,
@@ -680,6 +765,7 @@ def _evaluate_oracle_predictor_regret(
         "oracle_abstain_rate": 1.0 - (oracle_non_abstain / scored),
         "predictor_abstain_rate": 1.0 - (pred_non_abstain / scored),
         "capture": capture,
+        "utility_gap": utility_gap,
         "n_baseline_available": baseline_count,
     }
 
@@ -976,6 +1062,177 @@ def _plot_predicted_vs_realized_by_route(
     )
 
 
+def _plot_pairwise_delta_scatter_and_stats(
+    traces: list[dict[str, Any]],
+    score_key: str,
+    route_labels: list[str],
+    out_dir: Path,
+) -> None:
+    if len(route_labels) < 2:
+        return
+    if not MATPLOTLIB_AVAILABLE:
+        logger.warning("matplotlib not available; skipping pairwise delta scatter plots")
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stats_rows: list[dict[str, Any]] = []
+    for left_idx, right_idx in itertools.combinations(range(len(route_labels)), 2):
+        left_label = route_labels[left_idx]
+        right_label = route_labels[right_idx]
+        delta_pred: list[float] = []
+        delta_true: list[float] = []
+        for trace in traces:
+            rewards = extract_reward_vector(trace)
+            dim = min(len(rewards), len(route_labels))
+            if dim <= max(left_idx, right_idx):
+                continue
+            scores = extract_score_vector(trace, score_key=score_key, expected_dim=dim)
+            if scores is None:
+                continue
+            pred_delta = float(scores[left_idx]) - float(scores[right_idx])
+            true_delta = float(rewards[left_idx]) - float(rewards[right_idx])
+            delta_pred.append(pred_delta)
+            delta_true.append(true_delta)
+
+        if not delta_pred:
+            continue
+
+        abs_err = [abs(delta_pred[i] - delta_true[i]) for i in range(len(delta_pred))]
+        pearson = _pearson_corr(delta_pred, delta_true)
+        spearman = _spearman_corr(delta_pred, delta_true)
+        mae = sum(abs_err) / len(abs_err)
+        r2 = _r2_score(delta_true, delta_pred)
+        stats_rows.append(
+            {
+                "pair_left_idx": left_idx,
+                "pair_right_idx": right_idx,
+                "pair_left_label": left_label,
+                "pair_right_label": right_label,
+                "n_points": len(delta_pred),
+                "pearson": pearson,
+                "spearman": spearman,
+                "delta_mae": mae,
+                "r2": r2,
+            }
+        )
+
+        if not MATPLOTLIB_AVAILABLE:
+            continue
+
+        lower = min(min(delta_pred), min(delta_true))
+        upper = max(max(delta_pred), max(delta_true))
+        if abs(upper - lower) < 1e-12:
+            lower -= 0.05
+            upper += 0.05
+        plt.figure(figsize=(10.0, 5.8))
+        plt.scatter(delta_pred, delta_true, alpha=0.35, s=14, color="tab:blue")
+        plt.axhline(0.0, color="gray", linestyle="--", linewidth=1.0)
+        plt.axvline(0.0, color="gray", linestyle="--", linewidth=1.0)
+        if len(delta_pred) >= 2:
+            slope, intercept = np.polyfit(delta_pred, delta_true, 1) if NP_AVAILABLE else (None, None)
+            if slope is not None and intercept is not None:
+                x0, x1 = lower, upper
+                y0 = float(slope * x0 + intercept)
+                y1 = float(slope * x1 + intercept)
+                plt.plot([x0, x1], [y0, y1], color="tab:red", linewidth=1.5, label="Least-squares fit")
+                plt.legend(loc="best", fontsize=8)
+        title = f"Delta scatter: {left_label} - {right_label}"
+        if pearson is not None and spearman is not None:
+            title += f" | Pearson={pearson:.3f}, Spearman={spearman:.3f}, MAE={mae:.3f}"
+        plt.title(title, fontsize=10)
+        plt.xlabel("Predicted delta")
+        plt.ylabel("Realized delta")
+        plt.xlim(lower, upper)
+        plt.ylim(lower, upper)
+        plt.tight_layout()
+        out_path = out_dir / f"delta_scatter_{left_idx}_vs_{right_idx}_{_route_slug(left_label)}__{_route_slug(right_label)}.png"
+        plt.savefig(out_path)
+        plt.close()
+
+    _write_csv(
+        out_dir / "pairwise_delta_stats.csv",
+        stats_rows,
+        [
+            "pair_left_idx",
+            "pair_right_idx",
+            "pair_left_label",
+            "pair_right_label",
+            "n_points",
+            "pearson",
+            "spearman",
+            "delta_mae",
+            "r2",
+        ],
+    )
+
+
+def _compute_pairwise_ranking_metrics(
+    traces: list[dict[str, Any]],
+    score_key: str,
+    route_labels: list[str],
+    out_path: Path,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for left_idx, right_idx in itertools.combinations(range(len(route_labels)), 2):
+        delta_pred: list[float] = []
+        delta_true: list[float] = []
+        for trace in traces:
+            rewards = extract_reward_vector(trace)
+            dim = min(len(rewards), len(route_labels))
+            if dim <= max(left_idx, right_idx):
+                continue
+            scores = extract_score_vector(trace, score_key=score_key, expected_dim=dim)
+            if scores is None:
+                continue
+            delta_pred.append(float(scores[left_idx]) - float(scores[right_idx]))
+            delta_true.append(float(rewards[left_idx]) - float(rewards[right_idx]))
+        if not delta_pred:
+            continue
+
+        labels = [1 if value > 0.0 else 0 for value in delta_true]
+        sign_match = 0
+        for idx in range(len(delta_pred)):
+            pred_sign = 1 if delta_pred[idx] > 0 else (-1 if delta_pred[idx] < 0 else 0)
+            true_sign = 1 if delta_true[idx] > 0 else (-1 if delta_true[idx] < 0 else 0)
+            if pred_sign == true_sign:
+                sign_match += 1
+        ranking_acc = sign_match / len(delta_pred)
+        roc_auc = _roc_auc_binary(labels, delta_pred)
+        precision, recall = _precision_recall_from_scores(labels, delta_pred, threshold=0.0)
+
+        rows.append(
+            {
+                "pair_left_idx": left_idx,
+                "pair_right_idx": right_idx,
+                "pair_left_label": route_labels[left_idx],
+                "pair_right_label": route_labels[right_idx],
+                "n_points": len(delta_pred),
+                "positive_rate_true": sum(labels) / len(labels),
+                "ranking_accuracy_sign": ranking_acc,
+                "roc_auc": roc_auc,
+                "precision_pos_pred_gt_0": precision,
+                "recall_pos_pred_gt_0": recall,
+            }
+        )
+
+    _write_csv(
+        out_path,
+        rows,
+        [
+            "pair_left_idx",
+            "pair_right_idx",
+            "pair_left_label",
+            "pair_right_label",
+            "n_points",
+            "positive_rate_true",
+            "ranking_accuracy_sign",
+            "roc_auc",
+            "precision_pos_pred_gt_0",
+            "recall_pos_pred_gt_0",
+        ],
+    )
+    return rows
+
+
 def _float_token(value: float, decimals: int) -> str:
     token = f"{value:.{decimals}f}"
     token = token.replace("-", "m").replace(".", "p")
@@ -1025,6 +1282,148 @@ def _plot_routing_pies(
         plt.tight_layout()
         plt.savefig(pie_path)
         plt.close()
+
+
+def _plot_capture_vs_lambda(regret_rows: list[dict[str, Any]], out_path: Path) -> None:
+    if not MATPLOTLIB_AVAILABLE:
+        logger.warning("matplotlib not available; skipping oracle-gap-capture plot")
+        return
+    if not regret_rows:
+        return
+    x_values: list[float] = []
+    y_values: list[float] = []
+    for row in sorted(regret_rows, key=lambda r: float(r["lambda"])):
+        capture = row.get("capture")
+        if capture is None:
+            continue
+        x_values.append(float(row["lambda"]))
+        y_values.append(float(capture))
+    if not x_values:
+        return
+    plt.figure(figsize=(8, 5))
+    plt.plot(x_values, y_values, marker="o", linewidth=1.8, color="tab:purple")
+    plt.axhline(0.0, color="gray", linestyle="--", linewidth=1.0)
+    plt.axhline(1.0, color="gray", linestyle=":", linewidth=1.0)
+    plt.xlabel("lambda (cost sensitivity)")
+    plt.ylabel("Oracle gap capture")
+    plt.title("Oracle gap capture vs lambda (tau=0)")
+    plt.tight_layout()
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(out_path)
+    plt.close()
+
+
+def _rows_for_tau(rows: list[dict[str, Any]], tau: float) -> list[dict[str, Any]]:
+    return [row for row in rows if abs(float(row.get("tau", 0.0)) - tau) <= 1e-12]
+
+
+def _frontier_cost_range(frontier: list[dict[str, Any]]) -> tuple[float, float, float]:
+    if not frontier:
+        return (0.0, 0.0, 0.0)
+    costs = [float(row["avg_cost"]) for row in frontier]
+    min_cost = min(costs)
+    max_cost = max(costs)
+    return (min_cost, max_cost, max_cost - min_cost)
+
+
+def _compute_pred_std_over_model_version(
+    traces: list[dict[str, Any]],
+    score_key: str,
+    route_labels: list[str],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    versions = sorted({int(trace.get("model_version")) for trace in traces if trace.get("model_version") is not None})
+    if not versions:
+        return [], []
+
+    true_std_rows: list[dict[str, Any]] = []
+    for route_idx, route_label in enumerate(route_labels):
+        realized: list[float] = []
+        for trace in traces:
+            rewards = extract_reward_vector(trace)
+            if route_idx < len(rewards):
+                realized.append(float(rewards[route_idx]))
+        if not realized:
+            continue
+        mean_val = sum(realized) / len(realized)
+        var_val = sum((value - mean_val) ** 2 for value in realized) / len(realized)
+        true_std_rows.append(
+            {
+                "route_index": route_idx,
+                "route_label": route_label,
+                "n_points": len(realized),
+                "realized_mean": mean_val,
+                "realized_std": math.sqrt(max(var_val, 0.0)),
+            }
+        )
+
+    rows: list[dict[str, Any]] = []
+    for version in versions:
+        version_traces = [trace for trace in traces if int(trace.get("model_version")) == version]
+        for route_idx, route_label in enumerate(route_labels):
+            preds: list[float] = []
+            for trace in version_traces:
+                rewards = extract_reward_vector(trace)
+                dim = min(len(rewards), len(route_labels))
+                if route_idx >= dim:
+                    continue
+                scores = extract_score_vector(trace, score_key=score_key, expected_dim=dim)
+                if scores is None:
+                    continue
+                preds.append(float(scores[route_idx]))
+            if not preds:
+                continue
+            mean_val = sum(preds) / len(preds)
+            var_val = sum((value - mean_val) ** 2 for value in preds) / len(preds)
+            rows.append(
+                {
+                    "model_version": version,
+                    "route_index": route_idx,
+                    "route_label": route_label,
+                    "n_points": len(preds),
+                    "pred_mean": mean_val,
+                    "pred_std": math.sqrt(max(var_val, 0.0)),
+                }
+            )
+    return rows, true_std_rows
+
+
+def _plot_pred_std_over_model_version(
+    pred_rows: list[dict[str, Any]],
+    true_std_rows: list[dict[str, Any]],
+    route_labels: list[str],
+    out_path: Path,
+) -> None:
+    if not MATPLOTLIB_AVAILABLE:
+        logger.warning("matplotlib not available; skipping predicted std over model version plot")
+        return
+    if not pred_rows:
+        return
+    plt.figure(figsize=(10.5, 6.2))
+    true_std_by_idx = {
+        int(row["route_index"]): float(row["realized_std"]) for row in true_std_rows if row.get("realized_std") is not None
+    }
+    for route_idx, route_label in enumerate(route_labels):
+        route_rows = [row for row in pred_rows if int(row["route_index"]) == route_idx]
+        if not route_rows:
+            continue
+        route_rows = sorted(route_rows, key=lambda row: int(row["model_version"]))
+        x = [int(row["model_version"]) for row in route_rows]
+        y = [float(row["pred_std"]) for row in route_rows]
+        plt.plot(x, y, marker="o", linewidth=1.6, label=f"pred_std | {route_label}")
+        true_std = true_std_by_idx.get(route_idx)
+        if true_std is not None:
+            plt.axhline(true_std, linestyle="--", linewidth=1.0, alpha=0.55)
+    plt.xlabel("model_version")
+    plt.ylabel("Std of predicted reward")
+    plt.title("Predicted std over model versions (with realized std reference lines)")
+    if len(route_labels) <= 8:
+        plt.legend(loc="best", fontsize=8)
+    else:
+        plt.legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), fontsize=7, ncol=1)
+    plt.tight_layout()
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(out_path)
+    plt.close()
 
 
 def _print_top_rows(rows: list[dict[str, Any]], limit: int = 8) -> None:
@@ -1262,6 +1661,7 @@ def main() -> None:
             "oracle_abstain_rate",
             "predictor_abstain_rate",
             "capture",
+            "utility_gap",
             "n_baseline_available",
         ],
     )
@@ -1341,6 +1741,12 @@ def main() -> None:
                 else None
             ),
         },
+        "pairwise_ranking_metrics_file": "pairwise_ranking_metrics.csv",
+        "pairwise_delta_stats_file": "pairwise_delta/pairwise_delta_stats.csv",
+        "frontier_metrics_file": "frontier_metrics.csv",
+        "oracle_gap_capture_file": "oracle_gap_capture_vs_lambda.csv",
+        "pred_std_over_model_version_file": "pred_std_over_model_version.csv",
+        "true_reward_std_reference_file": "true_reward_std_reference.csv",
     }
     with (output_dir / "summary.json").open("w") as handle:
         json.dump(summary, handle, indent=2)
@@ -1387,11 +1793,27 @@ def main() -> None:
         ylabel="P95 regret",
         out_path=output_dir / "p95_regret_vs_lambda.png",
     )
+    _plot_capture_vs_lambda(
+        regret_rows,
+        out_path=output_dir / "oracle_gap_capture_vs_lambda.png",
+    )
     _plot_predicted_vs_realized_by_route(
         traces=traces,
         score_key=args.score_key,
         route_labels=route_labels,
         out_dir=output_dir / "pred_vs_realized",
+    )
+    _plot_pairwise_delta_scatter_and_stats(
+        traces=traces,
+        score_key=args.score_key,
+        route_labels=route_labels,
+        out_dir=output_dir / "pairwise_delta",
+    )
+    pairwise_ranking_rows = _compute_pairwise_ranking_metrics(
+        traces=traces,
+        score_key=args.score_key,
+        route_labels=route_labels,
+        out_path=output_dir / "pairwise_ranking_metrics.csv",
     )
     _plot_routing_pies(
         rows,
@@ -1489,6 +1911,137 @@ def main() -> None:
         oracle_auc_qc=oracle_auc_qc,
         out_path=output_dir / "pareto_frontier_combined.png",
     )
+    tau0_rows = _rows_for_tau(rows, 0.0)
+    tau0_baseline_rows = _rows_for_tau(baseline_rows, 0.0)
+    tau0_oracle_rows = _rows_for_tau(oracle_rows, 0.0)
+    tau0_frontier = _build_frontier(tau0_rows)
+    tau0_baseline_frontier = _build_frontier(tau0_baseline_rows)
+    tau0_oracle_frontier = _build_frontier(tau0_oracle_rows)
+    tau0_auc, tau0_auc_norm = _compute_auc_qc(tau0_frontier)
+    tau0_baseline_auc, tau0_baseline_auc_norm = _compute_auc_qc(tau0_baseline_frontier)
+    tau0_oracle_auc, tau0_oracle_auc_norm = _compute_auc_qc(tau0_oracle_frontier)
+    _plot_combined_frontiers(
+        actual_frontier=tau0_frontier,
+        baseline_frontier=tau0_baseline_frontier,
+        oracle_frontier=tau0_oracle_frontier,
+        actual_auc_qc=tau0_auc,
+        baseline_auc_qc=tau0_baseline_auc,
+        oracle_auc_qc=tau0_oracle_auc,
+        out_path=output_dir / "pareto_frontier_combined_tau0.png",
+    )
+    frontier_metric_rows = [
+        {
+            "method": "learned_all_tau",
+            "tau_filter": "all",
+            "auc_qc_raw": auc_qc,
+            "auc_qc_normalized": auc_qc_norm,
+            "cost_min": _frontier_cost_range(frontier)[0],
+            "cost_max": _frontier_cost_range(frontier)[1],
+            "cost_range": _frontier_cost_range(frontier)[2],
+            "n_frontier_points": len(frontier),
+        },
+        {
+            "method": "baseline_all_tau",
+            "tau_filter": "all",
+            "auc_qc_raw": baseline_auc_qc,
+            "auc_qc_normalized": baseline_auc_qc_norm,
+            "cost_min": _frontier_cost_range(baseline_frontier)[0],
+            "cost_max": _frontier_cost_range(baseline_frontier)[1],
+            "cost_range": _frontier_cost_range(baseline_frontier)[2],
+            "n_frontier_points": len(baseline_frontier),
+        },
+        {
+            "method": "oracle_all_tau",
+            "tau_filter": "all",
+            "auc_qc_raw": oracle_auc_qc,
+            "auc_qc_normalized": oracle_auc_qc_norm,
+            "cost_min": _frontier_cost_range(oracle_frontier)[0],
+            "cost_max": _frontier_cost_range(oracle_frontier)[1],
+            "cost_range": _frontier_cost_range(oracle_frontier)[2],
+            "n_frontier_points": len(oracle_frontier),
+        },
+        {
+            "method": "learned_tau0",
+            "tau_filter": "0.0",
+            "auc_qc_raw": tau0_auc,
+            "auc_qc_normalized": tau0_auc_norm,
+            "cost_min": _frontier_cost_range(tau0_frontier)[0],
+            "cost_max": _frontier_cost_range(tau0_frontier)[1],
+            "cost_range": _frontier_cost_range(tau0_frontier)[2],
+            "n_frontier_points": len(tau0_frontier),
+        },
+        {
+            "method": "baseline_tau0",
+            "tau_filter": "0.0",
+            "auc_qc_raw": tau0_baseline_auc,
+            "auc_qc_normalized": tau0_baseline_auc_norm,
+            "cost_min": _frontier_cost_range(tau0_baseline_frontier)[0],
+            "cost_max": _frontier_cost_range(tau0_baseline_frontier)[1],
+            "cost_range": _frontier_cost_range(tau0_baseline_frontier)[2],
+            "n_frontier_points": len(tau0_baseline_frontier),
+        },
+        {
+            "method": "oracle_tau0",
+            "tau_filter": "0.0",
+            "auc_qc_raw": tau0_oracle_auc,
+            "auc_qc_normalized": tau0_oracle_auc_norm,
+            "cost_min": _frontier_cost_range(tau0_oracle_frontier)[0],
+            "cost_max": _frontier_cost_range(tau0_oracle_frontier)[1],
+            "cost_range": _frontier_cost_range(tau0_oracle_frontier)[2],
+            "n_frontier_points": len(tau0_oracle_frontier),
+        },
+    ]
+    _write_csv(
+        output_dir / "frontier_metrics.csv",
+        frontier_metric_rows,
+        [
+            "method",
+            "tau_filter",
+            "auc_qc_raw",
+            "auc_qc_normalized",
+            "cost_min",
+            "cost_max",
+            "cost_range",
+            "n_frontier_points",
+        ],
+    )
+    _write_csv(
+        output_dir / "oracle_gap_capture_vs_lambda.csv",
+        regret_rows,
+        [
+            "lambda",
+            "tau",
+            "mean_util_oracle",
+            "mean_util_pred",
+            "mean_util_base",
+            "utility_gap",
+            "capture",
+            "mean_regret",
+            "p95_regret",
+            "n_scored",
+        ],
+    )
+    pred_std_rows, true_std_rows = _compute_pred_std_over_model_version(
+        traces=traces,
+        score_key=args.score_key,
+        route_labels=route_labels,
+    )
+    _write_csv(
+        output_dir / "pred_std_over_model_version.csv",
+        pred_std_rows,
+        ["model_version", "route_index", "route_label", "n_points", "pred_mean", "pred_std"],
+    )
+    _write_csv(
+        output_dir / "true_reward_std_reference.csv",
+        true_std_rows,
+        ["route_index", "route_label", "n_points", "realized_mean", "realized_std"],
+    )
+    _plot_pred_std_over_model_version(
+        pred_rows=pred_std_rows,
+        true_std_rows=true_std_rows,
+        route_labels=route_labels,
+        out_path=output_dir / "pred_std_over_model_version.png",
+    )
 
     _print_top_rows(rows, limit=args.max_log_points)
     _print_low_regret_rows(regret_rows, limit=args.max_log_points)
@@ -1506,6 +2059,22 @@ def main() -> None:
         baseline_best_utility["lambda"],
         baseline_best_utility["tau"],
         baseline_best_utility["avg_utility"],
+    )
+    logger.info(
+        "Pairwise ranking metrics rows=%d written to %s",
+        len(pairwise_ranking_rows),
+        output_dir / "pairwise_ranking_metrics.csv",
+    )
+    logger.info(
+        "Tau=0 frontier AUCs: learned=%.4f baseline=%.4f oracle=%.4f",
+        tau0_auc,
+        tau0_baseline_auc,
+        tau0_oracle_auc,
+    )
+    logger.info(
+        "Predicted std over model_version points=%d (versions=%d)",
+        len(pred_std_rows),
+        len({row['model_version'] for row in pred_std_rows}),
     )
     logger.info("Oracle frontier AUC-QC=%.4f (normalized %.4f)", oracle_auc_qc, oracle_auc_qc_norm)
     logger.info("Wrote outputs to %s", output_dir)

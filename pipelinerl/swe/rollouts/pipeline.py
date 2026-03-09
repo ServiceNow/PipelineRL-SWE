@@ -21,6 +21,30 @@ from .stages import run_localization, run_file_selection, run_repair
 logger = logging.getLogger(__name__)
 
 
+def _resolve_repo_base_path(cfg: DictConfig, dataset: str) -> str:
+    swe_cfg = cfg.swe or {}
+    repo_path_by_dataset = swe_cfg.get("repo_path_by_dataset")
+    if repo_path_by_dataset:
+        mapped = repo_path_by_dataset.get(dataset)
+        if mapped:
+            return mapped
+    # Backward-compatible defaults.
+    if dataset == "swegym":
+        return swe_cfg.get("repo_path_train", "/mnt/llmd/data/swegym/repos")
+    if dataset == "swebench_lite":
+        return swe_cfg.get("repo_path_test", "/mnt/llmd/data/swebench_lite/repos")
+    if swe_cfg.get("repo_path_default"):
+        return swe_cfg.get("repo_path_default")
+    if swe_cfg.get("repo_path_train"):
+        return swe_cfg.get("repo_path_train")
+    if swe_cfg.get("repo_path_test"):
+        return swe_cfg.get("repo_path_test")
+    raise ValueError(
+        f"No repo path configured for dataset='{dataset}'. "
+        "Set swe.repo_path_by_dataset[dataset] or swe.repo_path_default."
+    )
+
+
 async def generate_unified_swe_rollout(
     cfg: DictConfig,
     llm: TrainableLLM,
@@ -50,12 +74,7 @@ async def generate_unified_swe_rollout(
     enricher = FileContextEnricher()
     dataset = problem['dataset']
     
-    if dataset == 'swegym':
-        base_repo_path = cfg.swe.get('repo_path_train', '/mnt/llmd/data/swegym/repos')
-    elif dataset == 'swebench_lite':
-        base_repo_path = cfg.swe.get('repo_path_test', '/mnt/llmd/data/swebench_lite/repos')
-    else:
-        base_repo_path = '/tmp'
+    base_repo_path = _resolve_repo_base_path(cfg, dataset)
 
     trace_cfg = cfg.swe.get("router_trace", {}) or {}
     trace_enabled = bool(trace_cfg.get("enabled", False))
