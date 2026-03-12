@@ -81,6 +81,13 @@ async def generate_unified_swe_rollout(
     trace_include_outputs = bool(trace_cfg.get("include_outputs", True))
     trace_include_policy_token_ids = bool(trace_cfg.get("include_policy_token_ids", False))
     trace_include_file_contents = bool(trace_cfg.get("include_file_contents", False))
+    trace_include_prompt_text = bool(
+        trace_cfg.get("include_prompt_text", False) or trace_cfg.get("include_expert_prompt_text", False)
+    )
+    trace_include_output_text = bool(
+        trace_cfg.get("include_output_text", False) or trace_cfg.get("include_expert_output_text", False)
+    )
+    trace_include_prompt_messages = bool(trace_cfg.get("include_prompt_messages", False))
     router_trace = None
     
     try:
@@ -237,18 +244,28 @@ async def generate_unified_swe_rollout(
                         "base_url": getattr(llm, "base_url", None),
                         "reward": rep_result.get("reward", 0.0),
                         "success": rep_result.get("success", False),
+                        "format_error": bool((rep_result.get("metrics") or {}).get("format_error", False)),
+                        "semantic_failure": bool((rep_result.get("metrics") or {}).get("semantic_failure", False)),
+                        "failure_type": (rep_result.get("metrics") or {}).get("failure_type"),
+                        "no_edits": bool((rep_result.get("metrics") or {}).get("no_edits", False)),
                         "latency": rep_result.get("latency", 0.0),
                         "prompt_tokens": rep_result.get("prompt_tokens", 0),
                         "output_tokens": rep_result.get("output_tokens", 0),
                     }
                     if trace_include_outputs:
                         policy_trace["repair_output"] = rep_result.get("repair_output", "")
+                    if trace_include_output_text:
+                        policy_trace["output_text"] = rep_result.get("output_text")
                     if policy_training_text is not None:
                         policy_trace["prompt_text"] = policy_training_text.prompt_text
                         policy_trace["output_text"] = policy_training_text.output_text
                         if trace_include_policy_token_ids:
                             policy_trace["input_ids"] = policy_training_text.input_ids
                             policy_trace["labels"] = policy_training_text.labels
+                    elif trace_include_prompt_text:
+                        policy_trace["prompt_text"] = rep_result.get("prompt_text")
+                    if trace_include_prompt_messages:
+                        policy_trace["prompt_messages"] = rep_result.get("prompt_messages")
 
                     experts_trace = []
                     for expert_idx, expert_llm, expert_result in expert_rep_results:
@@ -258,12 +275,22 @@ async def generate_unified_swe_rollout(
                             "base_url": getattr(expert_llm, "base_url", None),
                             "reward": expert_result.get("reward", 0.0),
                             "success": expert_result.get("success", False),
+                            "format_error": bool((expert_result.get("metrics") or {}).get("format_error", False)),
+                            "semantic_failure": bool((expert_result.get("metrics") or {}).get("semantic_failure", False)),
+                            "failure_type": (expert_result.get("metrics") or {}).get("failure_type"),
+                            "no_edits": bool((expert_result.get("metrics") or {}).get("no_edits", False)),
                             "latency": expert_result.get("latency", 0.0),
                             "prompt_tokens": expert_result.get("prompt_tokens", 0),
                             "output_tokens": expert_result.get("output_tokens", 0),
                         }
                         if trace_include_outputs:
                             expert_trace["repair_output"] = expert_result.get("repair_output", "")
+                        if trace_include_prompt_text:
+                            expert_trace["prompt_text"] = expert_result.get("prompt_text")
+                        if trace_include_output_text:
+                            expert_trace["output_text"] = expert_result.get("output_text")
+                        if trace_include_prompt_messages:
+                            expert_trace["prompt_messages"] = expert_result.get("prompt_messages")
                         experts_trace.append(expert_trace)
 
                     router_trace = {

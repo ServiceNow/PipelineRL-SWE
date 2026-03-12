@@ -3,8 +3,8 @@ import argparse
 import csv
 import json
 import logging
-import math
 import random
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +12,13 @@ import numpy as np
 import torch
 from tqdm import tqdm
 from transformers import AutoTokenizer
+
+try:
+    import matplotlib.pyplot as plt  # type: ignore
+
+    MATPLOTLIB_AVAILABLE = True
+except Exception:
+    MATPLOTLIB_AVAILABLE = False
 
 from pipelinerl.finetune.value_model import AutoModelForCausalLMWithValueHead
 from pipelinerl.swe.scripts.new.router_trace_utils import (
@@ -21,6 +28,27 @@ from pipelinerl.swe.scripts.new.router_trace_utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+EXT_LANGUAGE_MAP = {
+    ".py": "Python",
+    ".pyi": "Python",
+    ".ipynb": "Python",
+    ".go": "Go",
+    ".rs": "Rust",
+    ".java": "Java",
+    ".kt": "Kotlin",
+    ".js": "JavaScript",
+    ".ts": "TypeScript",
+    ".cpp": "C++",
+    ".cc": "C++",
+    ".c": "C",
+    ".cs": "C#",
+    ".rb": "Ruby",
+    ".php": "PHP",
+    ".swift": "Swift",
+    ".scala": "Scala",
+}
 
 
 def _pick_device(device_arg: str) -> torch.device:
@@ -142,13 +170,15 @@ def _split_within_repo(
     return train, eval_
 
 
-def _encode_prompt_last_embedding(
+def _encode_prompt_last_embeddings(
     model: AutoModelForCausalLMWithValueHead,
     tokenizer: Any,
     device: torch.device,
     prompt_text: str,
     output_text: str,
-) -> np.ndarray | None:
+    hidden_indices: list[int],
+    pooling: str,
+) -> dict[int, np.ndarray] | None:
     if not prompt_text:
         return None
 
@@ -167,12 +197,126 @@ def _encode_prompt_last_embedding(
     hidden_states = outputs.hidden_states
     if hidden_states is None:
         return None
-    last_hidden = hidden_states[-1]
     prompt_last_idx = prompt_len - 1
-    if prompt_last_idx >= last_hidden.shape[1]:
+    if prompt_last_idx < 0 or prompt_last_idx >= hidden_states[-1].shape[1]:
         return None
-    embedding = last_hidden[0, prompt_last_idx].detach().float().cpu().numpy()
-    return embedding
+
+    embeddings: dict[int, np.ndarray] = {}
+    for hidden_idx in hidden_indices:
+        if hidden_idx < 0 or hidden_idx >= len(hidden_states):
+            return None
+        hidden = hidden_states[hidden_idx][0]
+        if pooling == "prompt_last":
+            vec = hidden[prompt_last_idx]
+        elif pooling == "prompt_mean":
+            vec = hidden[:prompt_len].mean(dim=0)
+        else:
+            raise ValueError(f"Unknown pooling mode: {pooling}")
+        vec = vec.detach().float().cpu().numpy()
+        embeddings[hidden_idx] = vec
+    return embeddings
+
+
+def _parse_probe_hidden_indices(
+    probe_layers: str,
+    num_hidden_layers: int,
+    include_embedding_layer: bool,
+) -> list[int]:
+    total_hidden_states = num_hidden_layers + 1  # includes embedding state at index 0
+    text = (probe_layers or "last").strip().lower()
+    if text == "last":
+        return [num_hidden_layers]
+    if text == "all":
+        start = 0 if include_embedding_layer else 1
+        return list(range(start, total_hidden_states))
+
+    indices: list[int] = []
+    for chunk in probe_layers.split(","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        idx = int(chunk)
+        if idx < 0:
+            idx = total_hidden_states + idx
+        if idx < 0 or idx >= total_hidden_states:
+            raise ValueError(
+                f"Hidden index out of range: {chunk}. Valid range is [0,{total_hidden_states-1}] "
+                "or negative python-style indexing."
+            )
+        indices.append(idx)
+    if not indices:
+        raise ValueError(f"Failed to parse --probe-layers={probe_layers}")
+    unique: list[int] = []
+    seen = set()
+    for idx in indices:
+        if idx not in seen:
+            seen.add(idx)
+            unique.append(idx)
+    return unique
+
+
+def _hidden_index_to_label(hidden_idx: int) -> str:
+    if hidden_idx == 0:
+        return "embedding"
+    return f"layer_{hidden_idx - 1:02d}"
+
+
+def _infer_language(trace: dict[str, Any]) -> str:
+    for key in ("language", "lang", "repo_language"):
+        value = trace.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
+    dataset = str(trace.get("dataset") or "").lower()
+    if "smith_py" in dataset or dataset.endswith("_py"):
+        return "Python"
+    if "smith_go" in dataset or dataset.endswith("_go"):
+        return "Go"
+    if "smith_rs" in dataset or dataset.endswith("_rs"):
+        return "Rust"
+    if "smith_java" in dataset or dataset.endswith("_java"):
+        return "Java"
+
+    files = trace.get("files_for_repair")
+    if isinstance(files, list) and files:
+        ext_counts = Counter()
+        for item in files:
+            if not isinstance(item, str):
+                continue
+            suffix = Path(item).suffix.lower()
+            if suffix:
+                ext_counts[EXT_LANGUAGE_MAP.get(suffix, "Other/Unknown")] += 1
+        if ext_counts:
+            return ext_counts.most_common(1)[0][0]
+    return "Unknown"
+
+
+def _build_language_onehot_features(
+    train_languages: list[str],
+    eval_languages: list[str],
+) -> tuple[np.ndarray, np.ndarray, list[str], int]:
+    labels = sorted(set(train_languages))
+    if not labels:
+        return (
+            np.zeros((len(train_languages), 0), dtype=np.float32),
+            np.zeros((len(eval_languages), 0), dtype=np.float32),
+            [],
+            len(eval_languages),
+        )
+    label_to_idx = {label: idx for idx, label in enumerate(labels)}
+    train_feat = np.zeros((len(train_languages), len(labels)), dtype=np.float32)
+    eval_feat = np.zeros((len(eval_languages), len(labels)), dtype=np.float32)
+    for row_idx, language in enumerate(train_languages):
+        train_feat[row_idx, label_to_idx[language]] = 1.0
+
+    unseen_eval = 0
+    for row_idx, language in enumerate(eval_languages):
+        idx = label_to_idx.get(language)
+        if idx is None:
+            unseen_eval += 1
+            continue
+        eval_feat[row_idx, idx] = 1.0
+    return train_feat, eval_feat, labels, unseen_eval
 
 
 def _fit_ridge_multi_target(
@@ -222,6 +366,134 @@ def _write_csv(path: Path, rows: list[dict[str, Any]], headers: list[str]) -> No
             writer.writerow({key: row.get(key) for key in headers})
 
 
+def _find_policy_vs_gpt_pair(pair_rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+    for row in pair_rows:
+        left = str(row["left_label"]).lower()
+        right = str(row["right_label"]).lower()
+        labels = [left, right]
+        if ("policy" in labels[0] or "policy" in labels[1]) and any("gpt" in label for label in labels):
+            return row
+    return None
+
+
+def _pair_label(row: dict[str, Any]) -> str:
+    return f"{row.get('left_label')} vs {row.get('right_label')}"
+
+
+def _compute_pairwise_metrics(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    route_labels: list[str],
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    target_dim = int(y_true.shape[1])
+    pair_rows: list[dict[str, Any]] = []
+    for i in range(target_dim):
+        for j in range(i + 1, target_dim):
+            delta_true = y_true[:, i] - y_true[:, j]
+            delta_pred = y_pred[:, i] - y_pred[:, j]
+            labels = (delta_true > 0).astype(np.int64)
+
+            sign_true = np.sign(delta_true)
+            sign_pred = np.sign(delta_pred)
+            ranking_acc = float(np.mean(sign_true == sign_pred))
+            pearson = _pearson_corr(delta_pred, delta_true)
+            spearman = _spearman_corr(delta_pred, delta_true)
+            mae_delta = float(np.mean(np.abs(delta_pred - delta_true)))
+            roc_auc = _roc_auc_binary(labels, delta_pred)
+
+            pair_rows.append(
+                {
+                    "left_idx": i,
+                    "right_idx": j,
+                    "left_label": route_labels[i],
+                    "right_label": route_labels[j],
+                    "n_eval": int(delta_true.shape[0]),
+                    "pearson_delta": pearson,
+                    "spearman_delta": spearman,
+                    "delta_mae": mae_delta,
+                    "ranking_accuracy_sign": ranking_acc,
+                    "roc_auc": roc_auc,
+                }
+            )
+    return pair_rows, _find_policy_vs_gpt_pair(pair_rows)
+
+
+def _plot_pairwise_metrics_by_layer(per_layer_pair_rows: list[dict[str, Any]], output_path: Path) -> None:
+    if not MATPLOTLIB_AVAILABLE or not per_layer_pair_rows:
+        return
+
+    layers = sorted({int(row["hidden_index"]) for row in per_layer_pair_rows})
+    layer_pos = {idx: pos for pos, idx in enumerate(layers)}
+    layer_labels = [_hidden_index_to_label(idx) for idx in layers]
+    pair_keys = sorted({_pair_label(row) for row in per_layer_pair_rows})
+
+    fig, axes = plt.subplots(1, 3, figsize=(max(15, 0.55 * len(layer_labels)), 5.6), sharex=True)
+    metric_specs = [
+        ("pearson_delta", "Pearson delta", "Pearson"),
+        ("spearman_delta", "Spearman delta", "Spearman"),
+        ("roc_auc", "ROC-AUC", "ROC-AUC"),
+    ]
+    for ax, (metric_key, metric_name, title) in zip(axes, metric_specs):
+        for pair_key in pair_keys:
+            series = [float("nan")] * len(layers)
+            for row in per_layer_pair_rows:
+                if _pair_label(row) != pair_key:
+                    continue
+                metric_val = row.get(metric_key)
+                if metric_val is None:
+                    continue
+                series[layer_pos[int(row["hidden_index"])]] = float(metric_val)
+            ax.plot(range(len(layers)), series, marker="o", linewidth=1.6, label=pair_key)
+
+        if metric_key == "roc_auc":
+            ax.axhline(0.5, color="gray", linestyle="--", linewidth=1.0, alpha=0.8)
+            ax.set_ylim(0.0, 1.0)
+        else:
+            ax.axhline(0.0, color="gray", linestyle="--", linewidth=1.0, alpha=0.8)
+            ax.set_ylim(-1.0, 1.0)
+        ax.set_title(title)
+        ax.set_ylabel(metric_name)
+        ax.grid(alpha=0.2)
+        ax.set_xticks(range(len(layer_labels)))
+        ax.set_xticklabels(layer_labels, rotation=30, ha="right")
+
+    axes[-1].legend(loc="lower right", fontsize=8)
+    fig.suptitle("Routing probe pairwise metrics by hidden layer")
+    fig.tight_layout()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path)
+    plt.close(fig)
+
+
+def _plot_policy_vs_gpt_by_layer(per_layer_rows: list[dict[str, Any]], output_path: Path) -> None:
+    if not MATPLOTLIB_AVAILABLE or not per_layer_rows:
+        return
+    valid = [row for row in per_layer_rows if row.get("policy_vs_gpt_pearson_delta") is not None]
+    if not valid:
+        return
+
+    x = list(range(len(valid)))
+    labels = [str(row["layer_label"]) for row in valid]
+    pearson = [_safe_float(row.get("policy_vs_gpt_pearson_delta"), default=float("nan")) for row in valid]
+    spearman = [_safe_float(row.get("policy_vs_gpt_spearman_delta"), default=float("nan")) for row in valid]
+    roc_auc = [_safe_float(row.get("policy_vs_gpt_roc_auc"), default=float("nan")) for row in valid]
+
+    plt.figure(figsize=(max(12, 0.35 * len(labels)), 5.5))
+    plt.plot(x, pearson, marker="o", linewidth=1.8, label="Policy-vs-GPT Pearson")
+    plt.plot(x, spearman, marker="o", linewidth=1.8, label="Policy-vs-GPT Spearman")
+    plt.plot(x, roc_auc, marker="o", linewidth=1.8, label="Policy-vs-GPT ROC-AUC")
+    plt.axhline(0.5, color="gray", linestyle="--", linewidth=1.0, alpha=0.8, label="0.5 reference")
+    plt.xticks(x, labels, rotation=30, ha="right")
+    plt.ylim(-1.0, 1.0)
+    plt.ylabel("Metric value")
+    plt.title("Policy-vs-GPT routing probe metrics by hidden layer")
+    plt.legend(loc="best")
+    plt.tight_layout()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(output_path)
+    plt.close()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Train/eval ridge regression probe on frozen trunk prompt-last embeddings.")
     parser.add_argument("--input-glob", action="append", required=True)
@@ -250,20 +522,43 @@ def main() -> None:
     parser.add_argument("--max-train-records", type=int, default=None)
     parser.add_argument("--max-eval-records", type=int, default=None)
     parser.add_argument("--save-predictions-jsonl", action="store_true")
+    parser.add_argument(
+        "--append-language-onehot",
+        action="store_true",
+        help="Append language one-hot features to trunk embeddings before ridge fitting.",
+    )
+    parser.add_argument(
+        "--pooling",
+        default="prompt_last",
+        choices=["prompt_last", "prompt_mean"],
+        help="Embedding pooling over prompt tokens before ridge probe.",
+    )
+    parser.add_argument(
+        "--probe-layers",
+        default="last",
+        help=(
+            "Which hidden states to probe: 'last', 'all', or comma-separated hidden-state indices "
+            "(index 0 is embedding state, index N is final layer output)."
+        ),
+    )
+    parser.add_argument(
+        "--include-embedding-layer",
+        action="store_true",
+        help="When --probe-layers=all, also include hidden index 0 (embedding state).",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
-    traces = load_router_traces(
-        input_globs=args.input_glob,
-        split=None,
-        latest_model_only=not args.all_model_versions,
-        dedupe_by_problem=not args.keep_duplicates,
-    )
-    if not traces:
-        raise ValueError("No traces found")
-
     if args.split_mode == "within-repo":
+        traces = load_router_traces(
+            input_globs=args.input_glob,
+            split=None,
+            latest_model_only=not args.all_model_versions,
+            dedupe_by_problem=not args.keep_duplicates,
+        )
+        if not traces:
+            raise ValueError("No traces found")
         source = _select_best_split(traces, args.within_repo_source_split)
         if not source:
             raise ValueError(f"No traces available for within-repo source split={args.within_repo_source_split}")
@@ -272,9 +567,23 @@ def main() -> None:
             train_fraction=float(args.within_repo_train_fraction),
             seed=int(args.within_repo_seed),
         )
+        traces_for_metadata = traces
     else:
-        train_traces = _select_best_split(traces, args.train_split)
-        eval_traces = _select_best_split(traces, args.eval_split)
+        train_split = None if args.train_split == "all" else args.train_split
+        eval_split = None if args.eval_split == "all" else args.eval_split
+        train_traces = load_router_traces(
+            input_globs=args.input_glob,
+            split=train_split,
+            latest_model_only=not args.all_model_versions,
+            dedupe_by_problem=not args.keep_duplicates,
+        )
+        eval_traces = load_router_traces(
+            input_globs=args.input_glob,
+            split=eval_split,
+            latest_model_only=not args.all_model_versions,
+            dedupe_by_problem=not args.keep_duplicates,
+        )
+        traces_for_metadata = train_traces + eval_traces
     if args.max_train_records is not None:
         train_traces = train_traces[: args.max_train_records]
     if args.max_eval_records is not None:
@@ -282,10 +591,16 @@ def main() -> None:
     if not train_traces or not eval_traces:
         raise ValueError(f"Empty split after filtering: train={len(train_traces)} eval={len(eval_traces)}")
 
-    n_experts = max((len(trace.get("experts") or []) for trace in traces), default=0)
-    route_labels = extract_route_labels(traces, n_experts=n_experts)
+    n_experts = max((len(trace.get("experts") or []) for trace in traces_for_metadata), default=0)
+    route_labels = extract_route_labels(traces_for_metadata, n_experts=n_experts)
     target_dim = len(route_labels)
-    logger.info("Loaded traces total=%d train=%d eval=%d target_dim=%d", len(traces), len(train_traces), len(eval_traces), target_dim)
+    logger.info(
+        "Loaded traces total=%d train=%d eval=%d target_dim=%d",
+        len(traces_for_metadata),
+        len(train_traces),
+        len(eval_traces),
+        target_dim,
+    )
     logger.info("Routes: %s", route_labels)
 
     device = _pick_device(args.device)
@@ -300,10 +615,29 @@ def main() -> None:
     for param in model.parameters():
         param.requires_grad = False
 
-    def build_xy(traces_in: list[dict[str, Any]], tag: str) -> tuple[np.ndarray, np.ndarray, list[dict[str, Any]]]:
-        xs: list[np.ndarray] = []
+    num_hidden_layers = int(getattr(model.config, "num_hidden_layers", 0))
+    if num_hidden_layers <= 0:
+        raise ValueError(f"Invalid num_hidden_layers={num_hidden_layers} in model config")
+    hidden_indices = _parse_probe_hidden_indices(
+        probe_layers=args.probe_layers,
+        num_hidden_layers=num_hidden_layers,
+        include_embedding_layer=bool(args.include_embedding_layer),
+    )
+    logger.info(
+        "Probing hidden indices=%s (labels=%s), pooling=%s",
+        hidden_indices,
+        [_hidden_index_to_label(idx) for idx in hidden_indices],
+        args.pooling,
+    )
+
+    def build_xy(
+        traces_in: list[dict[str, Any]],
+        tag: str,
+    ) -> tuple[dict[int, np.ndarray], np.ndarray, list[dict[str, Any]], list[str]]:
+        xs_by_layer: dict[int, list[np.ndarray]] = {idx: [] for idx in hidden_indices}
         ys: list[np.ndarray] = []
         kept: list[dict[str, Any]] = []
+        languages: list[str] = []
         skipped = 0
         for trace in tqdm(traces_in, desc=f"Embedding {tag}", unit="trace"):
             policy = trace.get("policy") or {}
@@ -312,89 +646,259 @@ def main() -> None:
             if not isinstance(prompt_text, str):
                 skipped += 1
                 continue
-            embedding = _encode_prompt_last_embedding(model, tokenizer, device, prompt_text, output_text)
-            if embedding is None:
+            embeddings = _encode_prompt_last_embeddings(
+                model=model,
+                tokenizer=tokenizer,
+                device=device,
+                prompt_text=prompt_text,
+                output_text=output_text,
+                hidden_indices=hidden_indices,
+                pooling=args.pooling,
+            )
+            if embeddings is None:
                 skipped += 1
                 continue
             rewards = extract_reward_vector(trace)
             if len(rewards) < target_dim:
                 skipped += 1
                 continue
-            xs.append(embedding.astype(np.float32))
+            for hidden_idx in hidden_indices:
+                xs_by_layer[hidden_idx].append(embeddings[hidden_idx].astype(np.float32))
             ys.append(np.asarray(rewards[:target_dim], dtype=np.float32))
             kept.append(trace)
-        if not xs:
+            languages.append(_infer_language(trace))
+        if not ys:
             raise ValueError(f"No valid examples for {tag}")
-        logger.info("%s examples kept=%d skipped=%d", tag, len(xs), skipped)
-        return np.stack(xs), np.stack(ys), kept
+        logger.info("%s examples kept=%d skipped=%d", tag, len(ys), skipped)
+        return {idx: np.stack(xs_by_layer[idx]) for idx in hidden_indices}, np.stack(ys), kept, languages
 
-    x_train, y_train, kept_train = build_xy(train_traces, "train")
-    x_eval, y_eval, kept_eval = build_xy(eval_traces, "eval")
-    logger.info("Embedding dims: train=%s eval=%s", x_train.shape, x_eval.shape)
-
-    weights, bias, x_mean, x_std = _fit_ridge_multi_target(x_train, y_train, alpha=float(args.alpha))
-    y_hat_eval = _predict_ridge(x_eval, weights, bias, x_mean, x_std)
-
-    pair_rows: list[dict[str, Any]] = []
-    for i in range(target_dim):
-        for j in range(i + 1, target_dim):
-            delta_true = y_eval[:, i] - y_eval[:, j]
-            delta_pred = y_hat_eval[:, i] - y_hat_eval[:, j]
-            labels = (delta_true > 0).astype(np.int64)
-
-            sign_true = np.sign(delta_true)
-            sign_pred = np.sign(delta_pred)
-            ranking_acc = float(np.mean(sign_true == sign_pred))
-            pearson = _pearson_corr(delta_pred, delta_true)
-            spearman = _spearman_corr(delta_pred, delta_true)
-            mae_delta = float(np.mean(np.abs(delta_pred - delta_true)))
-            roc_auc = _roc_auc_binary(labels, delta_pred)
-
-            pair_rows.append(
-                {
-                    "left_idx": i,
-                    "right_idx": j,
-                    "left_label": route_labels[i],
-                    "right_label": route_labels[j],
-                    "n_eval": int(delta_true.shape[0]),
-                    "pearson_delta": pearson,
-                    "spearman_delta": spearman,
-                    "delta_mae": mae_delta,
-                    "ranking_accuracy_sign": ranking_acc,
-                    "roc_auc": roc_auc,
-                }
-            )
+    x_train_by_layer, y_train, _kept_train, train_languages = build_xy(train_traces, "train")
+    x_eval_by_layer, y_eval, kept_eval, eval_languages = build_xy(eval_traces, "eval")
+    logger.info(
+        "Embedding dims by layer: %s",
+        {idx: x_train_by_layer[idx].shape for idx in hidden_indices},
+    )
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    _write_csv(
-        output_dir / "pairwise_metrics.csv",
-        pair_rows,
-        [
-            "left_idx",
-            "right_idx",
-            "left_label",
-            "right_label",
-            "n_eval",
-            "pearson_delta",
-            "spearman_delta",
-            "delta_mae",
-            "ranking_accuracy_sign",
-            "roc_auc",
-        ],
+    language_onehot_train = np.zeros((y_train.shape[0], 0), dtype=np.float32)
+    language_onehot_eval = np.zeros((y_eval.shape[0], 0), dtype=np.float32)
+    language_feature_labels: list[str] = []
+    language_eval_unseen = 0
+    if args.append_language_onehot:
+        (
+            language_onehot_train,
+            language_onehot_eval,
+            language_feature_labels,
+            language_eval_unseen,
+        ) = _build_language_onehot_features(train_languages, eval_languages)
+        logger.info(
+            "Language one-hot enabled: dim=%d unseen_eval=%d labels=%s",
+            language_onehot_train.shape[1],
+            language_eval_unseen,
+            language_feature_labels,
+        )
+        train_counts = Counter(train_languages)
+        eval_counts = Counter(eval_languages)
+        _write_csv(
+            output_dir / "language_feature_categories.csv",
+            [
+                {
+                    "language": label,
+                    "feature_index": idx,
+                    "train_count": int(train_counts.get(label, 0)),
+                    "eval_count": int(eval_counts.get(label, 0)),
+                }
+                for idx, label in enumerate(language_feature_labels)
+            ],
+            ["language", "feature_index", "train_count", "eval_count"],
+        )
+
+    pairwise_headers = [
+        "left_idx",
+        "right_idx",
+        "left_label",
+        "right_label",
+        "n_eval",
+        "pearson_delta",
+        "spearman_delta",
+        "delta_mae",
+        "ranking_accuracy_sign",
+        "roc_auc",
+    ]
+    multi_layer = len(hidden_indices) > 1
+    per_layer_rows: list[dict[str, Any]] = []
+    per_layer_pair_rows: list[dict[str, Any]] = []
+
+    for hidden_idx in hidden_indices:
+        layer_label = _hidden_index_to_label(hidden_idx)
+        layer_output_dir = output_dir / "layers" / layer_label if multi_layer else output_dir
+        layer_output_dir.mkdir(parents=True, exist_ok=True)
+
+        base_x_train = x_train_by_layer[hidden_idx]
+        base_x_eval = x_eval_by_layer[hidden_idx]
+        x_train = base_x_train
+        x_eval = base_x_eval
+        if args.append_language_onehot and language_onehot_train.shape[1] > 0:
+            x_train = np.concatenate([x_train, language_onehot_train], axis=1)
+            x_eval = np.concatenate([x_eval, language_onehot_eval], axis=1)
+        weights, bias, x_mean, x_std = _fit_ridge_multi_target(x_train, y_train, alpha=float(args.alpha))
+        y_hat_eval = _predict_ridge(x_eval, weights, bias, x_mean, x_std)
+        pair_rows, policy_vs_gpt = _compute_pairwise_metrics(y_eval, y_hat_eval, route_labels)
+        for pair_row in pair_rows:
+            enriched = dict(pair_row)
+            enriched["hidden_index"] = hidden_idx
+            enriched["layer_label"] = layer_label
+            enriched["transformer_layer_index"] = (hidden_idx - 1) if hidden_idx > 0 else -1
+            per_layer_pair_rows.append(enriched)
+
+        _write_csv(layer_output_dir / "pairwise_metrics.csv", pair_rows, pairwise_headers)
+        np.savez(
+            layer_output_dir / "ridge_probe_weights.npz",
+            weights=weights,
+            bias=bias,
+            x_mean=x_mean,
+            x_std=x_std,
+            route_labels=np.asarray(route_labels),
+            hidden_index=np.asarray([hidden_idx]),
+            layer_label=np.asarray([layer_label]),
+        )
+
+        if args.save_predictions_jsonl:
+            pred_path = layer_output_dir / "eval_predictions.jsonl"
+            with pred_path.open("w") as sink:
+                for idx, trace in enumerate(kept_eval):
+                    row = {
+                        "problem_id": trace.get("problem_id"),
+                        "split": trace.get("split"),
+                        "model_version": trace.get("model_version"),
+                        "routes": route_labels,
+                        "true_rewards": y_eval[idx].tolist(),
+                        "pred_rewards": y_hat_eval[idx].tolist(),
+                    }
+                    sink.write(json.dumps(row) + "\n")
+            logger.info("Wrote eval predictions to %s", pred_path)
+
+        selection_score = None
+        if policy_vs_gpt and policy_vs_gpt.get("pearson_delta") is not None:
+            selection_score = float(policy_vs_gpt["pearson_delta"])
+        elif pair_rows:
+            valid_pearsons = [float(row["pearson_delta"]) for row in pair_rows if row.get("pearson_delta") is not None]
+            if valid_pearsons:
+                selection_score = float(sum(valid_pearsons) / len(valid_pearsons))
+
+        row = {
+            "hidden_index": hidden_idx,
+            "layer_label": layer_label,
+            "transformer_layer_index": (hidden_idx - 1) if hidden_idx > 0 else -1,
+            "n_train": int(x_train.shape[0]),
+            "n_eval": int(x_eval.shape[0]),
+            "embedding_dim": int(base_x_train.shape[1]),
+            "language_onehot_dim": int(language_onehot_train.shape[1]),
+            "feature_dim_total": int(x_train.shape[1]),
+            "n_pairs": len(pair_rows),
+            "policy_vs_gpt_pearson_delta": policy_vs_gpt.get("pearson_delta") if policy_vs_gpt else None,
+            "policy_vs_gpt_spearman_delta": policy_vs_gpt.get("spearman_delta") if policy_vs_gpt else None,
+            "policy_vs_gpt_roc_auc": policy_vs_gpt.get("roc_auc") if policy_vs_gpt else None,
+            "selection_score": selection_score,
+        }
+        per_layer_rows.append(row)
+
+        layer_summary = {
+            "model_path": args.model_path,
+            "alpha": float(args.alpha),
+            "split_mode": args.split_mode,
+            "train_split": args.train_split,
+            "eval_split": args.eval_split,
+            "within_repo_source_split": args.within_repo_source_split,
+            "within_repo_train_fraction": float(args.within_repo_train_fraction),
+            "within_repo_seed": int(args.within_repo_seed),
+            "probe_layers": args.probe_layers,
+            "include_embedding_layer": bool(args.include_embedding_layer),
+            "pooling": args.pooling,
+            "append_language_onehot": bool(args.append_language_onehot),
+            "language_feature_labels": language_feature_labels,
+            "language_eval_unseen_count": int(language_eval_unseen),
+            "hidden_index": hidden_idx,
+            "layer_label": layer_label,
+            "n_train": int(x_train.shape[0]),
+            "n_eval": int(x_eval.shape[0]),
+            "embedding_dim": int(base_x_train.shape[1]),
+            "language_onehot_dim": int(language_onehot_train.shape[1]),
+            "feature_dim_total": int(x_train.shape[1]),
+            "target_dim": target_dim,
+            "routes": route_labels,
+            "policy_vs_gpt_pair_metrics": policy_vs_gpt,
+            "notes": (
+                "Ridge probe trained on frozen trunk embeddings with "
+                f"pooling={args.pooling}, append_language_onehot={bool(args.append_language_onehot)}."
+            ),
+        }
+        with (layer_output_dir / "summary.json").open("w") as handle:
+            json.dump(layer_summary, handle, indent=2)
+
+        logger.info(
+            "Layer %s (hidden_idx=%d): pairwise_metrics=%d policy_vs_gpt_pearson=%s",
+            layer_label,
+            hidden_idx,
+            len(pair_rows),
+            f"{row['policy_vs_gpt_pearson_delta']:.4f}" if row["policy_vs_gpt_pearson_delta"] is not None else "n/a",
+        )
+
+    per_layer_rows = sorted(per_layer_rows, key=lambda item: int(item["hidden_index"]))
+    per_layer_pair_rows = sorted(
+        per_layer_pair_rows,
+        key=lambda item: (int(item["hidden_index"]), int(item["left_idx"]), int(item["right_idx"])),
     )
+    if multi_layer:
+        _write_csv(
+            output_dir / "per_layer_metrics.csv",
+            per_layer_rows,
+            [
+                "hidden_index",
+                "layer_label",
+                "transformer_layer_index",
+                "n_train",
+                "n_eval",
+                "embedding_dim",
+                "language_onehot_dim",
+                "feature_dim_total",
+                "n_pairs",
+                "policy_vs_gpt_pearson_delta",
+                "policy_vs_gpt_spearman_delta",
+                "policy_vs_gpt_roc_auc",
+                "selection_score",
+            ],
+        )
+        _write_csv(
+            output_dir / "per_layer_pairwise_metrics.csv",
+            per_layer_pair_rows,
+            [
+                "hidden_index",
+                "layer_label",
+                "transformer_layer_index",
+                "left_idx",
+                "right_idx",
+                "left_label",
+                "right_label",
+                "n_eval",
+                "pearson_delta",
+                "spearman_delta",
+                "delta_mae",
+                "ranking_accuracy_sign",
+                "roc_auc",
+            ],
+        )
+        _plot_pairwise_metrics_by_layer(per_layer_pair_rows, output_dir / "metrics_by_layer.png")
+        _plot_policy_vs_gpt_by_layer(per_layer_rows, output_dir / "policy_vs_gpt_by_layer.png")
+        if not MATPLOTLIB_AVAILABLE:
+            logger.warning("matplotlib is not available; skipping layer-metric plots.")
 
-    policy_vs_gpt = None
-    for row in pair_rows:
-        left = str(row["left_label"]).lower()
-        right = str(row["right_label"]).lower()
-        labels = [left, right]
-        if "policy" in labels[0] or "policy" in labels[1]:
-            if any("gpt" in label for label in labels):
-                policy_vs_gpt = row
-                break
-
+    best_layer = max(
+        per_layer_rows,
+        key=lambda row: (_safe_float(row.get("selection_score"), default=-1e9), -int(row["hidden_index"])),
+    )
     summary = {
         "model_path": args.model_path,
         "alpha": float(args.alpha),
@@ -404,51 +908,28 @@ def main() -> None:
         "within_repo_source_split": args.within_repo_source_split,
         "within_repo_train_fraction": float(args.within_repo_train_fraction),
         "within_repo_seed": int(args.within_repo_seed),
-        "n_train": int(x_train.shape[0]),
-        "n_eval": int(x_eval.shape[0]),
-        "embedding_dim": int(x_train.shape[1]),
+        "probe_layers": args.probe_layers,
+        "include_embedding_layer": bool(args.include_embedding_layer),
+        "pooling": args.pooling,
+        "append_language_onehot": bool(args.append_language_onehot),
+        "language_onehot_dim": int(language_onehot_train.shape[1]),
+        "language_feature_labels": language_feature_labels,
+        "language_eval_unseen_count": int(language_eval_unseen),
+        "hidden_indices": hidden_indices,
+        "n_train": int(y_train.shape[0]),
+        "n_eval": int(y_eval.shape[0]),
         "target_dim": target_dim,
         "routes": route_labels,
-        "policy_vs_gpt_pair_metrics": policy_vs_gpt,
-        "notes": "Ridge probe trained on frozen prompt-last trunk embeddings.",
+        "best_layer": best_layer,
+        "all_layers": per_layer_rows,
     }
     with (output_dir / "summary.json").open("w") as handle:
         json.dump(summary, handle, indent=2)
 
-    np.savez(
-        output_dir / "ridge_probe_weights.npz",
-        weights=weights,
-        bias=bias,
-        x_mean=x_mean,
-        x_std=x_std,
-        route_labels=np.asarray(route_labels),
-    )
-
-    if args.save_predictions_jsonl:
-        pred_path = output_dir / "eval_predictions.jsonl"
-        with pred_path.open("w") as sink:
-            for idx, trace in enumerate(kept_eval):
-                row = {
-                    "problem_id": trace.get("problem_id"),
-                    "split": trace.get("split"),
-                    "model_version": trace.get("model_version"),
-                    "routes": route_labels,
-                    "true_rewards": y_eval[idx].tolist(),
-                    "pred_rewards": y_hat_eval[idx].tolist(),
-                }
-                sink.write(json.dumps(row) + "\n")
-        logger.info("Wrote eval predictions to %s", pred_path)
-
-    logger.info("Done. pairwise metrics: %s", output_dir / "pairwise_metrics.csv")
-    if policy_vs_gpt is None:
-        logger.warning("Could not auto-detect a policy-vs-gpt pair in route labels.")
+    if len(hidden_indices) == 1:
+        logger.info("Done. pairwise metrics: %s", output_dir / "pairwise_metrics.csv")
     else:
-        logger.info(
-            "Policy-vs-GPT: pearson=%.4f spearman=%.4f roc_auc=%s",
-            _safe_float(policy_vs_gpt.get("pearson_delta")),
-            _safe_float(policy_vs_gpt.get("spearman_delta")),
-            f"{policy_vs_gpt.get('roc_auc'):.4f}" if policy_vs_gpt.get("roc_auc") is not None else "n/a",
-        )
+        logger.info("Done. per-layer metrics: %s", output_dir / "per_layer_metrics.csv")
 
 
 if __name__ == "__main__":

@@ -786,10 +786,11 @@ def run_actor_loop(cfg: DictConfig):
                         % (model_name, sorted(url_by_model.keys()))
                     )
                 try:
+                    tokenizer_name = expert_config.get("tokenizer_name") or model_name
                     expert_llm = TrainableLLM(
                         base_url=resolved_url,
                         model_name=model_name,
-                        tokenizer_name=expert_config.get('tokenizer_name', cfg.model_path),
+                        tokenizer_name=tokenizer_name,
                         parameters=expert_config.get('parameters', {'max_tokens': 64000, 'temperature': 1.0}),
                         max_retries=expert_config.get('max_retries', 5),
                         max_parallel_requests=expert_config.get('max_parallel_requests', 32),
@@ -800,9 +801,10 @@ def run_actor_loop(cfg: DictConfig):
                     )
                     expert_llms.append(expert_llm)
                     logger.info(
-                        "Created expert LLM for performance regression: url=%s model=%s rank=%s",
+                        "Created expert LLM for performance regression: url=%s model=%s tokenizer=%s rank=%s",
                         resolved_url,
                         model_name,
+                        tokenizer_name,
                         expert_config.get("expert_rank"),
                     )
                 except Exception as e:

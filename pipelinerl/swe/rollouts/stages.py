@@ -25,6 +25,19 @@ from .base import execute_agent_with_retry
 logger = logging.getLogger(__name__)
 
 
+def _build_trace_prompt_text(llm: TrainableLLM, llm_call: LLMCall) -> str | None:
+    try:
+        llm.load_tokenizer()
+        return llm.tokenizer.apply_chat_template(
+            conversation=llm_call.prompt.messages,
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+    except Exception as exc:
+        logger.warning("Failed to build prompt_text for trace (model=%s): %s", getattr(llm, "model_name", None), exc)
+        return None
+
+
 async def run_localization(
     cfg: DictConfig,
     llm: TrainableLLM,
@@ -313,6 +326,19 @@ async def run_repair(
         if isinstance(llm_call, dict):
             llm_call = LLMCall(**llm_call)
         raw_output = llm_call.output.content if llm_call and llm_call.output else ""
+
+        trace_cfg = cfg.swe.get("router_trace", {}) or {}
+        trace_enabled = bool(trace_cfg.get("enabled", False))
+        trace_include_prompt_text = bool(
+            trace_cfg.get("include_prompt_text", False) or trace_cfg.get("include_expert_prompt_text", False)
+        )
+        trace_include_output_text = bool(
+            trace_cfg.get("include_output_text", False) or trace_cfg.get("include_expert_output_text", False)
+        )
+        trace_include_prompt_messages = bool(trace_cfg.get("include_prompt_messages", False))
+        prompt_text_for_trace = _build_trace_prompt_text(llm, llm_call) if (trace_enabled and trace_include_prompt_text) else None
+        output_text_for_trace = raw_output if (trace_enabled and trace_include_output_text) else None
+        prompt_messages_for_trace = llm_call.prompt.messages if (trace_enabled and trace_include_prompt_messages) else None
         
         edits = []
         for step in new_tape.steps:
@@ -341,17 +367,25 @@ async def run_repair(
         
         success_threshold = getattr(cfg.actor, 'success_threshold', 0.8)
         success = reward > success_threshold
+        format_error = bool("format_error" in reward_metadata or reward_metadata.get("format_error", False))
+        semantic_failure = bool((not success) and (not format_error))
+        failure_type = "none" if success else ("format" if format_error else "semantic")
         
         metrics_dict = {
             "reward": reward,
             "success": success,
             "no_edits": len(edits) == 0,
-            "format_error": "format_error" in reward_metadata,
+            "format_error": format_error,
+            "semantic_failure": semantic_failure,
+            "failure_type": failure_type,
             **reward_metadata
         }
         
         return {
             'training_text': training_text,
+            'prompt_text': prompt_text_for_trace,
+            'output_text': output_text_for_trace,
+            'prompt_messages': prompt_messages_for_trace,
             'repair_edits': edits,
             'repair_output': raw_output,
             'metrics': metrics_dict,
@@ -365,7 +399,13 @@ async def run_repair(
     except Exception as e:
         logger.error(f"Repair error: {e}")
         return {
-            'training_text': None, 'repair_edits': [], 'repair_output': '', 'metrics': {"error": str(e)},
+            'training_text': None,
+            'prompt_text': None,
+            'output_text': None,
+            'prompt_messages': None,
+            'repair_edits': [],
+            'repair_output': '',
+            'metrics': {"error": str(e), "format_error": False, "semantic_failure": False, "failure_type": "runtime_error"},
             'latency': time.time() - start_time, 'prompt_tokens': 0, 'output_tokens': 0, 
             'success': False
         }
