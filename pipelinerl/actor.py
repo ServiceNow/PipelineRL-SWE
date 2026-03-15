@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 import wandb
 from pipelinerl.finetune.logging_ import flatten_dict_config, init_wandb
 from pipelinerl.finetune_loop import calculate_train_steps
+from pipelinerl.tokenizers import configure_devstral_tokenizer, is_devstral_model_name
 from tapeagents.llms.trainable import TrainableLLM
 from pipelinerl.rollouts import BaseMetrics, RolloutResult
 from pipelinerl.shared_memory_array import SharedMemoryQueue
@@ -799,6 +800,8 @@ def run_actor_loop(cfg: DictConfig):
                         collect_logprobs=False,
                         observe_llm_calls=False,
                     )
+                    if is_devstral_model_name(tokenizer_name) or is_devstral_model_name(model_name):
+                        configure_devstral_tokenizer(expert_llm)
                     expert_llms.append(expert_llm)
                     logger.info(
                         "Created expert LLM for performance regression: url=%s model=%s tokenizer=%s rank=%s",

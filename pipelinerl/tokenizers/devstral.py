@@ -18,7 +18,7 @@ def is_devstral_model_name(model_name: str | None) -> bool:
     """Return True when the provided model name points to a Mistral DevStral model."""
     if not isinstance(model_name, str):
         return False
-    return model_name.startswith("mistralai/")
+    return "devstral" in model_name.lower()
 
 
 def configure_devstral_tokenizer(llm: Any) -> Any:
@@ -51,12 +51,22 @@ def configure_devstral_tokenizer(llm: Any) -> Any:
             ) from exc
 
         logger.info("Loading DevStral tokenizer for %s", model_name)
-        tekken_path = Path(hf_hub_download(repo_id=model_name, filename=TEKKEN_FILENAME))
+        model_path = Path(model_name)
+        if model_path.exists():
+            tekken_path = model_path / TEKKEN_FILENAME
+            if not tekken_path.exists():
+                raise FileNotFoundError(f"Missing {TEKKEN_FILENAME} in local DevStral path {model_path}")
+        else:
+            tekken_path = Path(hf_hub_download(repo_id=model_name, filename=TEKKEN_FILENAME))
 
         system_prompt = ""
         try:
-            system_prompt_path = Path(hf_hub_download(repo_id=model_name, filename=SYSTEM_PROMPT_FILENAME))
-            system_prompt = system_prompt_path.read_text(encoding="utf-8")
+            if model_path.exists():
+                system_prompt_path = model_path / SYSTEM_PROMPT_FILENAME
+            else:
+                system_prompt_path = Path(hf_hub_download(repo_id=model_name, filename=SYSTEM_PROMPT_FILENAME))
+            if system_prompt_path.exists():
+                system_prompt = system_prompt_path.read_text(encoding="utf-8")
         except Exception:
             logger.debug("SYSTEM_PROMPT.txt not found for %s, proceeding without default prompt", model_name)
 
