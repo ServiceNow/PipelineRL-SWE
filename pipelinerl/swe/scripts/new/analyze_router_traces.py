@@ -1466,7 +1466,7 @@ def main() -> None:
         help="Glob pattern for router trace JSONL files. Can be provided multiple times.",
     )
     parser.add_argument("--output-dir", required=True)
-    parser.add_argument("--score-key", default="policy_value_prompt_last_all")
+    parser.add_argument("--score-key", default="policy_value_completion_last_all")
     parser.add_argument("--split", default="test", choices=["train", "test", "all"])
     parser.add_argument("--all-model-versions", action="store_true", help="Do not filter to latest model version")
     parser.add_argument("--keep-duplicates", action="store_true", help="Do not dedupe by problem id")

@@ -470,7 +470,10 @@ def run_analysis(
 
     threshold_values = _frange(threshold_start, threshold_stop, threshold_step)
 
-    variants = [("performance_value_head_prompt_last_all", "prompt_last")]
+    variants = [
+        ("performance_value_head_completion_last_all", "completion_last"),
+        ("performance_value_head_prompt_last_all", "prompt_last"),
+    ]
     base_output_path = Path(output_path)
 
     for score_key, label in variants:
@@ -742,7 +745,7 @@ def main():  # pragma: no cover
     parser.add_argument("--threshold_start", type=float, default=0.0)
     parser.add_argument("--threshold_stop", type=float, default=1.0)
     parser.add_argument("--threshold_step", type=float, default=0.05)
-    parser.add_argument("--score_list_key", default="performance_value_head_prompt_last_all")
+    parser.add_argument("--score_list_key", default="performance_value_head_completion_last_all")
     parser.add_argument("--handoff_margin", type=float, default=0.0)
     args = parser.parse_args()
 

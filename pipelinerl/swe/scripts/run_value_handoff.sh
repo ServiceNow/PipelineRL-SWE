@@ -4,7 +4,7 @@
 #   bash pipelinerl/swe/scripts/run_value_handoff.sh
 #
 # This script runs actor repair evaluation with value-head scoring,
-# then runs handoff analysis (prompt-last value thresholds).
+# then runs handoff analysis (completion-last value thresholds).
 
 set -euo pipefail
 
@@ -32,7 +32,7 @@ python pipelinerl/swe/scripts/analyze_handoff.py \
   --actor_glob="${ACTOR_EVAL_JSONL}" \
   --expert_jsonls="${EXPERT_JSONL}" \
   --output_path="${ANALYSIS_OUTPUT}" \
-  --score_list_key="performance_value_head_prompt_last_all" \
+  --score_list_key="performance_value_head_completion_last_all" \
   --handoff_margin=0.0
 
 if [[ ! -f "${ANALYSIS_OUTPUT}" ]]; then

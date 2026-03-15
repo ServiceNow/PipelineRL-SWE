@@ -170,7 +170,7 @@ def _split_within_repo(
     return train, eval_
 
 
-def _encode_prompt_last_embeddings(
+def _encode_embeddings(
     model: AutoModelForCausalLMWithValueHead,
     tokenizer: Any,
     device: torch.device,
@@ -198,7 +198,10 @@ def _encode_prompt_last_embeddings(
     if hidden_states is None:
         return None
     prompt_last_idx = prompt_len - 1
+    completion_last_idx = full_len - 1
     if prompt_last_idx < 0 or prompt_last_idx >= hidden_states[-1].shape[1]:
+        return None
+    if completion_last_idx < 0 or completion_last_idx >= hidden_states[-1].shape[1]:
         return None
 
     embeddings: dict[int, np.ndarray] = {}
@@ -210,6 +213,8 @@ def _encode_prompt_last_embeddings(
             vec = hidden[prompt_last_idx]
         elif pooling == "prompt_mean":
             vec = hidden[:prompt_len].mean(dim=0)
+        elif pooling == "completion_last":
+            vec = hidden[completion_last_idx]
         else:
             raise ValueError(f"Unknown pooling mode: {pooling}")
         vec = vec.detach().float().cpu().numpy()
@@ -530,7 +535,7 @@ def main() -> None:
     parser.add_argument(
         "--pooling",
         default="prompt_last",
-        choices=["prompt_last", "prompt_mean"],
+        choices=["prompt_last", "prompt_mean", "completion_last"],
         help="Embedding pooling over prompt tokens before ridge probe.",
     )
     parser.add_argument(
@@ -646,7 +651,7 @@ def main() -> None:
             if not isinstance(prompt_text, str):
                 skipped += 1
                 continue
-            embeddings = _encode_prompt_last_embeddings(
+            embeddings = _encode_embeddings(
                 model=model,
                 tokenizer=tokenizer,
                 device=device,

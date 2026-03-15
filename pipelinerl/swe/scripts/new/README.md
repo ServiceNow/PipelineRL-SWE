@@ -27,7 +27,9 @@ Actor writes:
 python -m pipelinerl.swe.scripts.new.score_router_traces \
   --input-glob "/path/to/run/streams/router_trace_test/*/*/0.jsonl" \
   --model-path "/path/to/run/finetune/current" \
-  --output-jsonl "/path/to/run/router_trace_test_scored.jsonl"
+  --output-jsonl "/path/to/run/router_trace_test_scored.jsonl" \
+  --score-key policy_value_completion_last_all \
+  --score-position completion_last
 ```
 
 ## 3) Utility-based router simulation
@@ -41,7 +43,7 @@ Decision rule:
 python -m pipelinerl.swe.scripts.new.analyze_router_traces \
   --input-glob "/path/to/run/router_trace_test_scored.jsonl" \
   --output-dir "/path/to/run/router_analysis" \
-  --score-key policy_value_prompt_last_all \
+  --score-key policy_value_completion_last_all \
   --lambda-start 0.0 --lambda-stop 0.10 --lambda-step 0.01 \
   --tau-start 0.0 --tau-stop 1.0 --tau-step 0.05
 ```
@@ -91,3 +93,59 @@ Baseline comparator folder:
 
 - `baseline/` repeats the lambda/tau sweep using constant predictions per route (`mu` mean realized reward)
 - Includes `operating_points.csv`, `frontier_points.csv`, `summary.json`, `route_mean_rewards.csv`, and matching charts/pies
+
+## 4) Export old trace routes to `sb-cli`
+
+`sb-cli` only evaluates official SWE-bench subsets (`swe-bench-m`, `swe-bench_lite`, `swe-bench_verified`), so this is for
+older runs whose traces come from an official SWE-bench split rather than the new SWE-smith test set.
+
+The exporter expects:
+
+- router traces with `repair_output` for the route you want to evaluate
+- a preprocessed local dataset path containing the original `file_contents`
+
+Example: export expert rank 1 from an older SWE-bench Lite run:
+
+```bash
+python -m pipelinerl.swe.scripts.new.export_traces_to_sb_cli \
+  --input-glob "/path/to/run/router_trace_test_scored.jsonl" \
+  --dataset-path /mnt/llmd/data/swebench_lite/ds \
+  --route expert \
+  --expert-rank 1 \
+  --output-json "/path/to/run/sb_cli/expert1_preds.json" \
+  --sb-subset swe-bench_lite \
+  --sb-split test \
+  --sb-run-id expert1_eval
+```
+
+This writes:
+
+- `expert1_preds.json`: dictionary-format predictions for `sb-cli`
+- `expert1_preds.jsonl`: list-format companion file
+- `expert1_preds_summary.json`: export stats + suggested `sb-cli submit ...` command
+
+If `sb-cli` is installed and authenticated, run the submit directly:
+
+```bash
+python -m pipelinerl.swe.scripts.new.export_traces_to_sb_cli \
+  ... \
+  --run-sb-cli
+```
+
+To compare the exported route's proxy reward against the real `sb-cli` outcome on a per-instance basis:
+
+```bash
+python -m pipelinerl.swe.scripts.new.compare_proxy_reward_to_sb_cli \
+  --input-glob "/path/to/run/router_trace_test_scored.jsonl" \
+  --report-json "sb-cli-reports/swe-bench_lite__test__<run_id>.json" \
+  --dataset-path /mnt/llmd/data/swebench_lite/ds \
+  --route expert \
+  --expert-rank 1 \
+  --output-dir "/path/to/run/sb_cli/proxy_vs_real"
+```
+
+This writes:
+
+- `per_instance_proxy_vs_real.csv`
+- `summary.json`
+- `proxy_reward_vs_sb_cli_scatter.png`

@@ -153,32 +153,32 @@ def linear_decay_coef(current_step: int, max_step: int, initial_coef: float, fin
     return initial_coef + (final_coef - initial_coef) * current_step / max_step
 
 
-def build_last_prompt_token_mask(
+def build_last_completion_token_mask(
     labels: torch.Tensor,
     segments: list | None,
 ) -> torch.Tensor:
     """
-    Build a mask that selects the last prompt token (just before the first output token)
-    for each sequence. Works for both packed and unpacked batches.
+    Build a mask that selects the last completion token for each sequence.
+    Works for both packed and unpacked batches.
     """
     mask = torch.zeros_like(labels, dtype=torch.bool)
 
-    def mark_last_prompt(row_idx: int, start: int, end: int) -> None:
+    def mark_last_completion(row_idx: int, start: int, end: int) -> None:
         row_labels = labels[row_idx, start:end]
         output_idx = (row_labels != -100).nonzero(as_tuple=True)[0]
         if output_idx.numel() == 0:
             return
-        last_prompt = start + int(output_idx[0].item()) - 1
-        if last_prompt >= start:
-            mask[row_idx, last_prompt] = True
+        last_completion = start + int(output_idx[-1].item())
+        if last_completion < end:
+            mask[row_idx, last_completion] = True
 
     if segments:
         # packed batches have a single row and explicit segments
         for start, end in segments:
-            mark_last_prompt(0, int(start), int(end))
+            mark_last_completion(0, int(start), int(end))
     else:
         for row_idx in range(labels.shape[0]):
-            mark_last_prompt(row_idx, 0, labels.shape[1])
+            mark_last_completion(row_idx, 0, labels.shape[1])
 
     return mask
 
@@ -476,17 +476,18 @@ def rl_step(
         if performance_targets is None:
             raise ValueError("performance_targets missing from batch while performance_value_head is present")
 
-        # Train performance head on the last prompt token only (prompt-only estimate).
-        performance_prompt_mask = build_last_prompt_token_mask(batch.labels, segments)
+        # Train performance head on the last completion token so it can condition on
+        # the policy attempt rather than only the prompt state.
+        performance_completion_mask = build_last_completion_token_mask(batch.labels, segments)
 
         if config.group_normalization:
-            prompt_tokens_weights = torch.ones_like(batch.group_tokens) / batch.group_tokens
+            completion_tokens_weights = torch.ones_like(batch.group_tokens) / batch.group_tokens
         else:
-            prompt_tokens_weights = torch.ones_like(batch.group_tokens) / config.batch_size
+            completion_tokens_weights = torch.ones_like(batch.group_tokens) / config.batch_size
 
         if config.overlong_filtering:
             overflow_full = batch.overflow
-            prompt_tokens_weights = prompt_tokens_weights * (1 - overflow_full)
+            completion_tokens_weights = completion_tokens_weights * (1 - overflow_full)
 
         if performance_targets.dim() != 2:
             raise ValueError(f"performance_targets should be [num_sequences, dim], got {performance_targets.shape}")
@@ -496,47 +497,47 @@ def rl_step(
         if batch.is_packed:
             if batch.segment_ids is None:
                 raise ValueError("segment_ids missing from packed batch for performance head alignment")
-            prompt_target_ids = batch.segment_ids[performance_prompt_mask].to(
+            completion_target_ids = batch.segment_ids[performance_completion_mask].to(
                 device=performance_targets.device, dtype=torch.long
             )
-            if prompt_target_ids.numel() > 0:
-                if int(prompt_target_ids.min().item()) < 0 or int(prompt_target_ids.max().item()) >= int(
+            if completion_target_ids.numel() > 0:
+                if int(completion_target_ids.min().item()) < 0 or int(completion_target_ids.max().item()) >= int(
                     performance_targets.shape[0]
                 ):
                     raise IndexError(
-                        "Prompt segment ids out of bounds for performance targets: "
-                        f"min={int(prompt_target_ids.min().item())} max={int(prompt_target_ids.max().item())} "
+                        "Completion segment ids out of bounds for performance targets: "
+                        f"min={int(completion_target_ids.min().item())} max={int(completion_target_ids.max().item())} "
                         f"num_targets={int(performance_targets.shape[0])}"
                     )
-            filtered_targets = performance_targets[prompt_target_ids]
+            filtered_targets = performance_targets[completion_target_ids]
         else:
-            prompt_target_ids = performance_prompt_mask.nonzero(as_tuple=True)[0].to(
+            completion_target_ids = performance_completion_mask.nonzero(as_tuple=True)[0].to(
                 device=performance_targets.device, dtype=torch.long
             )
-            filtered_targets = performance_targets[prompt_target_ids]
+            filtered_targets = performance_targets[completion_target_ids]
 
-        prompt_predictions = performance_values[performance_prompt_mask]
-        if prompt_predictions.shape != filtered_targets.shape:
+        completion_predictions = performance_values[performance_completion_mask]
+        if completion_predictions.shape != filtered_targets.shape:
             raise ValueError(
-                f"Prompt predictions shape {prompt_predictions.shape} does not match targets shape {filtered_targets.shape}"
+                f"Completion predictions shape {completion_predictions.shape} does not match targets shape {filtered_targets.shape}"
             )
 
-        performance_predictions = prompt_predictions
+        performance_predictions = completion_predictions
         performance_targets_filtered = filtered_targets
-        performance_sq_error = torch.square(prompt_predictions - filtered_targets)
-        performance_abs_error = torch.abs(prompt_predictions - filtered_targets)
-        per_seq_mse = torch.square(prompt_predictions - filtered_targets).mean(dim=-1)
-        prompt_weights = prompt_tokens_weights[performance_prompt_mask]
-        performance_value_loss = 0.5 * (per_seq_mse * prompt_weights).sum()
-        if prompt_predictions.numel() > 0:
+        performance_sq_error = torch.square(completion_predictions - filtered_targets)
+        performance_abs_error = torch.abs(completion_predictions - filtered_targets)
+        per_seq_mse = torch.square(completion_predictions - filtered_targets).mean(dim=-1)
+        completion_weights = completion_tokens_weights[performance_completion_mask]
+        performance_value_loss = 0.5 * (per_seq_mse * completion_weights).sum()
+        if completion_predictions.numel() > 0:
             performance_dim_losses = 0.5 * (
-                performance_sq_error * prompt_weights.unsqueeze(-1)
+                performance_sq_error * completion_weights.unsqueeze(-1)
             ).sum(dim=0)
         else:
             performance_dim_losses = performance_values.new_zeros((performance_values.shape[-1],))
         if config.performance_value_dynamic_scale:
             output_token_count = masks_shifted.sum().to(device=performance_values.device, dtype=torch.float32)
-            anchor_count = performance_prompt_mask.sum().to(device=performance_values.device, dtype=torch.float32)
+            anchor_count = performance_completion_mask.sum().to(device=performance_values.device, dtype=torch.float32)
 
             if dist.is_available() and dist.is_initialized():
                 dist.all_reduce(output_token_count, op=dist.ReduceOp.SUM)
@@ -624,9 +625,9 @@ def rl_step(
         stats["min_performance_value_dynamic_multiplier"] = performance_dynamic_multiplier
         stats["performance_value_dynamic_output_tokens_sum"] = performance_dynamic_output_tokens
         stats["performance_value_dynamic_anchor_count_sum"] = performance_dynamic_anchor_count
-        stats["performance_value_mean"] = prompt_predictions[:, 0].mean().item() if prompt_predictions.numel() else 0.0
-        stats["performance_value_max"] = prompt_predictions.max().item() if prompt_predictions.numel() else 0.0
-        stats["performance_value_min"] = prompt_predictions.min().item() if prompt_predictions.numel() else 0.0
+        stats["performance_value_mean"] = completion_predictions[:, 0].mean().item() if completion_predictions.numel() else 0.0
+        stats["performance_value_max"] = completion_predictions.max().item() if completion_predictions.numel() else 0.0
+        stats["performance_value_min"] = completion_predictions.min().item() if completion_predictions.numel() else 0.0
         anchor_count = (
             float(performance_predictions.shape[0]) if performance_predictions is not None else 0.0
         )

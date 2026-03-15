@@ -20,12 +20,13 @@ def _pick_device(device_arg: str) -> torch.device:
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def _compute_prompt_last_scores(
+def _compute_scores(
     model: AutoModelForCausalLMWithValueHead,
     tokenizer,
     device: torch.device,
     prompt_text: str,
     output_text: str,
+    score_position: str,
 ) -> list[float] | None:
     if not prompt_text:
         return None
@@ -46,12 +47,18 @@ def _compute_prompt_last_scores(
     if performance_values is None:
         return None
 
-    prompt_last_idx = prompt_len - 1
-    if prompt_last_idx >= performance_values.shape[1]:
+    if score_position == "prompt_last":
+        score_idx = prompt_len - 1
+    elif score_position == "completion_last":
+        score_idx = full_len - 1
+    else:
+        raise ValueError(f"Unknown score_position: {score_position}")
+
+    if score_idx < 0 or score_idx >= performance_values.shape[1]:
         return None
 
-    prompt_last_scores = performance_values[0, prompt_last_idx]
-    return prompt_last_scores.detach().float().cpu().tolist()
+    scores = performance_values[0, score_idx]
+    return scores.detach().float().cpu().tolist()
 
 
 def main() -> None:
@@ -64,7 +71,13 @@ def main() -> None:
     )
     parser.add_argument("--output-jsonl", required=True, help="Output JSONL path with appended scores.")
     parser.add_argument("--model-path", required=True, help="Checkpoint path containing performance_value_head.pt")
-    parser.add_argument("--score-key", default="policy_value_prompt_last_all")
+    parser.add_argument("--score-key", default="policy_value_completion_last_all")
+    parser.add_argument(
+        "--score-position",
+        default="completion_last",
+        choices=["completion_last", "prompt_last"],
+        help="Which hidden-state position to score with the performance head.",
+    )
     parser.add_argument("--device", default="auto", help="Torch device (e.g. cuda:0, cpu, auto)")
     parser.add_argument("--split", default="test", choices=["train", "test", "all"])
     parser.add_argument("--all-model-versions", action="store_true", help="Do not filter to latest model version")
@@ -114,7 +127,14 @@ def main() -> None:
                 continue
 
             try:
-                scores = _compute_prompt_last_scores(model, tokenizer, device, prompt_text, output_text or "")
+                scores = _compute_scores(
+                    model,
+                    tokenizer,
+                    device,
+                    prompt_text,
+                    output_text or "",
+                    args.score_position,
+                )
             except Exception as exc:  # pylint: disable=broad-except
                 logger.warning("Scoring failed for problem_id=%s: %s", trace.get("problem_id"), exc)
                 scores = None

@@ -62,8 +62,8 @@ def _compute_value_scores(
     device,
     messages,
     response,
-) -> List[float] | None:
-    """Return performance_value_head prompt-last scores for all heads."""
+) -> tuple[List[float] | None, List[float] | None]:
+    """Return performance_value_head prompt-last and completion-last scores for all heads."""
     if not messages or response is None:
         return None
     try:
@@ -86,12 +86,16 @@ def _compute_value_scores(
     performance_values = (
         outputs.performance_value.squeeze(0) if outputs.performance_value is not None else None
     )
-    if performance_values is None or performance_values.shape[0] <= prompt_len:
-        return None
+    if performance_values is None or performance_values.shape[0] == 0:
+        return None, None
     prompt_last_all: List[float] | None = None
+    completion_last_all: List[float] | None = None
     if prompt_len > 0 and performance_values.shape[-1] > 0:
         prompt_last_all = performance_values[prompt_len - 1].tolist()
-    return prompt_last_all
+    full_len = int(full_ids.shape[1])
+    if full_len > prompt_len and performance_values.shape[-1] > 0:
+        completion_last_all = performance_values[full_len - 1].tolist()
+    return prompt_last_all, completion_last_all
 
 
 def _local_chat_completion(model, tokenizer, device, messages, parameters):
@@ -199,7 +203,7 @@ async def _evaluate_problem(
             self_eval_output
         )
 
-    prompt_last_all = _compute_value_scores(
+    prompt_last_all, completion_last_all = _compute_value_scores(
         tokenizer, value_model, device, repair_messages, repair_text
     )
 
@@ -228,6 +232,7 @@ async def _evaluate_problem(
         "self_eval_parsing_error": self_eval_parsing_error,
         "self_eval_prompt": self_eval_messages if eval_cfg.get("run_self_eval", True) else None,
         "performance_value_head_prompt_last_all": prompt_last_all,
+        "performance_value_head_completion_last_all": completion_last_all,
     }
 
     return record
@@ -385,7 +390,7 @@ async def _evaluate_reuse(cfg: DictConfig) -> None:
                         self_eval_output
                     )
 
-                    prompt_last_all = _compute_value_scores(
+                    prompt_last_all, completion_last_all = _compute_value_scores(
                         tokenizer, value_model, device, self_eval_messages, repair_text
                     )
 
@@ -401,6 +406,7 @@ async def _evaluate_reuse(cfg: DictConfig) -> None:
                             "self_eval_parsing_error": self_eval_parsing_error,
                             "self_eval_prompt": self_eval_messages,
                             "performance_value_head_prompt_last_all": prompt_last_all,
+                            "performance_value_head_completion_last_all": completion_last_all,
                         }
                     )
                     sink.write(json.dumps(record) + "\n")

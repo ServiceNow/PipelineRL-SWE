@@ -41,6 +41,7 @@ class ValueScorer:
                 "performance_policy_mean": None,
                 "performance_policy_last": None,
                 "performance_expert_prompt_last": None,
+                "performance_all_completion_last": None,
             }
 
         input_ids = torch.tensor([training_text.input_ids], device=self.device)
@@ -62,11 +63,13 @@ class ValueScorer:
         policy_value_mean = None
         policy_value_last = None
         expert_value_prompt_last = None
+        completion_last_all = None
 
         if response_indices and performance_values is not None:
             response_values = performance_values[response_indices, 0]
             policy_value_mean = response_values.mean().item()
             policy_value_last = response_values[-1].item()
+            completion_last_all = performance_values[response_indices[-1]].tolist()
             first_output_idx = response_indices[0]
             prompt_last_idx = first_output_idx - 1
             if prompt_last_idx >= 0 and performance_values.shape[-1] > 1:
@@ -80,6 +83,7 @@ class ValueScorer:
             "performance_policy_mean": policy_value_mean,
             "performance_policy_last": policy_value_last,
             "performance_expert_prompt_last": expert_value_prompt_last,
+            "performance_all_completion_last": completion_last_all,
         }
 
 
