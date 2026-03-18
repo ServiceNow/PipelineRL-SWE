@@ -84,15 +84,16 @@ swe:
   enable_expert_reward: true
   
   expert_models:
+    # Temporarily disable Devstral; it is dominating rollout latency.
+    # - expert_rank: 0
+    #   model_name: "mistralai/Devstral-Small-2505"
+    #   tokenizer_name: ${.model_name}
+    #   parameters:
+    #     max_tokens: 15000
+    #     temperature: 0.15
+    #   timeout: 300
+    #   max_retries: 3
     - expert_rank: 0
-      model_name: "mistralai/Devstral-Small-2505"
-      tokenizer_name: ${.model_name}
-      parameters:
-        max_tokens: 15000
-        temperature: 0.15
-      timeout: 300
-      max_retries: 3
-    - expert_rank: 1
       model_name: "openai/gpt-oss-120b"
       tokenizer_name: ${.model_name}
       parameters:
@@ -131,17 +132,18 @@ swe_preprocessor_args:
 
 world:
   expert_llms:
-    - enabled: true
-      model_path: mistralai/Devstral-Small-2505
-      port: 8280
-      # Optional: run expert server in a different conda env.
-      conda_env: vllm-env
-      vllm_kwargs:
-        tensor-parallel-size: 1
-        tokenizer_mode: mistral
-        config_format: mistral
-        load_format: mistral
-        max_model_len: 32000
+    # Temporarily disable Devstral server; keeping config here for quick restore.
+    # - enabled: true
+    #   model_path: mistralai/Devstral-Small-2505
+    #   port: 8280
+    #   # Optional: run expert server in a different conda env.
+    #   conda_env: vllm-env
+    #   vllm_kwargs:
+    #     tensor-parallel-size: 1
+    #     tokenizer_mode: mistral
+    #     config_format: mistral
+    #     load_format: mistral
+    #     max_model_len: 32000
     - enabled: true
       conda_env: vllm-env
       model_path: openai/gpt-oss-120b
@@ -152,7 +154,8 @@ world:
   replicas: 1
   env_replicas: 1
   fixed_gpus:
-    actor: 7
+    # Previously: actor=7, finetune=4, expert=5
+    actor: 8
     preprocessor: 0
     finetune: 4
-    expert: 5
+    expert: 4
