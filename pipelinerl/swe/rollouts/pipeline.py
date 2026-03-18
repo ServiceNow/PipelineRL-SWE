@@ -4,6 +4,7 @@ Coordinates the execution of all stages and produces the final RolloutResult.
 Now runs policy + optional expert model (for reward regression) without A2A/self-eval layers.
 """
 
+import asyncio
 import logging
 from pathlib import Path
 import time
@@ -89,6 +90,92 @@ async def _run_expert_stage_with_timing(
         )
 
     return expert_results, {"total_wait_s": total_wait_s, "per_expert": timings}
+
+
+async def _run_repair_bundle_with_timing(
+    cfg: DictConfig,
+    llm: TrainableLLM,
+    expert_llms: list[TrainableLLM],
+    problem: dict,
+    file_contents: dict,
+    session,
+) -> tuple[dict, list[tuple[int, TrainableLLM, dict]], dict]:
+    """
+    Run the policy repair plus all expert repairs concurrently.
+
+    This removes the avoidable policy->expert and expert->expert serialization
+    while preserving deterministic expert ordering in the returned results.
+    """
+
+    async def _timed_policy_call() -> dict:
+        start = time.perf_counter()
+        result = await run_repair(cfg, llm, problem, file_contents, session)
+        return {
+            "kind": "policy",
+            "result": result,
+            "wall_time_s": time.perf_counter() - start,
+        }
+
+    async def _timed_expert_call(expert_idx: int, expert_llm: TrainableLLM) -> dict:
+        start = time.perf_counter()
+        result = await run_repair(cfg, expert_llm, problem, file_contents, session, collect_training_text=False)
+        return {
+            "kind": "expert",
+            "expert_idx": expert_idx,
+            "expert_llm": expert_llm,
+            "result": result,
+            "wall_time_s": time.perf_counter() - start,
+        }
+
+    total_start = time.perf_counter()
+    tasks = [_timed_policy_call(), *[_timed_expert_call(idx, expert_llm) for idx, expert_llm in enumerate(expert_llms)]]
+    completed = await asyncio.gather(*tasks)
+    total_wait_s = time.perf_counter() - total_start
+
+    policy_entry = next(entry for entry in completed if entry["kind"] == "policy")
+    expert_entries = [entry for entry in completed if entry["kind"] == "expert"]
+    expert_entries.sort(key=lambda entry: int(entry["expert_idx"]))
+
+    expert_results = [
+        (entry["expert_idx"], entry["expert_llm"], entry["result"])
+        for entry in expert_entries
+    ]
+
+    timing = {
+        "total_wait_s": total_wait_s,
+        "policy_wall_time_s": policy_entry["wall_time_s"],
+        "policy_reported_latency_s": policy_entry["result"].get("latency", 0.0),
+        "per_expert": [
+            {
+                "expert_rank": entry["expert_idx"],
+                "model_name": getattr(entry["expert_llm"], "model_name", None),
+                "wall_time_s": entry["wall_time_s"],
+                "reported_latency_s": entry["result"].get("latency", 0.0),
+                "prompt_tokens": entry["result"].get("prompt_tokens", 0),
+                "output_tokens": entry["result"].get("output_tokens", 0),
+            }
+            for entry in expert_entries
+        ],
+    }
+
+    if expert_entries:
+        problem_id = problem.get("id") or problem.get("problem_id") or problem.get("instance_id")
+        expert_summary = ", ".join(
+            f"rank={entry['expert_idx']} model={getattr(entry['expert_llm'], 'model_name', None)} "
+            f"wall={entry['wall_time_s']:.2f}s reported={entry['result'].get('latency', 0.0):.2f}s "
+            f"tok={entry['result'].get('prompt_tokens', 0)}/{entry['result'].get('output_tokens', 0)}"
+            for entry in expert_entries
+        )
+        logger.info(
+            "Repair parallel timing: problem=%s total_wait=%.2fs policy_wall=%.2fs policy_reported=%.2fs [%s]",
+            problem_id,
+            total_wait_s,
+            policy_entry["wall_time_s"],
+            policy_entry["result"].get("latency", 0.0),
+            expert_summary,
+        )
+
+    return policy_entry["result"], expert_results, timing
 
 
 async def generate_unified_swe_rollout(
@@ -268,18 +355,14 @@ async def generate_unified_swe_rollout(
 
             if file_contents:
                 logger.info("Using pure stage mode for repair")
-                rep_result = await run_repair(cfg, llm, problem, file_contents, session)
-                expert_rep_results = []
-                expert_rep_timing = {"total_wait_s": 0.0, "per_expert": []}
-                if expert_llms:
-                    expert_rep_results, expert_rep_timing = await _run_expert_stage_with_timing(
-                        "Repair",
-                        problem,
-                        expert_llms,
-                        lambda expert_llm: run_repair(
-                            cfg, expert_llm, problem, file_contents, session, collect_training_text=False
-                        ),
-                    )
+                rep_result, expert_rep_results, expert_rep_timing = await _run_repair_bundle_with_timing(
+                    cfg,
+                    llm,
+                    expert_llms,
+                    problem,
+                    file_contents,
+                    session,
+                )
                 if cfg.swe.get('enable_repair', False) and rep_result['training_text']:
                     if expert_rep_results:
                         expert_rewards = [result.get('reward', 0.0) for _, _, result in expert_rep_results]
@@ -367,6 +450,7 @@ async def generate_unified_swe_rollout(
                             *[expert_result.get("reward", 0.0) for _, _, expert_result in expert_rep_results],
                         ],
                         "expert_timing": expert_rep_timing,
+                        "policy_wall_time_s": expert_rep_timing.get("policy_wall_time_s"),
                         "policy": policy_trace,
                         "experts": experts_trace,
                     }
