@@ -45,6 +45,52 @@ def _resolve_repo_base_path(cfg: DictConfig, dataset: str) -> str:
     )
 
 
+async def _run_expert_stage_with_timing(
+    stage_name: str,
+    problem: dict,
+    expert_llms: list[TrainableLLM],
+    runner,
+) -> tuple[list[tuple[int, TrainableLLM, dict]], dict]:
+    """Run expert calls serially and log how much wall time they add."""
+    expert_results: list[tuple[int, TrainableLLM, dict]] = []
+    timings: list[dict] = []
+    total_start = time.perf_counter()
+
+    for expert_idx, expert_llm in enumerate(expert_llms):
+        call_start = time.perf_counter()
+        result = await runner(expert_llm)
+        wall_time_s = time.perf_counter() - call_start
+        timings.append(
+            {
+                "expert_rank": expert_idx,
+                "model_name": getattr(expert_llm, "model_name", None),
+                "wall_time_s": wall_time_s,
+                "reported_latency_s": result.get("latency", 0.0),
+                "prompt_tokens": result.get("prompt_tokens", 0),
+                "output_tokens": result.get("output_tokens", 0),
+            }
+        )
+        expert_results.append((expert_idx, expert_llm, result))
+
+    total_wait_s = time.perf_counter() - total_start
+    if timings:
+        timing_summary = ", ".join(
+            f"rank={entry['expert_rank']} model={entry['model_name']} wall={entry['wall_time_s']:.2f}s "
+            f"reported={entry['reported_latency_s']:.2f}s tok={entry['prompt_tokens']}/{entry['output_tokens']}"
+            for entry in timings
+        )
+        problem_id = problem.get("id") or problem.get("problem_id") or problem.get("instance_id")
+        logger.info(
+            "%s expert timing: problem=%s total_wait=%.2fs [%s]",
+            stage_name,
+            problem_id,
+            total_wait_s,
+            timing_summary,
+        )
+
+    return expert_results, {"total_wait_s": total_wait_s, "per_expert": timings}
+
+
 async def generate_unified_swe_rollout(
     cfg: DictConfig,
     llm: TrainableLLM,
@@ -99,12 +145,15 @@ async def generate_unified_swe_rollout(
             if cfg.swe.get('enable_localization', False) and loc_result['training_text']:
                 # Attach expert reward if available
                 if expert_llms:
-                    expert_rewards = []
-                    for expert_llm in expert_llms:
-                        expert_loc_result = await run_localization(
+                    expert_loc_results, _ = await _run_expert_stage_with_timing(
+                        "Localization",
+                        problem,
+                        expert_llms,
+                        lambda expert_llm: run_localization(
                             cfg, expert_llm, problem, session, collect_training_text=False
-                        )
-                        expert_rewards.append(expert_loc_result.get('reward', 0.0))
+                        ),
+                    )
+                    expert_rewards = [result.get('reward', 0.0) for _, _, result in expert_loc_results]
                     performance_targets = [loc_result.get('reward', 0.0), *expert_rewards]
                     if len(performance_targets) != performance_value_dim:
                         logger.warning(
@@ -154,12 +203,15 @@ async def generate_unified_swe_rollout(
                     sel_result = await run_file_selection(cfg, llm, problem, enriched_context, session)
                     if cfg.swe.get('enable_file_selection', False) and sel_result['training_text']:
                         if expert_llms:
-                            expert_rewards = []
-                            for expert_llm in expert_llms:
-                                expert_sel_result = await run_file_selection(
+                            expert_sel_results, _ = await _run_expert_stage_with_timing(
+                                "Selection",
+                                problem,
+                                expert_llms,
+                                lambda expert_llm: run_file_selection(
                                     cfg, expert_llm, problem, enriched_context, session, collect_training_text=False
-                                )
-                                expert_rewards.append(expert_sel_result.get('reward', 0.0))
+                                ),
+                            )
+                            expert_rewards = [result.get('reward', 0.0) for _, _, result in expert_sel_results]
                             performance_targets = [sel_result.get('reward', 0.0), *expert_rewards]
                             if len(performance_targets) != performance_value_dim:
                                 logger.warning(
@@ -218,12 +270,16 @@ async def generate_unified_swe_rollout(
                 logger.info("Using pure stage mode for repair")
                 rep_result = await run_repair(cfg, llm, problem, file_contents, session)
                 expert_rep_results = []
+                expert_rep_timing = {"total_wait_s": 0.0, "per_expert": []}
                 if expert_llms:
-                    for expert_idx, expert_llm in enumerate(expert_llms):
-                        expert_rep_result = await run_repair(
+                    expert_rep_results, expert_rep_timing = await _run_expert_stage_with_timing(
+                        "Repair",
+                        problem,
+                        expert_llms,
+                        lambda expert_llm: run_repair(
                             cfg, expert_llm, problem, file_contents, session, collect_training_text=False
-                        )
-                        expert_rep_results.append((expert_idx, expert_llm, expert_rep_result))
+                        ),
+                    )
                 if cfg.swe.get('enable_repair', False) and rep_result['training_text']:
                     if expert_rep_results:
                         expert_rewards = [result.get('reward', 0.0) for _, _, result in expert_rep_results]
@@ -280,6 +336,9 @@ async def generate_unified_swe_rollout(
                             "failure_type": (expert_result.get("metrics") or {}).get("failure_type"),
                             "no_edits": bool((expert_result.get("metrics") or {}).get("no_edits", False)),
                             "latency": expert_result.get("latency", 0.0),
+                            "wall_time_s": expert_rep_timing["per_expert"][expert_idx]["wall_time_s"]
+                            if expert_idx < len(expert_rep_timing["per_expert"])
+                            else None,
                             "prompt_tokens": expert_result.get("prompt_tokens", 0),
                             "output_tokens": expert_result.get("output_tokens", 0),
                         }
@@ -307,6 +366,7 @@ async def generate_unified_swe_rollout(
                             rep_result.get("reward", 0.0),
                             *[expert_result.get("reward", 0.0) for _, _, expert_result in expert_rep_results],
                         ],
+                        "expert_timing": expert_rep_timing,
                         "policy": policy_trace,
                         "experts": experts_trace,
                     }

@@ -31,7 +31,7 @@ agent:
 finetune:
   seq_parallel: 2
   seq_length: 32000
-  gradient_accumulation_passes: 512  # Adjust based on your setup
+  gradient_accumulation_passes: 128  # Smaller step size so checkpoints/logs arrive sooner while finetune is data-starved
   rl:
     temperature: ${...llm.parameters.temperature}
     performance_value_loss_coef: 0.05
@@ -152,7 +152,7 @@ world:
   replicas: 1
   env_replicas: 1
   fixed_gpus:
-    actor: 5
+    actor: 7
     preprocessor: 0
-    finetune: 6
+    finetune: 4
     expert: 5
