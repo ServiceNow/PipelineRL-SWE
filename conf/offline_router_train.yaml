@@ -1,0 +1,24 @@
+defaults:
+  - swe
+  - _self_
+
+output_dir: ???
+
+offline_router:
+  train:
+    dataset_dir: ???
+    mode: frozen_backbone  # frozen_backbone | full_backbone
+    device: auto
+    num_epochs: 3
+    batch_size: 1
+    eval_batch_size: 1
+    gradient_accumulation_steps: 1
+    lr: 1.0e-4
+    weight_decay: 0.0
+    max_seq_length: ${finetune.seq_length}
+    num_workers: 0
+    bf16: true
+    gradient_checkpointing: false
+    shuffle_train: true
+    max_train_rows: null
+    max_eval_rows: null

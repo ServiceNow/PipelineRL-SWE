@@ -1,0 +1,29 @@
+defaults:
+  - swe
+  - _self_
+
+output_dir: ???
+
+offline_router:
+  collection:
+    collect_train: true
+    collect_eval: true
+    shuffle: false
+    shard_size: 64
+    max_concurrent_problems: 32
+    connector_limit: 128
+    request_timeout: 1800
+    max_samples:
+      train: null
+      eval: ${dataset_loader_params.test_max_samples}
+  policy:
+    base_url: null
+    model_name: ${model_path}
+    tokenizer_name: ${model_path}
+    api_key: null
+    parameters:
+      max_tokens: ${llm.parameters.max_tokens}
+      temperature: ${llm.parameters.temperature}
+      top_p: ${oc.select:llm.parameters.top_p,null}
+      top_k: ${oc.select:llm.parameters.top_k,null}
+  expert_base_urls: []
