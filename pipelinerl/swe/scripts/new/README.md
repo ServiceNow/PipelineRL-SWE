@@ -86,13 +86,82 @@ Graphs (if matplotlib is installed):
 - `mean_regret_vs_lambda.png`
 - `p95_regret_vs_lambda.png`
 - `pred_vs_realized/pred_vs_realized_<idx>_<route>.png` (wider plot, title includes `R^2`)
-- `pred_vs_realized/pred_vs_realized_stats.csv` (`R^2` + per-route summary stats)
+- `pred_vs_realized/pred_vs_realized_<idx>_<route>_standardized.png` (predictions affine-rescaled to true mean/std, then re-scored)
+- `pred_vs_realized/pred_vs_realized_stats.csv` (raw + standardized `R^2`, per-route means/stds, rescale params)
+- `pairwise_delta_scatter/*.png` and `*_standardized.png` (raw and standardized delta scatters)
 - `routing_pies/lambda_<lambda>/routing_lambda_<lambda>_tau_<tau>.png`
 
 Baseline comparator folder:
 
 - `baseline/` repeats the lambda/tau sweep using constant predictions per route (`mu` mean realized reward)
 - Includes `operating_points.csv`, `frontier_points.csv`, `summary.json`, `route_mean_rewards.csv`, and matching charts/pies
+
+## 3b) Reward SNR diagnostic
+
+Compute reward-vector separability:
+
+- between-expert variance per task
+- within-expert variance across tasks
+- optional language breakdown
+
+```bash
+python -m pipelinerl.swe.scripts.new.analyze_reward_snr \
+  --input-glob "/path/to/run/router_trace_test_scored.jsonl" \
+  --output-dir "/path/to/run/reward_snr"
+```
+
+Writes:
+
+- `snr_summary.json`
+- `per_task_between_expert_variance.csv`
+- `per_route_within_expert_variance.csv`
+- `language_snr_summary.csv`
+
+Plots (if matplotlib is installed):
+
+- `between_expert_variance_hist.png`
+- `within_expert_variance_bar.png`
+
+## 3c) Frozen-trunk ridge probe on route rewards
+
+This probe trains ridge regression on frozen completion representations from the policy attempt.
+It predicts the full reward vector (policy + experts), which is equivalent to separate ridge probes
+per route but solved in one multi-target regression.
+
+Example using completion-last representations:
+
+```bash
+python -m pipelinerl.swe.scripts.new.ridge_probe_router_embeddings \
+  --input-glob "/path/to/run/streams/router_trace/*/*/*.jsonl" \
+  --input-glob "/path/to/run/streams/router_trace_test/*/*/*.jsonl" \
+  --output-dir "/path/to/run/ridge_probe_completion_last" \
+  --model-path "/path/to/run/finetune/current" \
+  --train-split train \
+  --eval-split test \
+  --pooling completion_last
+```
+
+Useful options:
+
+- `--alpha 10.0` (ridge regularization strength)
+- `--probe-layers all` (layer sweep)
+- `--target-train-traces 500` (walk backward from eval version until this many train traces are collected)
+- `--max-train-versions-back 20` (cap train window)
+- `--append-language-onehot` (append inferred language one-hot features)
+
+Writes:
+
+- `pairwise_metrics.csv`
+- `route_metrics.csv` (per-route Pearson/Spearman/R^2/MSE/MAE)
+- `summary.json`
+
+For layer sweeps:
+
+- `per_layer_metrics.csv`
+- `per_layer_pairwise_metrics.csv`
+- `per_layer_route_metrics.csv`
+- `metrics_by_layer.png`
+- `policy_vs_gpt_by_layer.png`
 
 ## 4) Export old trace routes to `sb-cli`
 

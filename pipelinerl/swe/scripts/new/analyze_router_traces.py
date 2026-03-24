@@ -434,6 +434,29 @@ def _r2_score(y_true: list[float], y_pred: list[float]) -> float | None:
     return 1.0 - (ss_res / ss_tot)
 
 
+def _rescale_predictions_to_match_true_stats(
+    y_true: list[float],
+    y_pred: list[float],
+) -> tuple[list[float], float, float]:
+    if not y_true or not y_pred or len(y_true) != len(y_pred):
+        return list(y_pred), 1.0, 0.0
+
+    n = len(y_true)
+    true_mean = sum(y_true) / n
+    pred_mean = sum(y_pred) / n
+    true_var = sum((value - true_mean) ** 2 for value in y_true) / n
+    pred_var = sum((value - pred_mean) ** 2 for value in y_pred) / n
+    true_std = math.sqrt(max(true_var, 0.0))
+    pred_std = math.sqrt(max(pred_var, 0.0))
+
+    if pred_std <= 1e-12:
+        return [true_mean for _ in y_pred], 0.0, true_mean
+
+    scale = true_std / pred_std
+    shift = true_mean - scale * pred_mean
+    return [scale * value + shift for value in y_pred], scale, shift
+
+
 def _variance(values: list[float]) -> float:
     if not values:
         return 0.0
@@ -1009,6 +1032,10 @@ def _plot_predicted_vs_realized_by_route(
         real_var = sum((value - real_mean) ** 2 for value in real) / n_points
         pred_std = math.sqrt(max(pred_var, 0.0))
         real_std = math.sqrt(max(real_var, 0.0))
+        pred_standardized, standardize_scale, standardize_shift = _rescale_predictions_to_match_true_stats(real, pred)
+        pred_standardized_mean = sum(pred_standardized) / n_points
+        pred_standardized_var = sum((value - pred_standardized_mean) ** 2 for value in pred_standardized) / n_points
+        pred_standardized_std = math.sqrt(max(pred_standardized_var, 0.0))
 
         lower = min(min(pred), min(real))
         upper = max(max(pred), max(real))
@@ -1016,16 +1043,22 @@ def _plot_predicted_vs_realized_by_route(
             lower -= 0.05
             upper += 0.05
         r2 = _r2_score(real, pred)
+        r2_standardized = _r2_score(real, pred_standardized)
         stats_rows.append(
             {
                 "route_index": route_idx,
                 "route_label": route_label,
                 "n_points": n_points,
                 "r2": r2,
+                "r2_standardized": r2_standardized,
                 "pred_mean": pred_mean,
                 "pred_std": pred_std,
+                "pred_standardized_mean": pred_standardized_mean,
+                "pred_standardized_std": pred_standardized_std,
                 "realized_mean": real_mean,
                 "realized_std": real_std,
+                "standardize_scale": standardize_scale,
+                "standardize_shift": standardize_shift,
             }
         )
 
@@ -1046,6 +1079,27 @@ def _plot_predicted_vs_realized_by_route(
             plt.savefig(out_path)
             plt.close()
 
+            lower_std = min(min(pred_standardized), min(real))
+            upper_std = max(max(pred_standardized), max(real))
+            if abs(upper_std - lower_std) < 1e-12:
+                lower_std -= 0.05
+                upper_std += 0.05
+            plt.figure(figsize=(9.0, 5.5))
+            plt.scatter(pred_standardized, real, alpha=0.35, s=14, color="tab:green")
+            plt.plot([lower_std, upper_std], [lower_std, upper_std], linestyle="--", color="gray", linewidth=1.0)
+            plt.xlabel("Predicted reward (standardized to true mean/std)")
+            plt.ylabel("Realized reward")
+            title = f"{route_label} | standardized"
+            if r2_standardized is not None:
+                title += f" | R^2={r2_standardized:.3f}"
+            plt.title(title, fontsize=10)
+            plt.xlim(lower_std, upper_std)
+            plt.ylim(lower_std, upper_std)
+            plt.tight_layout()
+            out_path = out_dir / f"pred_vs_realized_{route_idx}_{_route_slug(route_label)}_standardized.png"
+            plt.savefig(out_path)
+            plt.close()
+
     _write_csv(
         out_dir / "pred_vs_realized_stats.csv",
         stats_rows,
@@ -1054,10 +1108,15 @@ def _plot_predicted_vs_realized_by_route(
             "route_label",
             "n_points",
             "r2",
+            "r2_standardized",
             "pred_mean",
             "pred_std",
+            "pred_standardized_mean",
+            "pred_standardized_std",
             "realized_mean",
             "realized_std",
+            "standardize_scale",
+            "standardize_shift",
         ],
     )
 
@@ -1101,6 +1160,10 @@ def _plot_pairwise_delta_scatter_and_stats(
         spearman = _spearman_corr(delta_pred, delta_true)
         mae = sum(abs_err) / len(abs_err)
         r2 = _r2_score(delta_true, delta_pred)
+        delta_pred_standardized, delta_scale, delta_shift = _rescale_predictions_to_match_true_stats(delta_true, delta_pred)
+        abs_err_standardized = [abs(delta_pred_standardized[i] - delta_true[i]) for i in range(len(delta_pred_standardized))]
+        mae_standardized = sum(abs_err_standardized) / len(abs_err_standardized)
+        r2_standardized = _r2_score(delta_true, delta_pred_standardized)
         stats_rows.append(
             {
                 "pair_left_idx": left_idx,
@@ -1112,6 +1175,10 @@ def _plot_pairwise_delta_scatter_and_stats(
                 "spearman": spearman,
                 "delta_mae": mae,
                 "r2": r2,
+                "delta_mae_standardized": mae_standardized,
+                "r2_standardized": r2_standardized,
+                "standardize_scale": delta_scale,
+                "standardize_shift": delta_shift,
             }
         )
 
@@ -1148,6 +1215,28 @@ def _plot_pairwise_delta_scatter_and_stats(
         plt.savefig(out_path)
         plt.close()
 
+        lower_std = min(min(delta_pred_standardized), min(delta_true))
+        upper_std = max(max(delta_pred_standardized), max(delta_true))
+        if abs(upper_std - lower_std) < 1e-12:
+            lower_std -= 0.05
+            upper_std += 0.05
+        plt.figure(figsize=(10.0, 5.8))
+        plt.scatter(delta_pred_standardized, delta_true, alpha=0.35, s=14, color="tab:green")
+        plt.axhline(0.0, color="gray", linestyle="--", linewidth=1.0)
+        plt.axvline(0.0, color="gray", linestyle="--", linewidth=1.0)
+        title = f"Delta scatter standardized: {left_label} - {right_label}"
+        if r2_standardized is not None:
+            title += f" | R^2={r2_standardized:.3f}, MAE={mae_standardized:.3f}"
+        plt.title(title, fontsize=10)
+        plt.xlabel("Predicted delta (standardized to true mean/std)")
+        plt.ylabel("Realized delta")
+        plt.xlim(lower_std, upper_std)
+        plt.ylim(lower_std, upper_std)
+        plt.tight_layout()
+        out_path = out_dir / f"delta_scatter_{left_idx}_vs_{right_idx}_{_route_slug(left_label)}__{_route_slug(right_label)}_standardized.png"
+        plt.savefig(out_path)
+        plt.close()
+
     _write_csv(
         out_dir / "pairwise_delta_stats.csv",
         stats_rows,
@@ -1161,6 +1250,10 @@ def _plot_pairwise_delta_scatter_and_stats(
             "spearman",
             "delta_mae",
             "r2",
+            "delta_mae_standardized",
+            "r2_standardized",
+            "standardize_scale",
+            "standardize_shift",
         ],
     )
 
@@ -1344,6 +1437,7 @@ def _compute_pred_std_over_model_version(
                 realized.append(float(rewards[route_idx]))
         if not realized:
             continue
+        zero_count = sum(1 for value in realized if abs(value) <= 1e-12)
         mean_val = sum(realized) / len(realized)
         var_val = sum((value - mean_val) ** 2 for value in realized) / len(realized)
         true_std_rows.append(
@@ -1353,6 +1447,8 @@ def _compute_pred_std_over_model_version(
                 "n_points": len(realized),
                 "realized_mean": mean_val,
                 "realized_std": math.sqrt(max(var_val, 0.0)),
+                "realized_zero_count": zero_count,
+                "realized_zero_fraction": zero_count / len(realized),
             }
         )
 
@@ -2034,7 +2130,15 @@ def main() -> None:
     _write_csv(
         output_dir / "true_reward_std_reference.csv",
         true_std_rows,
-        ["route_index", "route_label", "n_points", "realized_mean", "realized_std"],
+        [
+            "route_index",
+            "route_label",
+            "n_points",
+            "realized_mean",
+            "realized_std",
+            "realized_zero_count",
+            "realized_zero_fraction",
+        ],
     )
     _plot_pred_std_over_model_version(
         pred_rows=pred_std_rows,

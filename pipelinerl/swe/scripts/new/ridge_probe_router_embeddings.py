@@ -22,6 +22,7 @@ except Exception:
 
 from pipelinerl.finetune.value_model import AutoModelForCausalLMWithValueHead
 from pipelinerl.swe.scripts.new.router_trace_utils import (
+    dedupe_latest_by_problem,
     extract_reward_vector,
     extract_route_labels,
     load_router_traces,
@@ -122,10 +123,147 @@ def _roc_auc_binary(labels: np.ndarray, scores: np.ndarray) -> float | None:
     return float(u_stat / (positives * negatives))
 
 
+def _r2_score(y_true: np.ndarray, y_pred: np.ndarray) -> float | None:
+    if y_true.size == 0 or y_pred.size == 0 or y_true.shape != y_pred.shape:
+        return None
+    ss_res = float(np.sum((y_true - y_pred) ** 2))
+    y_mean = float(np.mean(y_true))
+    ss_tot = float(np.sum((y_true - y_mean) ** 2))
+    if ss_tot <= 1e-12:
+        return None
+    return float(1.0 - (ss_res / ss_tot))
+
+
 def _select_best_split(traces: list[dict[str, Any]], split: str) -> list[dict[str, Any]]:
     if split == "all":
         return traces
     return [trace for trace in traces if trace.get("split") == split]
+
+
+def _as_model_version(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return -1
+
+
+def _choose_joint_model_version(
+    traces: list[dict[str, Any]],
+    train_split: str | None,
+    eval_split: str | None,
+) -> int | None:
+    versions = sorted({_as_model_version(trace.get("model_version")) for trace in traces if trace.get("model_version") is not None})
+    versions = [version for version in versions if version >= 0]
+    if not versions:
+        return None
+
+    train_counts_all = {version: 0 for version in versions}
+    eval_counts_all = {version: 0 for version in versions}
+    for trace in traces:
+        version = _as_model_version(trace.get("model_version"))
+        if version not in train_counts_all:
+            continue
+        split = trace.get("split")
+        if train_split is None or split == train_split:
+            train_counts_all[version] += 1
+        if eval_split is None or split == eval_split:
+            eval_counts_all[version] += 1
+
+    if eval_split is not None:
+        eval_versions = [version for version in versions if eval_counts_all[version] > 0]
+        recent_versions = (eval_versions or versions)[-10:]
+    else:
+        recent_versions = versions[-10:]
+
+    train_counts = {version: train_counts_all[version] for version in recent_versions}
+    eval_counts = {version: eval_counts_all[version] for version in recent_versions}
+
+    target_eval_count = max(eval_counts.values())
+    candidates = [version for version in recent_versions if eval_counts[version] == target_eval_count]
+    if not candidates:
+        return recent_versions[-1]
+
+    latest_candidate = max(candidates)
+    latest_train_count = train_counts[latest_candidate]
+    max_train_count = max(train_counts[version] for version in candidates)
+    if latest_train_count < max_train_count:
+        best_candidates = [version for version in candidates if train_counts[version] == max_train_count]
+        chosen = max(best_candidates)
+        logger.warning(
+            "Latest model_version=%s has %s train traces, but recent full-eval versions have up to %s train traces; using model_version=%s.",
+            latest_candidate,
+            latest_train_count,
+            max_train_count,
+            chosen,
+        )
+        return chosen
+    return latest_candidate
+
+
+def _choose_eval_model_version(
+    traces: list[dict[str, Any]],
+    eval_split: str | None,
+) -> int | None:
+    versions = sorted({_as_model_version(trace.get("model_version")) for trace in traces if trace.get("model_version") is not None})
+    versions = [version for version in versions if version >= 0]
+    if not versions:
+        return None
+
+    eval_counts = {version: 0 for version in versions}
+    for trace in traces:
+        version = _as_model_version(trace.get("model_version"))
+        if version not in eval_counts:
+            continue
+        split = trace.get("split")
+        if eval_split is None or split == eval_split:
+            eval_counts[version] += 1
+
+    eval_versions = [version for version in versions if eval_counts[version] > 0]
+    if not eval_versions:
+        return None
+
+    recent_versions = eval_versions[-10:]
+    target_eval_count = max(eval_counts[version] for version in recent_versions)
+    candidates = [version for version in recent_versions if eval_counts[version] == target_eval_count]
+    return max(candidates) if candidates else recent_versions[-1]
+
+
+def _select_train_window_up_to_eval(
+    traces: list[dict[str, Any]],
+    train_split: str | None,
+    eval_version: int,
+    target_train_traces: int,
+    max_versions_back: int | None,
+) -> tuple[list[dict[str, Any]], list[int]]:
+    versions = sorted(
+        {
+            _as_model_version(trace.get("model_version"))
+            for trace in traces
+            if trace.get("model_version") is not None and _as_model_version(trace.get("model_version")) >= 0
+        }
+    )
+    eligible_versions = [version for version in versions if version <= eval_version]
+    if max_versions_back is not None and max_versions_back > 0:
+        eligible_versions = eligible_versions[-max_versions_back:]
+    eligible_versions = list(reversed(eligible_versions))
+
+    selected_versions: list[int] = []
+    train_traces: list[dict[str, Any]] = []
+    for version in eligible_versions:
+        version_traces = [
+            trace
+            for trace in traces
+            if _as_model_version(trace.get("model_version")) == version
+            and (train_split is None or trace.get("split") == train_split)
+        ]
+        if not version_traces:
+            continue
+        selected_versions.append(version)
+        train_traces.extend(version_traces)
+        if len(train_traces) >= target_train_traces:
+            break
+
+    return train_traces, list(reversed(selected_versions))
 
 
 def _split_within_repo(
@@ -423,6 +561,38 @@ def _compute_pairwise_metrics(
     return pair_rows, _find_policy_vs_gpt_pair(pair_rows)
 
 
+def _compute_per_route_metrics(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    route_labels: list[str],
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    target_dim = int(y_true.shape[1])
+    for idx in range(target_dim):
+        true_vals = y_true[:, idx]
+        pred_vals = y_pred[:, idx]
+        mse = float(np.mean((pred_vals - true_vals) ** 2))
+        mae = float(np.mean(np.abs(pred_vals - true_vals)))
+        rows.append(
+            {
+                "route_idx": idx,
+                "route_label": route_labels[idx],
+                "n_eval": int(true_vals.shape[0]),
+                "mean_true": float(np.mean(true_vals)),
+                "mean_pred": float(np.mean(pred_vals)),
+                "std_true": float(np.std(true_vals)),
+                "std_pred": float(np.std(pred_vals)),
+                "mse": mse,
+                "rmse": float(np.sqrt(mse)),
+                "mae": mae,
+                "pearson": _pearson_corr(pred_vals, true_vals),
+                "spearman": _spearman_corr(pred_vals, true_vals),
+                "r2": _r2_score(true_vals, pred_vals),
+            }
+        )
+    return rows
+
+
 def _plot_pairwise_metrics_by_layer(per_layer_pair_rows: list[dict[str, Any]], output_path: Path) -> None:
     if not MATPLOTLIB_AVAILABLE or not per_layer_pair_rows:
         return
@@ -528,6 +698,18 @@ def main() -> None:
     parser.add_argument("--max-eval-records", type=int, default=None)
     parser.add_argument("--save-predictions-jsonl", action="store_true")
     parser.add_argument(
+        "--target-train-traces",
+        type=int,
+        default=1000,
+        help="When using version-coupled selection, walk backward from eval version until at least this many train traces are collected.",
+    )
+    parser.add_argument(
+        "--max-train-versions-back",
+        type=int,
+        default=None,
+        help="Optional cap on how many model versions back the train window may extend.",
+    )
+    parser.add_argument(
         "--append-language-onehot",
         action="store_true",
         help="Append language one-hot features to trunk embeddings before ridge fitting.",
@@ -576,19 +758,57 @@ def main() -> None:
     else:
         train_split = None if args.train_split == "all" else args.train_split
         eval_split = None if args.eval_split == "all" else args.eval_split
-        train_traces = load_router_traces(
-            input_globs=args.input_glob,
-            split=train_split,
-            latest_model_only=not args.all_model_versions,
-            dedupe_by_problem=not args.keep_duplicates,
-        )
-        eval_traces = load_router_traces(
-            input_globs=args.input_glob,
-            split=eval_split,
-            latest_model_only=not args.all_model_versions,
-            dedupe_by_problem=not args.keep_duplicates,
-        )
-        traces_for_metadata = train_traces + eval_traces
+        if args.all_model_versions:
+            train_traces = load_router_traces(
+                input_globs=args.input_glob,
+                split=train_split,
+                latest_model_only=False,
+                dedupe_by_problem=not args.keep_duplicates,
+            )
+            eval_traces = load_router_traces(
+                input_globs=args.input_glob,
+                split=eval_split,
+                latest_model_only=False,
+                dedupe_by_problem=not args.keep_duplicates,
+            )
+            traces_for_metadata = train_traces + eval_traces
+        else:
+            all_traces = load_router_traces(
+                input_globs=args.input_glob,
+                split=None,
+                latest_model_only=False,
+                dedupe_by_problem=False,
+            )
+            chosen_eval_version = _choose_eval_model_version(
+                traces=all_traces,
+                eval_split=eval_split,
+            )
+            if chosen_eval_version is None:
+                raise ValueError("Could not determine an eval model_version for probe data selection")
+            eval_traces = [
+                trace
+                for trace in all_traces
+                if _as_model_version(trace.get("model_version")) == chosen_eval_version
+                and (eval_split is None or trace.get("split") == eval_split)
+            ]
+            train_traces, train_versions_used = _select_train_window_up_to_eval(
+                traces=all_traces,
+                train_split=train_split,
+                eval_version=chosen_eval_version,
+                target_train_traces=int(args.target_train_traces),
+                max_versions_back=args.max_train_versions_back,
+            )
+            if not args.keep_duplicates:
+                train_traces = dedupe_latest_by_problem(train_traces)
+                eval_traces = dedupe_latest_by_problem(eval_traces)
+            traces_for_metadata = train_traces + eval_traces
+            logger.info(
+                "Using eval model_version=%s and train window versions=%s for probe selection: train=%d eval=%d",
+                chosen_eval_version,
+                train_versions_used,
+                len(train_traces),
+                len(eval_traces),
+            )
     if args.max_train_records is not None:
         train_traces = train_traces[: args.max_train_records]
     if args.max_eval_records is not None:
@@ -732,9 +952,25 @@ def main() -> None:
         "ranking_accuracy_sign",
         "roc_auc",
     ]
+    per_route_headers = [
+        "route_idx",
+        "route_label",
+        "n_eval",
+        "mean_true",
+        "mean_pred",
+        "std_true",
+        "std_pred",
+        "mse",
+        "rmse",
+        "mae",
+        "pearson",
+        "spearman",
+        "r2",
+    ]
     multi_layer = len(hidden_indices) > 1
     per_layer_rows: list[dict[str, Any]] = []
     per_layer_pair_rows: list[dict[str, Any]] = []
+    per_layer_route_rows: list[dict[str, Any]] = []
 
     for hidden_idx in hidden_indices:
         layer_label = _hidden_index_to_label(hidden_idx)
@@ -751,14 +987,22 @@ def main() -> None:
         weights, bias, x_mean, x_std = _fit_ridge_multi_target(x_train, y_train, alpha=float(args.alpha))
         y_hat_eval = _predict_ridge(x_eval, weights, bias, x_mean, x_std)
         pair_rows, policy_vs_gpt = _compute_pairwise_metrics(y_eval, y_hat_eval, route_labels)
+        route_rows = _compute_per_route_metrics(y_eval, y_hat_eval, route_labels)
         for pair_row in pair_rows:
             enriched = dict(pair_row)
             enriched["hidden_index"] = hidden_idx
             enriched["layer_label"] = layer_label
             enriched["transformer_layer_index"] = (hidden_idx - 1) if hidden_idx > 0 else -1
             per_layer_pair_rows.append(enriched)
+        for route_row in route_rows:
+            enriched = dict(route_row)
+            enriched["hidden_index"] = hidden_idx
+            enriched["layer_label"] = layer_label
+            enriched["transformer_layer_index"] = (hidden_idx - 1) if hidden_idx > 0 else -1
+            per_layer_route_rows.append(enriched)
 
         _write_csv(layer_output_dir / "pairwise_metrics.csv", pair_rows, pairwise_headers)
+        _write_csv(layer_output_dir / "route_metrics.csv", route_rows, per_route_headers)
         np.savez(
             layer_output_dir / "ridge_probe_weights.npz",
             weights=weights,
@@ -835,6 +1079,7 @@ def main() -> None:
             "target_dim": target_dim,
             "routes": route_labels,
             "policy_vs_gpt_pair_metrics": policy_vs_gpt,
+            "per_route_metrics": route_rows,
             "notes": (
                 "Ridge probe trained on frozen trunk embeddings with "
                 f"pooling={args.pooling}, append_language_onehot={bool(args.append_language_onehot)}."
@@ -893,6 +1138,28 @@ def main() -> None:
                 "delta_mae",
                 "ranking_accuracy_sign",
                 "roc_auc",
+            ],
+        )
+        _write_csv(
+            output_dir / "per_layer_route_metrics.csv",
+            per_layer_route_rows,
+            [
+                "hidden_index",
+                "layer_label",
+                "transformer_layer_index",
+                "route_idx",
+                "route_label",
+                "n_eval",
+                "mean_true",
+                "mean_pred",
+                "std_true",
+                "std_pred",
+                "mse",
+                "rmse",
+                "mae",
+                "pearson",
+                "spearman",
+                "r2",
             ],
         )
         _plot_pairwise_metrics_by_layer(per_layer_pair_rows, output_dir / "metrics_by_layer.png")
