@@ -1,5 +1,5 @@
 defaults:
-  - swe
+  - base
   - _self_
 
 output_dir: ???
@@ -7,6 +7,7 @@ output_dir: ???
 offline_router:
   train:
     dataset_dir: ???
+    model_path: Qwen/Qwen2.5-Coder-7B-Instruct
     mode: frozen_backbone  # frozen_backbone | full_backbone
     device: auto
     num_epochs: 3
@@ -15,7 +16,7 @@ offline_router:
     gradient_accumulation_steps: 1
     lr: 1.0e-4
     weight_decay: 0.0
-    max_seq_length: ${finetune.seq_length}
+    max_seq_length: 32000
     num_workers: 0
     bf16: true
     gradient_checkpointing: false

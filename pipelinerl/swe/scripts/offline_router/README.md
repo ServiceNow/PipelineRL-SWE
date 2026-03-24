@@ -17,14 +17,19 @@ It reuses:
 - OpenAI-compatible chat calls from `pipelinerl.swe.scripts.repair_eval_utils.chat_completion`
 - reward computation from `pipelinerl.swe.utils.repair_utils.calculate_precise_reward`
 
-The collector assumes the policy and expert endpoints are already running and reachable over OpenAI-compatible HTTP APIs.
+The plain collector entrypoint assumes the primary model and expert endpoints are already running and reachable over OpenAI-compatible HTTP APIs.
+
+If you want one-node orchestration that starts the endpoints first and then collects, use:
+
+- `pipelinerl.swe.scripts.offline_router.run_collection_job`
+- or the wrapper `launch_offline_router_collect.sh`
 
 Example:
 
 ```bash
 conda run --no-capture-output -n pipeline-rl python -m pipelinerl.swe.scripts.offline_router.collect_router_dataset \
   output_dir=/mnt/llmd/results/offline_router_collect_example \
-  offline_router.policy.base_url=http://127.0.0.1:8000
+  offline_router.primary_model.base_url=http://127.0.0.1:8000
 ```
 
 Convenience launcher:
@@ -33,15 +38,23 @@ Convenience launcher:
 bash launch_offline_router_collect.sh
 ```
 
+`launch_offline_router_collect.sh` reserves a single 8-GPU node by default and starts:
+
+- primary-model vLLM on GPU `0`
+- Devstral on GPU `1`
+- GPT-OSS on GPUs `2,3,4,5`
+
+Then it waits for `/health` on each endpoint before starting collection.
+
 Notes:
 
 - Experts default to `world.expert_llms[*].port` if `offline_router.expert_base_urls` is not set.
-- Route order is fixed as `policy`, then experts sorted by `expert_rank`.
+- Route order is fixed as `primary_model`, then experts sorted by `expert_rank`.
 - Resume is shard-based: existing `problem_id`s already present in Parquet shards are skipped.
 
 ## 2) Train the router offline
 
-The trainer reads the collected Parquet dataset and optimizes only the routing objective on the completion-last representation of `prompt_text + policy_output_text`.
+The trainer reads the collected Parquet dataset and optimizes only the routing objective on the completion-last representation of `prompt_text + primary_output_text`.
 
 Modes:
 

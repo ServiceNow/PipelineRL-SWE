@@ -73,37 +73,32 @@ def _write_parquet_shard(split_dir: Path, shard_index: int, rows: list[dict[str,
     return path
 
 
-def _resolve_policy_route(cfg: DictConfig) -> RouteSpec:
-    policy_cfg = cfg.offline_router.policy
-    if not policy_cfg.get("base_url"):
-        raise ValueError("offline_router.policy.base_url must be set for offline collection")
-    model_name = str(policy_cfg.get("model_name") or cfg.model_path)
+def _resolve_primary_route(cfg: DictConfig) -> RouteSpec:
+    primary_cfg = cfg.offline_router.primary_model
+    if not primary_cfg.get("base_url"):
+        raise ValueError("offline_router.primary_model.base_url must be set for offline collection")
+    model_name = str(primary_cfg.get("model_name") or primary_cfg.get("model_path"))
     return RouteSpec(
-        label="policy",
+        label=str(primary_cfg.get("label") or "primary_model"),
         model_name=model_name,
-        base_url=str(policy_cfg.base_url),
-        parameters=dict(OmegaConf.to_container(policy_cfg.get("parameters", {}), resolve=True) or {}),
-        api_key=policy_cfg.get("api_key"),
+        base_url=str(primary_cfg.base_url),
+        parameters=dict(OmegaConf.to_container(primary_cfg.get("parameters", {}), resolve=True) or {}),
+        api_key=primary_cfg.get("api_key"),
     )
 
 
 def _resolve_expert_routes(cfg: DictConfig) -> list[RouteSpec]:
-    expert_cfgs = sorted(
-        list(cfg.swe.get("expert_models", [])),
-        key=lambda item: int(item.get("expert_rank", 0)),
-    )
+    expert_cfgs = sorted(list(cfg.offline_router.get("experts", [])), key=lambda item: int(item.get("expert_rank", 0)))
     if not expert_cfgs:
         return []
 
     base_urls = list(cfg.offline_router.get("expert_base_urls", []))
     if not base_urls:
-        world_experts = list(cfg.world.get("expert_llms", []))
-        enabled_world = [item for item in world_experts if bool(item.get("enabled", True))]
-        if len(enabled_world) < len(expert_cfgs):
+        base_urls = [str(item.get("base_url")) for item in expert_cfgs if item.get("base_url")]
+        if len(base_urls) != len(expert_cfgs):
             raise ValueError(
-                "Need expert_base_urls overrides or enough enabled world.expert_llms entries to derive expert endpoints"
+                "Need offline_router.expert_base_urls or base_url set on each offline_router.experts entry"
             )
-        base_urls = [f"http://127.0.0.1:{int(item['port'])}" for item in enabled_world[: len(expert_cfgs)]]
 
     if len(base_urls) != len(expert_cfgs):
         raise ValueError(
@@ -113,10 +108,10 @@ def _resolve_expert_routes(cfg: DictConfig) -> list[RouteSpec]:
     routes: list[RouteSpec] = []
     for expert_cfg, base_url in zip(expert_cfgs, base_urls):
         expert_rank = int(expert_cfg.get("expert_rank", 0))
-        model_name = str(expert_cfg.get("model_name"))
+        model_name = str(expert_cfg.get("model_name") or expert_cfg.get("model_path"))
         routes.append(
             RouteSpec(
-                label=route_label_for_expert(expert_rank, model_name),
+                label=str(expert_cfg.get("label") or route_label_for_expert(expert_rank, model_name)),
                 model_name=model_name,
                 base_url=str(base_url),
                 parameters=dict(OmegaConf.to_container(expert_cfg.get("parameters", {}), resolve=True) or {}),
@@ -127,25 +122,27 @@ def _resolve_expert_routes(cfg: DictConfig) -> list[RouteSpec]:
 
 
 def _load_split_dataset(cfg: DictConfig, split_name: str) -> list[dict[str, Any]]:
-    dataset_loader = get_method(cfg.dataset_loader)
-    params = dict(OmegaConf.to_container(cfg.get("dataset_loader_params", {}), resolve=True) or {})
-    params.pop("test_max_samples", None)
-    max_samples_cfg = cfg.offline_router.collection.get("max_samples", {})
-    max_samples = max_samples_cfg.get(split_name)
-    params["shuffle"] = bool(cfg.offline_router.collection.get("shuffle", False))
-    params["seed"] = int(cfg.get("seed", 42))
-    params["max_samples"] = max_samples
+    dataset_cfg = cfg.offline_router.dataset
+    dataset_loader = get_method(dataset_cfg.loader)
+    params = {
+        "shuffle": bool(cfg.offline_router.collection.get("shuffle", False)),
+        "seed": int(cfg.get("seed", 42)),
+        "max_samples": dataset_cfg.get(f"{split_name}_max_samples"),
+    }
 
     if split_name == "train":
-        dataset_names = list(cfg.get("train_dataset_names", []))
-        params.pop("test_dataset_path", None)
+        dataset_names = list(dataset_cfg.train_dataset_names)
+        params["dataset_path"] = str(dataset_cfg.train_dataset_path)
+        dataset_label = dataset_cfg.get("train_dataset_label")
     elif split_name == "eval":
-        dataset_names = list(cfg.get("test_dataset_names", []))
-        if "test_dataset_path" in params:
-            params["dataset_path"] = params.pop("test_dataset_path")
+        dataset_names = list(dataset_cfg.eval_dataset_names)
+        params["dataset_path"] = str(dataset_cfg.eval_dataset_path)
+        dataset_label = dataset_cfg.get("eval_dataset_label")
     else:
         raise ValueError(f"Unsupported split name: {split_name}")
 
+    if dataset_label:
+        params["dataset_label"] = str(dataset_label)
     dataset = dataset_loader(dataset_names, **params)
     dataset = sorted(dataset, key=problem_id_from_item)
     return dataset
@@ -240,7 +237,7 @@ async def _collect_problem(
         ]
     )
 
-    policy_output_text = route_results[0]["output_text"]
+    primary_output_text = route_results[0]["output_text"]
     return {
         "problem_id": problem_id,
         "dataset": str(problem.get("dataset") or ""),
@@ -250,7 +247,7 @@ async def _collect_problem(
         "language": infer_language_from_problem(problem),
         "problem_statement": problem_statement,
         "prompt_text": prompt_text,
-        "policy_output_text": policy_output_text,
+        "primary_output_text": primary_output_text,
         "performance_targets": [result["reward"] for result in route_results],
         "route_rewards": [result["reward"] for result in route_results],
         "route_successes": [bool(result["success"]) for result in route_results],
@@ -281,7 +278,7 @@ async def _collect_split(
         pending.append((len(pending), problem))
 
     collection_cfg = cfg.offline_router.collection
-    success_threshold = float(cfg.actor.get("success_threshold", 0.8))
+    success_threshold = float(cfg.offline_router.collection.get("success_threshold", 0.8))
     connector = aiohttp.TCPConnector(limit=int(collection_cfg.get("connector_limit", 128)))
     timeout = aiohttp.ClientTimeout(total=float(collection_cfg.get("request_timeout", 1800)))
     semaphore = asyncio.Semaphore(int(collection_cfg.get("max_concurrent_problems", 32)))
@@ -361,17 +358,19 @@ async def _collect_split(
     }
 
 
-@hydra.main(config_path="../../../../conf", config_name="offline_router_collect", version_base=None)
-def main(cfg: DictConfig) -> None:
+def run_collection(cfg: DictConfig) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
     output_dir = Path(cfg.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    route_specs = [_resolve_policy_route(cfg)] + _resolve_expert_routes(cfg)
+    route_specs = [_resolve_primary_route(cfg)] + _resolve_expert_routes(cfg)
     route_labels = [route.label for route in route_specs]
     route_model_names = [route.model_name for route in route_specs]
-    prompt_tokenizer_name = str(cfg.offline_router.policy.get("tokenizer_name") or cfg.model_path)
+    prompt_tokenizer_name = str(
+        cfg.offline_router.primary_model.get("tokenizer_name")
+        or cfg.offline_router.primary_model.get("model_path")
+    )
     prompt_tokenizer = AutoTokenizer.from_pretrained(prompt_tokenizer_name, use_fast=True)
 
     write_json(output_dir / "collection_config.json", sanitize_for_json(OmegaConf.to_container(cfg, resolve=True)))
@@ -401,11 +400,16 @@ def main(cfg: DictConfig) -> None:
         "route_model_names": route_model_names,
         "prompt_builder": "pipelinerl.swe.scripts.repair_eval_utils.build_repair_messages",
         "reward_function": "pipelinerl.swe.utils.repair_utils.calculate_precise_reward",
-        "policy_prompt_tokenizer_name": prompt_tokenizer_name,
+        "primary_model_prompt_tokenizer_name": prompt_tokenizer_name,
         "split_summaries": split_summaries,
     }
     write_json(output_dir / "metadata.json", metadata)
     logger.info("Offline router collection complete: output_dir=%s", output_dir)
+
+
+@hydra.main(config_path="../../../../conf", config_name="offline_router_collect", version_base=None)
+def main(cfg: DictConfig) -> None:
+    run_collection(cfg)
 
 
 if __name__ == "__main__":

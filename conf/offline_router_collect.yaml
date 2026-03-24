@@ -1,10 +1,76 @@
 defaults:
-  - swe
+  - base
   - _self_
 
 output_dir: ???
 
 offline_router:
+  launch:
+    healthcheck_timeout_s: 1800
+    healthcheck_poll_s: 10
+
+  dataset:
+    loader: pipelinerl.swe.load_datasets.load_local_swe_dataset
+    train_dataset_names:
+      - swe_smith_train
+    train_dataset_path: /mnt/llmd/data/swe_smith/ds_train
+    train_dataset_label: null
+    train_max_samples: null
+    eval_dataset_names:
+      - swebench_lite
+    eval_dataset_path: /mnt/llmd/data/swebench_lite/ds
+    eval_dataset_label: null
+    eval_max_samples: 500
+
+  primary_model:
+    label: primary_model
+    model_path: Qwen/Qwen2.5-Coder-7B-Instruct
+    model_name: ${.model_path}
+    tokenizer_name: ${.model_path}
+    base_url: null
+    conda_env: vllm-env
+    port: 8000
+    parameters:
+      max_tokens: 2000
+      temperature: 1.0
+    vllm_kwargs:
+      dtype: bfloat16
+      tensor-parallel-size: 1
+      pipeline-parallel-size: 1
+      gpu-memory-utilization: 0.9
+      max_model_len: 32000
+
+  experts:
+    - expert_rank: 0
+      label: expert_0:mistralai/Devstral-Small-2505
+      model_path: mistralai/Devstral-Small-2505
+      model_name: mistralai/Devstral-Small-2505
+      base_url: null
+      conda_env: vllm-env
+      port: 8280
+      parameters:
+        max_tokens: 15000
+        temperature: 0.15
+      vllm_kwargs:
+        tensor-parallel-size: 1
+        tokenizer_mode: mistral
+        config_format: mistral
+        load_format: mistral
+        max_model_len: 32000
+    - expert_rank: 1
+      label: expert_1:openai/gpt-oss-120b
+      model_path: openai/gpt-oss-120b
+      model_name: openai/gpt-oss-120b
+      base_url: null
+      conda_env: vllm-env
+      port: 8380
+      parameters:
+        max_tokens: 15000
+        temperature: 0.7
+      vllm_kwargs:
+        tensor-parallel-size: 4
+        max_model_len: 32000
+
   collection:
     collect_train: true
     collect_eval: true
@@ -13,17 +79,6 @@ offline_router:
     max_concurrent_problems: 32
     connector_limit: 128
     request_timeout: 1800
-    max_samples:
-      train: null
-      eval: ${dataset_loader_params.test_max_samples}
-  policy:
-    base_url: null
-    model_name: ${model_path}
-    tokenizer_name: ${model_path}
-    api_key: null
-    parameters:
-      max_tokens: ${llm.parameters.max_tokens}
-      temperature: ${llm.parameters.temperature}
-      top_p: ${oc.select:llm.parameters.top_p,null}
-      top_k: ${oc.select:llm.parameters.top_k,null}
+    success_threshold: 0.8
+
   expert_base_urls: []

@@ -67,16 +67,20 @@ def _make_collate_fn(tokenizer: Any, max_seq_length: int | None, target_dim: int
         encoded_rows: list[dict[str, Any]] = []
         for row in rows:
             prompt_text = row.get("prompt_text")
-            policy_output_text = row.get("policy_output_text")
+            primary_output_text = row.get("primary_output_text")
             targets = row.get("performance_targets")
-            if not isinstance(prompt_text, str) or not isinstance(policy_output_text, str):
+            if not isinstance(prompt_text, str):
+                continue
+            if not isinstance(primary_output_text, str):
+                primary_output_text = row.get("policy_output_text")
+            if not isinstance(primary_output_text, str):
                 continue
             if not isinstance(targets, list) or len(targets) != target_dim:
                 continue
             encoded = tokenize_prompt_completion(
                 tokenizer=tokenizer,
                 prompt_text=prompt_text,
-                output_text=policy_output_text,
+                output_text=primary_output_text,
                 max_seq_length=max_seq_length,
             )
             if encoded is None:
@@ -227,9 +231,10 @@ def main(cfg: DictConfig) -> None:
         eval_dataset = eval_dataset.select(range(min(int(max_eval_rows), len(eval_dataset))))
 
     device = _pick_device(str(train_cfg.get("device", "auto")))
-    logger.info("Loading tokenizer/model from %s on %s", cfg.model_path, device)
-    tokenizer = AutoTokenizer.from_pretrained(cfg.model_path, use_fast=True)
-    model = AutoModelForCausalLMWithValueHead.from_pretrained(cfg.model_path, performance_value_dim=target_dim)
+    model_path = str(train_cfg.model_path)
+    logger.info("Loading tokenizer/model from %s on %s", model_path, device)
+    tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=True)
+    model = AutoModelForCausalLMWithValueHead.from_pretrained(model_path, performance_value_dim=target_dim)
 
     if bool(train_cfg.get("gradient_checkpointing", False)):
         model.gradient_checkpointing_enable()
@@ -357,7 +362,7 @@ def main(cfg: DictConfig) -> None:
     summary = {
         "mode": str(train_cfg.mode),
         "dataset_dir": str(dataset_dir),
-        "model_path": str(cfg.model_path),
+        "model_path": model_path,
         "route_labels": route_labels,
         "target_dim": target_dim,
         "train_rows": int(len(train_dataset)),
