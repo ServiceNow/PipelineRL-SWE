@@ -12,6 +12,14 @@ NPROC=${NPROC:-8}
 CONDA_EXE=${CONDA_EXE:-/opt/conda/bin/conda}
 COLLECTOR_ENV=${COLLECTOR_ENV:-pipeline-rl}
 
+# Edit these directly for the collection run you want.
+PRIMARY_MODEL_PATH=${PRIMARY_MODEL_PATH:-/mnt/llmd/results/exps/aristides/reason/swe_smith_policy_conditioned_no_devstral_1773812579/finetune/current}
+PRIMARY_TOKENIZER_NAME=${PRIMARY_TOKENIZER_NAME:-Qwen/Qwen2.5-Coder-7B-Instruct}
+PRIMARY_SERVED_MODEL_NAME=${PRIMARY_SERVED_MODEL_NAME:-primary_model}
+
+DEVSTRAL_MODEL_PATH=${DEVSTRAL_MODEL_PATH:-mistralai/Devstral-Small-2505}
+GPT_OSS_MODEL_PATH=${GPT_OSS_MODEL_PATH:-openai/gpt-oss-120b}
+
 COLLECT_TRAIN=${COLLECT_TRAIN:-true}
 COLLECT_EVAL=${COLLECT_EVAL:-true}
 TRAIN_MAX_SAMPLES=${TRAIN_MAX_SAMPLES:-null}
@@ -29,6 +37,12 @@ make job \
   COMMAND="cd /home/toolkit/PipelineRL-SWE; mkdir -p ${LOG_DIR}; \
     python -m pipelinerl.swe.scripts.offline_router.run_collection_job \
     output_dir=${OUTPUT_DIR} \
+    offline_router.primary_model.model_path=${PRIMARY_MODEL_PATH} \
+    offline_router.primary_model.tokenizer_name=${PRIMARY_TOKENIZER_NAME} \
+    offline_router.primary_model.served_model_name=${PRIMARY_SERVED_MODEL_NAME} \
+    offline_router.primary_model.model_name=${PRIMARY_SERVED_MODEL_NAME} \
+    offline_router.experts[0].model_path=${DEVSTRAL_MODEL_PATH} \
+    offline_router.experts[1].model_path=${GPT_OSS_MODEL_PATH} \
     offline_router.collection.collect_train=${COLLECT_TRAIN} \
     offline_router.collection.collect_eval=${COLLECT_EVAL} \
     offline_router.collection.max_samples.train=${TRAIN_MAX_SAMPLES} \

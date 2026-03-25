@@ -24,6 +24,14 @@ If you want one-node orchestration that starts the endpoints first and then coll
 - `pipelinerl.swe.scripts.offline_router.run_collection_job`
 - or the wrapper `launch_offline_router_collect.sh`
 
+Each route can now specify:
+
+- `model_path`: checkpoint or HF path to load
+- `served_model_name`: API name exposed by vLLM
+- `model_name`: name sent by the collector in chat-completion requests
+
+In the common case, `model_name` should equal `served_model_name`.
+
 Example:
 
 ```bash
@@ -90,6 +98,8 @@ Outputs:
 - `eval_predictions.jsonl`
 - `checkpoints/best/`
 - `checkpoints/last/`
+
+If `wandb.use_wandb=true`, the trainer also logs epoch losses and per-route / pairwise eval metrics to W&B.
 
 `route_metrics.csv` includes per-route:
 

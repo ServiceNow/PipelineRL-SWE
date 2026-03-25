@@ -24,9 +24,10 @@ offline_router:
 
   primary_model:
     label: primary_model
-    model_path: Qwen/Qwen2.5-Coder-7B-Instruct
-    model_name: ${.model_path}
-    tokenizer_name: ${.model_path}
+    model_path: /mnt/llmd/results/exps/aristides/reason/swe_smith_policy_conditioned_no_devstral_1773812579/finetune/current
+    served_model_name: primary_model
+    model_name: ${.served_model_name}
+    tokenizer_name: Qwen/Qwen2.5-Coder-7B-Instruct
     base_url: null
     conda_env: vllm-env
     port: 8000
@@ -44,7 +45,8 @@ offline_router:
     - expert_rank: 0
       label: expert_0:mistralai/Devstral-Small-2505
       model_path: mistralai/Devstral-Small-2505
-      model_name: mistralai/Devstral-Small-2505
+      served_model_name: expert_0
+      model_name: ${.served_model_name}
       base_url: null
       conda_env: vllm-env
       port: 8280
@@ -60,7 +62,8 @@ offline_router:
     - expert_rank: 1
       label: expert_1:openai/gpt-oss-120b
       model_path: openai/gpt-oss-120b
-      model_name: openai/gpt-oss-120b
+      served_model_name: expert_1
+      model_name: ${.served_model_name}
       base_url: null
       conda_env: vllm-env
       port: 8380

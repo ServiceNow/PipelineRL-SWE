@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 class ServerSpec:
     name: str
     model_path: str
+    served_model_name: str
     port: int
     conda_env: str | None
     gpus: list[int]
@@ -75,6 +76,8 @@ def _launch_server(spec: ServerSpec, log_dir: Path) -> subprocess.Popen:
         "vllm.entrypoints.openai.api_server",
         "--model",
         spec.model_path,
+        "--served-model-name",
+        spec.served_model_name,
         "--host",
         "0.0.0.0",
         "--port",
@@ -126,6 +129,7 @@ def _build_primary_spec(cfg: DictConfig, available: list[int]) -> tuple[ServerSp
     spec = ServerSpec(
         name=str(primary_cfg.get("label") or "primary_model"),
         model_path=str(primary_cfg.model_path),
+        served_model_name=str(primary_cfg.get("served_model_name") or primary_cfg.get("model_name") or primary_cfg.model_path),
         port=port,
         conda_env=primary_cfg.get("conda_env"),
         gpus=gpus,
@@ -149,6 +153,9 @@ def _build_expert_specs(cfg: DictConfig, available: list[int]) -> tuple[list[Ser
             ServerSpec(
                 name=str(expert_cfg.get("label") or f"expert_{idx}"),
                 model_path=str(expert_cfg.model_path),
+                served_model_name=str(
+                    expert_cfg.get("served_model_name") or expert_cfg.get("model_name") or expert_cfg.model_path
+                ),
                 port=port,
                 conda_env=expert_cfg.get("conda_env"),
                 gpus=gpus,
@@ -187,9 +194,7 @@ def main(cfg: DictConfig) -> None:
             _wait_for_health(base_url, label, timeout_s, poll_s)
 
         cfg.offline_router.primary_model.base_url = primary_base_url
-        cfg.offline_router.primary_model.model_name = str(
-            cfg.offline_router.primary_model.get("model_name") or cfg.offline_router.primary_model.model_path
-        )
+        cfg.offline_router.primary_model.model_name = str(cfg.offline_router.primary_model.served_model_name)
         cfg.offline_router.primary_model.tokenizer_name = str(
             cfg.offline_router.primary_model.get("tokenizer_name") or cfg.offline_router.primary_model.model_path
         )

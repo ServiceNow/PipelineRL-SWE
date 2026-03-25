@@ -4,6 +4,7 @@ import glob
 import json
 import logging
 import math
+import os
 from pathlib import Path
 from typing import Any
 
@@ -16,8 +17,10 @@ from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import AutoTokenizer
+import wandb
 
 from pipelinerl.finetune.value_model import AutoModelForCausalLMWithValueHead
+from pipelinerl.utils import init_wandb
 from pipelinerl.swe.scripts.offline_router.common import (
     compute_pairwise_metrics,
     compute_per_route_metrics,
@@ -201,6 +204,70 @@ def _save_predictions_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
             handle.write(json.dumps(row) + "\n")
 
 
+def _flatten_dict(value: Any, prefix: str = "") -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    if isinstance(value, dict):
+        for key, subvalue in value.items():
+            next_prefix = f"{prefix}.{key}" if prefix else str(key)
+            result.update(_flatten_dict(subvalue, next_prefix))
+    else:
+        result[prefix] = value
+    return result
+
+
+def _init_offline_wandb(cfg: DictConfig, output_dir: Path):
+    if not bool(cfg.wandb.use_wandb):
+        return None
+    config_for_wandb = sanitize_for_json(OmegaConf.to_container(cfg, resolve=True))
+    wandb_cfg = OmegaConf.create(OmegaConf.to_container(cfg, resolve=False))
+    root = wandb_cfg.wandb.wandb_workspace_root
+    if root and not str(output_dir).startswith(str(root) + "/"):
+        wandb_cfg.wandb.wandb_workspace_root = ""
+    try:
+        run = init_wandb(wandb_cfg, output_dir, config_for_wandb)
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.warning("Failed to initialize W&B for offline router training: %s", exc)
+        return None
+
+    wandb_info = {
+        "name": run.name[:128] if run.name else None,
+        "entity": run.entity,
+        "project": run.project_name(),
+        "id": run.id,
+    }
+    with open(os.path.join(output_dir, "wandb_info.json"), "w") as handle:
+        json.dump(wandb_info, handle, indent=2)
+    return run
+
+
+def _log_epoch_to_wandb(
+    epoch: int,
+    train_loss: float,
+    eval_loss: float,
+    route_rows: list[dict[str, Any]],
+    pair_rows: list[dict[str, Any]],
+) -> None:
+    metrics: dict[str, Any] = {
+        "offline_router/train_loss": train_loss,
+        "offline_router/eval_loss": eval_loss,
+    }
+    for row in route_rows:
+        label = str(row["route_label"]).replace(":", "_").replace("/", "_")
+        for key in ("pearson", "spearman", "r2", "mae", "rmse", "mean_true", "mean_pred", "std_true", "std_pred"):
+            value = row.get(key)
+            if isinstance(value, (int, float)) and math.isfinite(float(value)):
+                metrics[f"offline_router/route/{label}/{key}"] = float(value)
+    for row in pair_rows:
+        left = str(row["left_label"]).replace(":", "_").replace("/", "_")
+        right = str(row["right_label"]).replace(":", "_").replace("/", "_")
+        pair_label = f"{left}_vs_{right}"
+        for key in ("pearson_delta", "spearman_delta", "delta_mae", "ranking_accuracy_sign", "roc_auc"):
+            value = row.get(key)
+            if isinstance(value, (int, float)) and math.isfinite(float(value)):
+                metrics[f"offline_router/pair/{pair_label}/{key}"] = float(value)
+    wandb.log(metrics, step=epoch)
+
+
 @hydra.main(config_path="../../../../conf", config_name="offline_router_train", version_base=None)
 def main(cfg: DictConfig) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -209,6 +276,7 @@ def main(cfg: DictConfig) -> None:
     output_dir = Path(cfg.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     write_json(output_dir / "train_config.json", sanitize_for_json(OmegaConf.to_container(cfg, resolve=True)))
+    wandb_run = _init_offline_wandb(cfg, output_dir)
 
     dataset_dir = Path(str(train_cfg.dataset_dir))
     metadata_path = dataset_dir / "metadata.json"
@@ -322,6 +390,8 @@ def main(cfg: DictConfig) -> None:
             raise ValueError("No valid training batches after tokenization/collation")
         train_loss = float(np.mean(running_losses))
         eval_loss, eval_rows, y_true, y_pred = _run_eval(model, eval_loader, device)
+        epoch_route_rows = compute_per_route_metrics(y_true, y_pred, route_labels)
+        epoch_pair_rows = compute_pairwise_metrics(y_true, y_pred, route_labels)
         history.append(
             {
                 "epoch": epoch,
@@ -335,6 +405,11 @@ def main(cfg: DictConfig) -> None:
             train_loss,
             eval_loss,
         )
+        if wandb_run is not None:
+            try:
+                _log_epoch_to_wandb(epoch, train_loss, eval_loss, epoch_route_rows, epoch_pair_rows)
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.warning("Failed to log offline router epoch %d to W&B: %s", epoch, exc)
 
         if eval_loss < best_eval_loss:
             best_eval_loss = eval_loss
@@ -378,6 +453,23 @@ def main(cfg: DictConfig) -> None:
         "last_checkpoint_dir": str(last_dir),
     }
     write_json(output_dir / "summary.json", summary)
+    if wandb_run is not None:
+        try:
+            best_metrics = _flatten_dict(
+                {
+                    "offline_router": {
+                        "best_epoch": best_epoch,
+                        "best_eval_loss": best_eval_loss,
+                    }
+                }
+            )
+            route_rows_for_wandb = compute_per_route_metrics(best_y_true, best_y_pred, route_labels)
+            pair_rows_for_wandb = compute_pairwise_metrics(best_y_true, best_y_pred, route_labels)
+            _log_epoch_to_wandb(best_epoch, history[best_epoch]["train_loss"], best_eval_loss, route_rows_for_wandb, pair_rows_for_wandb)
+            wandb.log(best_metrics, step=best_epoch)
+            wandb_run.finish()
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning("Failed to finalize offline router W&B logging: %s", exc)
     logger.info("Offline router training complete: output_dir=%s", output_dir)
 
 
