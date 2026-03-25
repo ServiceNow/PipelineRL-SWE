@@ -40,8 +40,8 @@ make job \
     offline_router.primary_model.model_name=${PRIMARY_SERVED_MODEL_NAME} \
     offline_router.collection.collect_train=${COLLECT_TRAIN} \
     offline_router.collection.collect_eval=${COLLECT_EVAL} \
-    offline_router.collection.max_samples.train=${TRAIN_MAX_SAMPLES} \
-    offline_router.collection.max_samples.eval=${EVAL_MAX_SAMPLES} \
+    offline_router.dataset.train_max_samples=${TRAIN_MAX_SAMPLES} \
+    offline_router.dataset.eval_max_samples=${EVAL_MAX_SAMPLES} \
     offline_router.collection.max_concurrent_problems=${MAX_CONCURRENT_PROBLEMS} \
     offline_router.collection.shard_size=${SHARD_SIZE} \
     ${EXTRA_ARGS}"
