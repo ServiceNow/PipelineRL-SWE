@@ -19,9 +19,9 @@ PRIMARY_SERVED_MODEL_NAME=${PRIMARY_SERVED_MODEL_NAME:-primary_model}
 
 COLLECT_TRAIN=${COLLECT_TRAIN:-true}
 COLLECT_EVAL=${COLLECT_EVAL:-true}
-TRAIN_MAX_SAMPLES=${TRAIN_MAX_SAMPLES:-500}
+TRAIN_MAX_SAMPLES=${TRAIN_MAX_SAMPLES:-10000}
 EVAL_MAX_SAMPLES=${EVAL_MAX_SAMPLES:-500}
-# Keep concurrency modest for the throughput smoke test so GPT-OSS does not get buried in queueing.
+# Keep concurrency modest so GPT-OSS does not get buried in queueing.
 MAX_CONCURRENT_PROBLEMS=${MAX_CONCURRENT_PROBLEMS:-8}
 SHARD_SIZE=${SHARD_SIZE:-64}
 EXTRA_ARGS=${EXTRA_ARGS:-}

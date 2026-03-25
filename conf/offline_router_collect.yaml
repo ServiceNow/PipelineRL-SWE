@@ -78,7 +78,7 @@ offline_router:
   collection:
     collect_train: true
     collect_eval: true
-    shuffle: false
+    shuffle: true
     shard_size: 64
     progress_log_every: 25
     max_concurrent_problems: 32
