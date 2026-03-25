@@ -42,27 +42,28 @@ offline_router:
       max_model_len: 32000
 
   experts:
+    # Devstral disabled for the throughput smoke test.
+    # - expert_rank: 0
+    #   label: expert_0:mistralai/Devstral-Small-2505
+    #   model_path: mistralai/Devstral-Small-2505
+    #   served_model_name: expert_0
+    #   model_name: ${.served_model_name}
+    #   base_url: null
+    #   conda_env: vllm-env
+    #   port: 8280
+    #   parameters:
+    #     max_tokens: 15000
+    #     temperature: 0.15
+    #   vllm_kwargs:
+    #     tensor-parallel-size: 1
+    #     tokenizer_mode: mistral
+    #     config_format: mistral
+    #     load_format: mistral
+    #     max_model_len: 32000
     - expert_rank: 0
-      label: expert_0:mistralai/Devstral-Small-2505
-      model_path: mistralai/Devstral-Small-2505
-      served_model_name: expert_0
-      model_name: ${.served_model_name}
-      base_url: null
-      conda_env: vllm-env
-      port: 8280
-      parameters:
-        max_tokens: 15000
-        temperature: 0.15
-      vllm_kwargs:
-        tensor-parallel-size: 1
-        tokenizer_mode: mistral
-        config_format: mistral
-        load_format: mistral
-        max_model_len: 32000
-    - expert_rank: 1
-      label: expert_1:openai/gpt-oss-120b
+      label: expert_0:openai/gpt-oss-120b
       model_path: openai/gpt-oss-120b
-      served_model_name: expert_1
+      served_model_name: expert_0
       model_name: ${.served_model_name}
       base_url: null
       conda_env: vllm-env
