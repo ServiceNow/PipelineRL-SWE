@@ -17,9 +17,6 @@ PRIMARY_MODEL_PATH=${PRIMARY_MODEL_PATH:-/mnt/llmd/results/exps/aristides/reason
 PRIMARY_TOKENIZER_NAME=${PRIMARY_TOKENIZER_NAME:-Qwen/Qwen2.5-Coder-7B-Instruct}
 PRIMARY_SERVED_MODEL_NAME=${PRIMARY_SERVED_MODEL_NAME:-primary_model}
 
-DEVSTRAL_MODEL_PATH=${DEVSTRAL_MODEL_PATH:-mistralai/Devstral-Small-2505}
-GPT_OSS_MODEL_PATH=${GPT_OSS_MODEL_PATH:-openai/gpt-oss-120b}
-
 COLLECT_TRAIN=${COLLECT_TRAIN:-true}
 COLLECT_EVAL=${COLLECT_EVAL:-true}
 TRAIN_MAX_SAMPLES=${TRAIN_MAX_SAMPLES:-null}
@@ -41,8 +38,6 @@ make job \
     offline_router.primary_model.tokenizer_name=${PRIMARY_TOKENIZER_NAME} \
     offline_router.primary_model.served_model_name=${PRIMARY_SERVED_MODEL_NAME} \
     offline_router.primary_model.model_name=${PRIMARY_SERVED_MODEL_NAME} \
-    offline_router.experts[0].model_path=${DEVSTRAL_MODEL_PATH} \
-    offline_router.experts[1].model_path=${GPT_OSS_MODEL_PATH} \
     offline_router.collection.collect_train=${COLLECT_TRAIN} \
     offline_router.collection.collect_eval=${COLLECT_EVAL} \
     offline_router.collection.max_samples.train=${TRAIN_MAX_SAMPLES} \
