@@ -283,6 +283,7 @@ async def _collect_split(
     timeout = aiohttp.ClientTimeout(total=float(collection_cfg.get("request_timeout", 1800)))
     semaphore = asyncio.Semaphore(int(collection_cfg.get("max_concurrent_problems", 32)))
     max_in_flight = max(1, int(collection_cfg.get("max_concurrent_problems", 32)) * 4)
+    progress_log_every = max(1, int(collection_cfg.get("progress_log_every", 25)))
 
     written = 0
     failed = 0
@@ -290,6 +291,16 @@ async def _collect_split(
     ready_rows: dict[int, dict[str, Any] | None] = {}
     next_ready_idx = 0
     shard_row_counts: list[int] = []
+
+    logger.info(
+        "Starting %s collection: source_rows=%d skipped_existing=%d pending=%d shard_size=%d max_in_flight=%d",
+        split_name,
+        len(dataset),
+        skipped_existing,
+        len(pending),
+        int(collection_cfg.get("shard_size", 64)),
+        max_in_flight,
+    )
 
     async def _task_wrapper(order_idx: int, problem: dict[str, Any], session: aiohttp.ClientSession):
         async with semaphore:
@@ -338,14 +349,57 @@ async def _collect_split(
                         if len(buffered_rows) >= int(collection_cfg.get("shard_size", 64)):
                             shard_path = _write_parquet_shard(split_dir, next_shard_index, buffered_rows)
                             shard_row_counts.append(_row_count_in_shard(shard_path))
+                            logger.info(
+                                "%s progress: processed=%d/%d written=%d failed=%d shards=%d last_shard=%s",
+                                split_name,
+                                written + failed,
+                                len(pending),
+                                written,
+                                failed,
+                                len(shard_row_counts),
+                                shard_path.name,
+                            )
                             next_shard_index += 1
                             buffered_rows = []
+                        elif (written + failed) % progress_log_every == 0:
+                            logger.info(
+                                "%s progress: processed=%d/%d written=%d failed=%d buffered=%d shards=%d in_flight=%d",
+                                split_name,
+                                written + failed,
+                                len(pending),
+                                written,
+                                failed,
+                                len(buffered_rows),
+                                len(shard_row_counts),
+                                len(in_flight),
+                            )
         finally:
             progress.close()
 
     if buffered_rows:
         shard_path = _write_parquet_shard(split_dir, next_shard_index, buffered_rows)
         shard_row_counts.append(_row_count_in_shard(shard_path))
+        logger.info(
+            "%s progress: processed=%d/%d written=%d failed=%d shards=%d last_shard=%s",
+            split_name,
+            written + failed,
+            len(pending),
+            written,
+            failed,
+            len(shard_row_counts),
+            shard_path.name,
+        )
+
+    logger.info(
+        "Finished %s collection: source_rows=%d skipped_existing=%d pending=%d written=%d failed=%d shards=%d",
+        split_name,
+        len(dataset),
+        skipped_existing,
+        len(pending),
+        written,
+        failed,
+        len(shard_row_counts),
+    )
 
     return {
         "split": split_name,
