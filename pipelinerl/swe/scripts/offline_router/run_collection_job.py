@@ -88,7 +88,8 @@ def _launch_server(spec: ServerSpec, log_dir: Path) -> subprocess.Popen:
     cmd.extend(_kwargs_to_cli(spec.kwargs))
     env = dict(os.environ)
     env["CUDA_VISIBLE_DEVICES"] = ",".join(str(gpu) for gpu in spec.gpus)
-    log_path = log_dir / f"{spec.name}.log"
+    safe_name = spec.name.replace("/", "_").replace(":", "_").replace(" ", "_")
+    log_path = log_dir / f"{safe_name}.log"
     handle = log_path.open("a")
     logger.info("Launching %s on GPUs %s: %s", spec.name, spec.gpus, " ".join(cmd))
     proc = subprocess.Popen(cmd, env=env, stdout=handle, stderr=handle)
