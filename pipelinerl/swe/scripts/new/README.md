@@ -147,7 +147,9 @@ Useful options:
 - `--probe-layers all` (layer sweep)
 - `--target-train-traces 500` (walk backward from eval version until this many train traces are collected)
 - `--max-train-versions-back 20` (cap train window)
+- `--model-version 25344` or `--model-version-min 25000 --model-version-max 25600` (restrict traces to an older policy checkpoint window)
 - `--append-language-onehot` (append inferred language one-hot features)
+- `--save-predictions-jsonl` (write per-example predicted reward vectors for post-hoc routing analysis)
 
 Writes:
 
@@ -162,6 +164,25 @@ For layer sweeps:
 - `per_layer_route_metrics.csv`
 - `metrics_by_layer.png`
 - `policy_vs_gpt_by_layer.png`
+
+Post-hoc threshold routing from saved ridge predictions:
+
+```bash
+python -m pipelinerl.swe.scripts.new.evaluate_threshold_router_from_ridge \
+  --predictions-jsonl "/path/to/run/ridge_probe_completion_last/eval_predictions.jsonl" \
+  --output-dir "/path/to/run/ridge_probe_completion_last/threshold_router"
+```
+
+This treats the predicted primary-model reward as a gating score:
+
+- if `pred_primary < tau`, route to the secondary route
+- else keep the primary route
+
+It writes:
+
+- `threshold_sweep.csv`
+- `summary.json`
+- `reward_vs_threshold.png`
 
 ## 4) Export old trace routes to `sb-cli`
 

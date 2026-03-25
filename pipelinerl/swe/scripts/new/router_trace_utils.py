@@ -4,6 +4,8 @@ import logging
 from pathlib import Path
 from typing import Any, Iterable
 
+from tqdm import tqdm
+
 logger = logging.getLogger(__name__)
 
 
@@ -39,21 +41,28 @@ def _as_model_version(value: Any) -> int:
 
 
 def iter_jsonl_dicts(paths: Iterable[Path]):
-    for path in paths:
-        with path.open() as handle:
-            for lineno, line in enumerate(handle, start=1):
-                text = line.strip()
-                if not text:
-                    continue
-                try:
-                    item = json.loads(text)
-                except json.JSONDecodeError:
-                    logger.warning("Skipping malformed JSON in %s:%d", path, lineno)
-                    continue
-                if isinstance(item, dict):
-                    yield item
-                else:
-                    logger.warning("Skipping non-dict JSON entry in %s:%d", path, lineno)
+    path_list = list(paths)
+    total_bytes = sum(path.stat().st_size for path in path_list if path.exists())
+    progress = tqdm(total=total_bytes, unit="B", unit_scale=True, desc="Load router traces")
+    try:
+        for path in path_list:
+            with path.open("rb") as handle:
+                for lineno, line in enumerate(handle, start=1):
+                    progress.update(len(line))
+                    text = line.strip()
+                    if not text:
+                        continue
+                    try:
+                        item = json.loads(text)
+                    except json.JSONDecodeError:
+                        logger.warning("Skipping malformed JSON in %s:%d", path, lineno)
+                        continue
+                    if isinstance(item, dict):
+                        yield item
+                    else:
+                        logger.warning("Skipping non-dict JSON entry in %s:%d", path, lineno)
+    finally:
+        progress.close()
 
 
 def _problem_key(trace: dict[str, Any]) -> str | None:

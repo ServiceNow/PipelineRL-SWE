@@ -147,6 +147,31 @@ def _as_model_version(value: Any) -> int:
         return -1
 
 
+def _filter_traces_by_model_version(
+    traces: list[dict[str, Any]],
+    model_version: int | None,
+    model_version_min: int | None,
+    model_version_max: int | None,
+) -> list[dict[str, Any]]:
+    if model_version is not None:
+        model_version_min = model_version
+        model_version_max = model_version
+    if model_version_min is None and model_version_max is None:
+        return traces
+
+    filtered: list[dict[str, Any]] = []
+    for trace in traces:
+        version = _as_model_version(trace.get("model_version"))
+        if version < 0:
+            continue
+        if model_version_min is not None and version < model_version_min:
+            continue
+        if model_version_max is not None and version > model_version_max:
+            continue
+        filtered.append(trace)
+    return filtered
+
+
 def _choose_joint_model_version(
     traces: list[dict[str, Any]],
     train_split: str | None,
@@ -694,6 +719,9 @@ def main() -> None:
     parser.add_argument("--within-repo-seed", type=int, default=0)
     parser.add_argument("--all-model-versions", action="store_true")
     parser.add_argument("--keep-duplicates", action="store_true")
+    parser.add_argument("--model-version", type=int, default=None, help="Restrict traces to a single model_version.")
+    parser.add_argument("--model-version-min", type=int, default=None, help="Restrict traces to model_version >= this value.")
+    parser.add_argument("--model-version-max", type=int, default=None, help="Restrict traces to model_version <= this value.")
     parser.add_argument("--max-train-records", type=int, default=None)
     parser.add_argument("--max-eval-records", type=int, default=None)
     parser.add_argument("--save-predictions-jsonl", action="store_true")
@@ -737,12 +765,23 @@ def main() -> None:
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
+    if args.model_version is not None and (
+        args.model_version_min is not None or args.model_version_max is not None
+    ):
+        raise ValueError("Use either --model-version or --model-version-min/--model-version-max, not both.")
+
     if args.split_mode == "within-repo":
         traces = load_router_traces(
             input_globs=args.input_glob,
             split=None,
             latest_model_only=not args.all_model_versions,
             dedupe_by_problem=not args.keep_duplicates,
+        )
+        traces = _filter_traces_by_model_version(
+            traces,
+            model_version=args.model_version,
+            model_version_min=args.model_version_min,
+            model_version_max=args.model_version_max,
         )
         if not traces:
             raise ValueError("No traces found")
@@ -765,11 +804,23 @@ def main() -> None:
                 latest_model_only=False,
                 dedupe_by_problem=not args.keep_duplicates,
             )
+            train_traces = _filter_traces_by_model_version(
+                train_traces,
+                model_version=args.model_version,
+                model_version_min=args.model_version_min,
+                model_version_max=args.model_version_max,
+            )
             eval_traces = load_router_traces(
                 input_globs=args.input_glob,
                 split=eval_split,
                 latest_model_only=False,
                 dedupe_by_problem=not args.keep_duplicates,
+            )
+            eval_traces = _filter_traces_by_model_version(
+                eval_traces,
+                model_version=args.model_version,
+                model_version_min=args.model_version_min,
+                model_version_max=args.model_version_max,
             )
             traces_for_metadata = train_traces + eval_traces
         else:
@@ -778,6 +829,12 @@ def main() -> None:
                 split=None,
                 latest_model_only=False,
                 dedupe_by_problem=False,
+            )
+            all_traces = _filter_traces_by_model_version(
+                all_traces,
+                model_version=args.model_version,
+                model_version_min=args.model_version_min,
+                model_version_max=args.model_version_max,
             )
             chosen_eval_version = _choose_eval_model_version(
                 traces=all_traces,
