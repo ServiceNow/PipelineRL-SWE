@@ -10,7 +10,7 @@ offline_router:
     model_path: Qwen/Qwen2.5-Coder-7B-Instruct
     mode: frozen_backbone  # frozen_backbone | full_backbone
     device: auto
-    num_epochs: 3
+    num_epochs: 10
     batch_size: 1
     eval_batch_size: 1
     gradient_accumulation_steps: 1
