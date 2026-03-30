@@ -11,6 +11,10 @@ offline_router:
     mode: frozen_backbone  # frozen_backbone | full_backbone
     device: auto
     num_epochs: 10
+    performance_value_hidden_dims:
+      - 1024
+      - 1024
+    performance_value_activation: gelu
     batch_size: 1
     eval_batch_size: 1
     gradient_accumulation_steps: 1

@@ -1,6 +1,7 @@
 import os
 import torch
 import torch.nn as nn
+import json
 from dataclasses import dataclass
 from transformers.modeling_utils import PreTrainedModel
 from transformers.modeling_outputs import ModelOutput
@@ -58,15 +59,53 @@ class ValueHead(nn.Module):
 class PerformanceValueHead(nn.Module):
     """Vector performance head for policy + expert rewards."""
 
-    def __init__(self, hidden_size: int, output_dim: int):
+    def __init__(
+        self,
+        hidden_size: int,
+        output_dim: int,
+        hidden_dims: Optional[list[int]] = None,
+        activation: str = "gelu",
+    ):
         super().__init__()
-        self.output = nn.Linear(hidden_size, output_dim)
+        hidden_dims = [int(dim) for dim in (hidden_dims or []) if int(dim) > 0]
+        self.hidden_dims = hidden_dims
+        self.output_dim = int(output_dim)
+        self.activation_name = activation
+
+        layers: list[nn.Module] = []
+        in_dim = hidden_size
+        for hidden_dim in hidden_dims:
+            layers.append(nn.Linear(in_dim, hidden_dim))
+            layers.append(self._make_activation(activation))
+            in_dim = hidden_dim
+        layers.append(nn.Linear(in_dim, output_dim))
+        self.network = nn.Sequential(*layers)
         torch.manual_seed(42)
-        nn.init.normal_(self.output.weight, std=1e-3)
-        nn.init.zeros_(self.output.bias)
+        for module in self.network:
+            if isinstance(module, nn.Linear):
+                nn.init.normal_(module.weight, std=1e-3)
+                nn.init.zeros_(module.bias)
+
+    @staticmethod
+    def _make_activation(name: str) -> nn.Module:
+        normalized = str(name).lower()
+        if normalized == "gelu":
+            return nn.GELU()
+        if normalized == "relu":
+            return nn.ReLU()
+        if normalized == "silu":
+            return nn.SiLU()
+        raise ValueError(f"Unsupported performance head activation: {name}")
+
+    def config_dict(self) -> dict:
+        return {
+            "hidden_dims": list(self.hidden_dims),
+            "output_dim": int(self.output_dim),
+            "activation": self.activation_name,
+        }
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.output(hidden_states)  # (batch_size, sequence_length, output_dim)
+        return self.network(hidden_states)  # (batch_size, sequence_length, output_dim)
 
 
 class AutoModelForCausalLMWithValueHead(nn.Module):
@@ -74,7 +113,13 @@ class AutoModelForCausalLMWithValueHead(nn.Module):
     A wrapper around a causal language model that adds a value head for PPO training.
     """
 
-    def __init__(self, pretrained_model, performance_value_dim: int = 1):
+    def __init__(
+        self,
+        pretrained_model,
+        performance_value_dim: int = 1,
+        performance_value_hidden_dims: Optional[list[int]] = None,
+        performance_value_activation: str = "gelu",
+    ):
         super().__init__()
         self.pretrained_model = pretrained_model
         self.config = pretrained_model.config
@@ -83,8 +128,15 @@ class AutoModelForCausalLMWithValueHead(nn.Module):
         # Initialize value head
         self.value_head = ValueHead(hidden_size)
         # Initialize performance head (policy + experts)
-        self.performance_value_head = PerformanceValueHead(hidden_size, performance_value_dim)
+        self.performance_value_head = PerformanceValueHead(
+            hidden_size,
+            performance_value_dim,
+            hidden_dims=performance_value_hidden_dims,
+            activation=performance_value_activation,
+        )
         self.performance_value_dim = performance_value_dim
+        self.performance_value_hidden_dims = list(performance_value_hidden_dims or [])
+        self.performance_value_activation = performance_value_activation
 
         # Copy relevant attributes from the pretrained model
         self.main_input_name = pretrained_model.main_input_name
@@ -199,6 +251,10 @@ class AutoModelForCausalLMWithValueHead(nn.Module):
             performance_head_path = os.path.join(save_directory, "performance_value_head.pt")
             save_function(performance_head_state_dict, performance_head_path)
             logger.info(f"Saved performance value head to {performance_head_path}")
+            performance_head_config_path = os.path.join(save_directory, "performance_value_head_config.json")
+            with open(performance_head_config_path, "w") as handle:
+                json.dump(self.performance_value_head.config_dict(), handle, indent=2)
+            logger.info(f"Saved performance value head config to {performance_head_config_path}")
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -207,14 +263,31 @@ class AutoModelForCausalLMWithValueHead(nn.Module):
         logger.info(f"Loading pretrained model from {pretrained_model_name_or_path}...")
 
         performance_value_dim = kwargs.pop("performance_value_dim", None)
+        performance_value_hidden_dims = kwargs.pop("performance_value_hidden_dims", None)
+        performance_value_activation = kwargs.pop("performance_value_activation", None)
         performance_head_path = os.path.join(pretrained_model_name_or_path, "performance_value_head.pt")
+        performance_head_config_path = os.path.join(pretrained_model_name_or_path, "performance_value_head_config.json")
+        if os.path.exists(performance_head_config_path):
+            with open(performance_head_config_path) as handle:
+                performance_head_config = json.load(handle)
+        else:
+            performance_head_config = {}
+
+        if performance_value_hidden_dims is None:
+            performance_value_hidden_dims = performance_head_config.get("hidden_dims")
+        if performance_value_activation is None:
+            performance_value_activation = performance_head_config.get("activation", "gelu")
         if performance_value_dim is None and os.path.exists(performance_head_path):
             state = torch.load(performance_head_path, map_location="cpu")
-            weight = state.get("output.weight")
-            if weight is not None:
-                performance_value_dim = weight.shape[0]
+            linear_weights = [
+                value for key, value in state.items() if key.endswith(".weight") and isinstance(value, torch.Tensor) and value.ndim == 2
+            ]
+            if linear_weights:
+                performance_value_dim = linear_weights[-1].shape[0]
         if performance_value_dim is None:
             performance_value_dim = 1
+        if performance_value_hidden_dims is None:
+            performance_value_hidden_dims = []
 
         # Load the base model
         pretrained_model = AutoModelForCausalLM.from_pretrained(
@@ -222,7 +295,12 @@ class AutoModelForCausalLMWithValueHead(nn.Module):
         )
 
         # Create the model with value head
-        model = cls(pretrained_model, performance_value_dim=performance_value_dim)
+        model = cls(
+            pretrained_model,
+            performance_value_dim=performance_value_dim,
+            performance_value_hidden_dims=performance_value_hidden_dims,
+            performance_value_activation=performance_value_activation,
+        )
 
         # Try to load value head weights if they exist
         value_head_path = os.path.join(pretrained_model_name_or_path, "value_head.pt")
@@ -231,7 +309,14 @@ class AutoModelForCausalLMWithValueHead(nn.Module):
             model.value_head.load_state_dict(value_head_state_dict)
         if os.path.exists(performance_head_path):
             performance_head_state_dict = torch.load(performance_head_path, map_location="cpu")
-            model.performance_value_head.load_state_dict(performance_head_state_dict)
+            try:
+                model.performance_value_head.load_state_dict(performance_head_state_dict)
+            except RuntimeError as exc:
+                logger.warning(
+                    "Skipping performance_value_head load from %s due to shape/config mismatch: %s",
+                    performance_head_path,
+                    exc,
+                )
 
         return model
 

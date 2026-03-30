@@ -300,9 +300,18 @@ def main(cfg: DictConfig) -> None:
 
     device = _pick_device(str(train_cfg.get("device", "auto")))
     model_path = str(train_cfg.model_path)
+    performance_value_hidden_dims = train_cfg.get("performance_value_hidden_dims")
+    if performance_value_hidden_dims is not None:
+        performance_value_hidden_dims = [int(dim) for dim in performance_value_hidden_dims]
+    performance_value_activation = str(train_cfg.get("performance_value_activation", "gelu"))
     logger.info("Loading tokenizer/model from %s on %s", model_path, device)
     tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=True)
-    model = AutoModelForCausalLMWithValueHead.from_pretrained(model_path, performance_value_dim=target_dim)
+    model = AutoModelForCausalLMWithValueHead.from_pretrained(
+        model_path,
+        performance_value_dim=target_dim,
+        performance_value_hidden_dims=performance_value_hidden_dims,
+        performance_value_activation=performance_value_activation,
+    )
 
     if bool(train_cfg.get("gradient_checkpointing", False)):
         model.gradient_checkpointing_enable()
@@ -325,6 +334,11 @@ def main(cfg: DictConfig) -> None:
         trainable_prefixes,
         trainable_parameters,
         total_parameters,
+    )
+    logger.info(
+        "Offline router performance head hidden_dims=%s activation=%s",
+        performance_value_hidden_dims or [],
+        performance_value_activation,
     )
 
     optimizer = torch.optim.AdamW(
@@ -443,6 +457,8 @@ def main(cfg: DictConfig) -> None:
         "train_rows": int(len(train_dataset)),
         "eval_rows": int(len(eval_dataset)),
         "num_epochs": num_epochs,
+        "performance_value_hidden_dims": performance_value_hidden_dims or [],
+        "performance_value_activation": performance_value_activation,
         "best_epoch": best_epoch,
         "best_eval_loss": best_eval_loss,
         "trainable_prefixes": trainable_prefixes,
