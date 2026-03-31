@@ -15,6 +15,7 @@ offline_router:
       - 1024
       - 1024
     performance_value_activation: gelu
+    log_every_steps: 100
     batch_size: 1
     eval_batch_size: 1
     gradient_accumulation_steps: 1

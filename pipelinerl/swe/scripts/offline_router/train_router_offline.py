@@ -11,14 +11,19 @@ from typing import Any
 import hydra
 import numpy as np
 import torch
+import torch.distributed as dist
 import torch.nn.functional as F
 from datasets import load_dataset
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
+from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm
 from transformers import AutoTokenizer
 import wandb
+import time
 
+from pipelinerl.finetune.checkpoints import save_model_only
+from pipelinerl.finetune.context import get_accelerator
 from pipelinerl.finetune.value_model import AutoModelForCausalLMWithValueHead
 from pipelinerl.utils import init_wandb
 from pipelinerl.swe.scripts.offline_router.common import (
@@ -37,10 +42,65 @@ from pipelinerl.swe.scripts.offline_router.common import (
 logger = logging.getLogger(__name__)
 
 
+def _dist_ready() -> bool:
+    return dist.is_available() and dist.is_initialized()
+
+
+def get_world_size() -> int:
+    return int(get_accelerator().state.num_processes)
+
+
+def get_rank() -> int:
+    return int(get_accelerator().process_index)
+
+
+def get_local_rank() -> int:
+    return int(os.environ.get("LOCAL_RANK", "0"))
+
+
+def is_distributed() -> bool:
+    return get_world_size() > 1
+
+
+def is_main_process() -> bool:
+    return bool(get_accelerator().is_main_process)
+
+
+def barrier_if_distributed() -> None:
+    if is_distributed():
+        get_accelerator().wait_for_everyone()
+
+
 def _pick_device(device_arg: str) -> torch.device:
+    if device_arg == "auto":
+        return get_accelerator().device
     if device_arg != "auto":
         return torch.device(device_arg)
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+def _all_gather_objects(local_obj: Any) -> list[Any]:
+    if not is_distributed() or not _dist_ready():
+        return [local_obj]
+    gathered = [None for _ in range(get_world_size())]
+    dist.all_gather_object(gathered, local_obj)
+    return gathered
+
+
+def _broadcast_object(obj: Any) -> Any:
+    if not is_distributed() or not _dist_ready():
+        return obj
+    container = [obj if is_main_process() else None]
+    dist.broadcast_object_list(container, src=0)
+    return container[0]
+
+
+def _prediction_row_key(row: dict[str, Any]) -> str:
+    dataset = row.get("dataset")
+    problem_id = row.get("problem_id")
+    if dataset is None and problem_id is None:
+        return json.dumps(row, sort_keys=True)
+    return f"{dataset}::{problem_id}"
 
 
 def _load_split(dataset_dir: Path, split_name: str):
@@ -162,23 +222,16 @@ def _run_eval(
     device: torch.device,
 ) -> tuple[float, list[dict[str, Any]], np.ndarray, np.ndarray]:
     model.eval()
-    losses: list[float] = []
     prediction_rows: list[dict[str, Any]] = []
-    y_true_parts: list[np.ndarray] = []
-    y_pred_parts: list[np.ndarray] = []
     with torch.no_grad():
-        for batch in tqdm(loader, desc="Eval offline router", unit="batch"):
+        for batch in tqdm(loader, desc="Eval offline router", unit="batch", disable=not is_main_process()):
             if batch is None:
                 continue
             batch = _move_batch_to_device(batch, device)
             preds = _forward_predictions(model, batch)
-            loss = F.mse_loss(preds, batch["targets"])
-            losses.append(float(loss.item()))
 
             preds_np = preds.cpu().numpy()
             targets_np = batch["targets"].cpu().numpy()
-            y_true_parts.append(targets_np)
-            y_pred_parts.append(preds_np)
             for row_idx, problem_id in enumerate(batch["problem_ids"]):
                 prediction_rows.append(
                     {
@@ -191,10 +244,33 @@ def _run_eval(
                     }
                 )
 
-    if not y_true_parts:
+    gathered = _all_gather_objects(
+        {
+            "rows": prediction_rows,
+        }
+    )
+    if not is_main_process():
+        return math.nan, [], np.empty((0, 0), dtype=np.float32), np.empty((0, 0), dtype=np.float32)
+
+    merged_rows: list[dict[str, Any]] = []
+    seen_keys: set[str] = set()
+    for item in gathered:
+        if not isinstance(item, dict):
+            continue
+        for row in item.get("rows", []):
+            key = _prediction_row_key(row)
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            merged_rows.append(row)
+
+    if not merged_rows:
         raise ValueError("No valid eval examples after tokenization/collation")
-    mean_loss = float(np.mean(losses)) if losses else math.nan
-    return mean_loss, prediction_rows, np.concatenate(y_true_parts, axis=0), np.concatenate(y_pred_parts, axis=0)
+
+    y_true = np.asarray([row["true_rewards"] for row in merged_rows], dtype=np.float32)
+    y_pred = np.asarray([row["pred_rewards"] for row in merged_rows], dtype=np.float32)
+    mean_loss = float(np.mean((y_pred - y_true) ** 2)) if y_true.size else math.nan
+    return mean_loss, merged_rows, y_true, y_pred
 
 
 def _save_predictions_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -216,6 +292,8 @@ def _flatten_dict(value: Any, prefix: str = "") -> dict[str, Any]:
 
 
 def _init_offline_wandb(cfg: DictConfig, output_dir: Path):
+    if not is_main_process():
+        return None
     if not bool(cfg.wandb.use_wandb):
         return None
     config_for_wandb = sanitize_for_json(OmegaConf.to_container(cfg, resolve=True))
@@ -268,226 +346,369 @@ def _log_epoch_to_wandb(
     wandb.log(metrics, step=epoch)
 
 
+def _log_train_progress_to_wandb(
+    epoch: int,
+    step: int,
+    global_step: int,
+    running_train_loss: float,
+    progress_fraction: float,
+    examples_per_sec: float,
+    eta_seconds: float,
+) -> None:
+    metrics = {
+        "offline_router/train_loss_running": running_train_loss,
+        "offline_router/train_progress_fraction": progress_fraction,
+        "offline_router/examples_per_sec": examples_per_sec,
+        "offline_router/eta_seconds": eta_seconds,
+        "offline_router/epoch": epoch,
+        "offline_router/step_in_epoch": step,
+    }
+    wandb.log(metrics, step=global_step)
+
+
 @hydra.main(config_path="../../../../conf", config_name="offline_router_train", version_base=None)
 def main(cfg: DictConfig) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
-    train_cfg = cfg.offline_router.train
-    output_dir = Path(cfg.output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    write_json(output_dir / "train_config.json", sanitize_for_json(OmegaConf.to_container(cfg, resolve=True)))
-    wandb_run = _init_offline_wandb(cfg, output_dir)
+    try:
+        train_cfg = cfg.offline_router.train
+        output_dir = Path(cfg.output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        if is_main_process():
+            write_json(output_dir / "train_config.json", sanitize_for_json(OmegaConf.to_container(cfg, resolve=True)))
+        wandb_run = _init_offline_wandb(cfg, output_dir)
 
-    dataset_dir = Path(str(train_cfg.dataset_dir))
-    metadata_path = dataset_dir / "metadata.json"
-    if not metadata_path.exists():
-        raise FileNotFoundError(f"Offline router metadata missing: {metadata_path}")
-    metadata = json.loads(metadata_path.read_text())
-    route_labels = list(metadata.get("route_labels") or [])
-    if not route_labels:
-        raise ValueError("metadata.json is missing route_labels")
-    target_dim = len(route_labels)
+        dataset_dir = Path(str(train_cfg.dataset_dir))
+        metadata_path = dataset_dir / "metadata.json"
+        if not metadata_path.exists():
+            raise FileNotFoundError(f"Offline router metadata missing: {metadata_path}")
+        metadata = json.loads(metadata_path.read_text())
+        route_labels = list(metadata.get("route_labels") or [])
+        if not route_labels:
+            raise ValueError("metadata.json is missing route_labels")
+        target_dim = len(route_labels)
 
-    train_dataset = _load_split(dataset_dir, "train")
-    eval_dataset = _load_split(dataset_dir, "eval")
+        train_dataset = _load_split(dataset_dir, "train")
+        eval_dataset = _load_split(dataset_dir, "eval")
 
-    max_train_rows = train_cfg.get("max_train_rows")
-    max_eval_rows = train_cfg.get("max_eval_rows")
-    if max_train_rows:
-        train_dataset = train_dataset.select(range(min(int(max_train_rows), len(train_dataset))))
-    if max_eval_rows:
-        eval_dataset = eval_dataset.select(range(min(int(max_eval_rows), len(eval_dataset))))
+        max_train_rows = train_cfg.get("max_train_rows")
+        max_eval_rows = train_cfg.get("max_eval_rows")
+        if max_train_rows:
+            train_dataset = train_dataset.select(range(min(int(max_train_rows), len(train_dataset))))
+        if max_eval_rows:
+            eval_dataset = eval_dataset.select(range(min(int(max_eval_rows), len(eval_dataset))))
 
-    device = _pick_device(str(train_cfg.get("device", "auto")))
-    model_path = str(train_cfg.model_path)
-    performance_value_hidden_dims = train_cfg.get("performance_value_hidden_dims")
-    if performance_value_hidden_dims is not None:
-        performance_value_hidden_dims = [int(dim) for dim in performance_value_hidden_dims]
-    performance_value_activation = str(train_cfg.get("performance_value_activation", "gelu"))
-    logger.info("Loading tokenizer/model from %s on %s", model_path, device)
-    tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=True)
-    model = AutoModelForCausalLMWithValueHead.from_pretrained(
-        model_path,
-        performance_value_dim=target_dim,
-        performance_value_hidden_dims=performance_value_hidden_dims,
-        performance_value_activation=performance_value_activation,
-    )
+        device = _pick_device(str(train_cfg.get("device", "auto")))
+        model_path = str(train_cfg.model_path)
+        performance_value_hidden_dims = train_cfg.get("performance_value_hidden_dims")
+        if performance_value_hidden_dims is not None:
+            performance_value_hidden_dims = [int(dim) for dim in performance_value_hidden_dims]
+        performance_value_activation = str(train_cfg.get("performance_value_activation", "gelu"))
+        logger.info(
+            "Loading tokenizer/model from %s on %s (rank=%d world_size=%d)",
+            model_path,
+            device,
+            get_rank(),
+            get_world_size(),
+        )
+        tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=True)
+        model = AutoModelForCausalLMWithValueHead.from_pretrained(
+            model_path,
+            performance_value_dim=target_dim,
+            performance_value_hidden_dims=performance_value_hidden_dims,
+            performance_value_activation=performance_value_activation,
+        )
 
-    if bool(train_cfg.get("gradient_checkpointing", False)):
-        model.gradient_checkpointing_enable()
-    if hasattr(model.pretrained_model.config, "use_cache"):
-        model.pretrained_model.config.use_cache = False
+        if bool(train_cfg.get("gradient_checkpointing", False)):
+            model.gradient_checkpointing_enable()
+        if hasattr(model.pretrained_model.config, "use_cache"):
+            model.pretrained_model.config.use_cache = False
 
-    model_dtype = torch.bfloat16 if device.type == "cuda" and bool(train_cfg.get("bf16", True)) else None
-    if model_dtype is not None:
-        model = model.to(device=device, dtype=model_dtype)
-    else:
-        model = model.to(device=device)
+        model_dtype = torch.bfloat16 if device.type == "cuda" and bool(train_cfg.get("bf16", True)) else None
+        if model_dtype is not None:
+            model = model.to(device=device, dtype=model_dtype)
+        else:
+            model = model.to(device=device)
 
-    trainable_prefixes = configure_router_training_mode(model, str(train_cfg.mode))
-    total_parameters = count_parameters(model, trainable_only=False)
-    trainable_parameters = count_parameters(model, trainable_only=True)
+        trainable_prefixes = configure_router_training_mode(model, str(train_cfg.mode))
+        total_parameters = count_parameters(model, trainable_only=False)
+        trainable_parameters = count_parameters(model, trainable_only=True)
 
-    logger.info(
-        "Offline router mode=%s trainable_prefixes=%s trainable_params=%d total_params=%d",
-        train_cfg.mode,
-        trainable_prefixes,
-        trainable_parameters,
-        total_parameters,
-    )
-    logger.info(
-        "Offline router performance head hidden_dims=%s activation=%s",
-        performance_value_hidden_dims or [],
-        performance_value_activation,
-    )
+        logger.info(
+            "Offline router mode=%s trainable_prefixes=%s trainable_params=%d total_params=%d",
+            train_cfg.mode,
+            trainable_prefixes,
+            trainable_parameters,
+            total_parameters,
+        )
+        logger.info(
+            "Offline router performance head hidden_dims=%s activation=%s",
+            performance_value_hidden_dims or [],
+            performance_value_activation,
+        )
+        optimizer = torch.optim.AdamW(
+            [param for param in model.parameters() if param.requires_grad],
+            lr=float(train_cfg.lr),
+            weight_decay=float(train_cfg.get("weight_decay", 0.0)),
+        )
 
-    optimizer = torch.optim.AdamW(
-        [param for param in model.parameters() if param.requires_grad],
-        lr=float(train_cfg.lr),
-        weight_decay=float(train_cfg.get("weight_decay", 0.0)),
-    )
+        if (ds_plugin := getattr(get_accelerator().state, "deepspeed_plugin", None)) is not None:
+            ds_plugin.deepspeed_config["train_micro_batch_size_per_gpu"] = int(train_cfg.batch_size)
+            ds_plugin.deepspeed_config["gradient_accumulation_steps"] = int(train_cfg.get("gradient_accumulation_steps", 1))
+            ds_plugin.deepspeed_config["train_batch_size"] = (
+                int(train_cfg.batch_size)
+                * int(train_cfg.get("gradient_accumulation_steps", 1))
+                * get_world_size()
+            )
 
-    collate_fn = _make_collate_fn(
-        tokenizer=tokenizer,
-        max_seq_length=int(train_cfg.max_seq_length) if train_cfg.get("max_seq_length") else None,
-        target_dim=target_dim,
-    )
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=int(train_cfg.batch_size),
-        shuffle=bool(train_cfg.get("shuffle_train", True)),
-        num_workers=int(train_cfg.get("num_workers", 0)),
-        collate_fn=collate_fn,
-    )
-    eval_loader = DataLoader(
-        eval_dataset,
-        batch_size=int(train_cfg.eval_batch_size),
-        shuffle=False,
-        num_workers=int(train_cfg.get("num_workers", 0)),
-        collate_fn=collate_fn,
-    )
+        collate_fn = _make_collate_fn(
+            tokenizer=tokenizer,
+            max_seq_length=int(train_cfg.max_seq_length) if train_cfg.get("max_seq_length") else None,
+            target_dim=target_dim,
+        )
+        train_sampler = (
+            DistributedSampler(
+                train_dataset,
+                num_replicas=get_world_size(),
+                rank=get_rank(),
+                shuffle=bool(train_cfg.get("shuffle_train", True)),
+            )
+            if is_distributed()
+            else None
+        )
+        eval_sampler = (
+            DistributedSampler(
+                eval_dataset,
+                num_replicas=get_world_size(),
+                rank=get_rank(),
+                shuffle=False,
+            )
+            if is_distributed()
+            else None
+        )
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=int(train_cfg.batch_size),
+            shuffle=False if train_sampler is not None else bool(train_cfg.get("shuffle_train", True)),
+            sampler=train_sampler,
+            num_workers=int(train_cfg.get("num_workers", 0)),
+            collate_fn=collate_fn,
+        )
+        eval_loader = DataLoader(
+            eval_dataset,
+            batch_size=int(train_cfg.eval_batch_size),
+            shuffle=False,
+            sampler=eval_sampler,
+            num_workers=int(train_cfg.get("num_workers", 0)),
+            collate_fn=collate_fn,
+        )
+        model, optimizer = get_accelerator().prepare(model, optimizer)
+        logger.info(
+            "Offline router accelerator prepared: distributed=%s world_size=%d deepspeed=%s",
+            is_distributed(),
+            get_world_size(),
+            getattr(get_accelerator().state, "deepspeed_plugin", None) is not None,
+        )
 
-    num_epochs = int(train_cfg.num_epochs)
-    grad_accum = max(1, int(train_cfg.get("gradient_accumulation_steps", 1)))
-    best_eval_loss = float("inf")
-    best_epoch = -1
-    history: list[dict[str, Any]] = []
-    best_eval_rows: list[dict[str, Any]] = []
-    best_y_true: np.ndarray | None = None
-    best_y_pred: np.ndarray | None = None
+        num_epochs = int(train_cfg.num_epochs)
+        grad_accum = max(1, int(train_cfg.get("gradient_accumulation_steps", 1)))
+        log_every_steps = max(1, int(train_cfg.get("log_every_steps", 100)))
+        best_eval_loss = float("inf")
+        best_epoch = -1
+        history: list[dict[str, Any]] = []
+        best_eval_rows: list[dict[str, Any]] = []
+        best_y_true: np.ndarray | None = None
+        best_y_pred: np.ndarray | None = None
 
-    for epoch in range(num_epochs):
-        model.train()
-        optimizer.zero_grad(set_to_none=True)
-        running_losses: list[float] = []
-        batch_count = 0
+        for epoch in range(num_epochs):
+            if train_sampler is not None:
+                train_sampler.set_epoch(epoch)
 
-        for step_idx, batch in enumerate(tqdm(train_loader, desc=f"Train epoch {epoch}", unit="batch"), start=1):
-            if batch is None:
-                continue
-            batch = _move_batch_to_device(batch, device)
-            preds = _forward_predictions(model, batch)
-            loss = F.mse_loss(preds, batch["targets"])
-            running_losses.append(float(loss.item()))
-            (loss / grad_accum).backward()
-            batch_count += 1
+            model.train()
+            optimizer.zero_grad(set_to_none=True)
+            running_losses: list[float] = []
+            batch_count = 0
+            local_examples_seen = 0
+            epoch_start_time = time.time()
+            global_log_step_base = epoch * max(1, len(train_loader))
 
-            if batch_count % grad_accum == 0:
+            for step_idx, batch in enumerate(
+                tqdm(train_loader, desc=f"Train epoch {epoch}", unit="batch", disable=not is_main_process()),
+                start=1,
+            ):
+                if batch is None:
+                    continue
+                batch = _move_batch_to_device(batch, device)
+                preds = _forward_predictions(model, batch)
+                loss = F.mse_loss(preds, batch["targets"])
+                running_losses.append(float(loss.item()))
+                get_accelerator().backward(loss / grad_accum)
+                batch_count += 1
+                local_examples_seen += int(batch["targets"].shape[0])
+
+                if batch_count % grad_accum == 0:
+                    optimizer.step()
+                    optimizer.zero_grad(set_to_none=True)
+
+                if is_main_process() and (step_idx % log_every_steps == 0 or step_idx == len(train_loader)):
+                    elapsed = max(time.time() - epoch_start_time, 1e-6)
+                    running_train_loss = float(np.mean(running_losses)) if running_losses else math.nan
+                    progress_fraction = step_idx / max(len(train_loader), 1)
+                    examples_per_sec = (local_examples_seen * get_world_size()) / elapsed
+                    eta_seconds = ((len(train_loader) - step_idx) / max(step_idx, 1)) * elapsed
+                    logger.info(
+                        "Offline router epoch=%d step=%d/%d running_train_loss=%.6f processed_examples=%d examples_per_sec=%.2f eta_seconds=%.1f",
+                        epoch,
+                        step_idx,
+                        len(train_loader),
+                        running_train_loss,
+                        local_examples_seen * get_world_size(),
+                        examples_per_sec,
+                        eta_seconds,
+                    )
+                    if wandb_run is not None:
+                        try:
+                            _log_train_progress_to_wandb(
+                                epoch=epoch,
+                                step=step_idx,
+                                global_step=global_log_step_base + step_idx,
+                                running_train_loss=running_train_loss,
+                                progress_fraction=progress_fraction,
+                                examples_per_sec=examples_per_sec,
+                                eta_seconds=eta_seconds,
+                            )
+                        except Exception as exc:  # pylint: disable=broad-except
+                            logger.warning("Failed to log offline router progress to W&B: %s", exc)
+
+            if batch_count % grad_accum != 0:
                 optimizer.step()
                 optimizer.zero_grad(set_to_none=True)
 
-        if batch_count % grad_accum != 0:
-            optimizer.step()
-            optimizer.zero_grad(set_to_none=True)
-
-        if not running_losses:
-            raise ValueError("No valid training batches after tokenization/collation")
-        train_loss = float(np.mean(running_losses))
-        eval_loss, eval_rows, y_true, y_pred = _run_eval(model, eval_loader, device)
-        epoch_route_rows = compute_per_route_metrics(y_true, y_pred, route_labels)
-        epoch_pair_rows = compute_pairwise_metrics(y_true, y_pred, route_labels)
-        history.append(
-            {
-                "epoch": epoch,
-                "train_loss": train_loss,
-                "eval_loss": eval_loss,
-            }
-        )
-        logger.info(
-            "Offline router epoch=%d train_loss=%.6f eval_loss=%.6f",
-            epoch,
-            train_loss,
-            eval_loss,
-        )
-        if wandb_run is not None:
-            try:
-                _log_epoch_to_wandb(epoch, train_loss, eval_loss, epoch_route_rows, epoch_pair_rows)
-            except Exception as exc:  # pylint: disable=broad-except
-                logger.warning("Failed to log offline router epoch %d to W&B: %s", epoch, exc)
-
-        if eval_loss < best_eval_loss:
-            best_eval_loss = eval_loss
-            best_epoch = epoch
-            best_eval_rows = eval_rows
-            best_y_true = y_true
-            best_y_pred = y_pred
-            best_dir = output_dir / "checkpoints" / "best"
-            best_dir.mkdir(parents=True, exist_ok=True)
-            model.save_pretrained(best_dir)
-
-    last_dir = output_dir / "checkpoints" / "last"
-    last_dir.mkdir(parents=True, exist_ok=True)
-    model.save_pretrained(last_dir)
-
-    if best_y_true is None or best_y_pred is None:
-        raise ValueError("Best eval predictions were never recorded")
-
-    route_rows = compute_per_route_metrics(best_y_true, best_y_pred, route_labels)
-    pair_rows = compute_pairwise_metrics(best_y_true, best_y_pred, route_labels)
-    _write_csv(output_dir / "route_metrics.csv", route_rows, csv_headers_for_route_metrics())
-    _write_csv(output_dir / "pairwise_metrics.csv", pair_rows, csv_headers_for_pairwise_metrics())
-    _save_predictions_jsonl(output_dir / "eval_predictions.jsonl", best_eval_rows)
-
-    summary = {
-        "mode": str(train_cfg.mode),
-        "dataset_dir": str(dataset_dir),
-        "model_path": model_path,
-        "route_labels": route_labels,
-        "target_dim": target_dim,
-        "train_rows": int(len(train_dataset)),
-        "eval_rows": int(len(eval_dataset)),
-        "num_epochs": num_epochs,
-        "performance_value_hidden_dims": performance_value_hidden_dims or [],
-        "performance_value_activation": performance_value_activation,
-        "best_epoch": best_epoch,
-        "best_eval_loss": best_eval_loss,
-        "trainable_prefixes": trainable_prefixes,
-        "trainable_parameters": trainable_parameters,
-        "total_parameters": total_parameters,
-        "history": history,
-        "best_checkpoint_dir": str(output_dir / "checkpoints" / "best"),
-        "last_checkpoint_dir": str(last_dir),
-    }
-    write_json(output_dir / "summary.json", summary)
-    if wandb_run is not None:
-        try:
-            best_metrics = _flatten_dict(
+            if not running_losses:
+                raise ValueError("No valid training batches after tokenization/collation")
+            loss_stats = _all_gather_objects(
                 {
-                    "offline_router": {
-                        "best_epoch": best_epoch,
-                        "best_eval_loss": best_eval_loss,
-                    }
+                    "loss_sum": float(np.sum(running_losses)),
+                    "loss_count": int(len(running_losses)),
                 }
             )
-            route_rows_for_wandb = compute_per_route_metrics(best_y_true, best_y_pred, route_labels)
-            pair_rows_for_wandb = compute_pairwise_metrics(best_y_true, best_y_pred, route_labels)
-            _log_epoch_to_wandb(best_epoch, history[best_epoch]["train_loss"], best_eval_loss, route_rows_for_wandb, pair_rows_for_wandb)
-            wandb.log(best_metrics, step=best_epoch)
-            wandb_run.finish()
-        except Exception as exc:  # pylint: disable=broad-except
-            logger.warning("Failed to finalize offline router W&B logging: %s", exc)
-    logger.info("Offline router training complete: output_dir=%s", output_dir)
+            total_loss_sum = 0.0
+            total_loss_count = 0
+            for item in loss_stats:
+                if not isinstance(item, dict):
+                    continue
+                total_loss_sum += float(item.get("loss_sum", 0.0))
+                total_loss_count += int(item.get("loss_count", 0))
+            train_loss = total_loss_sum / total_loss_count if total_loss_count > 0 else float(np.mean(running_losses))
+            eval_loss, eval_rows, y_true, y_pred = _run_eval(model, eval_loader, device)
+
+            should_save_best = False
+            if is_main_process():
+                epoch_route_rows = compute_per_route_metrics(y_true, y_pred, route_labels)
+                epoch_pair_rows = compute_pairwise_metrics(y_true, y_pred, route_labels)
+                history.append(
+                    {
+                        "epoch": epoch,
+                        "train_loss": train_loss,
+                        "eval_loss": eval_loss,
+                    }
+                )
+                logger.info(
+                    "Offline router epoch=%d train_loss=%.6f eval_loss=%.6f",
+                    epoch,
+                    train_loss,
+                    eval_loss,
+                )
+                if wandb_run is not None:
+                    try:
+                        _log_epoch_to_wandb(epoch, train_loss, eval_loss, epoch_route_rows, epoch_pair_rows)
+                    except Exception as exc:  # pylint: disable=broad-except
+                        logger.warning("Failed to log offline router epoch %d to W&B: %s", epoch, exc)
+
+                if eval_loss < best_eval_loss:
+                    best_eval_loss = eval_loss
+                    best_epoch = epoch
+                    best_eval_rows = eval_rows
+                    best_y_true = y_true
+                    best_y_pred = y_pred
+                    should_save_best = True
+
+            should_save_best = bool(_broadcast_object(should_save_best))
+            if should_save_best:
+                best_dir = output_dir / "checkpoints" / "best"
+                if is_main_process():
+                    best_dir.mkdir(parents=True, exist_ok=True)
+                    save_model_only(best_dir, model)
+                barrier_if_distributed()
+
+            barrier_if_distributed()
+
+        last_dir = output_dir / "checkpoints" / "last"
+        if is_main_process():
+            last_dir.mkdir(parents=True, exist_ok=True)
+            save_model_only(last_dir, model)
+        barrier_if_distributed()
+
+        if is_main_process():
+            if best_y_true is None or best_y_pred is None:
+                raise ValueError("Best eval predictions were never recorded")
+
+            route_rows = compute_per_route_metrics(best_y_true, best_y_pred, route_labels)
+            pair_rows = compute_pairwise_metrics(best_y_true, best_y_pred, route_labels)
+            _write_csv(output_dir / "route_metrics.csv", route_rows, csv_headers_for_route_metrics())
+            _write_csv(output_dir / "pairwise_metrics.csv", pair_rows, csv_headers_for_pairwise_metrics())
+            _save_predictions_jsonl(output_dir / "eval_predictions.jsonl", best_eval_rows)
+
+            summary = {
+                "mode": str(train_cfg.mode),
+                "dataset_dir": str(dataset_dir),
+                "model_path": model_path,
+                "route_labels": route_labels,
+                "target_dim": target_dim,
+                "train_rows": int(len(train_dataset)),
+                "eval_rows": int(len(eval_dataset)),
+                "num_epochs": num_epochs,
+                "performance_value_hidden_dims": performance_value_hidden_dims or [],
+                "performance_value_activation": performance_value_activation,
+                "best_epoch": best_epoch,
+                "best_eval_loss": best_eval_loss,
+                "trainable_prefixes": trainable_prefixes,
+                "trainable_parameters": trainable_parameters,
+                "total_parameters": total_parameters,
+                "history": history,
+                "best_checkpoint_dir": str(output_dir / "checkpoints" / "best"),
+                "last_checkpoint_dir": str(last_dir),
+                "distributed": is_distributed(),
+                "world_size": get_world_size(),
+            }
+            write_json(output_dir / "summary.json", summary)
+            if wandb_run is not None:
+                try:
+                    best_metrics = _flatten_dict(
+                        {
+                            "offline_router": {
+                                "best_epoch": best_epoch,
+                                "best_eval_loss": best_eval_loss,
+                            }
+                        }
+                    )
+                    route_rows_for_wandb = compute_per_route_metrics(best_y_true, best_y_pred, route_labels)
+                    pair_rows_for_wandb = compute_pairwise_metrics(best_y_true, best_y_pred, route_labels)
+                    _log_epoch_to_wandb(best_epoch, history[best_epoch]["train_loss"], best_eval_loss, route_rows_for_wandb, pair_rows_for_wandb)
+                    wandb.log(best_metrics, step=best_epoch)
+                    wandb_run.finish()
+                except Exception as exc:  # pylint: disable=broad-except
+                    logger.warning("Failed to finalize offline router W&B logging: %s", exc)
+            logger.info("Offline router training complete: output_dir=%s", output_dir)
+    finally:
+        barrier_if_distributed()
 
 
 if __name__ == "__main__":
+    import sys
+
+    for i, arg in enumerate(list(sys.argv)):
+        if arg.startswith("--local_rank"):
+            sys.argv = sys.argv[:i] + sys.argv[i + 1 :]
+            break
     main()

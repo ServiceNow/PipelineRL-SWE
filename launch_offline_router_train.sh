@@ -2,14 +2,28 @@
 set -euo pipefail
 
 TIMESTAMP=$(date +%s)
-JOB_NAME=offline_router_train
+JOB_NAME=offline_router_train_large_mlp
 OUTPUT_DIR=/mnt/llmd/results/exps/aristides/reason/${JOB_NAME}_${TIMESTAMP}
 
 # Edit these directly when you want a different launch configuration.
 NPROC=1
 DATASET_DIR=/mnt/llmd/results/exps/aristides/reason/offline_router_collect_1774417576
 MODEL_PATH=/mnt/llmd/results/exps/aristides/reason/swe_smith_policy_conditioned_no_devstral_1773812579/finetune/current
+MIXED_PRECISION=bf16
+ACCELERATE_CONFIG=deepspeed
+DEEPSPEED_CONFIG=deepspeed_stage3_bf16
 EXTRA_ARGS=
+
+TRAIN_CMD="python -m pipelinerl.swe.scripts.offline_router.train_router_offline"
+if [[ "${NPROC}" -gt 1 ]]; then
+  TRAIN_CMD="python -m accelerate.commands.launch \
+    --use_deepspeed \
+    --mixed_precision ${MIXED_PRECISION} \
+    --num_processes ${NPROC} \
+    --config_file conf/accelerate/${ACCELERATE_CONFIG}.yaml \
+    --deepspeed_config_file conf/deepspeed/${DEEPSPEED_CONFIG}.json \
+    pipelinerl/swe/scripts/offline_router/train_router_offline.py"
+fi
 
 make job \
   JOB_NAME=${JOB_NAME}_${TIMESTAMP} \
@@ -17,7 +31,7 @@ make job \
   CONDA_EXE=/opt/conda/bin/conda \
   SNAPSHOT=1 \
   NPROC=${NPROC} \
-  COMMAND="cd /home/toolkit/PipelineRL-SWE; python -m pipelinerl.swe.scripts.offline_router.train_router_offline \
+  COMMAND="cd /home/toolkit/PipelineRL-SWE; ${TRAIN_CMD} \
     output_dir=${OUTPUT_DIR} \
     offline_router.train.dataset_dir=${DATASET_DIR} \
     offline_router.train.model_path=${MODEL_PATH} \
