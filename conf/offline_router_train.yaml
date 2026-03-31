@@ -24,7 +24,7 @@ offline_router:
     max_seq_length: 32000
     num_workers: 0
     bf16: true
-    gradient_checkpointing: false
+    gradient_checkpointing: true
     shuffle_train: true
     max_train_rows: null
     max_eval_rows: null

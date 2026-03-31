@@ -169,7 +169,9 @@ def count_parameters(model: torch.nn.Module, trainable_only: bool) -> int:
     for param in model.parameters():
         if trainable_only and not param.requires_grad:
             continue
-        total += int(param.numel())
+        # Under DeepSpeed ZeRO-3, local shards can report a tiny placeholder
+        # numel(); ds_numel preserves the original full parameter size.
+        total += int(getattr(param, "ds_numel", param.numel()))
     return total
 
 
