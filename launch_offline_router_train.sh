@@ -6,13 +6,13 @@ JOB_NAME=offline_router_train_large_mlp
 OUTPUT_DIR=/mnt/llmd/results/exps/aristides/reason/${JOB_NAME}_${TIMESTAMP}
 
 # Edit these directly when you want a different launch configuration.
-NPROC=1
+NPROC=4
 DATASET_DIR=/mnt/llmd/results/exps/aristides/reason/offline_router_collect_1774417576
 MODEL_PATH=/mnt/llmd/results/exps/aristides/reason/swe_smith_policy_conditioned_no_devstral_1773812579/finetune/current
 MIXED_PRECISION=bf16
 ACCELERATE_CONFIG=deepspeed
 DEEPSPEED_CONFIG=deepspeed_stage3_bf16
-EXTRA_ARGS=
+EXTRA_ARGS="offline_router.train.mode=full_backbone"
 
 TRAIN_CMD="python -m pipelinerl.swe.scripts.offline_router.train_router_offline"
 if [[ "${NPROC}" -gt 1 ]]; then
