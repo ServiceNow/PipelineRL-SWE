@@ -31,7 +31,7 @@ offline_router:
     max_train_rows: null
     max_eval_rows: null
     text_reward:
-      target_precision: 3
+      target_precision: 2
       max_new_tokens: 8
       do_sample: false
       parse_failure_value: 0.0

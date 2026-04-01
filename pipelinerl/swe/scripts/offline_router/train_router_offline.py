@@ -227,17 +227,25 @@ def _configure_training_mode(
     return ["pretrained_model"]
 
 
-def _build_text_reward_prompt(prompt_text: str, primary_output_text: str, route_label: str) -> str:
+def _route_prompt_alias(route_idx: int) -> str:
+    return f"model_{int(route_idx) + 1}"
+
+
+def _build_text_reward_prompt(prompt_text: str, primary_output_text: str, route_idx: int) -> str:
+    route_alias = _route_prompt_alias(route_idx)
     return (
         "Predict the realized reward for the queried route.\n"
-        "Output only a single float between 0.000 and 1.000.\n\n"
+        "Respond in the exact format shown below.\n"
+        "The score must be a single float between 0.000 and 1.000.\n\n"
         "[Original Repair Prompt]\n"
         f"{prompt_text}\n\n"
         "[Primary Model Attempt]\n"
         f"{primary_output_text}\n\n"
         "[Route to Score]\n"
-        f"{route_label}\n\n"
-        "Reward: "
+        f"Model: {route_alias}\n\n"
+        "Output format:\n"
+        f"Model: {route_alias}\n"
+        "Predicted score: "
     )
 
 
@@ -305,7 +313,7 @@ def _make_text_train_collate_fn(
                 continue
             if not isinstance(target_reward, (float, int)):
                 continue
-            prompt = _build_text_reward_prompt(prompt_text, primary_output_text, route_label)
+            prompt = _build_text_reward_prompt(prompt_text, primary_output_text, route_idx)
             encoded = _tokenize_text_reward_target(
                 tokenizer=tokenizer,
                 prompt_text=prompt,
@@ -322,6 +330,7 @@ def _make_text_train_collate_fn(
                     "language": row.get("language"),
                     "route_label": route_label,
                     "route_idx": route_idx,
+                    "route_prompt_alias": _route_prompt_alias(route_idx),
                     "target_reward": float(target_reward),
                     "input_ids": encoded["input_ids"],
                     "labels": encoded["labels"],
@@ -355,6 +364,7 @@ def _make_text_train_collate_fn(
             "repos": [row["repo"] for row in encoded_rows],
             "languages": [row["language"] for row in encoded_rows],
             "route_labels": [row["route_label"] for row in encoded_rows],
+            "route_prompt_aliases": [row["route_prompt_alias"] for row in encoded_rows],
             "route_indices": route_indices,
             "target_rewards": target_rewards,
             "input_ids": input_ids,
@@ -391,7 +401,7 @@ def _make_text_eval_collate_fn(
                 continue
             if not isinstance(target_reward, (float, int)):
                 continue
-            prompt = _build_text_reward_prompt(prompt_text, primary_output_text, route_label)
+            prompt = _build_text_reward_prompt(prompt_text, primary_output_text, route_idx)
             prompt_ids = tokenizer(prompt, add_special_tokens=False).input_ids
             prompt_ids = _truncate_from_left(prompt_ids, max_seq_length)
             if not prompt_ids:
@@ -404,6 +414,7 @@ def _make_text_eval_collate_fn(
                     "language": row.get("language"),
                     "route_label": route_label,
                     "route_idx": route_idx,
+                    "route_prompt_alias": _route_prompt_alias(route_idx),
                     "target_reward": float(target_reward),
                     "input_ids": prompt_ids,
                 }
@@ -433,6 +444,7 @@ def _make_text_eval_collate_fn(
             "repos": [row["repo"] for row in encoded_rows],
             "languages": [row["language"] for row in encoded_rows],
             "route_labels": [row["route_label"] for row in encoded_rows],
+            "route_prompt_aliases": [row["route_prompt_alias"] for row in encoded_rows],
             "route_indices": route_indices,
             "target_rewards": target_rewards,
             "input_ids": input_ids,
@@ -697,6 +709,7 @@ def _run_text_reward_eval(
                         "repo": batch["repos"][row_idx],
                         "language": batch["languages"][row_idx],
                         "route_label": batch["route_labels"][row_idx],
+                        "route_prompt_alias": batch["route_prompt_aliases"][row_idx],
                         "route_idx": int(batch["route_indices"][row_idx].item()),
                         "true_reward": float(batch["target_rewards"][row_idx].item()),
                         "generated_text": generated_texts[row_idx],
@@ -745,6 +758,7 @@ def _run_text_reward_eval(
                 "generated_text": [None] * len(route_labels),
                 "parsed_reward": [None] * len(route_labels),
                 "parse_success": [None] * len(route_labels),
+                "route_prompt_alias": [None] * len(route_labels),
             }
         group = grouped_rows[problem_key]
         route_idx = int(row["route_idx"])
@@ -753,11 +767,16 @@ def _run_text_reward_eval(
         group["generated_text"][route_idx] = row["generated_text"]
         group["parsed_reward"][route_idx] = float(row["parsed_reward"])
         group["parse_success"][route_idx] = bool(row["parse_success"])
+        group["route_prompt_alias"][route_idx] = row["route_prompt_alias"]
 
     merged_problem_rows: list[dict[str, Any]] = []
     incomplete_groups = 0
     for group in grouped_rows.values():
-        if any(value is None for value in group["true_rewards"]) or any(value is None for value in group["pred_rewards"]):
+        if (
+            any(value is None for value in group["true_rewards"])
+            or any(value is None for value in group["pred_rewards"])
+            or any(value is None for value in group["route_prompt_alias"])
+        ):
             incomplete_groups += 1
             continue
         group["route_label"] = list(route_labels)
