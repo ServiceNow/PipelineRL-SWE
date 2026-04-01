@@ -110,6 +110,15 @@ python -m pipelinerl.swe.scripts.new.analyze_reward_snr \
   --output-dir "/path/to/run/reward_snr"
 ```
 
+Offline collected parquet datasets are also supported:
+
+```bash
+python -m pipelinerl.swe.scripts.new.analyze_reward_snr \
+  --dataset-dir "/path/to/offline_router_collect_xxx" \
+  --dataset-split all \
+  --output-dir "/path/to/offline_router_collect_xxx/reward_snr"
+```
+
 Writes:
 
 - `snr_summary.json`

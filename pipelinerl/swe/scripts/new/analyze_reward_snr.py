@@ -20,6 +20,11 @@ except Exception:
     MATPLOTLIB_AVAILABLE = False
 
 try:
+    from datasets import load_dataset
+except ModuleNotFoundError:
+    load_dataset = None  # type: ignore[assignment]
+
+try:
     from pipelinerl.swe.scripts.new.router_trace_utils import (
         extract_reward_vector,
         extract_route_labels,
@@ -62,6 +67,53 @@ def _problem_id(trace: dict) -> str:
 
 def _dataset_name(trace: dict) -> str:
     return str(trace.get("dataset") or "")
+
+
+def _load_offline_dataset_rows(
+    dataset_dir: Path,
+    dataset_split: str,
+) -> tuple[list[dict], list[str]]:
+    if load_dataset is None:
+        raise SystemExit("datasets is required for --dataset-dir mode")
+
+    metadata_path = dataset_dir / "metadata.json"
+    if not metadata_path.exists():
+        raise FileNotFoundError(f"Offline router metadata missing: {metadata_path}")
+    metadata = json.loads(metadata_path.read_text())
+    route_labels = list(metadata.get("route_labels") or [])
+    if not route_labels:
+        raise ValueError(f"metadata.json is missing route_labels: {metadata_path}")
+
+    split_names = ["train", "eval"] if dataset_split == "all" else [dataset_split]
+    data_files: dict[str, list[str]] = {}
+    for split_name in split_names:
+        split_dir = dataset_dir / split_name
+        files = sorted(str(path) for path in split_dir.glob("*.parquet"))
+        if not files:
+            raise FileNotFoundError(f"No parquet shards found for split={split_name} in {split_dir}")
+        data_files[split_name] = files
+
+    dataset_dict = load_dataset("parquet", data_files=data_files)
+    rows: list[dict] = []
+    for split_name in split_names:
+        split_dataset = dataset_dict[split_name]
+        for row in split_dataset:
+            rewards = row.get("performance_targets")
+            if not isinstance(rewards, list) or len(rewards) < 2:
+                continue
+            rows.append(
+                {
+                    "dataset": row.get("dataset"),
+                    "problem_id": row.get("problem_id") or row.get("instance_id") or row.get("id"),
+                    "language": row.get("language"),
+                    "repo": row.get("repo"),
+                    "performance_targets": rewards,
+                    "split": split_name,
+                }
+            )
+    if not rows:
+        raise ValueError(f"No valid rows with performance_targets found in {dataset_dir}")
+    return rows, route_labels
 
 
 def _write_json(path: Path, payload: dict) -> None:
@@ -257,7 +309,14 @@ def _write_language_csv(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Analyze reward-vector signal-vs-noise from router traces.")
-    parser.add_argument("--input-glob", action="append", required=True, help="Input JSONL glob. Repeatable.")
+    parser.add_argument("--input-glob", action="append", default=[], help="Input JSONL glob. Repeatable.")
+    parser.add_argument("--dataset-dir", default=None, help="Offline router dataset directory with train/eval parquet shards.")
+    parser.add_argument(
+        "--dataset-split",
+        default="all",
+        choices=["train", "eval", "all"],
+        help="Which split(s) to use with --dataset-dir.",
+    )
     parser.add_argument("--output-dir", required=True, help="Directory for summary outputs.")
     parser.add_argument(
         "--split",
@@ -297,17 +356,41 @@ def main() -> None:
     args = parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
-    split = None if args.split in (None, "all") else args.split
-    traces = load_router_traces(
-        input_globs=args.input_glob,
-        split=split,
-        latest_model_only=args.latest_model_only,
-        dedupe_by_problem=args.dedupe_by_problem,
-    )
-    if not traces:
-        raise ValueError("No traces matched the requested filters.")
+    has_input_globs = bool(args.input_glob)
+    has_dataset_dir = bool(args.dataset_dir)
+    if has_input_globs == has_dataset_dir:
+        raise ValueError("Specify exactly one of --input-glob or --dataset-dir.")
 
-    reward_vectors = [extract_reward_vector(trace) for trace in traces]
+    route_labels: list[str]
+    summary_inputs: dict[str, object]
+    if has_dataset_dir:
+        rows, route_labels = _load_offline_dataset_rows(Path(args.dataset_dir), str(args.dataset_split))
+        reward_vectors = [row["performance_targets"] for row in rows]
+        traces = rows
+        summary_inputs = {
+            "input_mode": "offline_dataset",
+            "dataset_dir": str(Path(args.dataset_dir)),
+            "dataset_split": str(args.dataset_split),
+        }
+    else:
+        split = None if args.split in (None, "all") else args.split
+        traces = load_router_traces(
+            input_globs=args.input_glob,
+            split=split,
+            latest_model_only=args.latest_model_only,
+            dedupe_by_problem=args.dedupe_by_problem,
+        )
+        if not traces:
+            raise ValueError("No traces matched the requested filters.")
+        reward_vectors = [extract_reward_vector(trace) for trace in traces]
+        summary_inputs = {
+            "input_mode": "router_traces",
+            "input_globs": list(args.input_glob),
+            "split": split or "all",
+            "latest_model_only": bool(args.latest_model_only),
+            "dedupe_by_problem": bool(args.dedupe_by_problem),
+        }
+
     dim = min(len(vec) for vec in reward_vectors)
     if dim <= 0:
         raise ValueError("Reward vectors are empty.")
@@ -315,8 +398,15 @@ def main() -> None:
         raise ValueError("Need at least two routes to compute between-expert variance.")
 
     rewards = np.asarray([vec[:dim] for vec in reward_vectors], dtype=np.float64)
-    n_experts = dim - 1
-    route_labels = extract_route_labels(traces, n_experts=n_experts)[:dim]
+    if has_dataset_dir:
+        if len(route_labels) < dim:
+            raise ValueError(
+                f"metadata route_labels has length {len(route_labels)} but rewards have dimension {dim}"
+            )
+        route_labels = route_labels[:dim]
+    else:
+        n_experts = dim - 1
+        route_labels = extract_route_labels(traces, n_experts=n_experts)[:dim]
 
     per_task_between_var = rewards.var(axis=1, ddof=args.ddof)
     per_task_between_std = rewards.std(axis=1, ddof=args.ddof)
@@ -329,6 +419,7 @@ def main() -> None:
     mean_within_std = float(per_route_within_std.mean())
 
     summary = {
+        **summary_inputs,
         "n_traces": int(rewards.shape[0]),
         "n_routes": int(rewards.shape[1]),
         "route_labels": route_labels,
