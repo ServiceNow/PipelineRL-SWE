@@ -320,6 +320,7 @@ def _init_offline_wandb(cfg: DictConfig, output_dir: Path):
 
 def _log_epoch_to_wandb(
     epoch: int,
+    step: int,
     train_loss: float,
     eval_loss: float,
     route_rows: list[dict[str, Any]],
@@ -343,7 +344,7 @@ def _log_epoch_to_wandb(
             value = row.get(key)
             if isinstance(value, (int, float)) and math.isfinite(float(value)):
                 metrics[f"offline_router/pair/{pair_label}/{key}"] = float(value)
-    wandb.log(metrics, step=epoch)
+    wandb.log(metrics, step=step)
 
 
 def _log_train_progress_to_wandb(
@@ -531,7 +532,8 @@ def main(cfg: DictConfig) -> None:
             batch_count = 0
             local_examples_seen = 0
             epoch_start_time = time.time()
-            global_log_step_base = epoch * max(1, len(train_loader))
+            steps_per_epoch = max(1, len(train_loader))
+            global_log_step_base = epoch * steps_per_epoch
 
             for step_idx, batch in enumerate(
                 tqdm(train_loader, desc=f"Train epoch {epoch}", unit="batch", disable=not is_main_process()),
@@ -619,11 +621,13 @@ def main(cfg: DictConfig) -> None:
             if is_main_process():
                 epoch_route_rows = compute_per_route_metrics(y_true, y_pred, route_labels)
                 epoch_pair_rows = compute_pairwise_metrics(y_true, y_pred, route_labels)
+                epoch_log_step = global_log_step_base + steps_per_epoch
                 history.append(
                     {
                         "epoch": epoch,
                         "train_loss": train_loss,
                         "eval_loss": eval_loss,
+                        "global_step": epoch_log_step,
                     }
                 )
                 logger.info(
@@ -634,7 +638,14 @@ def main(cfg: DictConfig) -> None:
                 )
                 if wandb_run is not None:
                     try:
-                        _log_epoch_to_wandb(epoch, train_loss, eval_loss, epoch_route_rows, epoch_pair_rows)
+                        _log_epoch_to_wandb(
+                            epoch=epoch,
+                            step=epoch_log_step,
+                            train_loss=train_loss,
+                            eval_loss=eval_loss,
+                            route_rows=epoch_route_rows,
+                            pair_rows=epoch_pair_rows,
+                        )
                     except Exception as exc:  # pylint: disable=broad-except
                         logger.warning("Failed to log offline router epoch %d to W&B: %s", epoch, exc)
 
@@ -653,13 +664,15 @@ def main(cfg: DictConfig) -> None:
                     logger.info("Offline router epoch=%d starting best checkpoint save to %s", epoch, best_dir)
                     best_dir.mkdir(parents=True, exist_ok=True)
                     save_start_time = time.time()
-                    save_model_only(best_dir, model)
+                barrier_if_distributed()
+                save_model_only(best_dir, model)
+                barrier_if_distributed()
+                if is_main_process():
                     logger.info(
                         "Offline router epoch=%d finished best checkpoint save elapsed_seconds=%.1f",
                         epoch,
                         time.time() - save_start_time,
                     )
-                barrier_if_distributed()
             elif should_save_best and is_main_process():
                 logger.info("Offline router epoch=%d skipping best checkpoint save because save_checkpoints=false", epoch)
 
@@ -671,12 +684,14 @@ def main(cfg: DictConfig) -> None:
                 logger.info("Offline router starting last checkpoint save to %s", last_dir)
                 last_dir.mkdir(parents=True, exist_ok=True)
                 save_start_time = time.time()
-                save_model_only(last_dir, model)
+            barrier_if_distributed()
+            save_model_only(last_dir, model)
+            barrier_if_distributed()
+            if is_main_process():
                 logger.info(
                     "Offline router finished last checkpoint save elapsed_seconds=%.1f",
                     time.time() - save_start_time,
                 )
-            barrier_if_distributed()
         elif is_main_process():
             logger.info("Offline router skipping last checkpoint save because save_checkpoints=false")
 
@@ -716,18 +731,10 @@ def main(cfg: DictConfig) -> None:
             write_json(output_dir / "summary.json", summary)
             if wandb_run is not None:
                 try:
-                    best_metrics = _flatten_dict(
-                        {
-                            "offline_router": {
-                                "best_epoch": best_epoch,
-                                "best_eval_loss": best_eval_loss,
-                            }
-                        }
-                    )
-                    route_rows_for_wandb = compute_per_route_metrics(best_y_true, best_y_pred, route_labels)
-                    pair_rows_for_wandb = compute_pairwise_metrics(best_y_true, best_y_pred, route_labels)
-                    _log_epoch_to_wandb(best_epoch, history[best_epoch]["train_loss"], best_eval_loss, route_rows_for_wandb, pair_rows_for_wandb)
-                    wandb.log(best_metrics, step=best_epoch)
+                    wandb_run.summary["offline_router/best_epoch"] = best_epoch
+                    wandb_run.summary["offline_router/best_eval_loss"] = best_eval_loss
+                    if 0 <= best_epoch < len(history):
+                        wandb_run.summary["offline_router/best_train_loss"] = history[best_epoch]["train_loss"]
                     wandb_run.finish()
                 except Exception as exc:  # pylint: disable=broad-except
                     logger.warning("Failed to finalize offline router W&B logging: %s", exc)
