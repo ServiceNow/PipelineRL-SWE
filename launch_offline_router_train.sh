@@ -31,8 +31,8 @@ make job \
   CONDA_EXE=/opt/conda/bin/conda \
   SNAPSHOT=1 \
   NPROC=${NPROC} \
-  COMMAND="cd /home/toolkit/PipelineRL-SWE; ${TRAIN_CMD} \
+  COMMAND="cd /home/toolkit/PipelineRL-SWE; mkdir -p ${OUTPUT_DIR}; set -o pipefail; { ${TRAIN_CMD} \
     output_dir=${OUTPUT_DIR} \
     offline_router.train.dataset_dir=${DATASET_DIR} \
     offline_router.train.model_path=${MODEL_PATH} \
-    ${EXTRA_ARGS}"
+    ${EXTRA_ARGS}; } 2>&1 | tee -a ${OUTPUT_DIR}/launch.out"

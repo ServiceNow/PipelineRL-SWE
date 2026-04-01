@@ -513,6 +513,7 @@ def main(cfg: DictConfig) -> None:
         num_epochs = int(train_cfg.num_epochs)
         grad_accum = max(1, int(train_cfg.get("gradient_accumulation_steps", 1)))
         log_every_steps = max(1, int(train_cfg.get("log_every_steps", 100)))
+        save_checkpoints = bool(train_cfg.get("save_checkpoints", True))
         best_eval_loss = float("inf")
         best_epoch = -1
         history: list[dict[str, Any]] = []
@@ -600,7 +601,19 @@ def main(cfg: DictConfig) -> None:
                 total_loss_sum += float(item.get("loss_sum", 0.0))
                 total_loss_count += int(item.get("loss_count", 0))
             train_loss = total_loss_sum / total_loss_count if total_loss_count > 0 else float(np.mean(running_losses))
+
+            if is_main_process():
+                logger.info("Offline router epoch=%d starting eval", epoch)
+            eval_start_time = time.time()
             eval_loss, eval_rows, y_true, y_pred = _run_eval(model, eval_loader, device)
+            if is_main_process():
+                logger.info(
+                    "Offline router epoch=%d finished eval eval_loss=%.6f eval_rows=%d elapsed_seconds=%.1f",
+                    epoch,
+                    eval_loss,
+                    len(eval_rows),
+                    time.time() - eval_start_time,
+                )
 
             should_save_best = False
             if is_main_process():
@@ -634,20 +647,38 @@ def main(cfg: DictConfig) -> None:
                     should_save_best = True
 
             should_save_best = bool(_broadcast_object(should_save_best))
-            if should_save_best:
+            if should_save_best and save_checkpoints:
                 best_dir = output_dir / "checkpoints" / "best"
                 if is_main_process():
+                    logger.info("Offline router epoch=%d starting best checkpoint save to %s", epoch, best_dir)
                     best_dir.mkdir(parents=True, exist_ok=True)
+                    save_start_time = time.time()
                     save_model_only(best_dir, model)
+                    logger.info(
+                        "Offline router epoch=%d finished best checkpoint save elapsed_seconds=%.1f",
+                        epoch,
+                        time.time() - save_start_time,
+                    )
                 barrier_if_distributed()
+            elif should_save_best and is_main_process():
+                logger.info("Offline router epoch=%d skipping best checkpoint save because save_checkpoints=false", epoch)
 
             barrier_if_distributed()
 
         last_dir = output_dir / "checkpoints" / "last"
-        if is_main_process():
-            last_dir.mkdir(parents=True, exist_ok=True)
-            save_model_only(last_dir, model)
-        barrier_if_distributed()
+        if save_checkpoints:
+            if is_main_process():
+                logger.info("Offline router starting last checkpoint save to %s", last_dir)
+                last_dir.mkdir(parents=True, exist_ok=True)
+                save_start_time = time.time()
+                save_model_only(last_dir, model)
+                logger.info(
+                    "Offline router finished last checkpoint save elapsed_seconds=%.1f",
+                    time.time() - save_start_time,
+                )
+            barrier_if_distributed()
+        elif is_main_process():
+            logger.info("Offline router skipping last checkpoint save because save_checkpoints=false")
 
         if is_main_process():
             if best_y_true is None or best_y_pred is None:
@@ -676,8 +707,9 @@ def main(cfg: DictConfig) -> None:
                 "trainable_parameters": trainable_parameters,
                 "total_parameters": total_parameters,
                 "history": history,
-                "best_checkpoint_dir": str(output_dir / "checkpoints" / "best"),
-                "last_checkpoint_dir": str(last_dir),
+                "best_checkpoint_dir": str(output_dir / "checkpoints" / "best") if save_checkpoints else None,
+                "last_checkpoint_dir": str(last_dir) if save_checkpoints else None,
+                "save_checkpoints": save_checkpoints,
                 "distributed": is_distributed(),
                 "world_size": get_world_size(),
             }
