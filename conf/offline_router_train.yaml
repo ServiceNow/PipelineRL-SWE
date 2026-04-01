@@ -9,6 +9,7 @@ offline_router:
     dataset_dir: ???
     model_path: Qwen/Qwen2.5-Coder-7B-Instruct
     mode: frozen_backbone  # frozen_backbone | full_backbone
+    supervision_mode: representation_head  # representation_head | text_reward_per_route
     device: auto
     num_epochs: 10
     performance_value_hidden_dims:
@@ -29,3 +30,9 @@ offline_router:
     shuffle_train: true
     max_train_rows: null
     max_eval_rows: null
+    text_reward:
+      target_precision: 3
+      max_new_tokens: 8
+      do_sample: false
+      parse_failure_value: 0.0
+      clip_predictions: true
