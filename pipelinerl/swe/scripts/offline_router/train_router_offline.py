@@ -80,19 +80,39 @@ def _pick_device(device_arg: str) -> torch.device:
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def _all_gather_objects(local_obj: Any) -> list[Any]:
+def _all_gather_objects(local_obj: Any, label: str | None = None) -> list[Any]:
     if not is_distributed() or not _dist_ready():
         return [local_obj]
+    start_time = time.time()
+    if label is not None:
+        logger.info("Offline router rank=%d entering all_gather_object label=%s", get_rank(), label)
     gathered = [None for _ in range(get_world_size())]
     dist.all_gather_object(gathered, local_obj)
+    if label is not None:
+        logger.info(
+            "Offline router rank=%d finished all_gather_object label=%s elapsed_seconds=%.1f",
+            get_rank(),
+            label,
+            time.time() - start_time,
+        )
     return gathered
 
 
-def _broadcast_object(obj: Any) -> Any:
+def _broadcast_object(obj: Any, label: str | None = None) -> Any:
     if not is_distributed() or not _dist_ready():
         return obj
+    start_time = time.time()
+    if label is not None:
+        logger.info("Offline router rank=%d entering broadcast_object label=%s", get_rank(), label)
     container = [obj if is_main_process() else None]
     dist.broadcast_object_list(container, src=0)
+    if label is not None:
+        logger.info(
+            "Offline router rank=%d finished broadcast_object label=%s elapsed_seconds=%.1f",
+            get_rank(),
+            label,
+            time.time() - start_time,
+        )
     return container[0]
 
 
@@ -565,7 +585,8 @@ def _run_representation_eval(
     gathered = _all_gather_objects(
         {
             "rows": prediction_rows,
-        }
+        },
+        label="representation_eval_predictions",
     )
     if not is_main_process():
         return math.nan, [], np.empty((0, 0), dtype=np.float32), np.empty((0, 0), dtype=np.float32), {}
@@ -722,7 +743,8 @@ def _run_text_reward_eval(
         {
             "rows": route_prediction_rows,
             "parse_failures": local_parse_failures,
-        }
+        },
+        label="text_reward_eval_predictions",
     )
     if not is_main_process():
         return math.nan, [], np.empty((0, 0), dtype=np.float32), np.empty((0, 0), dtype=np.float32), {}
@@ -1176,16 +1198,31 @@ def main(cfg: DictConfig) -> None:
                             logger.warning("Failed to log offline router progress to W&B: %s", exc)
 
             if batch_count % grad_accum != 0:
+                logger.info(
+                    "Offline router epoch=%d rank=%d applying final optimizer step with leftover accumulation batches=%d",
+                    epoch,
+                    get_rank(),
+                    batch_count % grad_accum,
+                )
                 optimizer.step()
                 optimizer.zero_grad(set_to_none=True)
 
             if not running_losses:
                 raise ValueError("No valid training batches after tokenization/collation")
+            logger.info(
+                "Offline router epoch=%d rank=%d pre_eval local_batches=%d local_examples=%d local_loss_count=%d",
+                epoch,
+                get_rank(),
+                batch_count,
+                local_examples_seen,
+                len(running_losses),
+            )
             loss_stats = _all_gather_objects(
                 {
                     "loss_sum": float(np.sum(running_losses)),
                     "loss_count": int(len(running_losses)),
-                }
+                },
+                label=f"epoch_{epoch}_train_loss_stats",
             )
             total_loss_sum = 0.0
             total_loss_count = 0
@@ -1195,7 +1232,15 @@ def main(cfg: DictConfig) -> None:
                 total_loss_sum += float(item.get("loss_sum", 0.0))
                 total_loss_count += int(item.get("loss_count", 0))
             train_loss = total_loss_sum / total_loss_count if total_loss_count > 0 else float(np.mean(running_losses))
+            logger.info(
+                "Offline router epoch=%d rank=%d post_train_loss_reduce total_loss_count=%d train_loss=%.6f",
+                epoch,
+                get_rank(),
+                total_loss_count,
+                train_loss,
+            )
 
+            logger.info("Offline router epoch=%d rank=%d entering eval", epoch, get_rank())
             if is_main_process():
                 logger.info("Offline router epoch=%d starting eval", epoch)
             eval_start_time = time.time()
@@ -1278,7 +1323,7 @@ def main(cfg: DictConfig) -> None:
                     best_eval_extra = dict(eval_extra)
                     should_save_best = True
 
-            should_save_best = bool(_broadcast_object(should_save_best))
+            should_save_best = bool(_broadcast_object(should_save_best, label=f"epoch_{epoch}_should_save_best"))
             if should_save_best and save_checkpoints:
                 best_dir = output_dir / "checkpoints" / "best"
                 if is_main_process():
