@@ -12,7 +12,7 @@ MODEL_PATH=/mnt/llmd/results/exps/aristides/reason/swe_smith_policy_conditioned_
 MIXED_PRECISION=bf16
 ACCELERATE_CONFIG=deepspeed
 DEEPSPEED_CONFIG=deepspeed_stage3_bf16
-EXTRA_ARGS="offline_router.train.max_train_rows=256 offline_router.train.max_eval_rows=8 offline_router.train.num_epochs=3 offline_router.train.mode=full_backbone"
+EXTRA_ARGS="offline_router.train.max_train_rows=2048 offline_router.train.max_eval_rows=256 offline_router.train.num_epochs=3 offline_router.train.mode=full_backbone"
 #EXTRA_ARGS="offline_router.train.supervision_mode=text_reward_per_route offline_router.train.max_train_rows=256 offline_router.train.max_eval_rows=32 offline_router.train.num_epochs=3 offline_router.train.mode=full_backbone" \
 #EXTRA_ARGS="offline_router.train.mode=full_backbone"
 

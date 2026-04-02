@@ -97,6 +97,23 @@ def _load_split(dataset_dir: Path, split_name: str):
     return load_dataset("parquet", data_files={split_name: files})[split_name]
 
 
+def _shuffle_and_truncate_dataset(dataset: Any, max_rows: int | None, seed: int, split_name: str) -> Any:
+    if not max_rows:
+        return dataset
+    requested_rows = min(int(max_rows), len(dataset))
+    if requested_rows <= 0:
+        return dataset.select(range(0))
+    logger.info(
+        "Offline router randomly sampling split=%s rows=%d/%d with seed=%d before truncation",
+        split_name,
+        requested_rows,
+        len(dataset),
+        seed,
+    )
+    shuffled = dataset.shuffle(seed=int(seed))
+    return shuffled.select(range(requested_rows))
+
+
 def _write_csv(path: Path, rows: list[dict[str, Any]], headers: list[str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="") as handle:
@@ -955,10 +972,19 @@ def main(cfg: DictConfig) -> None:
 
         max_train_rows = train_cfg.get("max_train_rows")
         max_eval_rows = train_cfg.get("max_eval_rows")
-        if max_train_rows:
-            train_dataset = train_dataset.select(range(min(int(max_train_rows), len(train_dataset))))
-        if max_eval_rows:
-            eval_dataset = eval_dataset.select(range(min(int(max_eval_rows), len(eval_dataset))))
+        base_seed = int(cfg.get("seed", 42))
+        train_dataset = _shuffle_and_truncate_dataset(
+            train_dataset,
+            max_rows=int(max_train_rows) if max_train_rows else None,
+            seed=base_seed,
+            split_name="train",
+        )
+        eval_dataset = _shuffle_and_truncate_dataset(
+            eval_dataset,
+            max_rows=int(max_eval_rows) if max_eval_rows else None,
+            seed=base_seed + 1,
+            split_name="eval",
+        )
         raw_train_rows = int(len(train_dataset))
         raw_eval_rows = int(len(eval_dataset))
 
