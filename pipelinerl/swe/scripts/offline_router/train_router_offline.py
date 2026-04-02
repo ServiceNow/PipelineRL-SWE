@@ -6,13 +6,13 @@ import logging
 import math
 import os
 import re
+import shutil
 from pathlib import Path
 from typing import Any
 
 import hydra
 import numpy as np
 import torch
-import torch.distributed as dist
 import torch.nn.functional as F
 from datasets import load_dataset
 from omegaconf import DictConfig, OmegaConf
@@ -41,10 +41,6 @@ from pipelinerl.swe.scripts.offline_router.common import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _dist_ready() -> bool:
-    return dist.is_available() and dist.is_initialized()
 
 
 def get_world_size() -> int:
@@ -78,42 +74,6 @@ def _pick_device(device_arg: str) -> torch.device:
     if device_arg != "auto":
         return torch.device(device_arg)
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-
-def _all_gather_objects(local_obj: Any, label: str | None = None) -> list[Any]:
-    if not is_distributed() or not _dist_ready():
-        return [local_obj]
-    start_time = time.time()
-    if label is not None:
-        logger.info("Offline router rank=%d entering all_gather_object label=%s", get_rank(), label)
-    gathered = [None for _ in range(get_world_size())]
-    dist.all_gather_object(gathered, local_obj)
-    if label is not None:
-        logger.info(
-            "Offline router rank=%d finished all_gather_object label=%s elapsed_seconds=%.1f",
-            get_rank(),
-            label,
-            time.time() - start_time,
-        )
-    return gathered
-
-
-def _broadcast_object(obj: Any, label: str | None = None) -> Any:
-    if not is_distributed() or not _dist_ready():
-        return obj
-    start_time = time.time()
-    if label is not None:
-        logger.info("Offline router rank=%d entering broadcast_object label=%s", get_rank(), label)
-    container = [obj if is_main_process() else None]
-    dist.broadcast_object_list(container, src=0)
-    if label is not None:
-        logger.info(
-            "Offline router rank=%d finished broadcast_object label=%s elapsed_seconds=%.1f",
-            get_rank(),
-            label,
-            time.time() - start_time,
-        )
-    return container[0]
 
 
 def _prediction_row_key(row: dict[str, Any]) -> str:
@@ -558,9 +518,11 @@ def _run_representation_eval(
     model: AutoModelForCausalLMWithValueHead,
     loader: DataLoader,
     device: torch.device,
-) -> tuple[float, list[dict[str, Any]], np.ndarray, np.ndarray, dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], float, int]:
     model.eval()
     prediction_rows: list[dict[str, Any]] = []
+    local_squared_error_sum = 0.0
+    local_value_count = 0
     with torch.no_grad():
         for batch in tqdm(loader, desc="Eval offline router", unit="batch", disable=not is_main_process()):
             if batch is None:
@@ -570,6 +532,8 @@ def _run_representation_eval(
 
             preds_np = preds.cpu().numpy()
             targets_np = batch["targets"].cpu().numpy()
+            local_squared_error_sum += float(((preds - batch["targets"]) ** 2).sum().item())
+            local_value_count += int(batch["targets"].numel())
             for row_idx, problem_id in enumerate(batch["problem_ids"]):
                 prediction_rows.append(
                     {
@@ -581,35 +545,7 @@ def _run_representation_eval(
                         "pred_rewards": preds_np[row_idx].tolist(),
                     }
                 )
-
-    gathered = _all_gather_objects(
-        {
-            "rows": prediction_rows,
-        },
-        label="representation_eval_predictions",
-    )
-    if not is_main_process():
-        return math.nan, [], np.empty((0, 0), dtype=np.float32), np.empty((0, 0), dtype=np.float32), {}
-
-    merged_rows: list[dict[str, Any]] = []
-    seen_keys: set[str] = set()
-    for item in gathered:
-        if not isinstance(item, dict):
-            continue
-        for row in item.get("rows", []):
-            key = _prediction_row_key(row)
-            if key in seen_keys:
-                continue
-            seen_keys.add(key)
-            merged_rows.append(row)
-
-    if not merged_rows:
-        raise ValueError("No valid eval examples after tokenization/collation")
-
-    y_true = np.asarray([row["true_rewards"] for row in merged_rows], dtype=np.float32)
-    y_pred = np.asarray([row["pred_rewards"] for row in merged_rows], dtype=np.float32)
-    mean_loss = float(np.mean((y_pred - y_true) ** 2)) if y_true.size else math.nan
-    return mean_loss, merged_rows, y_true, y_pred, {"parse_failures": 0, "parse_failure_rate": 0.0}
+    return prediction_rows, local_squared_error_sum, local_value_count
 
 
 _FLOAT_PATTERN = re.compile(r"[-+]?(?:\d+\.\d*|\.\d+|\d+)(?:[eE][-+]?\d+)?")
@@ -694,10 +630,11 @@ def _run_text_reward_eval(
     do_sample: bool,
     parse_failure_value: float,
     clip_predictions: bool,
-) -> tuple[float, list[dict[str, Any]], np.ndarray, np.ndarray, dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], float, int]:
     model.eval()
     route_prediction_rows: list[dict[str, Any]] = []
-    local_parse_failures = 0
+    local_squared_error_sum = 0.0
+    local_value_count = 0
     with torch.no_grad():
         for batch in tqdm(loader, desc="Eval offline router", unit="batch", disable=not is_main_process()):
             if batch is None:
@@ -720,9 +657,11 @@ def _run_text_reward_eval(
                 parse_success = parsed_reward is not None
                 if not parse_success:
                     parsed_reward = float(parse_failure_value)
-                    local_parse_failures += 1
                 if clip_predictions:
                     parsed_reward = float(min(1.0, max(0.0, float(parsed_reward))))
+                target_reward = float(batch["target_rewards"][row_idx].item())
+                local_squared_error_sum += float((float(parsed_reward) - target_reward) ** 2)
+                local_value_count += 1
                 route_prediction_rows.append(
                     {
                         "problem_id": problem_id,
@@ -732,36 +671,103 @@ def _run_text_reward_eval(
                         "route_label": batch["route_labels"][row_idx],
                         "route_prompt_alias": batch["route_prompt_aliases"][row_idx],
                         "route_idx": int(batch["route_indices"][row_idx].item()),
-                        "true_reward": float(batch["target_rewards"][row_idx].item()),
+                        "true_reward": target_reward,
                         "generated_text": generated_texts[row_idx],
                         "parsed_reward": float(parsed_reward),
                         "parse_success": bool(parse_success),
                     }
                 )
+    return route_prediction_rows, local_squared_error_sum, local_value_count
 
-    gathered = _all_gather_objects(
-        {
-            "rows": route_prediction_rows,
-            "parse_failures": local_parse_failures,
-        },
-        label="text_reward_eval_predictions",
-    )
-    if not is_main_process():
-        return math.nan, [], np.empty((0, 0), dtype=np.float32), np.empty((0, 0), dtype=np.float32), {}
 
+def _save_predictions_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w") as handle:
+        for row in rows:
+            handle.write(json.dumps(row) + "\n")
+
+
+def _read_predictions_jsonl(path: Path) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    if not path.exists():
+        return rows
+    with path.open() as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            rows.append(json.loads(line))
+    return rows
+
+
+def _eval_shard_dir(output_dir: Path, epoch: int) -> Path:
+    return output_dir / ".eval_shards" / f"epoch_{epoch:04d}"
+
+
+def _eval_shard_path(output_dir: Path, epoch: int, rank: int) -> Path:
+    return _eval_shard_dir(output_dir, epoch) / f"rank_{rank:05d}.jsonl"
+
+
+def _write_eval_shard(output_dir: Path, epoch: int, rows: list[dict[str, Any]]) -> Path:
+    shard_path = _eval_shard_path(output_dir, epoch, get_rank())
+    shard_path.parent.mkdir(parents=True, exist_ok=True)
+    _save_predictions_jsonl(shard_path, rows)
+    return shard_path
+
+
+def _load_eval_shard_rows(output_dir: Path, epoch: int) -> list[dict[str, Any]]:
+    shard_dir = _eval_shard_dir(output_dir, epoch)
+    rows: list[dict[str, Any]] = []
+    for shard_path in sorted(shard_dir.glob("rank_*.jsonl")):
+        rows.extend(_read_predictions_jsonl(shard_path))
+    return rows
+
+
+def _cleanup_eval_shards(output_dir: Path, epoch: int) -> None:
+    shard_dir = _eval_shard_dir(output_dir, epoch)
+    if shard_dir.exists():
+        shutil.rmtree(shard_dir)
+
+
+def _reduce_scalar_sum(value: float, device: torch.device) -> float:
+    tensor = torch.tensor(float(value), dtype=torch.float64, device=device)
+    reduced = get_accelerator().reduce(tensor, reduction="sum")
+    return float(reduced.item())
+
+
+def _merge_representation_eval_rows(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], np.ndarray, np.ndarray, dict[str, Any]]:
+    merged_rows: list[dict[str, Any]] = []
+    seen_keys: set[str] = set()
+    for row in rows:
+        key = _prediction_row_key(row)
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        merged_rows.append(row)
+
+    if not merged_rows:
+        raise ValueError("No valid eval examples after tokenization/collation")
+
+    y_true = np.asarray([row["true_rewards"] for row in merged_rows], dtype=np.float32)
+    y_pred = np.asarray([row["pred_rewards"] for row in merged_rows], dtype=np.float32)
+    return merged_rows, y_true, y_pred, {"parse_failures": 0, "parse_failure_rate": 0.0}
+
+
+def _merge_text_reward_eval_rows(
+    rows: list[dict[str, Any]],
+    route_labels: list[str],
+) -> tuple[list[dict[str, Any]], np.ndarray, np.ndarray, dict[str, Any]]:
     merged_route_rows: list[dict[str, Any]] = []
     seen_keys: set[str] = set()
     total_parse_failures = 0
-    for item in gathered:
-        if not isinstance(item, dict):
+    for row in rows:
+        key = _prediction_row_key(row)
+        if key in seen_keys:
             continue
-        total_parse_failures += int(item.get("parse_failures", 0))
-        for row in item.get("rows", []):
-            key = _prediction_row_key(row)
-            if key in seen_keys:
-                continue
-            seen_keys.add(key)
-            merged_route_rows.append(row)
+        seen_keys.add(key)
+        merged_route_rows.append(row)
+        if not bool(row.get("parse_success", False)):
+            total_parse_failures += 1
 
     if not merged_route_rows:
         raise ValueError("No valid eval examples after tokenization/collation")
@@ -810,10 +816,8 @@ def _run_text_reward_eval(
 
     y_true = np.asarray([row["true_rewards"] for row in merged_problem_rows], dtype=np.float32)
     y_pred = np.asarray([row["pred_rewards"] for row in merged_problem_rows], dtype=np.float32)
-    mean_loss = float(np.mean((y_pred - y_true) ** 2)) if y_true.size else math.nan
     parse_failure_rate = float(total_parse_failures / len(merged_route_rows)) if merged_route_rows else 0.0
     return (
-        mean_loss,
         merged_problem_rows,
         y_true,
         y_pred,
@@ -824,13 +828,6 @@ def _run_text_reward_eval(
             "incomplete_eval_groups": int(incomplete_groups),
         },
     )
-
-
-def _save_predictions_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w") as handle:
-        for row in rows:
-            handle.write(json.dumps(row) + "\n")
 
 
 def _flatten_dict(value: Any, prefix: str = "") -> dict[str, Any]:
@@ -1210,27 +1207,16 @@ def main(cfg: DictConfig) -> None:
             if not running_losses:
                 raise ValueError("No valid training batches after tokenization/collation")
             logger.info(
-                "Offline router epoch=%d rank=%d pre_eval local_batches=%d local_examples=%d local_loss_count=%d",
+                "Offline router epoch=%d rank=%d train loop complete local_batches=%d local_examples=%d local_loss_count=%d",
                 epoch,
                 get_rank(),
                 batch_count,
                 local_examples_seen,
                 len(running_losses),
             )
-            loss_stats = _all_gather_objects(
-                {
-                    "loss_sum": float(np.sum(running_losses)),
-                    "loss_count": int(len(running_losses)),
-                },
-                label=f"epoch_{epoch}_train_loss_stats",
-            )
-            total_loss_sum = 0.0
-            total_loss_count = 0
-            for item in loss_stats:
-                if not isinstance(item, dict):
-                    continue
-                total_loss_sum += float(item.get("loss_sum", 0.0))
-                total_loss_count += int(item.get("loss_count", 0))
+            local_loss_sum = float(np.sum(running_losses))
+            total_loss_sum = _reduce_scalar_sum(local_loss_sum, device)
+            total_loss_count = int(round(_reduce_scalar_sum(float(len(running_losses)), device)))
             train_loss = total_loss_sum / total_loss_count if total_loss_count > 0 else float(np.mean(running_losses))
             logger.info(
                 "Offline router epoch=%d rank=%d post_train_loss_reduce total_loss_count=%d train_loss=%.6f",
@@ -1240,14 +1226,21 @@ def main(cfg: DictConfig) -> None:
                 train_loss,
             )
 
+            logger.info("Offline router epoch=%d rank=%d entering pre-eval barrier", epoch, get_rank())
+            barrier_if_distributed()
+            logger.info("Offline router epoch=%d rank=%d exited pre-eval barrier", epoch, get_rank())
             logger.info("Offline router epoch=%d rank=%d entering eval", epoch, get_rank())
             if is_main_process():
                 logger.info("Offline router epoch=%d starting eval", epoch)
             eval_start_time = time.time()
             if supervision_mode == "representation_head":
-                eval_loss, eval_rows, y_true, y_pred, eval_extra = _run_representation_eval(model, eval_loader, device)
+                local_eval_rows, local_eval_squared_error_sum, local_eval_value_count = _run_representation_eval(
+                    model,
+                    eval_loader,
+                    device,
+                )
             else:
-                eval_loss, eval_rows, y_true, y_pred, eval_extra = _run_text_reward_eval(
+                local_eval_rows, local_eval_squared_error_sum, local_eval_value_count = _run_text_reward_eval(
                     model,
                     eval_loader,
                     device,
@@ -1258,6 +1251,47 @@ def main(cfg: DictConfig) -> None:
                     parse_failure_value=text_parse_failure_value,
                     clip_predictions=text_clip_predictions,
                 )
+            shard_path = _write_eval_shard(output_dir, epoch, local_eval_rows)
+            logger.info(
+                "Offline router epoch=%d rank=%d finished local eval rows=%d values=%d shard=%s",
+                epoch,
+                get_rank(),
+                len(local_eval_rows),
+                local_eval_value_count,
+                shard_path,
+            )
+            total_eval_squared_error_sum = _reduce_scalar_sum(local_eval_squared_error_sum, device)
+            total_eval_value_count = int(round(_reduce_scalar_sum(float(local_eval_value_count), device)))
+            eval_loss = (
+                total_eval_squared_error_sum / total_eval_value_count
+                if total_eval_value_count > 0
+                else math.nan
+            )
+            logger.info("Offline router epoch=%d rank=%d entering post-eval barrier", epoch, get_rank())
+            barrier_if_distributed()
+            logger.info("Offline router epoch=%d rank=%d exited post-eval barrier", epoch, get_rank())
+            eval_rows: list[dict[str, Any]] = []
+            y_true = np.empty((0, 0), dtype=np.float32)
+            y_pred = np.empty((0, 0), dtype=np.float32)
+            eval_extra: dict[str, Any] = {}
+            if is_main_process():
+                logger.info("Offline router epoch=%d merging eval shards from %s", epoch, _eval_shard_dir(output_dir, epoch))
+                merged_shard_rows = _load_eval_shard_rows(output_dir, epoch)
+                if supervision_mode == "representation_head":
+                    eval_rows, y_true, y_pred, eval_extra = _merge_representation_eval_rows(merged_shard_rows)
+                else:
+                    eval_rows, y_true, y_pred, eval_extra = _merge_text_reward_eval_rows(
+                        merged_shard_rows,
+                        route_labels=route_labels,
+                    )
+                logger.info(
+                    "Offline router epoch=%d finished metric preparation merged_rows=%d elapsed_seconds=%.1f",
+                    epoch,
+                    len(eval_rows),
+                    time.time() - eval_start_time,
+                )
+                _cleanup_eval_shards(output_dir, epoch)
+            barrier_if_distributed()
             if is_main_process():
                 if supervision_mode == "representation_head":
                     logger.info(
@@ -1280,7 +1314,6 @@ def main(cfg: DictConfig) -> None:
                         time.time() - eval_start_time,
                     )
 
-            should_save_best = False
             if is_main_process():
                 epoch_route_rows = compute_per_route_metrics(y_true, y_pred, route_labels)
                 epoch_pair_rows = compute_pairwise_metrics(y_true, y_pred, route_labels)
@@ -1314,16 +1347,16 @@ def main(cfg: DictConfig) -> None:
                     except Exception as exc:  # pylint: disable=broad-except
                         logger.warning("Failed to log offline router epoch %d to W&B: %s", epoch, exc)
 
-                if eval_loss < best_eval_loss:
-                    best_eval_loss = eval_loss
-                    best_epoch = epoch
-                    best_eval_rows = eval_rows
-                    best_y_true = y_true
-                    best_y_pred = y_pred
-                    best_eval_extra = dict(eval_extra)
-                    should_save_best = True
-
-            should_save_best = bool(_broadcast_object(should_save_best, label=f"epoch_{epoch}_should_save_best"))
+            previous_best_eval_loss = best_eval_loss
+            should_save_best = eval_loss < previous_best_eval_loss
+            if should_save_best:
+                best_eval_loss = eval_loss
+                best_epoch = epoch
+            if is_main_process() and should_save_best:
+                best_eval_rows = eval_rows
+                best_y_true = y_true
+                best_y_pred = y_pred
+                best_eval_extra = dict(eval_extra)
             if should_save_best and save_checkpoints:
                 best_dir = output_dir / "checkpoints" / "best"
                 if is_main_process():
