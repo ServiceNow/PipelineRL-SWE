@@ -17,7 +17,6 @@ import torch.nn.functional as F
 from datasets import load_dataset
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
-from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm
 from transformers import AutoTokenizer
 import wandb
@@ -130,56 +129,53 @@ def _get_primary_output_text(row: dict[str, Any]) -> str | None:
     return primary_output_text if isinstance(primary_output_text, str) else None
 
 
-def _make_collate_fn(tokenizer: Any, max_seq_length: int | None, target_dim: int):
-    pad_token_id = tokenizer.pad_token_id
-    if pad_token_id is None:
-        pad_token_id = tokenizer.eos_token_id
-    if pad_token_id is None:
-        raise ValueError("Tokenizer needs either pad_token_id or eos_token_id for offline router batching")
+def _prepare_representation_rows(
+    dataset: Any,
+    tokenizer: Any,
+    max_seq_length: int | None,
+    target_dim: int,
+) -> list[dict[str, Any]]:
+    prepared_rows: list[dict[str, Any]] = []
+    for row in dataset:
+        prompt_text = row.get("prompt_text")
+        primary_output_text = _get_primary_output_text(row)
+        targets = row.get("performance_targets")
+        if not isinstance(prompt_text, str) or not isinstance(primary_output_text, str):
+            continue
+        if not isinstance(targets, list) or len(targets) != target_dim:
+            continue
+        encoded = tokenize_prompt_completion(
+            tokenizer=tokenizer,
+            prompt_text=prompt_text,
+            output_text=primary_output_text,
+            max_seq_length=max_seq_length,
+        )
+        if encoded is None:
+            continue
+        prepared_rows.append(
+            {
+                "problem_id": problem_id_from_item(row),
+                "dataset": row.get("dataset"),
+                "repo": row.get("repo"),
+                "language": row.get("language"),
+                "input_ids": encoded["input_ids"],
+                "completion_last_index": encoded["completion_last_index"],
+                "targets": [float(value) for value in targets],
+            }
+        )
+    return prepared_rows
 
-    def _collate(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
-        encoded_rows: list[dict[str, Any]] = []
-        for row in rows:
-            prompt_text = row.get("prompt_text")
-            primary_output_text = _get_primary_output_text(row)
-            targets = row.get("performance_targets")
-            if not isinstance(prompt_text, str):
-                continue
-            if not isinstance(primary_output_text, str):
-                continue
-            if not isinstance(targets, list) or len(targets) != target_dim:
-                continue
-            encoded = tokenize_prompt_completion(
-                tokenizer=tokenizer,
-                prompt_text=prompt_text,
-                output_text=primary_output_text,
-                max_seq_length=max_seq_length,
-            )
-            if encoded is None:
-                continue
-            encoded_rows.append(
-                {
-                    "problem_id": problem_id_from_item(row),
-                    "dataset": row.get("dataset"),
-                    "repo": row.get("repo"),
-                    "language": row.get("language"),
-                    "input_ids": encoded["input_ids"],
-                    "completion_last_index": encoded["completion_last_index"],
-                    "targets": [float(value) for value in targets],
-                }
-            )
 
-        if not encoded_rows:
-            return None
-
-        max_len = max(len(row["input_ids"]) for row in encoded_rows)
-        batch_size = len(encoded_rows)
+def _make_collate_fn(pad_token_id: int, target_dim: int):
+    def _collate(rows: list[dict[str, Any]]) -> dict[str, Any]:
+        max_len = max(len(row["input_ids"]) for row in rows)
+        batch_size = len(rows)
         input_ids = torch.full((batch_size, max_len), fill_value=pad_token_id, dtype=torch.long)
         attention_mask = torch.zeros((batch_size, max_len), dtype=torch.long)
         last_indices = torch.zeros((batch_size,), dtype=torch.long)
         targets = torch.zeros((batch_size, target_dim), dtype=torch.float32)
 
-        for batch_idx, row in enumerate(encoded_rows):
+        for batch_idx, row in enumerate(rows):
             ids = row["input_ids"]
             seq_len = len(ids)
             input_ids[batch_idx, :seq_len] = torch.tensor(ids, dtype=torch.long)
@@ -188,10 +184,10 @@ def _make_collate_fn(tokenizer: Any, max_seq_length: int | None, target_dim: int
             targets[batch_idx] = torch.tensor(row["targets"], dtype=torch.float32)
 
         return {
-            "problem_ids": [row["problem_id"] for row in encoded_rows],
-            "datasets": [row["dataset"] for row in encoded_rows],
-            "repos": [row["repo"] for row in encoded_rows],
-            "languages": [row["language"] for row in encoded_rows],
+            "problem_ids": [row["problem_id"] for row in rows],
+            "datasets": [row["dataset"] for row in rows],
+            "repos": [row["repo"] for row in rows],
+            "languages": [row["language"] for row in rows],
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "completion_last_indices": last_indices,
@@ -283,69 +279,64 @@ def _tokenize_text_reward_target(
     }
 
 
-def _make_text_train_collate_fn(
+def _prepare_text_train_rows(
+    dataset: list[dict[str, Any]],
     tokenizer: Any,
     max_seq_length: int | None,
-):
-    pad_token_id = tokenizer.pad_token_id
-    if pad_token_id is None:
-        pad_token_id = tokenizer.eos_token_id
-    if pad_token_id is None:
-        raise ValueError("Tokenizer needs either pad_token_id or eos_token_id for offline router batching")
+) -> list[dict[str, Any]]:
+    prepared_rows: list[dict[str, Any]] = []
+    for row in dataset:
+        prompt_text = row.get("prompt_text")
+        primary_output_text = row.get("primary_output_text")
+        route_label = row.get("route_label")
+        target_text = row.get("target_text")
+        target_reward = row.get("target_reward")
+        route_idx = row.get("route_idx")
+        if not isinstance(prompt_text, str) or not isinstance(primary_output_text, str):
+            continue
+        if not isinstance(route_label, str) or not isinstance(target_text, str):
+            continue
+        if not isinstance(route_idx, int):
+            continue
+        if not isinstance(target_reward, (float, int)):
+            continue
+        prompt = _build_text_reward_prompt(prompt_text, primary_output_text, route_idx)
+        encoded = _tokenize_text_reward_target(
+            tokenizer=tokenizer,
+            prompt_text=prompt,
+            target_text=target_text,
+            max_seq_length=max_seq_length,
+        )
+        if encoded is None:
+            continue
+        prepared_rows.append(
+            {
+                "problem_id": row.get("problem_id"),
+                "dataset": row.get("dataset"),
+                "repo": row.get("repo"),
+                "language": row.get("language"),
+                "route_label": route_label,
+                "route_idx": route_idx,
+                "route_prompt_alias": _route_prompt_alias(route_idx),
+                "target_reward": float(target_reward),
+                "input_ids": encoded["input_ids"],
+                "labels": encoded["labels"],
+            }
+        )
+    return prepared_rows
 
-    def _collate(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
-        encoded_rows: list[dict[str, Any]] = []
-        for row in rows:
-            prompt_text = row.get("prompt_text")
-            primary_output_text = row.get("primary_output_text")
-            route_label = row.get("route_label")
-            target_text = row.get("target_text")
-            target_reward = row.get("target_reward")
-            route_idx = row.get("route_idx")
-            if not isinstance(prompt_text, str) or not isinstance(primary_output_text, str):
-                continue
-            if not isinstance(route_label, str) or not isinstance(target_text, str):
-                continue
-            if not isinstance(route_idx, int):
-                continue
-            if not isinstance(target_reward, (float, int)):
-                continue
-            prompt = _build_text_reward_prompt(prompt_text, primary_output_text, route_idx)
-            encoded = _tokenize_text_reward_target(
-                tokenizer=tokenizer,
-                prompt_text=prompt,
-                target_text=target_text,
-                max_seq_length=max_seq_length,
-            )
-            if encoded is None:
-                continue
-            encoded_rows.append(
-                {
-                    "problem_id": row.get("problem_id"),
-                    "dataset": row.get("dataset"),
-                    "repo": row.get("repo"),
-                    "language": row.get("language"),
-                    "route_label": route_label,
-                    "route_idx": route_idx,
-                    "route_prompt_alias": _route_prompt_alias(route_idx),
-                    "target_reward": float(target_reward),
-                    "input_ids": encoded["input_ids"],
-                    "labels": encoded["labels"],
-                }
-            )
 
-        if not encoded_rows:
-            return None
-
-        max_len = max(len(row["input_ids"]) for row in encoded_rows)
-        batch_size = len(encoded_rows)
+def _make_text_train_collate_fn(pad_token_id: int):
+    def _collate(rows: list[dict[str, Any]]) -> dict[str, Any]:
+        max_len = max(len(row["input_ids"]) for row in rows)
+        batch_size = len(rows)
         input_ids = torch.full((batch_size, max_len), fill_value=pad_token_id, dtype=torch.long)
         attention_mask = torch.zeros((batch_size, max_len), dtype=torch.long)
         labels = torch.full((batch_size, max_len), fill_value=-100, dtype=torch.long)
         route_indices = torch.zeros((batch_size,), dtype=torch.long)
         target_rewards = torch.zeros((batch_size,), dtype=torch.float32)
 
-        for batch_idx, row in enumerate(encoded_rows):
+        for batch_idx, row in enumerate(rows):
             ids = row["input_ids"]
             row_labels = row["labels"]
             seq_len = len(ids)
@@ -356,12 +347,12 @@ def _make_text_train_collate_fn(
             target_rewards[batch_idx] = float(row["target_reward"])
 
         return {
-            "problem_ids": [row["problem_id"] for row in encoded_rows],
-            "datasets": [row["dataset"] for row in encoded_rows],
-            "repos": [row["repo"] for row in encoded_rows],
-            "languages": [row["language"] for row in encoded_rows],
-            "route_labels": [row["route_label"] for row in encoded_rows],
-            "route_prompt_aliases": [row["route_prompt_alias"] for row in encoded_rows],
+            "problem_ids": [row["problem_id"] for row in rows],
+            "datasets": [row["dataset"] for row in rows],
+            "repos": [row["repo"] for row in rows],
+            "languages": [row["language"] for row in rows],
+            "route_labels": [row["route_label"] for row in rows],
+            "route_prompt_aliases": [row["route_prompt_alias"] for row in rows],
             "route_indices": route_indices,
             "target_rewards": target_rewards,
             "input_ids": input_ids,
@@ -372,62 +363,57 @@ def _make_text_train_collate_fn(
     return _collate
 
 
-def _make_text_eval_collate_fn(
+def _prepare_text_eval_rows(
+    dataset: list[dict[str, Any]],
     tokenizer: Any,
     max_seq_length: int | None,
-):
-    pad_token_id = tokenizer.pad_token_id
-    if pad_token_id is None:
-        pad_token_id = tokenizer.eos_token_id
-    if pad_token_id is None:
-        raise ValueError("Tokenizer needs either pad_token_id or eos_token_id for offline router batching")
+) -> list[dict[str, Any]]:
+    prepared_rows: list[dict[str, Any]] = []
+    for row in dataset:
+        prompt_text = row.get("prompt_text")
+        primary_output_text = row.get("primary_output_text")
+        route_label = row.get("route_label")
+        target_reward = row.get("target_reward")
+        route_idx = row.get("route_idx")
+        if not isinstance(prompt_text, str) or not isinstance(primary_output_text, str):
+            continue
+        if not isinstance(route_label, str):
+            continue
+        if not isinstance(route_idx, int):
+            continue
+        if not isinstance(target_reward, (float, int)):
+            continue
+        prompt = _build_text_reward_prompt(prompt_text, primary_output_text, route_idx)
+        prompt_ids = tokenizer(prompt, add_special_tokens=False).input_ids
+        prompt_ids = _truncate_from_left(prompt_ids, max_seq_length)
+        if not prompt_ids:
+            continue
+        prepared_rows.append(
+            {
+                "problem_id": row.get("problem_id"),
+                "dataset": row.get("dataset"),
+                "repo": row.get("repo"),
+                "language": row.get("language"),
+                "route_label": route_label,
+                "route_idx": route_idx,
+                "route_prompt_alias": _route_prompt_alias(route_idx),
+                "target_reward": float(target_reward),
+                "input_ids": prompt_ids,
+            }
+        )
+    return prepared_rows
 
-    def _collate(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
-        encoded_rows: list[dict[str, Any]] = []
-        for row in rows:
-            prompt_text = row.get("prompt_text")
-            primary_output_text = row.get("primary_output_text")
-            route_label = row.get("route_label")
-            target_reward = row.get("target_reward")
-            route_idx = row.get("route_idx")
-            if not isinstance(prompt_text, str) or not isinstance(primary_output_text, str):
-                continue
-            if not isinstance(route_label, str):
-                continue
-            if not isinstance(route_idx, int):
-                continue
-            if not isinstance(target_reward, (float, int)):
-                continue
-            prompt = _build_text_reward_prompt(prompt_text, primary_output_text, route_idx)
-            prompt_ids = tokenizer(prompt, add_special_tokens=False).input_ids
-            prompt_ids = _truncate_from_left(prompt_ids, max_seq_length)
-            if not prompt_ids:
-                continue
-            encoded_rows.append(
-                {
-                    "problem_id": row.get("problem_id"),
-                    "dataset": row.get("dataset"),
-                    "repo": row.get("repo"),
-                    "language": row.get("language"),
-                    "route_label": route_label,
-                    "route_idx": route_idx,
-                    "route_prompt_alias": _route_prompt_alias(route_idx),
-                    "target_reward": float(target_reward),
-                    "input_ids": prompt_ids,
-                }
-            )
 
-        if not encoded_rows:
-            return None
-
-        max_len = max(len(row["input_ids"]) for row in encoded_rows)
-        batch_size = len(encoded_rows)
+def _make_text_eval_collate_fn(pad_token_id: int):
+    def _collate(rows: list[dict[str, Any]]) -> dict[str, Any]:
+        max_len = max(len(row["input_ids"]) for row in rows)
+        batch_size = len(rows)
         input_ids = torch.full((batch_size, max_len), fill_value=pad_token_id, dtype=torch.long)
         attention_mask = torch.zeros((batch_size, max_len), dtype=torch.long)
         route_indices = torch.zeros((batch_size,), dtype=torch.long)
         target_rewards = torch.zeros((batch_size,), dtype=torch.float32)
 
-        for batch_idx, row in enumerate(encoded_rows):
+        for batch_idx, row in enumerate(rows):
             ids = row["input_ids"]
             seq_len = len(ids)
             input_ids[batch_idx, :seq_len] = torch.tensor(ids, dtype=torch.long)
@@ -436,12 +422,12 @@ def _make_text_eval_collate_fn(
             target_rewards[batch_idx] = float(row["target_reward"])
 
         return {
-            "problem_ids": [row["problem_id"] for row in encoded_rows],
-            "datasets": [row["dataset"] for row in encoded_rows],
-            "repos": [row["repo"] for row in encoded_rows],
-            "languages": [row["language"] for row in encoded_rows],
-            "route_labels": [row["route_label"] for row in encoded_rows],
-            "route_prompt_aliases": [row["route_prompt_alias"] for row in encoded_rows],
+            "problem_ids": [row["problem_id"] for row in rows],
+            "datasets": [row["dataset"] for row in rows],
+            "repos": [row["repo"] for row in rows],
+            "languages": [row["language"] for row in rows],
+            "route_labels": [row["route_label"] for row in rows],
+            "route_prompt_aliases": [row["route_prompt_alias"] for row in rows],
             "route_indices": route_indices,
             "target_rewards": target_rewards,
             "input_ids": input_ids,
@@ -488,23 +474,6 @@ def _expand_dataset_for_text_reward(
     return expanded_rows
 
 
-def _move_batch_to_device(batch: dict[str, Any], device: torch.device) -> dict[str, Any]:
-    moved = dict(batch)
-    for key in (
-        "input_ids",
-        "attention_mask",
-        "completion_last_indices",
-        "targets",
-        "labels",
-        "route_indices",
-        "target_rewards",
-    ):
-        value = moved.get(key)
-        if isinstance(value, torch.Tensor):
-            moved[key] = value.to(device)
-    return moved
-
-
 def _forward_predictions(model: AutoModelForCausalLMWithValueHead, batch: dict[str, Any]) -> torch.Tensor:
     outputs = model(
         input_ids=batch["input_ids"],
@@ -534,7 +503,6 @@ def _forward_text_reward_loss(model: AutoModelForCausalLMWithValueHead, batch: d
 def _run_representation_eval(
     model: AutoModelForCausalLMWithValueHead,
     loader: DataLoader,
-    device: torch.device,
 ) -> tuple[list[dict[str, Any]], float, int]:
     model.eval()
     prediction_rows: list[dict[str, Any]] = []
@@ -542,9 +510,6 @@ def _run_representation_eval(
     local_value_count = 0
     with torch.no_grad():
         for batch in tqdm(loader, desc="Eval offline router", unit="batch", disable=not is_main_process()):
-            if batch is None:
-                continue
-            batch = _move_batch_to_device(batch, device)
             preds = _forward_predictions(model, batch)
 
             preds_np = preds.cpu().numpy()
@@ -640,8 +605,6 @@ def _generate_text_reward_tokens(
 def _run_text_reward_eval(
     model: AutoModelForCausalLMWithValueHead,
     loader: DataLoader,
-    device: torch.device,
-    route_labels: list[str],
     tokenizer: Any,
     max_new_tokens: int,
     do_sample: bool,
@@ -654,9 +617,6 @@ def _run_text_reward_eval(
     local_value_count = 0
     with torch.no_grad():
         for batch in tqdm(loader, desc="Eval offline router", unit="batch", disable=not is_main_process()):
-            if batch is None:
-                continue
-            batch = _move_batch_to_device(batch, device)
             generated_tokens = _generate_text_reward_tokens(
                 model=model,
                 input_ids=batch["input_ids"],
@@ -746,8 +706,8 @@ def _cleanup_eval_shards(output_dir: Path, epoch: int) -> None:
         shutil.rmtree(shard_dir)
 
 
-def _reduce_scalar_sum(value: float, device: torch.device) -> float:
-    tensor = torch.tensor(float(value), dtype=torch.float64, device=device)
+def _reduce_scalar_sum(value: float) -> float:
+    tensor = torch.tensor(float(value), dtype=torch.float64, device=get_accelerator().device)
     reduced = get_accelerator().reduce(tensor, reduction="sum")
     return float(reduced.item())
 
@@ -1084,47 +1044,61 @@ def main(cfg: DictConfig) -> None:
             )
 
         max_seq_length = int(train_cfg.max_seq_length) if train_cfg.get("max_seq_length") else None
+        pad_token_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id
+        if pad_token_id is None:
+            raise ValueError("Tokenizer must define pad_token_id or eos_token_id for offline router training")
+
         if supervision_mode == "representation_head":
-            train_collate_fn = _make_collate_fn(
+            train_dataset = _prepare_representation_rows(
+                train_dataset,
                 tokenizer=tokenizer,
                 max_seq_length=max_seq_length,
                 target_dim=target_dim,
             )
+            eval_dataset = _prepare_representation_rows(
+                eval_dataset,
+                tokenizer=tokenizer,
+                max_seq_length=max_seq_length,
+                target_dim=target_dim,
+            )
+            train_collate_fn = _make_collate_fn(
+                pad_token_id=pad_token_id,
+                target_dim=target_dim,
+            )
             eval_collate_fn = train_collate_fn
         else:
-            train_collate_fn = _make_text_train_collate_fn(
-                tokenizer=tokenizer,
-                max_seq_length=max_seq_length,
-            )
-            eval_collate_fn = _make_text_eval_collate_fn(
-                tokenizer=tokenizer,
-                max_seq_length=max_seq_length,
-            )
-        train_sampler = (
-            DistributedSampler(
+            train_dataset = _prepare_text_train_rows(
                 train_dataset,
-                num_replicas=get_world_size(),
-                rank=get_rank(),
-                shuffle=bool(train_cfg.get("shuffle_train", True)),
+                tokenizer=tokenizer,
+                max_seq_length=max_seq_length,
             )
-            if is_distributed()
-            else None
-        )
-        eval_sampler = (
-            DistributedSampler(
+            eval_dataset = _prepare_text_eval_rows(
                 eval_dataset,
-                num_replicas=get_world_size(),
-                rank=get_rank(),
-                shuffle=False,
+                tokenizer=tokenizer,
+                max_seq_length=max_seq_length,
             )
-            if is_distributed()
-            else None
+            train_collate_fn = _make_text_train_collate_fn(pad_token_id=pad_token_id)
+            eval_collate_fn = _make_text_eval_collate_fn(pad_token_id=pad_token_id)
+
+        if not train_dataset:
+            raise ValueError("No valid training rows remain after preprocessing/tokenization")
+        if not eval_dataset:
+            raise ValueError("No valid eval rows remain after preprocessing/tokenization")
+
+        preprocessed_train_rows = int(len(train_dataset))
+        preprocessed_eval_rows = int(len(eval_dataset))
+
+        logger.info(
+            "Offline router preprocessed rows: train=%d eval=%d supervision_mode=%s",
+            preprocessed_train_rows,
+            preprocessed_eval_rows,
+            supervision_mode,
         )
+
         train_loader = DataLoader(
             train_dataset,
             batch_size=int(train_cfg.batch_size),
-            shuffle=False if train_sampler is not None else bool(train_cfg.get("shuffle_train", True)),
-            sampler=train_sampler,
+            shuffle=bool(train_cfg.get("shuffle_train", True)),
             num_workers=int(train_cfg.get("num_workers", 0)),
             collate_fn=train_collate_fn,
         )
@@ -1132,11 +1106,15 @@ def main(cfg: DictConfig) -> None:
             eval_dataset,
             batch_size=int(train_cfg.eval_batch_size),
             shuffle=False,
-            sampler=eval_sampler,
             num_workers=int(train_cfg.get("num_workers", 0)),
             collate_fn=eval_collate_fn,
         )
-        model, optimizer = get_accelerator().prepare(model, optimizer)
+        model, optimizer, train_loader, eval_loader = get_accelerator().prepare(
+            model,
+            optimizer,
+            train_loader,
+            eval_loader,
+        )
         logger.info(
             "Offline router accelerator prepared: distributed=%s world_size=%d deepspeed=%s",
             is_distributed(),
@@ -1157,9 +1135,6 @@ def main(cfg: DictConfig) -> None:
         best_eval_extra: dict[str, Any] = {}
 
         for epoch in range(num_epochs):
-            if train_sampler is not None:
-                train_sampler.set_epoch(epoch)
-
             model.train()
             optimizer.zero_grad(set_to_none=True)
             running_losses: list[float] = []
@@ -1173,9 +1148,6 @@ def main(cfg: DictConfig) -> None:
                 tqdm(train_loader, desc=f"Train epoch {epoch}", unit="batch", disable=not is_main_process()),
                 start=1,
             ):
-                if batch is None:
-                    continue
-                batch = _move_batch_to_device(batch, device)
                 if supervision_mode == "representation_head":
                     preds = _forward_predictions(model, batch)
                     loss = F.mse_loss(preds, batch["targets"])
@@ -1241,8 +1213,8 @@ def main(cfg: DictConfig) -> None:
                 len(running_losses),
             )
             local_loss_sum = float(np.sum(running_losses))
-            total_loss_sum = _reduce_scalar_sum(local_loss_sum, device)
-            total_loss_count = int(round(_reduce_scalar_sum(float(len(running_losses)), device)))
+            total_loss_sum = _reduce_scalar_sum(local_loss_sum)
+            total_loss_count = int(round(_reduce_scalar_sum(float(len(running_losses)))))
             train_loss = total_loss_sum / total_loss_count if total_loss_count > 0 else float(np.mean(running_losses))
             logger.info(
                 "Offline router epoch=%d rank=%d post_train_loss_reduce total_loss_count=%d train_loss=%.6f",
@@ -1263,14 +1235,11 @@ def main(cfg: DictConfig) -> None:
                 local_eval_rows, local_eval_squared_error_sum, local_eval_value_count = _run_representation_eval(
                     model,
                     eval_loader,
-                    device,
                 )
             else:
                 local_eval_rows, local_eval_squared_error_sum, local_eval_value_count = _run_text_reward_eval(
                     model,
                     eval_loader,
-                    device,
-                    route_labels=route_labels,
                     tokenizer=tokenizer,
                     max_new_tokens=text_max_new_tokens,
                     do_sample=text_do_sample,
@@ -1286,8 +1255,8 @@ def main(cfg: DictConfig) -> None:
                 local_eval_value_count,
                 shard_path,
             )
-            total_eval_squared_error_sum = _reduce_scalar_sum(local_eval_squared_error_sum, device)
-            total_eval_value_count = int(round(_reduce_scalar_sum(float(local_eval_value_count), device)))
+            total_eval_squared_error_sum = _reduce_scalar_sum(local_eval_squared_error_sum)
+            total_eval_value_count = int(round(_reduce_scalar_sum(float(local_eval_value_count))))
             eval_loss = (
                 total_eval_squared_error_sum / total_eval_value_count
                 if total_eval_value_count > 0
@@ -1441,6 +1410,8 @@ def main(cfg: DictConfig) -> None:
                 "eval_rows": raw_eval_rows,
                 "train_supervision_rows": train_supervision_rows,
                 "eval_supervision_rows": eval_supervision_rows,
+                "train_preprocessed_rows": preprocessed_train_rows,
+                "eval_preprocessed_rows": preprocessed_eval_rows,
                 "num_epochs": num_epochs,
                 "performance_value_hidden_dims": performance_value_hidden_dims or [],
                 "performance_value_activation": performance_value_activation,

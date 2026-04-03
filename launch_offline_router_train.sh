@@ -2,7 +2,7 @@
 set -euo pipefail
 
 TIMESTAMP=$(date +%s)
-JOB_NAME=offline_router_train_more_accelerate
+JOB_NAME=offline_router_stage_2_dsp_full_no_save
 OUTPUT_DIR=/mnt/llmd/results/exps/aristides/reason/${JOB_NAME}_${TIMESTAMP}
 
 # Edit these directly when you want a different launch configuration.
@@ -11,8 +11,8 @@ DATASET_DIR=/mnt/llmd/results/exps/aristides/reason/offline_router_collect_17744
 MODEL_PATH=/mnt/llmd/results/exps/aristides/reason/swe_smith_policy_conditioned_no_devstral_1773812579/finetune/current
 MIXED_PRECISION=bf16
 ACCELERATE_CONFIG=deepspeed
-DEEPSPEED_CONFIG=deepspeed_stage3_bf16
-EXTRA_ARGS="offline_router.train.max_train_rows=2048 offline_router.train.max_eval_rows=256 offline_router.train.num_epochs=3 offline_router.train.mode=full_backbone"
+DEEPSPEED_CONFIG=deepspeed_stage2_bf16
+EXTRA_ARGS="offline_router.train.supervision_mode=representation_head offline_router.train.mode=full_backbone offline_router.train.max_train_rows=4096 offline_router.train.max_eval_rows=178 offline_router.train.num_epochs=2 offline_router.train.save_checkpoints=false" \
 #EXTRA_ARGS="offline_router.train.supervision_mode=text_reward_per_route offline_router.train.max_train_rows=256 offline_router.train.max_eval_rows=32 offline_router.train.num_epochs=3 offline_router.train.mode=full_backbone" \
 #EXTRA_ARGS="offline_router.train.mode=full_backbone"
 
