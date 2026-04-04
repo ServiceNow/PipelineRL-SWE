@@ -52,6 +52,7 @@ class ValueHead(nn.Module):
         nn.init.zeros_(self.output.bias)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = hidden_states.to(dtype=self.output.weight.dtype)
         values = self.output(hidden_states).squeeze(-1)  # (batch_size, sequence_length)
         return values
 
@@ -105,6 +106,9 @@ class PerformanceValueHead(nn.Module):
         }
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        first_linear = next((module for module in self.network if isinstance(module, nn.Linear)), None)
+        if first_linear is not None:
+            hidden_states = hidden_states.to(dtype=first_linear.weight.dtype)
         return self.network(hidden_states)  # (batch_size, sequence_length, output_dim)
 
 

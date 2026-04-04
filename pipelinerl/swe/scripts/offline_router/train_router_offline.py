@@ -75,6 +75,14 @@ def _pick_device(device_arg: str) -> torch.device:
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
+def _cast_auxiliary_heads_to_fp32(
+    model: AutoModelForCausalLMWithValueHead,
+    device: torch.device,
+) -> None:
+    model.value_head = model.value_head.to(device=device, dtype=torch.float32)
+    model.performance_value_head = model.performance_value_head.to(device=device, dtype=torch.float32)
+
+
 def _prediction_row_key(row: dict[str, Any]) -> str:
     dataset = row.get("dataset")
     problem_id = row.get("problem_id")
@@ -993,6 +1001,7 @@ def main(cfg: DictConfig) -> None:
             model = model.to(device=device, dtype=model_dtype)
         else:
             model = model.to(device=device)
+        _cast_auxiliary_heads_to_fp32(model, device)
 
         trainable_prefixes = _configure_training_mode(
             model,
@@ -1011,9 +1020,11 @@ def main(cfg: DictConfig) -> None:
             total_parameters,
         )
         logger.info(
-            "Offline router performance head hidden_dims=%s activation=%s",
+            "Offline router performance head hidden_dims=%s activation=%s value_head_dtype=%s performance_value_head_dtype=%s",
             performance_value_hidden_dims or [],
             performance_value_activation,
+            next(model.value_head.parameters()).dtype,
+            next(model.performance_value_head.parameters()).dtype,
         )
         if supervision_mode == "text_reward_per_route":
             logger.info(
