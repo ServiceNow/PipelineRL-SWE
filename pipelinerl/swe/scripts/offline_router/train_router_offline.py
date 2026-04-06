@@ -93,6 +93,56 @@ def _log_auxiliary_head_dtypes(prefix: str, model: Any) -> None:
     )
 
 
+def _build_optimizer(
+    model: AutoModelForCausalLMWithValueHead,
+    train_cfg: Any,
+) -> tuple[torch.optim.Optimizer, list[dict[str, Any]]]:
+    default_lr = float(train_cfg.get("lr", 1.0e-4))
+    head_lr = float(train_cfg.get("head_lr", default_lr))
+    trunk_lr = float(train_cfg.get("trunk_lr", default_lr))
+    weight_decay = float(train_cfg.get("weight_decay", 0.0))
+
+    assigned_param_ids: set[int] = set()
+    param_groups: list[dict[str, Any]] = []
+    group_summaries: list[dict[str, Any]] = []
+
+    def _add_group(name: str, params: Any, lr: float) -> None:
+        selected = [param for param in params if param.requires_grad and id(param) not in assigned_param_ids]
+        if not selected:
+            return
+        assigned_param_ids.update(id(param) for param in selected)
+        param_groups.append(
+            {
+                "name": name,
+                "params": selected,
+                "lr": float(lr),
+                "weight_decay": weight_decay,
+            }
+        )
+        group_summaries.append(
+            {
+                "name": name,
+                "lr": float(lr),
+                "parameter_count": int(sum(param.numel() for param in selected)),
+                "tensor_count": int(len(selected)),
+            }
+        )
+
+    _add_group("performance_value_head", model.performance_value_head.parameters(), head_lr)
+    _add_group("pretrained_model", model.pretrained_model.parameters(), trunk_lr)
+    _add_group(
+        "other_trainable",
+        (param for param in model.parameters() if param.requires_grad and id(param) not in assigned_param_ids),
+        default_lr,
+    )
+
+    if not param_groups:
+        raise ValueError("No trainable parameters found for optimizer construction")
+
+    optimizer = torch.optim.AdamW(param_groups)
+    return optimizer, group_summaries
+
+
 def _prediction_row_key(row: dict[str, Any]) -> str:
     dataset = row.get("dataset")
     problem_id = row.get("problem_id")
@@ -1049,11 +1099,8 @@ def main(cfg: DictConfig) -> None:
                 raw_eval_rows,
                 eval_supervision_rows,
             )
-        optimizer = torch.optim.AdamW(
-            [param for param in model.parameters() if param.requires_grad],
-            lr=float(train_cfg.lr),
-            weight_decay=float(train_cfg.get("weight_decay", 0.0)),
-        )
+        optimizer, optimizer_group_summaries = _build_optimizer(model, train_cfg)
+        logger.info("Offline router optimizer groups=%s", optimizer_group_summaries)
 
         if (ds_plugin := getattr(get_accelerator().state, "deepspeed_plugin", None)) is not None:
             ds_plugin.deepspeed_config["train_micro_batch_size_per_gpu"] = int(train_cfg.batch_size)
@@ -1437,6 +1484,7 @@ def main(cfg: DictConfig) -> None:
                 "num_epochs": num_epochs,
                 "performance_value_hidden_dims": performance_value_hidden_dims or [],
                 "performance_value_activation": performance_value_activation,
+                "optimizer_groups": optimizer_group_summaries,
                 "best_epoch": best_epoch,
                 "best_eval_loss": best_eval_loss,
                 "trainable_prefixes": trainable_prefixes,

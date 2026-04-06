@@ -2,7 +2,7 @@
 set -euo pipefail
 
 TIMESTAMP=$(date +%s)
-JOB_NAME=offline_router_fp32_head_runtime_check
+JOB_NAME=offline_router_diff_lr_test
 OUTPUT_DIR=/mnt/llmd/results/exps/aristides/reason/${JOB_NAME}_${TIMESTAMP}
 
 # Edit these directly when you want a different launch configuration.
