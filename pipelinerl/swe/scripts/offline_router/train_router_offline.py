@@ -5,7 +5,6 @@ import json
 import logging
 import math
 import os
-import re
 import shutil
 from pathlib import Path
 from typing import Any
@@ -18,7 +17,7 @@ from datasets import load_dataset
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, get_constant_schedule_with_warmup
 import wandb
 import time
 
@@ -96,17 +95,16 @@ def _log_auxiliary_head_dtypes(prefix: str, model: Any) -> None:
 def _build_optimizer(
     model: AutoModelForCausalLMWithValueHead,
     train_cfg: Any,
+    supervision_mode: str,
+    text_reward_cfg: Any,
 ) -> tuple[torch.optim.Optimizer, list[dict[str, Any]]]:
-    default_lr = float(train_cfg.get("lr", 1.0e-4))
-    head_lr = float(train_cfg.get("head_lr", default_lr))
-    trunk_lr = float(train_cfg.get("trunk_lr", default_lr))
-    weight_decay = float(train_cfg.get("weight_decay", 0.0))
-
     assigned_param_ids: set[int] = set()
     param_groups: list[dict[str, Any]] = []
     group_summaries: list[dict[str, Any]] = []
+    group_weight_decay = 0.0
 
     def _add_group(name: str, params: Any, lr: float) -> None:
+        weight_decay = group_weight_decay
         selected = [param for param in params if param.requires_grad and id(param) not in assigned_param_ids]
         if not selected:
             return
@@ -128,13 +126,27 @@ def _build_optimizer(
             }
         )
 
-    _add_group("performance_value_head", model.performance_value_head.parameters(), head_lr)
-    _add_group("pretrained_model", model.pretrained_model.parameters(), trunk_lr)
-    _add_group(
-        "other_trainable",
-        (param for param in model.parameters() if param.requires_grad and id(param) not in assigned_param_ids),
-        default_lr,
-    )
+    if supervision_mode == "text_reward_vector":
+        default_lr = float(text_reward_cfg.get("lr", 5.0e-6))
+        group_weight_decay = float(text_reward_cfg.get("weight_decay", 0.01))
+        _add_group("pretrained_model", model.pretrained_model.parameters(), default_lr)
+        _add_group(
+            "other_trainable",
+            (param for param in model.parameters() if param.requires_grad and id(param) not in assigned_param_ids),
+            default_lr,
+        )
+    else:
+        default_lr = float(train_cfg.get("lr", 1.0e-4))
+        head_lr = float(train_cfg.get("head_lr", default_lr))
+        trunk_lr = float(train_cfg.get("trunk_lr", default_lr))
+        group_weight_decay = float(train_cfg.get("weight_decay", 0.0))
+        _add_group("performance_value_head", model.performance_value_head.parameters(), head_lr)
+        _add_group("pretrained_model", model.pretrained_model.parameters(), trunk_lr)
+        _add_group(
+            "other_trainable",
+            (param for param in model.parameters() if param.requires_grad and id(param) not in assigned_param_ids),
+            default_lr,
+        )
 
     if not param_groups:
         raise ValueError("No trainable parameters found for optimizer construction")
@@ -272,10 +284,10 @@ def _configure_training_mode(
 ) -> list[str]:
     if supervision_mode == "representation_head":
         return configure_router_training_mode(model, training_mode)
-    if supervision_mode != "text_reward_per_route":
+    if supervision_mode != "text_reward_vector":
         raise ValueError(f"Unsupported supervision mode: {supervision_mode}")
     if training_mode != "full_backbone":
-        raise ValueError("offline_router.train.supervision_mode=text_reward_per_route requires mode=full_backbone")
+        raise ValueError("offline_router.train.supervision_mode=text_reward_vector requires mode=full_backbone")
 
     for param in model.parameters():
         param.requires_grad = False
@@ -288,30 +300,39 @@ def _configure_training_mode(
     return ["pretrained_model"]
 
 
-def _route_prompt_alias(route_idx: int) -> str:
-    return f"model_{int(route_idx) + 1}"
+def _route_prompt_aliases(route_labels: list[str]) -> list[str]:
+    return [f"model_{route_idx + 1}" for route_idx, _ in enumerate(route_labels)]
 
 
-def _build_text_reward_prompt(prompt_text: str, primary_output_text: str, route_idx: int) -> str:
-    route_alias = _route_prompt_alias(route_idx)
+def _build_text_reward_prompt(
+    prompt_text: str,
+    primary_output_text: str,
+    route_aliases: list[str],
+) -> str:
+    route_legend = ", ".join(route_aliases)
+    example_output = json.dumps(
+        [float(f"{max(0.0, 0.42 - (0.05 * route_idx)):.2f}") for route_idx in range(len(route_aliases))],
+        separators=(",", ":"),
+    )
     return (
-        "Predict the realized reward for the queried route.\n"
-        "Respond in the exact format shown below.\n"
-        "The score must be a single float between 0.000 and 1.000.\n\n"
+        "Predict the realized reward for each model.\n"
+        "Respond with only a compact JSON array of floats in the listed order.\n"
+        "Do not include any keys, labels, or explanation text.\n"
+        "Each score must be between 0.000 and 1.000.\n\n"
+        "[Model Order]\n"
+        f"{route_legend}\n\n"
         "[Original Repair Prompt]\n"
         f"{prompt_text}\n\n"
         "[Primary Model Attempt]\n"
         f"{primary_output_text}\n\n"
-        "[Route to Score]\n"
-        f"Model: {route_alias}\n\n"
         "Output format:\n"
-        f"Model: {route_alias}\n"
-        "Predicted score: "
+        f"{example_output}\n"
     )
 
 
-def _format_reward_target(value: float, precision: int) -> str:
-    return f"{float(value):.{int(precision)}f}"
+def _format_reward_target(values: list[float], precision: int) -> str:
+    rounded = [float(f"{float(value):.{int(precision)}f}") for value in values]
+    return json.dumps(rounded, separators=(",", ":"))
 
 
 def _truncate_from_left(token_ids: list[int], max_seq_length: int | None) -> list[int]:
@@ -348,45 +369,44 @@ def _tokenize_text_reward_target(
 
 
 def _prepare_text_train_rows(
-    dataset: list[dict[str, Any]],
+    dataset: Any,
     tokenizer: Any,
     max_seq_length: int | None,
+    route_aliases: list[str],
+    target_dim: int,
+    target_precision: int,
 ) -> list[dict[str, Any]]:
     prepared_rows: list[dict[str, Any]] = []
     for row in dataset:
         prompt_text = row.get("prompt_text")
-        primary_output_text = row.get("primary_output_text")
-        route_label = row.get("route_label")
-        target_text = row.get("target_text")
-        target_reward = row.get("target_reward")
-        route_idx = row.get("route_idx")
+        primary_output_text = _get_primary_output_text(row)
+        targets = row.get("performance_targets")
         if not isinstance(prompt_text, str) or not isinstance(primary_output_text, str):
             continue
-        if not isinstance(route_label, str) or not isinstance(target_text, str):
+        if not isinstance(targets, list) or len(targets) != target_dim:
             continue
-        if not isinstance(route_idx, int):
+        try:
+            problem_id = problem_id_from_item(row)
+        except ValueError:
             continue
-        if not isinstance(target_reward, (float, int)):
-            continue
-        prompt = _build_text_reward_prompt(prompt_text, primary_output_text, route_idx)
+        target_rewards = [float(value) for value in targets]
+        prompt = _build_text_reward_prompt(prompt_text, primary_output_text, route_aliases)
         encoded = _tokenize_text_reward_target(
             tokenizer=tokenizer,
             prompt_text=prompt,
-            target_text=target_text,
+            target_text=_format_reward_target(target_rewards, target_precision),
             max_seq_length=max_seq_length,
         )
         if encoded is None:
             continue
         prepared_rows.append(
             {
-                "problem_id": row.get("problem_id"),
+                "problem_id": problem_id,
                 "dataset": row.get("dataset"),
                 "repo": row.get("repo"),
                 "language": row.get("language"),
-                "route_label": route_label,
-                "route_idx": route_idx,
-                "route_prompt_alias": _route_prompt_alias(route_idx),
-                "target_reward": float(target_reward),
+                "route_aliases": list(route_aliases),
+                "target_rewards": target_rewards,
                 "input_ids": encoded["input_ids"],
                 "labels": encoded["labels"],
             }
@@ -394,15 +414,14 @@ def _prepare_text_train_rows(
     return prepared_rows
 
 
-def _make_text_train_collate_fn(pad_token_id: int):
+def _make_text_train_collate_fn(pad_token_id: int, target_dim: int):
     def _collate(rows: list[dict[str, Any]]) -> dict[str, Any]:
         max_len = max(len(row["input_ids"]) for row in rows)
         batch_size = len(rows)
         input_ids = torch.full((batch_size, max_len), fill_value=pad_token_id, dtype=torch.long)
         attention_mask = torch.zeros((batch_size, max_len), dtype=torch.long)
         labels = torch.full((batch_size, max_len), fill_value=-100, dtype=torch.long)
-        route_indices = torch.zeros((batch_size,), dtype=torch.long)
-        target_rewards = torch.zeros((batch_size,), dtype=torch.float32)
+        target_rewards = torch.zeros((batch_size, target_dim), dtype=torch.float32)
 
         for batch_idx, row in enumerate(rows):
             ids = row["input_ids"]
@@ -411,18 +430,15 @@ def _make_text_train_collate_fn(pad_token_id: int):
             input_ids[batch_idx, :seq_len] = torch.tensor(ids, dtype=torch.long)
             attention_mask[batch_idx, :seq_len] = 1
             labels[batch_idx, :seq_len] = torch.tensor(row_labels, dtype=torch.long)
-            route_indices[batch_idx] = int(row["route_idx"])
-            target_rewards[batch_idx] = float(row["target_reward"])
+            target_rewards[batch_idx] = torch.tensor(row["target_rewards"], dtype=torch.float32)
 
         return {
             "problem_ids": [row["problem_id"] for row in rows],
             "datasets": [row["dataset"] for row in rows],
             "repos": [row["repo"] for row in rows],
             "languages": [row["language"] for row in rows],
-            "route_labels": [row["route_label"] for row in rows],
-            "route_prompt_aliases": [row["route_prompt_alias"] for row in rows],
-            "route_indices": route_indices,
-            "target_rewards": target_rewards,
+            "route_aliases": [row["route_aliases"] for row in rows],
+            "targets": target_rewards,
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "labels": labels,
@@ -432,114 +448,71 @@ def _make_text_train_collate_fn(pad_token_id: int):
 
 
 def _prepare_text_eval_rows(
-    dataset: list[dict[str, Any]],
+    dataset: Any,
     tokenizer: Any,
     max_seq_length: int | None,
+    route_aliases: list[str],
+    target_dim: int,
 ) -> list[dict[str, Any]]:
     prepared_rows: list[dict[str, Any]] = []
-    for row in dataset:
-        prompt_text = row.get("prompt_text")
-        primary_output_text = row.get("primary_output_text")
-        route_label = row.get("route_label")
-        target_reward = row.get("target_reward")
-        route_idx = row.get("route_idx")
-        if not isinstance(prompt_text, str) or not isinstance(primary_output_text, str):
-            continue
-        if not isinstance(route_label, str):
-            continue
-        if not isinstance(route_idx, int):
-            continue
-        if not isinstance(target_reward, (float, int)):
-            continue
-        prompt = _build_text_reward_prompt(prompt_text, primary_output_text, route_idx)
-        prompt_ids = tokenizer(prompt, add_special_tokens=False).input_ids
-        prompt_ids = _truncate_from_left(prompt_ids, max_seq_length)
-        if not prompt_ids:
-            continue
-        prepared_rows.append(
-            {
-                "problem_id": row.get("problem_id"),
-                "dataset": row.get("dataset"),
-                "repo": row.get("repo"),
-                "language": row.get("language"),
-                "route_label": route_label,
-                "route_idx": route_idx,
-                "route_prompt_alias": _route_prompt_alias(route_idx),
-                "target_reward": float(target_reward),
-                "input_ids": prompt_ids,
-            }
-        )
-    return prepared_rows
-
-
-def _make_text_eval_collate_fn(pad_token_id: int):
-    def _collate(rows: list[dict[str, Any]]) -> dict[str, Any]:
-        max_len = max(len(row["input_ids"]) for row in rows)
-        batch_size = len(rows)
-        input_ids = torch.full((batch_size, max_len), fill_value=pad_token_id, dtype=torch.long)
-        attention_mask = torch.zeros((batch_size, max_len), dtype=torch.long)
-        route_indices = torch.zeros((batch_size,), dtype=torch.long)
-        target_rewards = torch.zeros((batch_size,), dtype=torch.float32)
-
-        for batch_idx, row in enumerate(rows):
-            ids = row["input_ids"]
-            seq_len = len(ids)
-            input_ids[batch_idx, :seq_len] = torch.tensor(ids, dtype=torch.long)
-            attention_mask[batch_idx, :seq_len] = 1
-            route_indices[batch_idx] = int(row["route_idx"])
-            target_rewards[batch_idx] = float(row["target_reward"])
-
-        return {
-            "problem_ids": [row["problem_id"] for row in rows],
-            "datasets": [row["dataset"] for row in rows],
-            "repos": [row["repo"] for row in rows],
-            "languages": [row["language"] for row in rows],
-            "route_labels": [row["route_label"] for row in rows],
-            "route_prompt_aliases": [row["route_prompt_alias"] for row in rows],
-            "route_indices": route_indices,
-            "target_rewards": target_rewards,
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-        }
-
-    return _collate
-
-
-def _expand_dataset_for_text_reward(
-    dataset: Any,
-    route_labels: list[str],
-    target_precision: int,
-) -> list[dict[str, Any]]:
-    expanded_rows: list[dict[str, Any]] = []
     for row in dataset:
         prompt_text = row.get("prompt_text")
         primary_output_text = _get_primary_output_text(row)
         targets = row.get("performance_targets")
         if not isinstance(prompt_text, str) or not isinstance(primary_output_text, str):
             continue
-        if not isinstance(targets, list) or len(targets) != len(route_labels):
+        if not isinstance(targets, list) or len(targets) != target_dim:
             continue
         try:
             problem_id = problem_id_from_item(row)
         except ValueError:
             continue
-        for route_idx, route_label in enumerate(route_labels):
-            target_reward = float(targets[route_idx])
-            expanded_rows.append(
-                {
-                    "problem_id": problem_id,
-                    "dataset": row.get("dataset"),
-                    "repo": row.get("repo"),
-                    "language": row.get("language"),
-                    "prompt_text": prompt_text,
-                    "primary_output_text": primary_output_text,
-                    "route_idx": int(route_idx),
-                    "route_label": route_label,
-                    "target_reward": target_reward,
-                    "target_text": _format_reward_target(target_reward, target_precision),
-                }
-            )
-    return expanded_rows
+        prompt = _build_text_reward_prompt(prompt_text, primary_output_text, route_aliases)
+        prompt_ids = tokenizer(prompt, add_special_tokens=False).input_ids
+        prompt_ids = _truncate_from_left(prompt_ids, max_seq_length)
+        if not prompt_ids:
+            continue
+        prepared_rows.append(
+            {
+                "problem_id": problem_id,
+                "dataset": row.get("dataset"),
+                "repo": row.get("repo"),
+                "language": row.get("language"),
+                "route_aliases": list(route_aliases),
+                "target_rewards": [float(value) for value in targets],
+                "input_ids": prompt_ids,
+            }
+        )
+    return prepared_rows
+
+
+def _make_text_eval_collate_fn(pad_token_id: int, target_dim: int):
+    def _collate(rows: list[dict[str, Any]]) -> dict[str, Any]:
+        max_len = max(len(row["input_ids"]) for row in rows)
+        batch_size = len(rows)
+        input_ids = torch.full((batch_size, max_len), fill_value=pad_token_id, dtype=torch.long)
+        attention_mask = torch.zeros((batch_size, max_len), dtype=torch.long)
+        target_rewards = torch.zeros((batch_size, target_dim), dtype=torch.float32)
+
+        for batch_idx, row in enumerate(rows):
+            ids = row["input_ids"]
+            seq_len = len(ids)
+            input_ids[batch_idx, :seq_len] = torch.tensor(ids, dtype=torch.long)
+            attention_mask[batch_idx, :seq_len] = 1
+            target_rewards[batch_idx] = torch.tensor(row["target_rewards"], dtype=torch.float32)
+
+        return {
+            "problem_ids": [row["problem_id"] for row in rows],
+            "datasets": [row["dataset"] for row in rows],
+            "repos": [row["repo"] for row in rows],
+            "languages": [row["language"] for row in rows],
+            "route_aliases": [row["route_aliases"] for row in rows],
+            "targets": target_rewards,
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+        }
+
+    return _collate
 
 
 def _forward_predictions(model: AutoModelForCausalLMWithValueHead, batch: dict[str, Any]) -> torch.Tensor:
@@ -562,6 +535,7 @@ def _forward_text_reward_loss(model: AutoModelForCausalLMWithValueHead, batch: d
         attention_mask=batch["attention_mask"],
         labels=batch["labels"],
         return_dict=True,
+        skip_value_heads=True,
     )
     if outputs.loss is None:
         raise ValueError("Model did not return language-model loss for text reward supervision")
@@ -597,20 +571,25 @@ def _run_representation_eval(
                 )
     return prediction_rows, local_squared_error_sum, local_value_count
 
-
-_FLOAT_PATTERN = re.compile(r"[-+]?(?:\d+\.\d*|\.\d+|\d+)(?:[eE][-+]?\d+)?")
-
-
-def _parse_generated_reward(text: str) -> float | None:
+def _parse_generated_reward(text: str, target_dim: int) -> tuple[list[float] | None, str | None]:
     if not isinstance(text, str):
-        return None
-    match = _FLOAT_PATTERN.search(text)
-    if match is None:
-        return None
+        return None, "generated_text_not_string"
     try:
-        return float(match.group(0))
-    except ValueError:
-        return None
+        parsed = json.loads(text.strip())
+    except json.JSONDecodeError as exc:
+        return None, f"json_decode_error:{exc.msg}"
+    if not isinstance(parsed, list):
+        return None, f"json_type_error:{type(parsed).__name__}"
+    if len(parsed) != target_dim:
+        return None, f"json_length_error:{len(parsed)}"
+
+    rewards: list[float] = []
+    for idx, value in enumerate(parsed):
+        try:
+            rewards.append(float(value))
+        except (TypeError, ValueError):
+            return None, f"json_value_error:index={idx}"
+    return rewards, None
 
 
 def _generate_text_reward_tokens(
@@ -636,6 +615,7 @@ def _generate_text_reward_tokens(
             input_ids=generated_ids,
             attention_mask=generated_attention_mask,
             return_dict=True,
+            skip_value_heads=True,
         )
         next_logits = outputs.logits[:, -1, :]
         if do_sample:
@@ -678,9 +658,10 @@ def _run_text_reward_eval(
     do_sample: bool,
     parse_failure_value: float,
     clip_predictions: bool,
+    target_dim: int,
 ) -> tuple[list[dict[str, Any]], float, int]:
     model.eval()
-    route_prediction_rows: list[dict[str, Any]] = []
+    prediction_rows: list[dict[str, Any]] = []
     local_squared_error_sum = 0.0
     local_value_count = 0
     with torch.no_grad():
@@ -698,31 +679,33 @@ def _run_text_reward_eval(
             else:
                 generated_texts = tokenizer.batch_decode(generated_tokens.detach().cpu(), skip_special_tokens=True)
             for row_idx, problem_id in enumerate(batch["problem_ids"]):
-                parsed_reward = _parse_generated_reward(generated_texts[row_idx])
-                parse_success = parsed_reward is not None
+                parsed_rewards, parse_error = _parse_generated_reward(generated_texts[row_idx], target_dim)
+                parse_success = parsed_rewards is not None
                 if not parse_success:
-                    parsed_reward = float(parse_failure_value)
+                    parsed_rewards = [float(parse_failure_value)] * target_dim
                 if clip_predictions:
-                    parsed_reward = float(min(1.0, max(0.0, float(parsed_reward))))
-                target_reward = float(batch["target_rewards"][row_idx].item())
-                local_squared_error_sum += float((float(parsed_reward) - target_reward) ** 2)
-                local_value_count += 1
-                route_prediction_rows.append(
-                    {
-                        "problem_id": problem_id,
-                        "dataset": batch["datasets"][row_idx],
-                        "repo": batch["repos"][row_idx],
-                        "language": batch["languages"][row_idx],
-                        "route_label": batch["route_labels"][row_idx],
-                        "route_prompt_alias": batch["route_prompt_aliases"][row_idx],
-                        "route_idx": int(batch["route_indices"][row_idx].item()),
-                        "true_reward": target_reward,
-                        "generated_text": generated_texts[row_idx],
-                        "parsed_reward": float(parsed_reward),
-                        "parse_success": bool(parse_success),
-                    }
+                    parsed_rewards = [float(min(1.0, max(0.0, value))) for value in parsed_rewards]
+                target_rewards = [float(value) for value in batch["targets"][row_idx].tolist()]
+                local_squared_error_sum += float(
+                    sum((pred - target) ** 2 for pred, target in zip(parsed_rewards, target_rewards))
                 )
-    return route_prediction_rows, local_squared_error_sum, local_value_count
+                local_value_count += target_dim
+                prediction_row = {
+                    "problem_id": problem_id,
+                    "dataset": batch["datasets"][row_idx],
+                    "repo": batch["repos"][row_idx],
+                    "language": batch["languages"][row_idx],
+                    "route_aliases": list(batch["route_aliases"][row_idx]),
+                    "true_rewards": target_rewards,
+                    "generated_text": generated_texts[row_idx],
+                    "parsed_rewards": [float(value) for value in parsed_rewards],
+                    "pred_rewards": [float(value) for value in parsed_rewards],
+                    "parse_success": bool(parse_success),
+                }
+                if parse_error is not None:
+                    prediction_row["parse_error"] = parse_error
+                prediction_rows.append(prediction_row)
+    return prediction_rows, local_squared_error_sum, local_value_count
 
 
 def _save_predictions_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -802,7 +785,7 @@ def _merge_text_reward_eval_rows(
     rows: list[dict[str, Any]],
     route_labels: list[str],
 ) -> tuple[list[dict[str, Any]], np.ndarray, np.ndarray, dict[str, Any]]:
-    merged_route_rows: list[dict[str, Any]] = []
+    merged_problem_rows: list[dict[str, Any]] = []
     seen_keys: set[str] = set()
     total_parse_failures = 0
     for row in rows:
@@ -810,67 +793,45 @@ def _merge_text_reward_eval_rows(
         if key in seen_keys:
             continue
         seen_keys.add(key)
-        merged_route_rows.append(row)
+        merged_problem_rows.append(row)
         if not bool(row.get("parse_success", False)):
             total_parse_failures += 1
 
-    if not merged_route_rows:
+    if not merged_problem_rows:
         raise ValueError("No valid eval examples after tokenization/collation")
 
-    grouped_rows: dict[str, dict[str, Any]] = {}
-    for row in merged_route_rows:
-        problem_key = f"{row.get('dataset')}::{row.get('problem_id')}"
-        if problem_key not in grouped_rows:
-            grouped_rows[problem_key] = {
-                "problem_id": row.get("problem_id"),
-                "dataset": row.get("dataset"),
-                "repo": row.get("repo"),
-                "language": row.get("language"),
-                "true_rewards": [None] * len(route_labels),
-                "pred_rewards": [None] * len(route_labels),
-                "generated_text": [None] * len(route_labels),
-                "parsed_reward": [None] * len(route_labels),
-                "parse_success": [None] * len(route_labels),
-                "route_prompt_alias": [None] * len(route_labels),
-            }
-        group = grouped_rows[problem_key]
-        route_idx = int(row["route_idx"])
-        group["true_rewards"][route_idx] = float(row["true_reward"])
-        group["pred_rewards"][route_idx] = float(row["parsed_reward"])
-        group["generated_text"][route_idx] = row["generated_text"]
-        group["parsed_reward"][route_idx] = float(row["parsed_reward"])
-        group["parse_success"][route_idx] = bool(row["parse_success"])
-        group["route_prompt_alias"][route_idx] = row["route_prompt_alias"]
-
-    merged_problem_rows: list[dict[str, Any]] = []
-    incomplete_groups = 0
-    for group in grouped_rows.values():
+    filtered_rows: list[dict[str, Any]] = []
+    for row in merged_problem_rows:
+        true_rewards = row.get("true_rewards")
+        pred_rewards = row.get("pred_rewards")
+        route_aliases = row.get("route_aliases")
         if (
-            any(value is None for value in group["true_rewards"])
-            or any(value is None for value in group["pred_rewards"])
-            or any(value is None for value in group["route_prompt_alias"])
+            not isinstance(true_rewards, list)
+            or not isinstance(pred_rewards, list)
+            or len(true_rewards) != len(route_labels)
+            or len(pred_rewards) != len(route_labels)
+            or not isinstance(route_aliases, list)
+            or len(route_aliases) != len(route_labels)
         ):
-            incomplete_groups += 1
             continue
-        group["route_label"] = list(route_labels)
-        group["route_labels"] = list(route_labels)
-        merged_problem_rows.append(group)
+        normalized_row = dict(row)
+        normalized_row["route_labels"] = list(route_labels)
+        filtered_rows.append(normalized_row)
 
-    if not merged_problem_rows:
-        raise ValueError("No complete eval problems after regrouping text reward predictions")
+    if not filtered_rows:
+        raise ValueError("No complete eval problems after parsing text reward predictions")
 
-    y_true = np.asarray([row["true_rewards"] for row in merged_problem_rows], dtype=np.float32)
-    y_pred = np.asarray([row["pred_rewards"] for row in merged_problem_rows], dtype=np.float32)
-    parse_failure_rate = float(total_parse_failures / len(merged_route_rows)) if merged_route_rows else 0.0
+    y_true = np.asarray([row["true_rewards"] for row in filtered_rows], dtype=np.float32)
+    y_pred = np.asarray([row["pred_rewards"] for row in filtered_rows], dtype=np.float32)
+    parse_failure_rate = float(total_parse_failures / len(filtered_rows)) if filtered_rows else 0.0
     return (
-        merged_problem_rows,
+        filtered_rows,
         y_true,
         y_pred,
         {
             "parse_failures": int(total_parse_failures),
             "parse_failure_rate": parse_failure_rate,
-            "eval_route_examples": int(len(merged_route_rows)),
-            "incomplete_eval_groups": int(incomplete_groups),
+            "eval_problem_examples": int(len(filtered_rows)),
         },
     )
 
@@ -982,15 +943,20 @@ def main(cfg: DictConfig) -> None:
         route_labels = list(metadata.get("route_labels") or [])
         if not route_labels:
             raise ValueError("metadata.json is missing route_labels")
+        route_aliases = _route_prompt_aliases(route_labels)
         target_dim = len(route_labels)
         supervision_mode = str(train_cfg.get("supervision_mode", "representation_head"))
-        if supervision_mode not in {"representation_head", "text_reward_per_route"}:
+        if supervision_mode not in {"representation_head", "text_reward_vector"}:
             raise ValueError(f"Unsupported offline_router.train.supervision_mode: {supervision_mode}")
         text_reward_cfg = train_cfg.get("text_reward")
         if text_reward_cfg is None:
             text_reward_cfg = {}
-        text_target_precision = int(text_reward_cfg.get("target_precision", 3))
-        text_max_new_tokens = int(text_reward_cfg.get("max_new_tokens", 8))
+        text_target_precision = int(text_reward_cfg.get("target_precision", 2))
+        text_lr = float(text_reward_cfg.get("lr", 5.0e-6))
+        text_weight_decay = float(text_reward_cfg.get("weight_decay", 0.01))
+        text_warmup_steps = int(text_reward_cfg.get("warmup_steps", 100))
+        text_gradient_clipping = float(text_reward_cfg.get("gradient_clipping", 0.3))
+        text_max_new_tokens = int(text_reward_cfg.get("max_new_tokens", 16))
         text_do_sample = bool(text_reward_cfg.get("do_sample", False))
         text_parse_failure_value = float(text_reward_cfg.get("parse_failure_value", 0.0))
         text_clip_predictions = bool(text_reward_cfg.get("clip_predictions", True))
@@ -1015,18 +981,6 @@ def main(cfg: DictConfig) -> None:
         )
         raw_train_rows = int(len(train_dataset))
         raw_eval_rows = int(len(eval_dataset))
-
-        if supervision_mode == "text_reward_per_route":
-            train_dataset = _expand_dataset_for_text_reward(
-                train_dataset,
-                route_labels=route_labels,
-                target_precision=text_target_precision,
-            )
-            eval_dataset = _expand_dataset_for_text_reward(
-                eval_dataset,
-                route_labels=route_labels,
-                target_precision=text_target_precision,
-            )
         train_supervision_rows = int(len(train_dataset))
         eval_supervision_rows = int(len(eval_dataset))
 
@@ -1086,10 +1040,14 @@ def main(cfg: DictConfig) -> None:
             next(model.value_head.parameters()).dtype,
             next(model.performance_value_head.parameters()).dtype,
         )
-        if supervision_mode == "text_reward_per_route":
+        if supervision_mode == "text_reward_vector":
             logger.info(
-                "Offline router text reward settings: target_precision=%d max_new_tokens=%d do_sample=%s parse_failure_value=%.3f clip_predictions=%s train_rows=%d train_supervision_rows=%d eval_rows=%d eval_supervision_rows=%d",
+                "Offline router text reward settings: target_precision=%d lr=%.2e weight_decay=%.3f warmup_steps=%d gradient_clipping=%.3f max_new_tokens=%d do_sample=%s parse_failure_value=%.3f clip_predictions=%s train_rows=%d train_supervision_rows=%d eval_rows=%d eval_supervision_rows=%d",
                 text_target_precision,
+                text_lr,
+                text_weight_decay,
+                text_warmup_steps,
+                text_gradient_clipping,
                 text_max_new_tokens,
                 text_do_sample,
                 text_parse_failure_value,
@@ -1099,7 +1057,12 @@ def main(cfg: DictConfig) -> None:
                 raw_eval_rows,
                 eval_supervision_rows,
             )
-        optimizer, optimizer_group_summaries = _build_optimizer(model, train_cfg)
+        optimizer, optimizer_group_summaries = _build_optimizer(
+            model,
+            train_cfg,
+            supervision_mode=supervision_mode,
+            text_reward_cfg=text_reward_cfg,
+        )
         logger.info("Offline router optimizer groups=%s", optimizer_group_summaries)
 
         if (ds_plugin := getattr(get_accelerator().state, "deepspeed_plugin", None)) is not None:
@@ -1139,14 +1102,19 @@ def main(cfg: DictConfig) -> None:
                 train_dataset,
                 tokenizer=tokenizer,
                 max_seq_length=max_seq_length,
+                route_aliases=route_aliases,
+                target_dim=target_dim,
+                target_precision=text_target_precision,
             )
             eval_dataset = _prepare_text_eval_rows(
                 eval_dataset,
                 tokenizer=tokenizer,
                 max_seq_length=max_seq_length,
+                route_aliases=route_aliases,
+                target_dim=target_dim,
             )
-            train_collate_fn = _make_text_train_collate_fn(pad_token_id=pad_token_id)
-            eval_collate_fn = _make_text_eval_collate_fn(pad_token_id=pad_token_id)
+            train_collate_fn = _make_text_train_collate_fn(pad_token_id=pad_token_id, target_dim=target_dim)
+            eval_collate_fn = _make_text_eval_collate_fn(pad_token_id=pad_token_id, target_dim=target_dim)
 
         if not train_dataset:
             raise ValueError("No valid training rows remain after preprocessing/tokenization")
@@ -1195,6 +1163,23 @@ def main(cfg: DictConfig) -> None:
         grad_accum = max(1, int(train_cfg.get("gradient_accumulation_steps", 1)))
         log_every_steps = max(1, int(train_cfg.get("log_every_steps", 100)))
         save_checkpoints = bool(train_cfg.get("save_checkpoints", True))
+        text_scheduler = None
+        text_trainable_params: list[torch.nn.Parameter] = []
+        if supervision_mode == "text_reward_vector":
+            optimizer_steps_per_epoch = max(1, math.ceil(len(train_loader) / grad_accum))
+            total_optimizer_steps = max(1, optimizer_steps_per_epoch * num_epochs)
+            text_scheduler = get_constant_schedule_with_warmup(
+                optimizer,
+                num_warmup_steps=min(text_warmup_steps, total_optimizer_steps),
+            )
+            text_trainable_params = [param for param in model.parameters() if param.requires_grad]
+            logger.info(
+                "Offline router text reward optimizer schedule: optimizer_steps_per_epoch=%d total_optimizer_steps=%d warmup_steps=%d gradient_clipping=%.3f",
+                optimizer_steps_per_epoch,
+                total_optimizer_steps,
+                min(text_warmup_steps, total_optimizer_steps),
+                text_gradient_clipping,
+            )
         best_eval_loss = float("inf")
         best_epoch = -1
         history: list[dict[str, Any]] = []
@@ -1228,7 +1213,11 @@ def main(cfg: DictConfig) -> None:
                 local_examples_seen += int(batch["input_ids"].shape[0])
 
                 if batch_count % grad_accum == 0:
+                    if supervision_mode == "text_reward_vector" and text_gradient_clipping > 0.0:
+                        get_accelerator().clip_grad_norm_(text_trainable_params, text_gradient_clipping)
                     optimizer.step()
+                    if text_scheduler is not None:
+                        text_scheduler.step()
                     optimizer.zero_grad(set_to_none=True)
 
                 if is_main_process() and (step_idx % log_every_steps == 0 or step_idx == len(train_loader)):
@@ -1268,7 +1257,11 @@ def main(cfg: DictConfig) -> None:
                     get_rank(),
                     batch_count % grad_accum,
                 )
+                if supervision_mode == "text_reward_vector" and text_gradient_clipping > 0.0:
+                    get_accelerator().clip_grad_norm_(text_trainable_params, text_gradient_clipping)
                 optimizer.step()
+                if text_scheduler is not None:
+                    text_scheduler.step()
                 optimizer.zero_grad(set_to_none=True)
 
             if not running_losses:
@@ -1314,6 +1307,7 @@ def main(cfg: DictConfig) -> None:
                     do_sample=text_do_sample,
                     parse_failure_value=text_parse_failure_value,
                     clip_predictions=text_clip_predictions,
+                    target_dim=target_dim,
                 )
             shard_path = _write_eval_shard(output_dir, epoch, local_eval_rows)
             logger.info(
@@ -1367,14 +1361,13 @@ def main(cfg: DictConfig) -> None:
                     )
                 else:
                     logger.info(
-                        "Offline router epoch=%d finished eval eval_loss=%.6f eval_rows=%d eval_route_examples=%d parse_failures=%d parse_failure_rate=%.4f incomplete_eval_groups=%d elapsed_seconds=%.1f",
+                        "Offline router epoch=%d finished eval eval_loss=%.6f eval_rows=%d eval_problem_examples=%d parse_failures=%d parse_failure_rate=%.4f elapsed_seconds=%.1f",
                         epoch,
                         eval_loss,
                         len(eval_rows),
-                        int(eval_extra.get("eval_route_examples", 0)),
+                        int(eval_extra.get("eval_problem_examples", 0)),
                         int(eval_extra.get("parse_failures", 0)),
                         float(eval_extra.get("parse_failure_rate", 0.0)),
-                        int(eval_extra.get("incomplete_eval_groups", 0)),
                         time.time() - eval_start_time,
                     )
 
@@ -1497,17 +1490,20 @@ def main(cfg: DictConfig) -> None:
                 "distributed": is_distributed(),
                 "world_size": get_world_size(),
             }
-            if supervision_mode == "text_reward_per_route":
+            if supervision_mode == "text_reward_vector":
                 summary["text_reward"] = {
                     "target_precision": text_target_precision,
+                    "lr": text_lr,
+                    "weight_decay": text_weight_decay,
+                    "warmup_steps": text_warmup_steps,
+                    "gradient_clipping": text_gradient_clipping,
                     "max_new_tokens": text_max_new_tokens,
                     "do_sample": text_do_sample,
                     "parse_failure_value": text_parse_failure_value,
                     "clip_predictions": text_clip_predictions,
                     "best_eval_parse_failures": int(best_eval_extra.get("parse_failures", 0)),
                     "best_eval_parse_failure_rate": float(best_eval_extra.get("parse_failure_rate", 0.0)),
-                    "best_eval_route_examples": int(best_eval_extra.get("eval_route_examples", 0)),
-                    "best_incomplete_eval_groups": int(best_eval_extra.get("incomplete_eval_groups", 0)),
+                    "best_eval_problem_examples": int(best_eval_extra.get("eval_problem_examples", 0)),
                 }
             write_json(output_dir / "summary.json", summary)
             if wandb_run is not None:

@@ -172,12 +172,16 @@ class AutoModelForCausalLMWithValueHead(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        skip_value_heads: bool = False,
     ) -> Union[Tuple, CausalLMOutputWithValue]:
         """
         Forward pass that computes both language modeling outputs and value predictions.
         """
 
-        # Get outputs from the base model
+        want_hidden_states = True
+        if skip_value_heads:
+            want_hidden_states = bool(output_hidden_states)
+
         outputs = self.pretrained_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -187,26 +191,26 @@ class AutoModelForCausalLMWithValueHead(nn.Module):
             labels=labels,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            output_hidden_states=True,
+            output_hidden_states=want_hidden_states,
             return_dict=True,
         )
 
-        # Get the last hidden states
-        hidden_states = outputs.hidden_states[-1]
-
-        # Compute values
-        values = self.value_head(hidden_states)
-        performance_values = self.performance_value_head(hidden_states)
-        if not getattr(self, "_logged_runtime_head_dtypes", False) and get_accelerator().is_main_process:
-            self._logged_runtime_head_dtypes = True
-            logger.info(
-                "Value-model runtime dtypes: hidden_states=%s value_head_param=%s value_output=%s performance_head_param=%s performance_output=%s",
-                hidden_states.dtype,
-                next(self.value_head.parameters()).dtype,
-                values.dtype,
-                next(self.performance_value_head.parameters()).dtype,
-                performance_values.dtype,
-            )
+        values = None
+        performance_values = None
+        if not skip_value_heads:
+            hidden_states = outputs.hidden_states[-1]
+            values = self.value_head(hidden_states)
+            performance_values = self.performance_value_head(hidden_states)
+            if not getattr(self, "_logged_runtime_head_dtypes", False) and get_accelerator().is_main_process:
+                self._logged_runtime_head_dtypes = True
+                logger.info(
+                    "Value-model runtime dtypes: hidden_states=%s value_head_param=%s value_output=%s performance_head_param=%s performance_output=%s",
+                    hidden_states.dtype,
+                    next(self.value_head.parameters()).dtype,
+                    values.dtype,
+                    next(self.performance_value_head.parameters()).dtype,
+                    performance_values.dtype,
+                )
 
         return CausalLMOutputWithValue(
             loss=outputs.loss,
