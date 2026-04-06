@@ -83,6 +83,16 @@ def _cast_auxiliary_heads_to_fp32(
     model.performance_value_head = model.performance_value_head.to(device=device, dtype=torch.float32)
 
 
+def _log_auxiliary_head_dtypes(prefix: str, model: Any) -> None:
+    unwrapped_model = get_accelerator().unwrap_model(model)
+    logger.info(
+        "Offline router %s head dtypes: value_head=%s performance_value_head=%s",
+        prefix,
+        next(unwrapped_model.value_head.parameters()).dtype,
+        next(unwrapped_model.performance_value_head.parameters()).dtype,
+    )
+
+
 def _prediction_row_key(row: dict[str, Any]) -> str:
     dataset = row.get("dataset")
     problem_id = row.get("problem_id")
@@ -1126,6 +1136,7 @@ def main(cfg: DictConfig) -> None:
             train_loader,
             eval_loader,
         )
+        _log_auxiliary_head_dtypes("post_prepare", model)
         logger.info(
             "Offline router accelerator prepared: distributed=%s world_size=%d deepspeed=%s",
             is_distributed(),

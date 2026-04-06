@@ -1,6 +1,7 @@
 import os
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import json
 from dataclasses import dataclass
 from transformers.modeling_utils import PreTrainedModel
@@ -52,8 +53,13 @@ class ValueHead(nn.Module):
         nn.init.zeros_(self.output.bias)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = hidden_states.to(dtype=self.output.weight.dtype)
-        values = self.output(hidden_states).squeeze(-1)  # (batch_size, sequence_length)
+        # Force the scalar-regression path to run in fp32 even when the backbone
+        # is bf16, so small calibration differences are not quantized away.
+        values = F.linear(
+            hidden_states.float(),
+            self.output.weight.float(),
+            self.output.bias.float() if self.output.bias is not None else None,
+        ).squeeze(-1)
         return values
 
 
@@ -106,10 +112,19 @@ class PerformanceValueHead(nn.Module):
         }
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        first_linear = next((module for module in self.network if isinstance(module, nn.Linear)), None)
-        if first_linear is not None:
-            hidden_states = hidden_states.to(dtype=first_linear.weight.dtype)
-        return self.network(hidden_states)  # (batch_size, sequence_length, output_dim)
+        # Force the vector-regression path to run in fp32 even when the model is
+        # otherwise bf16. This isolates head numerics from backbone numerics.
+        x = hidden_states.float()
+        for module in self.network:
+            if isinstance(module, nn.Linear):
+                x = F.linear(
+                    x,
+                    module.weight.float(),
+                    module.bias.float() if module.bias is not None else None,
+                )
+            else:
+                x = module(x)
+        return x  # (batch_size, sequence_length, output_dim)
 
 
 class AutoModelForCausalLMWithValueHead(nn.Module):
@@ -182,6 +197,16 @@ class AutoModelForCausalLMWithValueHead(nn.Module):
         # Compute values
         values = self.value_head(hidden_states)
         performance_values = self.performance_value_head(hidden_states)
+        if not getattr(self, "_logged_runtime_head_dtypes", False) and get_accelerator().is_main_process:
+            self._logged_runtime_head_dtypes = True
+            logger.info(
+                "Value-model runtime dtypes: hidden_states=%s value_head_param=%s value_output=%s performance_head_param=%s performance_output=%s",
+                hidden_states.dtype,
+                next(self.value_head.parameters()).dtype,
+                values.dtype,
+                next(self.performance_value_head.parameters()).dtype,
+                performance_values.dtype,
+            )
 
         return CausalLMOutputWithValue(
             loss=outputs.loss,

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 TIMESTAMP=$(date +%s)
-JOB_NAME=offline_router_fp32_head_test
+JOB_NAME=offline_router_fp32_head_runtime_check
 OUTPUT_DIR=/mnt/llmd/results/exps/aristides/reason/${JOB_NAME}_${TIMESTAMP}
 
 # Edit these directly when you want a different launch configuration.
@@ -12,9 +12,7 @@ MODEL_PATH=/mnt/llmd/results/exps/aristides/reason/swe_smith_policy_conditioned_
 MIXED_PRECISION=bf16
 ACCELERATE_CONFIG=deepspeed
 DEEPSPEED_CONFIG=deepspeed_stage2_bf16
-EXTRA_ARGS="offline_router.train.supervision_mode=representation_head offline_router.train.mode=full_backbone offline_router.train.max_train_rows=4096 offline_router.train.max_eval_rows=178 offline_router.train.num_epochs=5" \
-#EXTRA_ARGS="offline_router.train.supervision_mode=text_reward_per_route offline_router.train.max_train_rows=256 offline_router.train.max_eval_rows=32 offline_router.train.num_epochs=3 offline_router.train.mode=full_backbone" \
-#EXTRA_ARGS="offline_router.train.mode=full_backbone"
+EXTRA_ARGS="offline_router.train.supervision_mode=representation_head offline_router.train.mode=full_backbone offline_router.train.max_train_rows=4096 offline_router.train.max_eval_rows=178 offline_router.train.num_epochs=5 offline_router.train.save_checkpoints=true"
 
 TRAIN_CMD="python -m pipelinerl.swe.scripts.offline_router.train_router_offline"
 if [[ "${NPROC}" -gt 1 ]]; then
