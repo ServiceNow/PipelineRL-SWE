@@ -2,7 +2,7 @@
 set -euo pipefail
 
 TIMESTAMP=$(date +%s)
-JOB_NAME=offline_router_text_vector_accumulate_test
+JOB_NAME=offline_router_text_vector_nccl_trace_test
 OUTPUT_DIR=/mnt/llmd/results/exps/aristides/reason/${JOB_NAME}_${TIMESTAMP}
 
 # Edit these directly when you want a different launch configuration.
@@ -31,7 +31,7 @@ make job \
   CONDA_EXE=/opt/conda/bin/conda \
   SNAPSHOT=1 \
   NPROC=${NPROC} \
-  COMMAND="cd /home/toolkit/PipelineRL-SWE; mkdir -p ${OUTPUT_DIR}; export TORCH_NCCL_DESYNC_DEBUG=1; set -o pipefail; { ${TRAIN_CMD} \
+  COMMAND="cd /home/toolkit/PipelineRL-SWE; mkdir -p ${OUTPUT_DIR}; export TORCH_NCCL_DESYNC_DEBUG=1; export TORCH_NCCL_DUMP_ON_TIMEOUT=1; export TORCH_NCCL_TRACE_BUFFER_SIZE=2000; export TORCH_NCCL_DEBUG_INFO_TEMP_FILE=${OUTPUT_DIR}/nccl_trace_rank; export TORCH_SHOW_CPP_STACKTRACES=1; export TORCH_CPP_LOG_LEVEL=INFO; export NCCL_DEBUG=INFO; export NCCL_DEBUG_SUBSYS=COLL; set -o pipefail; { ${TRAIN_CMD} \
     output_dir=${OUTPUT_DIR} \
     offline_router.train.dataset_dir=${DATASET_DIR} \
     offline_router.train.model_path=${MODEL_PATH} \

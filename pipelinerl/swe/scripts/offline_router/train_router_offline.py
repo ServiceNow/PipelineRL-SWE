@@ -993,6 +993,7 @@ def _log_train_progress_to_wandb(
 def main(cfg: DictConfig) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
+    had_error = False
     try:
         train_cfg = cfg.offline_router.train
         grad_accum = max(1, int(train_cfg.get("gradient_accumulation_steps", 1)))
@@ -1651,12 +1652,18 @@ def main(cfg: DictConfig) -> None:
                 except Exception as exc:  # pylint: disable=broad-except
                     logger.warning("Failed to finalize offline router W&B logging: %s", exc)
             logger.info("Offline router training complete: output_dir=%s", output_dir)
+    except Exception:
+        had_error = True
+        logger.exception("Offline router training failed on rank=%s", os.environ.get("RANK", "unknown"))
+        raise
     finally:
         if accelerator_is_initialized():
             try:
-                barrier_if_distributed()
-            finally:
                 get_accelerator().end_training()
+            except Exception:
+                logger.exception("Offline router end_training cleanup failed on rank=%s", os.environ.get("RANK", "unknown"))
+                if not had_error:
+                    raise
 
 
 if __name__ == "__main__":
