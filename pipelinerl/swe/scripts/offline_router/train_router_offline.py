@@ -92,6 +92,71 @@ def _log_auxiliary_head_dtypes(prefix: str, model: Any) -> None:
     )
 
 
+def _maybe_cuda_synchronize() -> None:
+    device = get_accelerator().device
+    if device.type != "cuda" or not torch.cuda.is_available():
+        return
+    torch.cuda.synchronize(device)
+
+
+def _maybe_reset_cuda_peak_memory() -> None:
+    device = get_accelerator().device
+    if device.type != "cuda" or not torch.cuda.is_available():
+        return
+    torch.cuda.reset_peak_memory_stats(device)
+
+
+def _cuda_memory_snapshot() -> tuple[float | None, float | None, float | None]:
+    device = get_accelerator().device
+    if device.type != "cuda" or not torch.cuda.is_available():
+        return None, None, None
+    mib = float(1024**2)
+    return (
+        float(torch.cuda.memory_allocated(device) / mib),
+        float(torch.cuda.memory_reserved(device) / mib),
+        float(torch.cuda.max_memory_allocated(device) / mib),
+    )
+
+
+def _log_text_train_step_debug(
+    enabled: bool,
+    epoch: int,
+    step_idx: int,
+    total_steps: int,
+    phase: str,
+    batch: dict[str, Any],
+    optimizer: torch.optim.Optimizer,
+    loss: torch.Tensor | None = None,
+) -> None:
+    if not enabled:
+        return
+    _maybe_cuda_synchronize()
+    if phase == "before_forward":
+        _maybe_reset_cuda_peak_memory()
+    seq_lens = batch["attention_mask"].sum(dim=1).detach().cpu().tolist()
+    target_tokens = (batch["labels"] != -100).sum(dim=1).detach().cpu().tolist()
+    problem_ids = list(batch["problem_ids"])
+    lr = float(optimizer.param_groups[0]["lr"]) if optimizer.param_groups else math.nan
+    loss_value = float(loss.detach().float().item()) if loss is not None else math.nan
+    alloc_mb, reserved_mb, max_alloc_mb = _cuda_memory_snapshot()
+    logger.info(
+        "Offline router text debug epoch=%d rank=%d step=%d/%d phase=%s problems=%s seq_lens=%s target_tokens=%s loss=%.6f lr=%.2e alloc_mb=%s reserved_mb=%s max_alloc_mb=%s",
+        epoch,
+        get_rank(),
+        step_idx,
+        total_steps,
+        phase,
+        problem_ids,
+        seq_lens,
+        target_tokens,
+        loss_value,
+        lr,
+        "n/a" if alloc_mb is None else f"{alloc_mb:.1f}",
+        "n/a" if reserved_mb is None else f"{reserved_mb:.1f}",
+        "n/a" if max_alloc_mb is None else f"{max_alloc_mb:.1f}",
+    )
+
+
 def _build_optimizer(
     model: AutoModelForCausalLMWithValueHead,
     train_cfg: Any,
@@ -956,6 +1021,7 @@ def main(cfg: DictConfig) -> None:
         text_weight_decay = float(text_reward_cfg.get("weight_decay", 0.01))
         text_warmup_steps = int(text_reward_cfg.get("warmup_steps", 100))
         text_gradient_clipping = float(text_reward_cfg.get("gradient_clipping", 0.3))
+        text_debug_step_logging = bool(text_reward_cfg.get("debug_step_logging", False))
         text_max_new_tokens = int(text_reward_cfg.get("max_new_tokens", 16))
         text_do_sample = bool(text_reward_cfg.get("do_sample", False))
         text_parse_failure_value = float(text_reward_cfg.get("parse_failure_value", 0.0))
@@ -1042,12 +1108,13 @@ def main(cfg: DictConfig) -> None:
         )
         if supervision_mode == "text_reward_vector":
             logger.info(
-                "Offline router text reward settings: target_precision=%d lr=%.2e weight_decay=%.3f warmup_steps=%d gradient_clipping=%.3f max_new_tokens=%d do_sample=%s parse_failure_value=%.3f clip_predictions=%s train_rows=%d train_supervision_rows=%d eval_rows=%d eval_supervision_rows=%d",
+                "Offline router text reward settings: target_precision=%d lr=%.2e weight_decay=%.3f warmup_steps=%d gradient_clipping=%.3f debug_step_logging=%s max_new_tokens=%d do_sample=%s parse_failure_value=%.3f clip_predictions=%s train_rows=%d train_supervision_rows=%d eval_rows=%d eval_supervision_rows=%d",
                 text_target_precision,
                 text_lr,
                 text_weight_decay,
                 text_warmup_steps,
                 text_gradient_clipping,
+                text_debug_step_logging,
                 text_max_new_tokens,
                 text_do_sample,
                 text_parse_failure_value,
@@ -1206,19 +1273,102 @@ def main(cfg: DictConfig) -> None:
                     preds = _forward_predictions(model, batch)
                     loss = F.mse_loss(preds, batch["targets"])
                 else:
+                    _log_text_train_step_debug(
+                        text_debug_step_logging,
+                        epoch,
+                        step_idx,
+                        len(train_loader),
+                        "before_forward",
+                        batch,
+                        optimizer,
+                    )
                     loss = _forward_text_reward_loss(model, batch)
+                    _log_text_train_step_debug(
+                        text_debug_step_logging,
+                        epoch,
+                        step_idx,
+                        len(train_loader),
+                        "after_forward",
+                        batch,
+                        optimizer,
+                        loss=loss,
+                    )
                 running_losses.append(float(loss.item()))
                 get_accelerator().backward(loss / grad_accum)
+                if supervision_mode == "text_reward_vector":
+                    _log_text_train_step_debug(
+                        text_debug_step_logging,
+                        epoch,
+                        step_idx,
+                        len(train_loader),
+                        "after_backward",
+                        batch,
+                        optimizer,
+                        loss=loss,
+                    )
                 batch_count += 1
                 local_examples_seen += int(batch["input_ids"].shape[0])
 
                 if batch_count % grad_accum == 0:
                     if supervision_mode == "text_reward_vector" and text_gradient_clipping > 0.0:
+                        _log_text_train_step_debug(
+                            text_debug_step_logging,
+                            epoch,
+                            step_idx,
+                            len(train_loader),
+                            "before_clip",
+                            batch,
+                            optimizer,
+                            loss=loss,
+                        )
                         get_accelerator().clip_grad_norm_(text_trainable_params, text_gradient_clipping)
+                        _log_text_train_step_debug(
+                            text_debug_step_logging,
+                            epoch,
+                            step_idx,
+                            len(train_loader),
+                            "after_clip",
+                            batch,
+                            optimizer,
+                            loss=loss,
+                        )
+                    if supervision_mode == "text_reward_vector":
+                        _log_text_train_step_debug(
+                            text_debug_step_logging,
+                            epoch,
+                            step_idx,
+                            len(train_loader),
+                            "before_optimizer_step",
+                            batch,
+                            optimizer,
+                            loss=loss,
+                        )
                     optimizer.step()
+                    if supervision_mode == "text_reward_vector":
+                        _log_text_train_step_debug(
+                            text_debug_step_logging,
+                            epoch,
+                            step_idx,
+                            len(train_loader),
+                            "after_optimizer_step",
+                            batch,
+                            optimizer,
+                            loss=loss,
+                        )
                     if text_scheduler is not None:
                         text_scheduler.step()
                     optimizer.zero_grad(set_to_none=True)
+                    if supervision_mode == "text_reward_vector":
+                        _log_text_train_step_debug(
+                            text_debug_step_logging,
+                            epoch,
+                            step_idx,
+                            len(train_loader),
+                            "after_zero_grad",
+                            batch,
+                            optimizer,
+                            loss=loss,
+                        )
 
                 if is_main_process() and (step_idx % log_every_steps == 0 or step_idx == len(train_loader)):
                     elapsed = max(time.time() - epoch_start_time, 1e-6)
@@ -1258,11 +1408,64 @@ def main(cfg: DictConfig) -> None:
                     batch_count % grad_accum,
                 )
                 if supervision_mode == "text_reward_vector" and text_gradient_clipping > 0.0:
+                    _log_text_train_step_debug(
+                        text_debug_step_logging,
+                        epoch,
+                        len(train_loader),
+                        len(train_loader),
+                        "before_final_clip",
+                        batch,
+                        optimizer,
+                        loss=loss,
+                    )
                     get_accelerator().clip_grad_norm_(text_trainable_params, text_gradient_clipping)
+                    _log_text_train_step_debug(
+                        text_debug_step_logging,
+                        epoch,
+                        len(train_loader),
+                        len(train_loader),
+                        "after_final_clip",
+                        batch,
+                        optimizer,
+                        loss=loss,
+                    )
+                if supervision_mode == "text_reward_vector":
+                    _log_text_train_step_debug(
+                        text_debug_step_logging,
+                        epoch,
+                        len(train_loader),
+                        len(train_loader),
+                        "before_final_optimizer_step",
+                        batch,
+                        optimizer,
+                        loss=loss,
+                    )
                 optimizer.step()
+                if supervision_mode == "text_reward_vector":
+                    _log_text_train_step_debug(
+                        text_debug_step_logging,
+                        epoch,
+                        len(train_loader),
+                        len(train_loader),
+                        "after_final_optimizer_step",
+                        batch,
+                        optimizer,
+                        loss=loss,
+                    )
                 if text_scheduler is not None:
                     text_scheduler.step()
                 optimizer.zero_grad(set_to_none=True)
+                if supervision_mode == "text_reward_vector":
+                    _log_text_train_step_debug(
+                        text_debug_step_logging,
+                        epoch,
+                        len(train_loader),
+                        len(train_loader),
+                        "after_final_zero_grad",
+                        batch,
+                        optimizer,
+                        loss=loss,
+                    )
 
             if not running_losses:
                 raise ValueError("No valid training batches after tokenization/collation")
