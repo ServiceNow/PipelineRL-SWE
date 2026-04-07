@@ -7,6 +7,7 @@ import math
 import os
 import shutil
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import hydra
@@ -18,12 +19,13 @@ from datasets import load_dataset
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import AutoTokenizer, get_constant_schedule_with_warmup
+from transformers import AutoModelForCausalLM, AutoTokenizer, get_constant_schedule_with_warmup
 import wandb
 import time
 
-from pipelinerl.finetune.checkpoints import save_model_only
+from pipelinerl.finetune.checkpoints import save_model_and_tokenizer, save_model_only
 from pipelinerl.finetune.context import accelerator_is_initialized, configure_accelerator, get_accelerator
+from pipelinerl.finetune.lora import has_lora_checkpoint, lora_load, prepare_lora_model
 from pipelinerl.finetune.value_model import AutoModelForCausalLMWithValueHead
 from pipelinerl.utils import init_wandb
 from pipelinerl.swe.scripts.offline_router.common import (
@@ -85,6 +87,8 @@ def _cast_auxiliary_heads_to_fp32(
 
 def _log_auxiliary_head_dtypes(prefix: str, model: Any) -> None:
     unwrapped_model = get_accelerator().unwrap_model(model)
+    if not hasattr(unwrapped_model, "value_head") or not hasattr(unwrapped_model, "performance_value_head"):
+        return
     logger.info(
         "Offline router %s head dtypes: value_head=%s performance_value_head=%s",
         prefix,
@@ -159,7 +163,7 @@ def _log_text_train_step_debug(
 
 
 def _build_optimizer(
-    model: AutoModelForCausalLMWithValueHead,
+    model: torch.nn.Module,
     train_cfg: Any,
     supervision_mode: str,
     text_reward_cfg: Any,
@@ -195,7 +199,7 @@ def _build_optimizer(
     if supervision_mode == "text_reward_vector":
         default_lr = float(text_reward_cfg.get("lr", 5.0e-6))
         group_weight_decay = float(text_reward_cfg.get("weight_decay", 0.01))
-        _add_group("pretrained_model", model.pretrained_model.parameters(), default_lr)
+        _add_group("lora_adapters", model.parameters(), default_lr)
         _add_group(
             "other_trainable",
             (param for param in model.parameters() if param.requires_grad and id(param) not in assigned_param_ids),
@@ -364,6 +368,95 @@ def _configure_training_mode(
     for param in model.pretrained_model.parameters():
         param.requires_grad = True
     return ["pretrained_model"]
+
+
+def _build_text_lora_runtime_config(
+    train_cfg: Any,
+    adapter_config: dict[str, Any] | None = None,
+) -> SimpleNamespace:
+    configured_lora = train_cfg.get("lora")
+    if configured_lora is None:
+        configured_lora = {}
+    adapter_config = adapter_config or {}
+    configured_target_modules = configured_lora.get("target_modules", ["q_proj", "k_proj", "v_proj", "o_proj"])
+    adapter_target_modules = adapter_config.get("target_modules")
+    return SimpleNamespace(
+        task_type=str(adapter_config.get("task_type", configured_lora.get("task_type", "CAUSAL_LM"))),
+        base_model_8bit=bool(configured_lora.get("base_model_8bit", False)),
+        base_model_4bit=bool(configured_lora.get("base_model_4bit", False)),
+        r=int(adapter_config.get("r", configured_lora.get("r", 16))),
+        alpha=int(adapter_config.get("lora_alpha", configured_lora.get("alpha", 32))),
+        dropout=float(adapter_config.get("lora_dropout", configured_lora.get("dropout", 0.05))),
+        bias=str(adapter_config.get("bias", configured_lora.get("bias", "none"))),
+        target_modules=list(adapter_target_modules if adapter_target_modules is not None else configured_target_modules),
+    )
+
+
+def _serialize_text_lora_config(lora_config: SimpleNamespace) -> dict[str, Any]:
+    return {
+        "task_type": str(lora_config.task_type),
+        "base_model_8bit": bool(lora_config.base_model_8bit),
+        "base_model_4bit": bool(lora_config.base_model_4bit),
+        "r": int(lora_config.r),
+        "alpha": int(lora_config.alpha),
+        "dropout": float(lora_config.dropout),
+        "bias": str(lora_config.bias),
+        "target_modules": list(lora_config.target_modules),
+    }
+
+
+def _load_text_lora_model(
+    model_path: str,
+    train_cfg: Any,
+    device: torch.device,
+) -> tuple[Any, Any, str, str | None, dict[str, Any]]:
+    adapter_checkpoint_path: str | None = None
+    adapter_config: dict[str, Any] | None = None
+    tokenizer_path = model_path
+    base_model_path = model_path
+    model_path_obj = Path(model_path)
+    if model_path_obj.is_dir() and has_lora_checkpoint(model_path_obj):
+        adapter_checkpoint_path = str(model_path_obj)
+        tokenizer_path = adapter_checkpoint_path
+        adapter_config_path = model_path_obj / "adapter_config.json"
+        adapter_config = json.loads(adapter_config_path.read_text())
+        base_model_path = str(adapter_config["base_model_name_or_path"])
+        logger.info(
+            "Offline router text mode detected LoRA adapter checkpoint=%s base_model=%s",
+            adapter_checkpoint_path,
+            base_model_path,
+        )
+
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, use_fast=True)
+    if tokenizer.pad_token is None:
+        if tokenizer.eos_token is not None:
+            tokenizer.pad_token = tokenizer.eos_token
+            tokenizer.pad_token_id = tokenizer.eos_token_id
+        else:
+            tokenizer.add_special_tokens({"pad_token": "[PAD]"})
+
+    loading_kwargs: dict[str, Any] = {}
+    if device.type == "cuda" and bool(train_cfg.get("bf16", True)):
+        loading_kwargs["torch_dtype"] = torch.bfloat16
+    model = AutoModelForCausalLM.from_pretrained(base_model_path, **loading_kwargs)
+    if hasattr(model.config, "use_cache"):
+        model.config.use_cache = False
+
+    lora_runtime_config = _build_text_lora_runtime_config(train_cfg, adapter_config=adapter_config)
+    model = prepare_lora_model(
+        lora_runtime_config,
+        model,
+        gradient_checkpointing=bool(train_cfg.get("gradient_checkpointing", False)),
+    )
+    if adapter_checkpoint_path is not None:
+        model = lora_load(adapter_checkpoint_path, model)
+    return (
+        tokenizer,
+        model,
+        base_model_path,
+        adapter_checkpoint_path,
+        _serialize_text_lora_config(lora_runtime_config),
+    )
 
 
 def _route_prompt_aliases(route_labels: list[str]) -> list[str]:
@@ -595,13 +688,12 @@ def _forward_predictions(model: AutoModelForCausalLMWithValueHead, batch: dict[s
     return preds.float()
 
 
-def _forward_text_reward_loss(model: AutoModelForCausalLMWithValueHead, batch: dict[str, Any]) -> torch.Tensor:
+def _forward_text_reward_loss(model: Any, batch: dict[str, Any]) -> torch.Tensor:
     outputs = model(
         input_ids=batch["input_ids"],
         attention_mask=batch["attention_mask"],
         labels=batch["labels"],
         return_dict=True,
-        skip_value_heads=True,
     )
     if outputs.loss is None:
         raise ValueError("Model did not return language-model loss for text reward supervision")
@@ -659,7 +751,7 @@ def _parse_generated_reward(text: str, target_dim: int) -> tuple[list[float] | N
 
 
 def _generate_text_reward_tokens(
-    model: AutoModelForCausalLMWithValueHead,
+    model: Any,
     input_ids: torch.Tensor,
     attention_mask: torch.Tensor,
     max_new_tokens: int,
@@ -681,7 +773,6 @@ def _generate_text_reward_tokens(
             input_ids=generated_ids,
             attention_mask=generated_attention_mask,
             return_dict=True,
-            skip_value_heads=True,
         )
         next_logits = outputs.logits[:, -1, :]
         if do_sample:
@@ -717,7 +808,7 @@ def _generate_text_reward_tokens(
 
 
 def _run_text_reward_eval(
-    model: AutoModelForCausalLMWithValueHead,
+    model: Any,
     loader: DataLoader,
     tokenizer: Any,
     max_new_tokens: int,
@@ -772,6 +863,18 @@ def _run_text_reward_eval(
                     prediction_row["parse_error"] = parse_error
                 prediction_rows.append(prediction_row)
     return prediction_rows, local_squared_error_sum, local_value_count
+
+
+def _save_offline_router_checkpoint(
+    output_dir: Path,
+    model: Any,
+    tokenizer: Any,
+    supervision_mode: str,
+) -> None:
+    if supervision_mode == "text_reward_vector":
+        save_model_and_tokenizer(output_dir, model, tokenizer, lora=True)
+        return
+    save_model_only(output_dir, model)
 
 
 def _save_predictions_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -1059,6 +1162,9 @@ def main(cfg: DictConfig) -> None:
 
         device = _pick_device(str(train_cfg.get("device", "auto")))
         model_path = str(train_cfg.model_path)
+        text_lora_base_model_path: str | None = None
+        text_lora_adapter_source: str | None = None
+        text_lora_config_summary: dict[str, Any] | None = None
         performance_value_hidden_dims = train_cfg.get("performance_value_hidden_dims")
         if performance_value_hidden_dims is not None:
             performance_value_hidden_dims = [int(dim) for dim in performance_value_hidden_dims]
@@ -1070,31 +1176,44 @@ def main(cfg: DictConfig) -> None:
             get_rank(),
             get_world_size(),
         )
-        tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=True)
-        model = AutoModelForCausalLMWithValueHead.from_pretrained(
-            model_path,
-            performance_value_dim=target_dim,
-            performance_value_hidden_dims=performance_value_hidden_dims,
-            performance_value_activation=performance_value_activation,
-        )
+        if supervision_mode == "representation_head":
+            tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=True)
+            model = AutoModelForCausalLMWithValueHead.from_pretrained(
+                model_path,
+                performance_value_dim=target_dim,
+                performance_value_hidden_dims=performance_value_hidden_dims,
+                performance_value_activation=performance_value_activation,
+            )
 
-        if bool(train_cfg.get("gradient_checkpointing", False)):
-            model.gradient_checkpointing_enable()
-        if hasattr(model.pretrained_model.config, "use_cache"):
-            model.pretrained_model.config.use_cache = False
+            if bool(train_cfg.get("gradient_checkpointing", False)):
+                model.gradient_checkpointing_enable()
+            if hasattr(model.pretrained_model.config, "use_cache"):
+                model.pretrained_model.config.use_cache = False
 
-        model_dtype = torch.bfloat16 if device.type == "cuda" and bool(train_cfg.get("bf16", True)) else None
-        if model_dtype is not None:
-            model = model.to(device=device, dtype=model_dtype)
+            model_dtype = torch.bfloat16 if device.type == "cuda" and bool(train_cfg.get("bf16", True)) else None
+            if model_dtype is not None:
+                model = model.to(device=device, dtype=model_dtype)
+            else:
+                model = model.to(device=device)
+            _cast_auxiliary_heads_to_fp32(model, device)
+            trainable_prefixes = _configure_training_mode(
+                model,
+                training_mode=str(train_cfg.mode),
+                supervision_mode=supervision_mode,
+            )
         else:
-            model = model.to(device=device)
-        _cast_auxiliary_heads_to_fp32(model, device)
-
-        trainable_prefixes = _configure_training_mode(
-            model,
-            training_mode=str(train_cfg.mode),
-            supervision_mode=supervision_mode,
-        )
+            logger.warning(
+                "offline_router.train.supervision_mode=text_reward_vector always uses LoRA adapters; ignoring mode=%s",
+                train_cfg.mode,
+            )
+            tokenizer, model, text_lora_base_model_path, text_lora_adapter_source, text_lora_config_summary = _load_text_lora_model(
+                model_path=model_path,
+                train_cfg=train_cfg,
+                device=device,
+            )
+            trainable_prefixes = [
+                f"lora:{target_module}" for target_module in (text_lora_config_summary or {}).get("target_modules", [])
+            ] or ["lora_adapters"]
         total_parameters = count_parameters(model, trainable_only=False)
         trainable_parameters = count_parameters(model, trainable_only=True)
 
@@ -1106,13 +1225,21 @@ def main(cfg: DictConfig) -> None:
             trainable_parameters,
             total_parameters,
         )
-        logger.info(
-            "Offline router performance head hidden_dims=%s activation=%s value_head_dtype=%s performance_value_head_dtype=%s",
-            performance_value_hidden_dims or [],
-            performance_value_activation,
-            next(model.value_head.parameters()).dtype,
-            next(model.performance_value_head.parameters()).dtype,
-        )
+        if supervision_mode == "representation_head":
+            logger.info(
+                "Offline router performance head hidden_dims=%s activation=%s value_head_dtype=%s performance_value_head_dtype=%s",
+                performance_value_hidden_dims or [],
+                performance_value_activation,
+                next(model.value_head.parameters()).dtype,
+                next(model.performance_value_head.parameters()).dtype,
+            )
+        else:
+            logger.info(
+                "Offline router text LoRA settings: base_model_path=%s adapter_source=%s config=%s",
+                text_lora_base_model_path,
+                text_lora_adapter_source,
+                text_lora_config_summary,
+            )
         if supervision_mode == "text_reward_vector":
             logger.info(
                 "Offline router text reward settings: target_precision=%d lr=%.2e weight_decay=%.3f warmup_steps=%d gradient_clipping=%.3f debug_step_logging=%s max_new_tokens=%d do_sample=%s parse_failure_value=%.3f clip_predictions=%s train_rows=%d train_supervision_rows=%d eval_rows=%d eval_supervision_rows=%d",
@@ -1557,7 +1684,7 @@ def main(cfg: DictConfig) -> None:
                     best_dir.mkdir(parents=True, exist_ok=True)
                     save_start_time = time.time()
                 barrier_if_distributed()
-                save_model_only(best_dir, model)
+                _save_offline_router_checkpoint(best_dir, model, tokenizer, supervision_mode)
                 barrier_if_distributed()
                 if is_main_process():
                     logger.info(
@@ -1577,7 +1704,7 @@ def main(cfg: DictConfig) -> None:
                 last_dir.mkdir(parents=True, exist_ok=True)
                 save_start_time = time.time()
             barrier_if_distributed()
-            save_model_only(last_dir, model)
+            _save_offline_router_checkpoint(last_dir, model, tokenizer, supervision_mode)
             barrier_if_distributed()
             if is_main_process():
                 logger.info(
@@ -1627,6 +1754,11 @@ def main(cfg: DictConfig) -> None:
                 "world_size": get_world_size(),
             }
             if supervision_mode == "text_reward_vector":
+                summary["text_lora"] = True
+                summary["text_lora_base_model_path"] = text_lora_base_model_path
+                summary["text_lora_adapter_source"] = text_lora_adapter_source
+                summary["text_lora_trainable_parameters"] = trainable_parameters
+                summary["text_lora_config"] = text_lora_config_summary or {}
                 summary["text_reward"] = {
                     "target_precision": text_target_precision,
                     "lr": text_lr,

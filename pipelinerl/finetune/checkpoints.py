@@ -404,6 +404,7 @@ def save_model_only(
     Creates the following files in output_dir/ :
         - config.json
     and either:
+        - adapter_config.json and adapter_model.safetensors/.bin for LoRA adapters, OR
         - pytorch_model.bin (single-file model), OR
         - pytorch_model-XXXXX-of-XXXXX.bin (multi-file model) and pytorch_model.bin.index.json OR
         - the safetensors versions of the files above
@@ -421,7 +422,14 @@ def save_model_only(
 
     unwrapped_model = get_accelerator().unwrap_model(model) if unwrap else model
     logger.info(f"type of unwrapped_model: {type(unwrapped_model)}")
-    
+
+    if lora or hasattr(unwrapped_model, "peft_config"):
+        logger.info("Saving LoRA adapter model")
+        if get_accelerator().is_main_process:
+            lora_save(output_dir, unwrapped_model)
+        get_accelerator().wait_for_everyone()
+        return
+
     # Handle value head model
     if isinstance(unwrapped_model, AutoModelForCausalLMWithValueHead):
         logger.info("Saving model with value head")

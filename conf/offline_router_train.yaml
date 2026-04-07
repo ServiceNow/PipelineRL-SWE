@@ -8,8 +8,8 @@ offline_router:
   train:
     dataset_dir: ???
     model_path: Qwen/Qwen2.5-Coder-7B-Instruct
-    mode: frozen_backbone  # frozen_backbone | full_backbone
-    supervision_mode: representation_head  # representation_head | text_reward_vector | text_output_tokens_vector
+    mode: frozen_backbone  # representation_head only: frozen_backbone | full_backbone
+    supervision_mode: representation_head  # representation_head | text_reward_vector
     device: auto
     num_epochs: 10
     performance_value_hidden_dims:
@@ -32,6 +32,19 @@ offline_router:
     shuffle_train: true
     max_train_rows: null
     max_eval_rows: null
+    lora:
+      task_type: CAUSAL_LM
+      base_model_8bit: false
+      base_model_4bit: false
+      r: 16
+      alpha: 32
+      dropout: 0.05
+      bias: none
+      target_modules:
+        - q_proj
+        - k_proj
+        - v_proj
+        - o_proj
     text_reward:
       target_precision: 2
       lr: 5.0e-6

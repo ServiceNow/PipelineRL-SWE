@@ -2,7 +2,7 @@
 set -euo pipefail
 
 TIMESTAMP=$(date +%s)
-JOB_NAME=offline_router_text_vector_nccl_trace_test
+JOB_NAME=offline_router_text_lora_smoke
 OUTPUT_DIR=/mnt/llmd/results/exps/aristides/reason/${JOB_NAME}_${TIMESTAMP}
 
 # Edit these directly when you want a different launch configuration.
@@ -10,18 +10,16 @@ NPROC=4
 DATASET_DIR=/mnt/llmd/results/exps/aristides/reason/offline_router_collect_1774417576
 MODEL_PATH=/mnt/llmd/results/exps/aristides/reason/swe_smith_policy_conditioned_no_devstral_1773812579/finetune/current
 MIXED_PRECISION=bf16
-ACCELERATE_CONFIG=deepspeed
-DEEPSPEED_CONFIG=deepspeed_stage2_bf16_small_buckets
-EXTRA_ARGS="offline_router.train.supervision_mode=text_reward_vector offline_router.train.mode=full_backbone offline_router.train.max_train_rows=4096 offline_router.train.max_eval_rows=178 offline_router.train.max_seq_length=32000 offline_router.train.num_epochs=1 offline_router.train.save_checkpoints=false offline_router.train.text_reward.debug_step_logging=false"
+ACCELERATE_CONFIG=base_mp
+EXTRA_ARGS="offline_router.train.supervision_mode=text_reward_vector offline_router.train.mode=full_backbone offline_router.train.max_train_rows=64 offline_router.train.max_eval_rows=16 offline_router.train.max_seq_length=32000 offline_router.train.num_epochs=1 offline_router.train.save_checkpoints=true offline_router.train.text_reward.debug_step_logging=false"
 
 TRAIN_CMD="python -m pipelinerl.swe.scripts.offline_router.train_router_offline"
 if [[ "${NPROC}" -gt 1 ]]; then
   TRAIN_CMD="python -m accelerate.commands.launch \
-    --use_deepspeed \
+    --multi_gpu \
     --mixed_precision ${MIXED_PRECISION} \
     --num_processes ${NPROC} \
     --config_file conf/accelerate/${ACCELERATE_CONFIG}.yaml \
-    --deepspeed_config_file conf/deepspeed/${DEEPSPEED_CONFIG}.json \
     pipelinerl/swe/scripts/offline_router/train_router_offline.py"
 fi
 
@@ -31,7 +29,7 @@ make job \
   CONDA_EXE=/opt/conda/bin/conda \
   SNAPSHOT=1 \
   NPROC=${NPROC} \
-  COMMAND="cd /home/toolkit/PipelineRL-SWE; mkdir -p ${OUTPUT_DIR}; export TORCH_NCCL_DESYNC_DEBUG=1; export TORCH_NCCL_DUMP_ON_TIMEOUT=1; export TORCH_NCCL_TRACE_BUFFER_SIZE=2000; export TORCH_NCCL_DEBUG_INFO_TEMP_FILE=${OUTPUT_DIR}/nccl_trace_rank; export TORCH_SHOW_CPP_STACKTRACES=1; export TORCH_CPP_LOG_LEVEL=INFO; export NCCL_DEBUG=INFO; export NCCL_DEBUG_SUBSYS=COLL; set -o pipefail; { ${TRAIN_CMD} \
+  COMMAND="cd /home/toolkit/PipelineRL-SWE; mkdir -p ${OUTPUT_DIR}; set -o pipefail; { ${TRAIN_CMD} \
     output_dir=${OUTPUT_DIR} \
     offline_router.train.dataset_dir=${DATASET_DIR} \
     offline_router.train.model_path=${MODEL_PATH} \
