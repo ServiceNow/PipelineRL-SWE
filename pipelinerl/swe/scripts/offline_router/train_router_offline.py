@@ -5,6 +5,7 @@ import json
 import logging
 import math
 import os
+import random
 import shutil
 from pathlib import Path
 from types import SimpleNamespace
@@ -261,6 +262,175 @@ def _shuffle_and_truncate_dataset(dataset: Any, max_rows: int | None, seed: int,
     )
     shuffled = dataset.shuffle(seed=int(seed))
     return shuffled.select(range(requested_rows))
+
+
+def _pairwise_delta_sign(row: dict[str, Any]) -> int | None:
+    targets = row.get("performance_targets")
+    if not isinstance(targets, list) or len(targets) < 2:
+        return None
+    try:
+        primary = float(targets[0])
+        expert = float(targets[1])
+    except (TypeError, ValueError):
+        return None
+    delta = primary - expert
+    if delta > 0:
+        return 1
+    if delta < 0:
+        return -1
+    return 0
+
+
+def _sample_indices_with_optional_replacement(
+    indices: list[int],
+    target_count: int,
+    rng: random.Random,
+) -> tuple[list[int], bool]:
+    if target_count <= 0 or not indices:
+        return [], False
+    if target_count <= len(indices):
+        return list(indices[:target_count]), False
+    result = list(indices)
+    while len(result) < target_count:
+        result.append(rng.choice(indices))
+    return result, True
+
+
+def _balanced_pairwise_sign_dataset(
+    dataset: Any,
+    max_rows: int | None,
+    seed: int,
+    split_name: str,
+    oversample: bool,
+) -> tuple[Any, dict[str, Any]]:
+    positive_indices: list[int] = []
+    negative_indices: list[int] = []
+    tied_indices: list[int] = []
+    invalid_rows = 0
+    for idx, row in enumerate(dataset):
+        sign = _pairwise_delta_sign(row)
+        if sign is None:
+            invalid_rows += 1
+        elif sign > 0:
+            positive_indices.append(idx)
+        elif sign < 0:
+            negative_indices.append(idx)
+        else:
+            tied_indices.append(idx)
+
+    rng = random.Random(int(seed))
+    rng.shuffle(positive_indices)
+    rng.shuffle(negative_indices)
+
+    requested_rows = int(max_rows) if max_rows else None
+    if requested_rows is None:
+        if oversample:
+            requested_rows = len(positive_indices) + len(negative_indices)
+        else:
+            requested_rows = 2 * min(len(positive_indices), len(negative_indices))
+    requested_rows = max(0, int(requested_rows))
+    if requested_rows % 2 == 1:
+        requested_rows -= 1
+
+    available_balanced_rows = 2 * min(len(positive_indices), len(negative_indices))
+    per_class_target = requested_rows // 2
+    positive_selected, positive_used_replacement = _sample_indices_with_optional_replacement(
+        positive_indices,
+        per_class_target,
+        rng,
+    ) if oversample else (list(positive_indices[: min(per_class_target, len(positive_indices))]), False)
+    negative_selected, negative_used_replacement = _sample_indices_with_optional_replacement(
+        negative_indices,
+        per_class_target,
+        rng,
+    ) if oversample else (list(negative_indices[: min(per_class_target, len(negative_indices))]), False)
+
+    final_per_class = min(len(positive_selected), len(negative_selected))
+    selected_indices = positive_selected[:final_per_class] + negative_selected[:final_per_class]
+    rng.shuffle(selected_indices)
+
+    if not oversample and 2 * final_per_class < requested_rows:
+        logger.warning(
+            "Offline router could not satisfy balanced %s sampling for split=%s rows=%d because only %d positive and %d negative rows are available; using rows=%d instead",
+            "oversample" if oversample else "undersample",
+            split_name,
+            requested_rows,
+            len(positive_indices),
+            len(negative_indices),
+            2 * final_per_class,
+        )
+
+    logger.info(
+        "Offline router pairwise-sign-balanced sampling split=%s oversample=%s rows=%d/%d seed=%d positives=%d negatives=%d ties=%d invalid=%d available_balanced_rows=%d",
+        split_name,
+        oversample,
+        2 * final_per_class,
+        len(dataset),
+        seed,
+        len(positive_indices),
+        len(negative_indices),
+        len(tied_indices),
+        invalid_rows,
+        available_balanced_rows,
+    )
+    if positive_used_replacement or negative_used_replacement:
+        logger.info(
+            "Offline router pairwise-sign-balanced sampling reused minority-class rows split=%s positive_replacement=%s negative_replacement=%s",
+            split_name,
+            positive_used_replacement,
+            negative_used_replacement,
+        )
+
+    summary = {
+        "strategy": "pairwise_sign_balanced_oversample" if oversample else "pairwise_sign_balanced_undersample",
+        "seed": int(seed),
+        "requested_rows": int(requested_rows),
+        "selected_rows": int(2 * final_per_class),
+        "positive_available": int(len(positive_indices)),
+        "negative_available": int(len(negative_indices)),
+        "tie_available": int(len(tied_indices)),
+        "invalid_available": int(invalid_rows),
+        "available_balanced_rows_without_replacement": int(available_balanced_rows),
+        "positive_selected": int(final_per_class),
+        "negative_selected": int(final_per_class),
+        "positive_used_replacement": bool(positive_used_replacement),
+        "negative_used_replacement": bool(negative_used_replacement),
+    }
+    return dataset.select(selected_indices), summary
+
+
+def _sample_train_dataset(
+    dataset: Any,
+    max_rows: int | None,
+    seed: int,
+    strategy: str,
+) -> tuple[Any, dict[str, Any]]:
+    if strategy == "random":
+        sampled = _shuffle_and_truncate_dataset(dataset, max_rows=max_rows, seed=seed, split_name="train")
+        requested_rows = min(int(max_rows), len(dataset)) if max_rows else len(dataset)
+        return sampled, {
+            "strategy": "random",
+            "seed": int(seed),
+            "requested_rows": int(requested_rows),
+            "selected_rows": int(len(sampled)),
+        }
+    if strategy == "pairwise_sign_balanced_undersample":
+        return _balanced_pairwise_sign_dataset(
+            dataset,
+            max_rows=max_rows,
+            seed=seed,
+            split_name="train",
+            oversample=False,
+        )
+    if strategy == "pairwise_sign_balanced_oversample":
+        return _balanced_pairwise_sign_dataset(
+            dataset,
+            max_rows=max_rows,
+            seed=seed,
+            split_name="train",
+            oversample=True,
+        )
+    raise ValueError(f"Unsupported offline_router.train.train_sampling_strategy: {strategy}")
 
 
 def _write_csv(path: Path, rows: list[dict[str, Any]], headers: list[str]) -> None:
@@ -1157,6 +1327,7 @@ def main(cfg: DictConfig) -> None:
         text_do_sample = bool(text_reward_cfg.get("do_sample", False))
         text_parse_failure_value = float(text_reward_cfg.get("parse_failure_value", 0.0))
         text_clip_predictions = bool(text_reward_cfg.get("clip_predictions", True))
+        train_sampling_strategy = str(train_cfg.get("train_sampling_strategy", "random"))
 
         train_dataset = _load_split(dataset_dir, "train")
         eval_dataset = _load_split(dataset_dir, "eval")
@@ -1164,11 +1335,11 @@ def main(cfg: DictConfig) -> None:
         max_train_rows = train_cfg.get("max_train_rows")
         max_eval_rows = train_cfg.get("max_eval_rows")
         base_seed = int(cfg.get("seed", 42))
-        train_dataset = _shuffle_and_truncate_dataset(
+        train_dataset, train_sampling_summary = _sample_train_dataset(
             train_dataset,
             max_rows=int(max_train_rows) if max_train_rows else None,
             seed=base_seed,
-            split_name="train",
+            strategy=train_sampling_strategy,
         )
         eval_dataset = _shuffle_and_truncate_dataset(
             eval_dataset,
@@ -1263,7 +1434,7 @@ def main(cfg: DictConfig) -> None:
             )
         if supervision_mode == "text_reward_vector":
             logger.info(
-                "Offline router text reward settings: target_precision=%d lr=%.2e weight_decay=%.3f warmup_steps=%d gradient_clipping=%.3f debug_step_logging=%s max_new_tokens=%d do_sample=%s parse_failure_value=%.3f clip_predictions=%s train_rows=%d train_supervision_rows=%d eval_rows=%d eval_supervision_rows=%d",
+                "Offline router text reward settings: target_precision=%d lr=%.2e weight_decay=%.3f warmup_steps=%d gradient_clipping=%.3f debug_step_logging=%s max_new_tokens=%d do_sample=%s parse_failure_value=%.3f clip_predictions=%s train_sampling_strategy=%s train_rows=%d train_supervision_rows=%d eval_rows=%d eval_supervision_rows=%d",
                 text_target_precision,
                 text_lr,
                 text_weight_decay,
@@ -1274,6 +1445,7 @@ def main(cfg: DictConfig) -> None:
                 text_do_sample,
                 text_parse_failure_value,
                 text_clip_predictions,
+                train_sampling_strategy,
                 raw_train_rows,
                 train_supervision_rows,
                 raw_eval_rows,
@@ -1752,6 +1924,7 @@ def main(cfg: DictConfig) -> None:
                 "model_path": model_path,
                 "route_labels": route_labels,
                 "target_dim": target_dim,
+                "train_sampling": train_sampling_summary,
                 "train_rows": raw_train_rows,
                 "eval_rows": raw_eval_rows,
                 "train_supervision_rows": train_supervision_rows,

@@ -30,6 +30,7 @@ offline_router:
     bf16: true
     gradient_checkpointing: true
     shuffle_train: true
+    train_sampling_strategy: random  # random | pairwise_sign_balanced_undersample | pairwise_sign_balanced_oversample
     max_train_rows: null
     max_eval_rows: null
     lora:
