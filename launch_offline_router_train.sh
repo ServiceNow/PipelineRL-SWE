@@ -2,7 +2,7 @@
 set -euo pipefail
 
 TIMESTAMP=$(date +%s)
-JOB_NAME=offline_router_text_lora_medium
+JOB_NAME=offline_router_text_lora_full
 OUTPUT_DIR=/mnt/llmd/results/exps/aristides/reason/${JOB_NAME}_${TIMESTAMP}
 
 # Edit these directly when you want a different launch configuration.
@@ -11,7 +11,7 @@ DATASET_DIR=/mnt/llmd/results/exps/aristides/reason/offline_router_collect_17744
 MODEL_PATH=/mnt/llmd/results/exps/aristides/reason/swe_smith_policy_conditioned_no_devstral_1773812579/finetune/current
 MIXED_PRECISION=bf16
 ACCELERATE_CONFIG=base_mp
-EXTRA_ARGS="offline_router.train.supervision_mode=text_reward_vector offline_router.train.mode=full_backbone offline_router.train.max_train_rows=4096 offline_router.train.max_eval_rows=178 offline_router.train.max_seq_length=32000 offline_router.train.num_epochs=1 offline_router.train.save_checkpoints=false offline_router.train.text_reward.debug_step_logging=false"
+EXTRA_ARGS="offline_router.train.supervision_mode=text_reward_vector offline_router.train.mode=full_backbone offline_router.train.max_seq_length=32000 offline_router.train.num_epochs=3 offline_router.train.save_checkpoints=true offline_router.train.text_reward.debug_step_logging=false"
 
 TRAIN_CMD="python -m pipelinerl.swe.scripts.offline_router.train_router_offline"
 if [[ "${NPROC}" -gt 1 ]]; then
