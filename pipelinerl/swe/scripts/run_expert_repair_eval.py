@@ -85,6 +85,8 @@ async def _evaluate(cfg: DictConfig) -> None:
     test_params = dict(dataset_loader_params)
     if "test_dataset_path" in test_params:
         test_params["dataset_path"] = test_params.pop("test_dataset_path")
+    if "test_max_samples" in test_params:
+        test_params["max_samples"] = test_params.pop("test_max_samples")
 
     dataset_names: List[str] = cfg.get("test_dataset_names", [])
     dataset: List[Dict[str, Any]] = dataset_loader(dataset_names, **test_params)
