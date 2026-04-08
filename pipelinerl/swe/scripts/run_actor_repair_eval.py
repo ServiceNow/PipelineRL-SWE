@@ -16,7 +16,6 @@ from transformers import AutoTokenizer
 from pipelinerl.finetune.value_model import AutoModelForCausalLMWithValueHead
 from tqdm import tqdm
 
-from pipelinerl.swe.rollouts.utils import get_problem_id
 from pipelinerl.swe.scripts.repair_eval_utils import (
     build_repair_messages,
     build_self_eval_messages,
@@ -27,6 +26,14 @@ from pipelinerl.swe.scripts.repair_eval_utils import (
 from pipelinerl.swe.utils.repair_utils import FormatError, calculate_precise_reward
 
 logger = logging.getLogger(__name__)
+
+
+def get_problem_id(problem: Dict[str, Any]) -> str:
+    for key in ("problem_id", "issue_id", "instance_id", "id"):
+        value = problem.get(key)
+        if value not in (None, ""):
+            return str(value)
+    raise ValueError("Problem is missing an identifier (problem_id/issue_id/instance_id/id)")
 
 
 @asynccontextmanager
