@@ -469,10 +469,6 @@ def _build_text_reward_prompt(
     route_aliases: list[str],
 ) -> str:
     route_legend = ", ".join(route_aliases)
-    example_output = json.dumps(
-        [float(f"{max(0.0, 0.42 - (0.05 * route_idx)):.2f}") for route_idx in range(len(route_aliases))],
-        separators=(",", ":"),
-    )
     return (
         "Predict the realized reward for each model.\n"
         "Respond with only a compact JSON array of floats in the listed order.\n"
@@ -484,8 +480,7 @@ def _build_text_reward_prompt(
         f"{prompt_text}\n\n"
         "[Primary Model Attempt]\n"
         f"{primary_output_text}\n\n"
-        "Output format:\n"
-        f"{example_output}\n"
+        "Answer:\n"
     )
 
 
