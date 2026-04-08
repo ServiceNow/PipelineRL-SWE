@@ -730,24 +730,50 @@ def _run_representation_eval(
     return prediction_rows, local_squared_error_sum, local_value_count
 
 def _parse_generated_reward(text: str, target_dim: int) -> tuple[list[float] | None, str | None]:
+    def _coerce_reward_list(parsed: Any) -> tuple[list[float] | None, str | None]:
+        if not isinstance(parsed, list):
+            return None, f"json_type_error:{type(parsed).__name__}"
+        if len(parsed) != target_dim:
+            return None, f"json_length_error:{len(parsed)}"
+
+        rewards: list[float] = []
+        for idx, value in enumerate(parsed):
+            try:
+                rewards.append(float(value))
+            except (TypeError, ValueError):
+                return None, f"json_value_error:index={idx}"
+        return rewards, None
+
     if not isinstance(text, str):
         return None, "generated_text_not_string"
-    try:
-        parsed = json.loads(text.strip())
-    except json.JSONDecodeError as exc:
-        return None, f"json_decode_error:{exc.msg}"
-    if not isinstance(parsed, list):
-        return None, f"json_type_error:{type(parsed).__name__}"
-    if len(parsed) != target_dim:
-        return None, f"json_length_error:{len(parsed)}"
+    stripped = text.strip()
+    if not stripped:
+        return None, "generated_text_empty"
 
-    rewards: list[float] = []
-    for idx, value in enumerate(parsed):
+    decoder = json.JSONDecoder()
+
+    try:
+        parsed = json.loads(stripped)
+        return _coerce_reward_list(parsed)
+    except json.JSONDecodeError:
+        pass
+
+    # Be tolerant of fenced code blocks or extra prose by extracting the first
+    # decodable JSON array from the generated text.
+    for start_idx, char in enumerate(stripped):
+        if char != "[":
+            continue
         try:
-            rewards.append(float(value))
-        except (TypeError, ValueError):
-            return None, f"json_value_error:index={idx}"
-    return rewards, None
+            parsed, _ = decoder.raw_decode(stripped[start_idx:])
+        except json.JSONDecodeError:
+            continue
+        rewards, error = _coerce_reward_list(parsed)
+        if rewards is not None:
+            return rewards, None
+        if error is not None and not error.startswith("json_length_error"):
+            return None, error
+
+    return None, "json_array_not_found"
 
 
 def _generate_text_reward_tokens(
