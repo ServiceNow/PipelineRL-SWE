@@ -63,6 +63,23 @@ dataset_loader_params:
   test_dataset_path: /mnt/llmd/data/swe_smith/ds_test
   test_max_samples: 500
 
+expert_eval:
+  base_url: null
+  model_name: openai/gpt-oss-120b
+  api_key: null
+  parameters:
+    max_tokens: 15000
+    temperature: 0.7
+    reasoning_effort: null
+  success_threshold: null
+  problem_ids_path: null
+  subsample: null
+  limit: null
+  connector_limit: 128
+  request_timeout: 600
+  output_path: ${output_dir}/expert_eval.jsonl
+  source_label: expert_eval
+
 # Model path - use a coding-focused model if available
 model_path: Qwen/Qwen2.5-Coder-7B-Instruct
 
