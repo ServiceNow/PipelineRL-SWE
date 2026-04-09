@@ -14,8 +14,8 @@ TENSOR_PARALLEL_SIZE=${TENSOR_PARALLEL_SIZE:-4}
 MAX_MODEL_LEN=${MAX_MODEL_LEN:-26720}
 GPU_MEMORY_UTILIZATION=${GPU_MEMORY_UTILIZATION:-0.9}
 
-REASONING_LEVELS=${REASONING_LEVELS:-"low medium high"}
-SUBSAMPLE=${SUBSAMPLE:-32}
+REASONING_LEVELS=${REASONING_LEVELS:-"high"}
+SUBSAMPLE=${SUBSAMPLE:-4}
 TEST_MAX_SAMPLES=${TEST_MAX_SAMPLES:-500}
 MAX_TOKENS=${MAX_TOKENS:-15000}
 TEMPERATURE=${TEMPERATURE:-0.7}
@@ -83,6 +83,7 @@ for EFFORT in ${REASONING_LEVELS}; do
       expert_eval.parameters.max_tokens="${MAX_TOKENS}" \
       expert_eval.parameters.temperature="${TEMPERATURE}" \
       expert_eval.parameters.reasoning_effort="${EFFORT}" \
+      expert_eval.debug_raw_response_dir="${EFFORT_OUTPUT_DIR}/raw_api" \
       expert_eval.subsample="${SUBSAMPLE}" \
       dataset_loader_params.test_max_samples="${TEST_MAX_SAMPLES}" \
     2>&1 | tee -a "${EFFORT_OUTPUT_DIR}/launch.out"

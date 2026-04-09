@@ -193,6 +193,8 @@ async def chat_completion(
     messages: List[Dict[str, str]],
     parameters: Dict[str, Any] | DictConfig,
     api_key: str | None = None,
+    debug_dump_dir: str | None = None,
+    debug_metadata: Dict[str, Any] | None = None,
 ) -> Tuple[str, Dict[str, Any], float]:
     url = base_url.rstrip("/") + "/v1/chat/completions"
     headers = {"Content-Type": "application/json"}
@@ -209,5 +211,18 @@ async def chat_completion(
         data = await response.json()
     latency = time.time() - start
     text = data["choices"][0]["message"]["content"]
+    if text is None and debug_dump_dir:
+        dump_dir = Path(debug_dump_dir)
+        dump_dir.mkdir(parents=True, exist_ok=True)
+        dump_payload = {
+            "request": payload,
+            "response": data,
+            "latency_s": latency,
+            "metadata": debug_metadata or {},
+        }
+        dump_name = f"{int(time.time() * 1000)}_{(debug_metadata or {}).get('problem_id', 'unknown')}.json"
+        dump_path = dump_dir / dump_name
+        dump_path.write_text(json.dumps(dump_payload, indent=2))
+        logger.warning("Wrote null-content response dump to %s", dump_path)
     usage = data.get("usage", {})
     return text, usage, latency

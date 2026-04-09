@@ -47,6 +47,12 @@ async def _evaluate_problem(
         repair_messages,
         eval_cfg.get("parameters", {}),
         eval_cfg.get("api_key"),
+        eval_cfg.get("debug_raw_response_dir"),
+        {
+            "problem_id": get_problem_id(problem),
+            "reasoning_effort": eval_cfg.get("parameters", {}).get("reasoning_effort"),
+            "model_name": eval_cfg.model_name,
+        },
     )
     if repair_text is None:
         raise ValueError("Model returned empty content")
