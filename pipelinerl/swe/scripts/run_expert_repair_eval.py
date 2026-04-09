@@ -48,6 +48,8 @@ async def _evaluate_problem(
         eval_cfg.get("parameters", {}),
         eval_cfg.get("api_key"),
     )
+    if repair_text is None:
+        raise ValueError("Model returned empty content")
 
     edits = extract_search_replace_edits(repair_text)
     try:
@@ -59,8 +61,12 @@ async def _evaluate_problem(
         reward = 0.0
         reward_metadata = {"error": str(exc)}
 
-    success_threshold = eval_cfg.get("success_threshold", cfg.actor.get("success_threshold", 0.8))
-    success = bool(reward and reward > success_threshold)
+    success_threshold = eval_cfg.get("success_threshold")
+    if success_threshold is None:
+        success_threshold = cfg.actor.get("success_threshold")
+    if success_threshold is None:
+        success_threshold = 0.8
+    success = bool(reward is not None and reward > success_threshold)
 
     return {
         "problem_id": get_problem_id(problem),
