@@ -46,6 +46,20 @@ Convenience launcher:
 bash launch_offline_router_collect.sh
 ```
 
+For the SWE-smith in-distribution control, use the one-node launcher from the
+repo root:
+
+```bash
+bash launch_offline_router_swe_smith_id.sh
+```
+
+It collects router-train traces from `/mnt/llmd/data/swe_smith/ds_train`, router
+eval traces from `/mnt/llmd/data/swe_smith/ds_test`, writes
+`collect/route_distribution_summary.json`, then trains the text reward-vector
+LoRA router with random train sampling. Override `TRAIN_MAX_SAMPLES`,
+`EVAL_MAX_SAMPLES`, `MAX_TRAIN_ROWS`, `MAX_EVAL_ROWS`, or `RUN_TRAIN=0` for a
+collection-only run.
+
 `launch_offline_router_collect.sh` reserves a single 8-GPU node by default and starts:
 
 - primary-model vLLM on GPU `0`
