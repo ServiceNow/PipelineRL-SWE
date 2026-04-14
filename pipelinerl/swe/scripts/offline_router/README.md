@@ -60,6 +60,20 @@ LoRA router with random train sampling. Override `TRAIN_MAX_SAMPLES`,
 `EVAL_MAX_SAMPLES`, `MAX_TRAIN_ROWS`, `MAX_EVAL_ROWS`, or `RUN_TRAIN=0` for a
 collection-only run.
 
+If collection already finished and only router training needs to be retried, run:
+
+```bash
+bash launch_offline_router_swe_smith_id_train_only.sh
+```
+
+For the independent scalar text ablation, which trains one numeric reward example
+per `(problem, route)` and merges scalar predictions back into route vectors for
+the same metrics, run:
+
+```bash
+bash launch_offline_router_swe_smith_id_scalar_train_only.sh
+```
+
 `launch_offline_router_collect.sh` reserves a single 8-GPU node by default and starts:
 
 - primary-model vLLM on GPU `0`

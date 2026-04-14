@@ -6,6 +6,7 @@ import logging
 import math
 import os
 import random
+import re
 import shutil
 from pathlib import Path
 from types import SimpleNamespace
@@ -43,6 +44,8 @@ from pipelinerl.swe.scripts.offline_router.common import (
 )
 
 logger = logging.getLogger(__name__)
+
+TEXT_REWARD_SUPERVISION_MODES = {"text_reward_vector", "text_reward_scalar"}
 
 
 def get_world_size() -> int:
@@ -197,7 +200,7 @@ def _build_optimizer(
             }
         )
 
-    if supervision_mode == "text_reward_vector":
+    if supervision_mode in TEXT_REWARD_SUPERVISION_MODES:
         default_lr = float(text_reward_cfg.get("lr", 5.0e-6))
         group_weight_decay = float(text_reward_cfg.get("weight_decay", 0.01))
         _add_group("lora_adapters", model.parameters(), default_lr)
@@ -237,6 +240,14 @@ def _prediction_row_key(row: dict[str, Any]) -> str:
     route_label = row.get("route_label")
     if route_label is not None:
         return f"{dataset}::{problem_id}::route_label={route_label}"
+    return f"{dataset}::{problem_id}"
+
+
+def _prediction_problem_key(row: dict[str, Any]) -> str:
+    dataset = row.get("dataset")
+    problem_id = row.get("problem_id")
+    if dataset is None and problem_id is None:
+        return json.dumps(row, sort_keys=True)
     return f"{dataset}::{problem_id}"
 
 
@@ -524,10 +535,12 @@ def _configure_training_mode(
 ) -> list[str]:
     if supervision_mode == "representation_head":
         return configure_router_training_mode(model, training_mode)
-    if supervision_mode != "text_reward_vector":
+    if supervision_mode not in TEXT_REWARD_SUPERVISION_MODES:
         raise ValueError(f"Unsupported supervision mode: {supervision_mode}")
     if training_mode != "full_backbone":
-        raise ValueError("offline_router.train.supervision_mode=text_reward_vector requires mode=full_backbone")
+        raise ValueError(
+            f"offline_router.train.supervision_mode={supervision_mode} requires mode=full_backbone"
+        )
 
     for param in model.parameters():
         param.requires_grad = False
@@ -654,9 +667,38 @@ def _build_text_reward_prompt(
     )
 
 
+def _build_text_scalar_reward_prompt(
+    prompt_text: str,
+    primary_output_text: str,
+    route_aliases: list[str],
+    route_idx: int,
+) -> str:
+    route_legend = ", ".join(route_aliases)
+    route_alias = route_aliases[route_idx]
+    return (
+        "Predict the realized reward for one model route.\n"
+        "Respond with only one float between 0.000 and 1.000.\n"
+        "Do not include any keys, labels, JSON, or explanation text.\n\n"
+        "[Model Order]\n"
+        f"{route_legend}\n"
+        "model_1 is the primary model whose attempt is shown below.\n\n"
+        "[Route To Score]\n"
+        f"{route_alias}\n\n"
+        "[Original Repair Prompt]\n"
+        f"{prompt_text}\n\n"
+        "[Primary Model Attempt]\n"
+        f"{primary_output_text}\n\n"
+        "Answer:\n"
+    )
+
+
 def _format_reward_target(values: list[float], precision: int) -> str:
     rounded = [float(f"{float(value):.{int(precision)}f}") for value in values]
     return json.dumps(rounded, separators=(",", ":"))
+
+
+def _format_scalar_reward_target(value: float, precision: int) -> str:
+    return f"{float(value):.{int(precision)}f}"
 
 
 def _truncate_from_left(token_ids: list[int], max_seq_length: int | None) -> list[int]:
@@ -839,6 +881,184 @@ def _make_text_eval_collate_fn(pad_token_id: int, target_dim: int):
     return _collate
 
 
+def _prepare_text_scalar_train_rows(
+    dataset: Any,
+    tokenizer: Any,
+    max_seq_length: int | None,
+    route_aliases: list[str],
+    route_labels: list[str],
+    target_dim: int,
+    target_precision: int,
+) -> list[dict[str, Any]]:
+    prepared_rows: list[dict[str, Any]] = []
+    for row in dataset:
+        prompt_text = row.get("prompt_text")
+        primary_output_text = _get_primary_output_text(row)
+        targets = row.get("performance_targets")
+        if not isinstance(prompt_text, str) or not isinstance(primary_output_text, str):
+            continue
+        if not isinstance(targets, list) or len(targets) != target_dim:
+            continue
+        try:
+            problem_id = problem_id_from_item(row)
+        except ValueError:
+            continue
+        target_rewards = [float(value) for value in targets]
+        for route_idx, target_reward in enumerate(target_rewards):
+            prompt = _build_text_scalar_reward_prompt(
+                prompt_text=prompt_text,
+                primary_output_text=primary_output_text,
+                route_aliases=route_aliases,
+                route_idx=route_idx,
+            )
+            encoded = _tokenize_text_reward_target(
+                tokenizer=tokenizer,
+                prompt_text=prompt,
+                target_text=_format_scalar_reward_target(target_reward, target_precision),
+                max_seq_length=max_seq_length,
+            )
+            if encoded is None:
+                continue
+            prepared_rows.append(
+                {
+                    "problem_id": problem_id,
+                    "dataset": row.get("dataset"),
+                    "repo": row.get("repo"),
+                    "language": row.get("language"),
+                    "route_aliases": list(route_aliases),
+                    "route_idx": int(route_idx),
+                    "route_alias": route_aliases[route_idx],
+                    "route_label": route_labels[route_idx],
+                    "target_reward": float(target_reward),
+                    "input_ids": encoded["input_ids"],
+                    "labels": encoded["labels"],
+                }
+            )
+    return prepared_rows
+
+
+def _prepare_text_scalar_eval_rows(
+    dataset: Any,
+    tokenizer: Any,
+    max_seq_length: int | None,
+    route_aliases: list[str],
+    route_labels: list[str],
+    target_dim: int,
+) -> list[dict[str, Any]]:
+    prepared_rows: list[dict[str, Any]] = []
+    for row in dataset:
+        prompt_text = row.get("prompt_text")
+        primary_output_text = _get_primary_output_text(row)
+        targets = row.get("performance_targets")
+        if not isinstance(prompt_text, str) or not isinstance(primary_output_text, str):
+            continue
+        if not isinstance(targets, list) or len(targets) != target_dim:
+            continue
+        try:
+            problem_id = problem_id_from_item(row)
+        except ValueError:
+            continue
+        target_rewards = [float(value) for value in targets]
+        for route_idx, target_reward in enumerate(target_rewards):
+            prompt = _build_text_scalar_reward_prompt(
+                prompt_text=prompt_text,
+                primary_output_text=primary_output_text,
+                route_aliases=route_aliases,
+                route_idx=route_idx,
+            )
+            prompt_ids = tokenizer(prompt, add_special_tokens=False).input_ids
+            prompt_ids = _truncate_from_left(prompt_ids, max_seq_length)
+            if not prompt_ids:
+                continue
+            prepared_rows.append(
+                {
+                    "problem_id": problem_id,
+                    "dataset": row.get("dataset"),
+                    "repo": row.get("repo"),
+                    "language": row.get("language"),
+                    "route_aliases": list(route_aliases),
+                    "route_idx": int(route_idx),
+                    "route_alias": route_aliases[route_idx],
+                    "route_label": route_labels[route_idx],
+                    "target_reward": float(target_reward),
+                    "input_ids": prompt_ids,
+                }
+            )
+    return prepared_rows
+
+
+def _make_text_scalar_train_collate_fn(pad_token_id: int):
+    def _collate(rows: list[dict[str, Any]]) -> dict[str, Any]:
+        max_len = max(len(row["input_ids"]) for row in rows)
+        batch_size = len(rows)
+        input_ids = torch.full((batch_size, max_len), fill_value=pad_token_id, dtype=torch.long)
+        attention_mask = torch.zeros((batch_size, max_len), dtype=torch.long)
+        labels = torch.full((batch_size, max_len), fill_value=-100, dtype=torch.long)
+        targets = torch.zeros((batch_size,), dtype=torch.float32)
+        route_indices = torch.zeros((batch_size,), dtype=torch.long)
+
+        for batch_idx, row in enumerate(rows):
+            ids = row["input_ids"]
+            row_labels = row["labels"]
+            seq_len = len(ids)
+            input_ids[batch_idx, :seq_len] = torch.tensor(ids, dtype=torch.long)
+            attention_mask[batch_idx, :seq_len] = 1
+            labels[batch_idx, :seq_len] = torch.tensor(row_labels, dtype=torch.long)
+            targets[batch_idx] = float(row["target_reward"])
+            route_indices[batch_idx] = int(row["route_idx"])
+
+        return {
+            "problem_ids": [row["problem_id"] for row in rows],
+            "datasets": [row["dataset"] for row in rows],
+            "repos": [row["repo"] for row in rows],
+            "languages": [row["language"] for row in rows],
+            "route_aliases": [row["route_aliases"] for row in rows],
+            "route_indices": route_indices,
+            "route_alias": [row["route_alias"] for row in rows],
+            "route_label": [row["route_label"] for row in rows],
+            "targets": targets,
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "labels": labels,
+        }
+
+    return _collate
+
+
+def _make_text_scalar_eval_collate_fn(pad_token_id: int):
+    def _collate(rows: list[dict[str, Any]]) -> dict[str, Any]:
+        max_len = max(len(row["input_ids"]) for row in rows)
+        batch_size = len(rows)
+        input_ids = torch.full((batch_size, max_len), fill_value=pad_token_id, dtype=torch.long)
+        attention_mask = torch.zeros((batch_size, max_len), dtype=torch.long)
+        targets = torch.zeros((batch_size,), dtype=torch.float32)
+        route_indices = torch.zeros((batch_size,), dtype=torch.long)
+
+        for batch_idx, row in enumerate(rows):
+            ids = row["input_ids"]
+            seq_len = len(ids)
+            input_ids[batch_idx, :seq_len] = torch.tensor(ids, dtype=torch.long)
+            attention_mask[batch_idx, :seq_len] = 1
+            targets[batch_idx] = float(row["target_reward"])
+            route_indices[batch_idx] = int(row["route_idx"])
+
+        return {
+            "problem_ids": [row["problem_id"] for row in rows],
+            "datasets": [row["dataset"] for row in rows],
+            "repos": [row["repo"] for row in rows],
+            "languages": [row["language"] for row in rows],
+            "route_aliases": [row["route_aliases"] for row in rows],
+            "route_indices": route_indices,
+            "route_alias": [row["route_alias"] for row in rows],
+            "route_label": [row["route_label"] for row in rows],
+            "targets": targets,
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+        }
+
+    return _collate
+
+
 def _forward_predictions(model: AutoModelForCausalLMWithValueHead, batch: dict[str, Any]) -> torch.Tensor:
     outputs = model(
         input_ids=batch["input_ids"],
@@ -939,6 +1159,39 @@ def _parse_generated_reward(text: str, target_dim: int) -> tuple[list[float] | N
             return None, error
 
     return None, "json_array_not_found"
+
+
+def _parse_generated_scalar_reward(text: str) -> tuple[float | None, str | None]:
+    if not isinstance(text, str):
+        return None, "generated_text_not_string"
+    stripped = text.strip()
+    if not stripped:
+        return None, "generated_text_empty"
+
+    try:
+        return float(stripped), None
+    except ValueError:
+        pass
+
+    matches = list(
+        re.finditer(
+            r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?",
+            stripped,
+        )
+    )
+    if not matches:
+        return None, "float_not_found"
+    for match in matches:
+        try:
+            value = float(match.group(0))
+        except ValueError:
+            continue
+        if 0.0 <= value <= 1.0:
+            return value, None
+    try:
+        return float(matches[0].group(0)), None
+    except ValueError:
+        return None, "float_parse_error"
 
 
 def _generate_text_reward_tokens(
@@ -1056,13 +1309,71 @@ def _run_text_reward_eval(
     return prediction_rows, local_squared_error_sum, local_value_count
 
 
+def _run_text_scalar_reward_eval(
+    model: Any,
+    loader: DataLoader,
+    tokenizer: Any,
+    max_new_tokens: int,
+    do_sample: bool,
+    parse_failure_value: float,
+    clip_predictions: bool,
+) -> tuple[list[dict[str, Any]], float, int]:
+    model.eval()
+    prediction_rows: list[dict[str, Any]] = []
+    local_squared_error_sum = 0.0
+    local_value_count = 0
+    with torch.no_grad():
+        for batch in tqdm(loader, desc="Eval offline router", unit="batch", disable=not is_main_process()):
+            generated_tokens = _generate_text_reward_tokens(
+                model=model,
+                input_ids=batch["input_ids"],
+                attention_mask=batch["attention_mask"],
+                max_new_tokens=max_new_tokens,
+                do_sample=do_sample,
+                tokenizer=tokenizer,
+            )
+            if generated_tokens.shape[1] == 0:
+                generated_texts = [""] * int(batch["input_ids"].shape[0])
+            else:
+                generated_texts = tokenizer.batch_decode(generated_tokens.detach().cpu(), skip_special_tokens=True)
+            for row_idx, problem_id in enumerate(batch["problem_ids"]):
+                parsed_reward, parse_error = _parse_generated_scalar_reward(generated_texts[row_idx])
+                parse_success = parsed_reward is not None
+                if not parse_success:
+                    parsed_reward = float(parse_failure_value)
+                if clip_predictions:
+                    parsed_reward = float(min(1.0, max(0.0, parsed_reward)))
+                target_reward = float(batch["targets"][row_idx].item())
+                local_squared_error_sum += float((parsed_reward - target_reward) ** 2)
+                local_value_count += 1
+                prediction_row = {
+                    "problem_id": problem_id,
+                    "dataset": batch["datasets"][row_idx],
+                    "repo": batch["repos"][row_idx],
+                    "language": batch["languages"][row_idx],
+                    "route_aliases": list(batch["route_aliases"][row_idx]),
+                    "route_idx": int(batch["route_indices"][row_idx].item()),
+                    "route_alias": batch["route_alias"][row_idx],
+                    "route_label": batch["route_label"][row_idx],
+                    "true_reward": target_reward,
+                    "generated_text": generated_texts[row_idx],
+                    "parsed_reward": float(parsed_reward),
+                    "pred_reward": float(parsed_reward),
+                    "parse_success": bool(parse_success),
+                }
+                if parse_error is not None:
+                    prediction_row["parse_error"] = parse_error
+                prediction_rows.append(prediction_row)
+    return prediction_rows, local_squared_error_sum, local_value_count
+
+
 def _save_offline_router_checkpoint(
     output_dir: Path,
     model: Any,
     tokenizer: Any,
     supervision_mode: str,
 ) -> None:
-    if supervision_mode == "text_reward_vector":
+    if supervision_mode in TEXT_REWARD_SUPERVISION_MODES:
         save_model_and_tokenizer(output_dir, model, tokenizer, lora=True)
         return
     save_model_only(output_dir, model)
@@ -1196,6 +1507,97 @@ def _merge_text_reward_eval_rows(
     )
 
 
+def _merge_text_scalar_reward_eval_rows(
+    rows: list[dict[str, Any]],
+    route_labels: list[str],
+    route_aliases: list[str],
+) -> tuple[list[dict[str, Any]], np.ndarray, np.ndarray, dict[str, Any]]:
+    target_dim = len(route_labels)
+    seen_route_keys: set[str] = set()
+    total_parse_failures = 0
+    total_route_examples = 0
+    grouped: dict[str, dict[str, Any]] = {}
+
+    for row in rows:
+        route_key = _prediction_row_key(row)
+        if route_key in seen_route_keys:
+            continue
+        seen_route_keys.add(route_key)
+        total_route_examples += 1
+        if not bool(row.get("parse_success", False)):
+            total_parse_failures += 1
+
+        try:
+            route_idx = int(row.get("route_idx"))
+        except (TypeError, ValueError):
+            continue
+        if route_idx < 0 or route_idx >= target_dim:
+            continue
+
+        problem_key = _prediction_problem_key(row)
+        entry = grouped.get(problem_key)
+        if entry is None:
+            entry = {
+                "problem_id": row.get("problem_id"),
+                "dataset": row.get("dataset"),
+                "repo": row.get("repo"),
+                "language": row.get("language"),
+                "route_aliases": list(route_aliases),
+                "route_labels": list(route_labels),
+                "true_rewards": [None] * target_dim,
+                "pred_rewards": [None] * target_dim,
+                "route_predictions": [None] * target_dim,
+            }
+            grouped[problem_key] = entry
+
+        true_reward = row.get("true_reward")
+        pred_reward = row.get("pred_reward")
+        if true_reward is None or pred_reward is None:
+            continue
+        entry["true_rewards"][route_idx] = float(true_reward)
+        entry["pred_rewards"][route_idx] = float(pred_reward)
+        entry["route_predictions"][route_idx] = {
+            "route_idx": int(route_idx),
+            "route_alias": row.get("route_alias"),
+            "route_label": row.get("route_label"),
+            "true_reward": float(true_reward),
+            "generated_text": row.get("generated_text"),
+            "parsed_reward": row.get("parsed_reward"),
+            "pred_reward": float(pred_reward),
+            "parse_success": bool(row.get("parse_success", False)),
+            "parse_error": row.get("parse_error"),
+        }
+
+    filtered_rows: list[dict[str, Any]] = []
+    for row in grouped.values():
+        true_rewards = row["true_rewards"]
+        pred_rewards = row["pred_rewards"]
+        if any(value is None for value in true_rewards) or any(value is None for value in pred_rewards):
+            continue
+        normalized_row = dict(row)
+        normalized_row["true_rewards"] = [float(value) for value in true_rewards]
+        normalized_row["pred_rewards"] = [float(value) for value in pred_rewards]
+        filtered_rows.append(normalized_row)
+
+    if not filtered_rows:
+        raise ValueError("No complete eval problems after parsing scalar text reward predictions")
+
+    y_true = np.asarray([row["true_rewards"] for row in filtered_rows], dtype=np.float32)
+    y_pred = np.asarray([row["pred_rewards"] for row in filtered_rows], dtype=np.float32)
+    parse_failure_rate = float(total_parse_failures / total_route_examples) if total_route_examples else 0.0
+    return (
+        filtered_rows,
+        y_true,
+        y_pred,
+        {
+            "parse_failures": int(total_parse_failures),
+            "parse_failure_rate": parse_failure_rate,
+            "eval_problem_examples": int(len(filtered_rows)),
+            "eval_route_examples": int(total_route_examples),
+        },
+    )
+
+
 def _flatten_dict(value: Any, prefix: str = "") -> dict[str, Any]:
     result: dict[str, Any] = {}
     if isinstance(value, dict):
@@ -1312,7 +1714,7 @@ def main(cfg: DictConfig) -> None:
         route_aliases = _route_prompt_aliases(route_labels)
         target_dim = len(route_labels)
         supervision_mode = str(train_cfg.get("supervision_mode", "representation_head"))
-        if supervision_mode not in {"representation_head", "text_reward_vector"}:
+        if supervision_mode not in {"representation_head", *TEXT_REWARD_SUPERVISION_MODES}:
             raise ValueError(f"Unsupported offline_router.train.supervision_mode: {supervision_mode}")
         text_reward_cfg = train_cfg.get("text_reward")
         if text_reward_cfg is None:
@@ -1351,6 +1753,9 @@ def main(cfg: DictConfig) -> None:
         raw_eval_rows = int(len(eval_dataset))
         train_supervision_rows = int(len(train_dataset))
         eval_supervision_rows = int(len(eval_dataset))
+        if supervision_mode == "text_reward_scalar":
+            train_supervision_rows *= target_dim
+            eval_supervision_rows *= target_dim
 
         device = _pick_device(str(train_cfg.get("device", "auto")))
         model_path = str(train_cfg.model_path)
@@ -1395,7 +1800,8 @@ def main(cfg: DictConfig) -> None:
             )
         else:
             logger.warning(
-                "offline_router.train.supervision_mode=text_reward_vector always uses LoRA adapters; ignoring mode=%s",
+                "offline_router.train.supervision_mode=%s always uses LoRA adapters; ignoring mode=%s",
+                supervision_mode,
                 train_cfg.mode,
             )
             tokenizer, model, text_lora_base_model_path, text_lora_adapter_source, text_lora_config_summary = _load_text_lora_model(
@@ -1432,7 +1838,7 @@ def main(cfg: DictConfig) -> None:
                 text_lora_adapter_source,
                 text_lora_config_summary,
             )
-        if supervision_mode == "text_reward_vector":
+        if supervision_mode in TEXT_REWARD_SUPERVISION_MODES:
             logger.info(
                 "Offline router text reward settings: target_precision=%d lr=%.2e weight_decay=%.3f warmup_steps=%d gradient_clipping=%.3f debug_step_logging=%s max_new_tokens=%d do_sample=%s parse_failure_value=%.3f clip_predictions=%s train_sampling_strategy=%s train_rows=%d train_supervision_rows=%d eval_rows=%d eval_supervision_rows=%d",
                 text_target_precision,
@@ -1482,7 +1888,7 @@ def main(cfg: DictConfig) -> None:
                 target_dim=target_dim,
             )
             eval_collate_fn = train_collate_fn
-        else:
+        elif supervision_mode == "text_reward_vector":
             train_dataset = _prepare_text_train_rows(
                 train_dataset,
                 tokenizer=tokenizer,
@@ -1500,6 +1906,28 @@ def main(cfg: DictConfig) -> None:
             )
             train_collate_fn = _make_text_train_collate_fn(pad_token_id=pad_token_id, target_dim=target_dim)
             eval_collate_fn = _make_text_eval_collate_fn(pad_token_id=pad_token_id, target_dim=target_dim)
+        elif supervision_mode == "text_reward_scalar":
+            train_dataset = _prepare_text_scalar_train_rows(
+                train_dataset,
+                tokenizer=tokenizer,
+                max_seq_length=max_seq_length,
+                route_aliases=route_aliases,
+                route_labels=route_labels,
+                target_dim=target_dim,
+                target_precision=text_target_precision,
+            )
+            eval_dataset = _prepare_text_scalar_eval_rows(
+                eval_dataset,
+                tokenizer=tokenizer,
+                max_seq_length=max_seq_length,
+                route_aliases=route_aliases,
+                route_labels=route_labels,
+                target_dim=target_dim,
+            )
+            train_collate_fn = _make_text_scalar_train_collate_fn(pad_token_id=pad_token_id)
+            eval_collate_fn = _make_text_scalar_eval_collate_fn(pad_token_id=pad_token_id)
+        else:
+            raise ValueError(f"Unsupported supervision mode: {supervision_mode}")
 
         if not train_dataset:
             raise ValueError("No valid training rows remain after preprocessing/tokenization")
@@ -1549,7 +1977,7 @@ def main(cfg: DictConfig) -> None:
         save_checkpoints = bool(train_cfg.get("save_checkpoints", True))
         text_scheduler = None
         text_trainable_params: list[torch.nn.Parameter] = []
-        if supervision_mode == "text_reward_vector":
+        if supervision_mode in TEXT_REWARD_SUPERVISION_MODES:
             optimizer_steps_per_epoch = max(1, math.ceil(len(train_loader) / grad_accum))
             total_optimizer_steps = max(1, optimizer_steps_per_epoch * num_epochs)
             text_scheduler = get_constant_schedule_with_warmup(
@@ -1613,7 +2041,7 @@ def main(cfg: DictConfig) -> None:
                         )
                     running_losses.append(float(loss.item()))
                     get_accelerator().backward(loss)
-                    if supervision_mode == "text_reward_vector":
+                    if supervision_mode in TEXT_REWARD_SUPERVISION_MODES:
                         _log_text_train_step_debug(
                             text_debug_step_logging,
                             epoch,
@@ -1625,7 +2053,7 @@ def main(cfg: DictConfig) -> None:
                             loss=loss,
                         )
                     if (
-                        supervision_mode == "text_reward_vector"
+                        supervision_mode in TEXT_REWARD_SUPERVISION_MODES
                         and get_accelerator().sync_gradients
                         and text_gradient_clipping > 0.0
                     ):
@@ -1650,7 +2078,7 @@ def main(cfg: DictConfig) -> None:
                             optimizer,
                             loss=loss,
                         )
-                    if supervision_mode == "text_reward_vector":
+                    if supervision_mode in TEXT_REWARD_SUPERVISION_MODES:
                         _log_text_train_step_debug(
                             text_debug_step_logging,
                             epoch,
@@ -1662,7 +2090,7 @@ def main(cfg: DictConfig) -> None:
                             loss=loss,
                         )
                     optimizer.step()
-                    if supervision_mode == "text_reward_vector":
+                    if supervision_mode in TEXT_REWARD_SUPERVISION_MODES:
                         _log_text_train_step_debug(
                             text_debug_step_logging,
                             epoch,
@@ -1676,7 +2104,7 @@ def main(cfg: DictConfig) -> None:
                     if text_scheduler is not None and get_accelerator().sync_gradients:
                         text_scheduler.step()
                     optimizer.zero_grad(set_to_none=True)
-                    if supervision_mode == "text_reward_vector":
+                    if supervision_mode in TEXT_REWARD_SUPERVISION_MODES:
                         _log_text_train_step_debug(
                             text_debug_step_logging,
                             epoch,
@@ -1754,7 +2182,7 @@ def main(cfg: DictConfig) -> None:
                     model,
                     eval_loader,
                 )
-            else:
+            elif supervision_mode == "text_reward_vector":
                 local_eval_rows, local_eval_squared_error_sum, local_eval_value_count = _run_text_reward_eval(
                     model,
                     eval_loader,
@@ -1765,6 +2193,18 @@ def main(cfg: DictConfig) -> None:
                     clip_predictions=text_clip_predictions,
                     target_dim=target_dim,
                 )
+            elif supervision_mode == "text_reward_scalar":
+                local_eval_rows, local_eval_squared_error_sum, local_eval_value_count = _run_text_scalar_reward_eval(
+                    model,
+                    eval_loader,
+                    tokenizer=tokenizer,
+                    max_new_tokens=text_max_new_tokens,
+                    do_sample=text_do_sample,
+                    parse_failure_value=text_parse_failure_value,
+                    clip_predictions=text_clip_predictions,
+                )
+            else:
+                raise ValueError(f"Unsupported supervision mode: {supervision_mode}")
             shard_path = _write_eval_shard(output_dir, epoch, local_eval_rows)
             logger.info(
                 "Offline router epoch=%d rank=%d finished local eval rows=%d values=%d shard=%s",
@@ -1793,11 +2233,19 @@ def main(cfg: DictConfig) -> None:
                 merged_shard_rows = _load_eval_shard_rows(output_dir, epoch)
                 if supervision_mode == "representation_head":
                     eval_rows, y_true, y_pred, eval_extra = _merge_representation_eval_rows(merged_shard_rows)
-                else:
+                elif supervision_mode == "text_reward_vector":
                     eval_rows, y_true, y_pred, eval_extra = _merge_text_reward_eval_rows(
                         merged_shard_rows,
                         route_labels=route_labels,
                     )
+                elif supervision_mode == "text_reward_scalar":
+                    eval_rows, y_true, y_pred, eval_extra = _merge_text_scalar_reward_eval_rows(
+                        merged_shard_rows,
+                        route_labels=route_labels,
+                        route_aliases=route_aliases,
+                    )
+                else:
+                    raise ValueError(f"Unsupported supervision mode: {supervision_mode}")
                 logger.info(
                     "Offline router epoch=%d finished metric preparation merged_rows=%d elapsed_seconds=%.1f",
                     epoch,
@@ -1947,7 +2395,7 @@ def main(cfg: DictConfig) -> None:
                 "distributed": is_distributed(),
                 "world_size": get_world_size(),
             }
-            if supervision_mode == "text_reward_vector":
+            if supervision_mode in TEXT_REWARD_SUPERVISION_MODES:
                 summary["text_lora"] = True
                 summary["text_lora_base_model_path"] = text_lora_base_model_path
                 summary["text_lora_adapter_source"] = text_lora_adapter_source
@@ -1966,6 +2414,7 @@ def main(cfg: DictConfig) -> None:
                     "best_eval_parse_failures": int(best_eval_extra.get("parse_failures", 0)),
                     "best_eval_parse_failure_rate": float(best_eval_extra.get("parse_failure_rate", 0.0)),
                     "best_eval_problem_examples": int(best_eval_extra.get("eval_problem_examples", 0)),
+                    "best_eval_route_examples": int(best_eval_extra.get("eval_route_examples", 0)),
                 }
             write_json(output_dir / "summary.json", summary)
             if wandb_run is not None:

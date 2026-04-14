@@ -6,6 +6,8 @@ OUTPUT_ROOT=${OUTPUT_ROOT:?OUTPUT_ROOT must be set}
 
 RUN_COLLECT=${RUN_COLLECT:-1}
 RUN_TRAIN=${RUN_TRAIN:-1}
+CLEANUP_VLLM_BEFORE_TRAIN=${CLEANUP_VLLM_BEFORE_TRAIN:-1}
+POST_COLLECT_CLEANUP_SLEEP_SECS=${POST_COLLECT_CLEANUP_SLEEP_SECS:-30}
 
 COLLECT_OUTPUT_DIR=${COLLECT_OUTPUT_DIR:-${OUTPUT_ROOT}/collect}
 TRAIN_OUTPUT_DIR=${TRAIN_OUTPUT_DIR:-${OUTPUT_ROOT}/train_text_lora_random}
@@ -81,6 +83,28 @@ python pipelinerl/swe/scripts/offline_router/summarize_collected_dataset.py \
 if [[ "${RUN_TRAIN}" != "1" ]]; then
   echo "RUN_TRAIN=${RUN_TRAIN}; stopping after collection and summary."
   exit 0
+fi
+
+if [[ "${CLEANUP_VLLM_BEFORE_TRAIN}" == "1" ]]; then
+  echo "=== Cleaning up any vLLM server processes before router training ==="
+  VLLM_CLEANUP_PATTERNS=(
+    "vllm.entrypoints.openai.api_server"
+    "vllm.v1.engine"
+    "vllm_worker"
+  )
+  for PATTERN in "${VLLM_CLEANUP_PATTERNS[@]}"; do
+    mapfile -t VLLM_PIDS < <(pgrep -u "$(id -u)" -f "${PATTERN}" || true)
+    for PID in "${VLLM_PIDS[@]}"; do
+      if [[ "${PID}" == "$$" || "${PID}" == "${BASHPID}" || "${PID}" == "${PPID}" ]]; then
+        continue
+      fi
+      echo "Stopping leftover vLLM process ${PID} matching ${PATTERN}"
+      kill "${PID}" 2>/dev/null || true
+    done
+  done
+  if [[ "${POST_COLLECT_CLEANUP_SLEEP_SECS}" -gt 0 ]]; then
+    sleep "${POST_COLLECT_CLEANUP_SLEEP_SECS}"
+  fi
 fi
 
 TRAIN_CMD=(python -m pipelinerl.swe.scripts.offline_router.train_router_offline)
