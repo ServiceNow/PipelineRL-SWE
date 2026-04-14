@@ -9,7 +9,7 @@ offline_router:
     dataset_dir: ???
     model_path: Qwen/Qwen2.5-Coder-7B-Instruct
     mode: frozen_backbone  # representation_head only: frozen_backbone | full_backbone
-    supervision_mode: representation_head  # representation_head | text_reward_vector | text_reward_scalar
+    supervision_mode: representation_head  # representation_head | text_reward_vector | text_reward_scalar | text_reward_bin
     device: auto
     num_epochs: 10
     performance_value_hidden_dims:
@@ -57,3 +57,5 @@ offline_router:
       do_sample: false
       parse_failure_value: 0.0
       clip_predictions: true
+      bin_count: 21
+      bin_label_prefix: " "

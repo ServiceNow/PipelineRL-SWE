@@ -74,6 +74,14 @@ the same metrics, run:
 bash launch_offline_router_swe_smith_id_scalar_train_only.sh
 ```
 
+For the independent reward-bin ablation, which trains one bin-label example per
+`(problem, route)` and evaluates by softmaxing over all bin labels to compute an
+expected reward, run:
+
+```bash
+bash launch_offline_router_swe_smith_id_bin_train_only.sh
+```
+
 `launch_offline_router_collect.sh` reserves a single 8-GPU node by default and starts:
 
 - primary-model vLLM on GPU `0`

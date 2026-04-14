@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TIMESTAMP=$(date +%s)
+TIMESTAMP=${TIMESTAMP:-$(date +%s)}
 JOB_NAME=${JOB_NAME:-offline_router_swe_smith_id}
 OUTPUT_ROOT=${OUTPUT_ROOT:-/mnt/llmd/results/exps/aristides/reason/${JOB_NAME}_${TIMESTAMP}}
 COLLECT_OUTPUT_DIR=${COLLECT_OUTPUT_DIR:-${OUTPUT_ROOT}/collect}

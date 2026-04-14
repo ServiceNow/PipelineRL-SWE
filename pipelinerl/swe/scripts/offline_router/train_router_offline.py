@@ -45,7 +45,7 @@ from pipelinerl.swe.scripts.offline_router.common import (
 
 logger = logging.getLogger(__name__)
 
-TEXT_REWARD_SUPERVISION_MODES = {"text_reward_vector", "text_reward_scalar"}
+TEXT_REWARD_SUPERVISION_MODES = {"text_reward_vector", "text_reward_scalar", "text_reward_bin"}
 
 
 def get_world_size() -> int:
@@ -692,6 +692,62 @@ def _build_text_scalar_reward_prompt(
     )
 
 
+def _build_reward_bin_specs(
+    bin_count: int,
+    label_prefix: str = " ",
+) -> list[dict[str, Any]]:
+    if bin_count < 2:
+        raise ValueError("offline_router.train.text_reward.bin_count must be at least 2")
+    if bin_count > 26:
+        raise ValueError("offline_router.train.text_reward.bin_count currently supports at most 26 letter bins")
+    labels = [chr(ord("A") + idx) for idx in range(bin_count)]
+    return [
+        {
+            "idx": int(idx),
+            "label": label,
+            "target_text": f"{label_prefix}{label}",
+            "value": float(idx / (bin_count - 1)),
+        }
+        for idx, label in enumerate(labels)
+    ]
+
+
+def _format_reward_bin_table(bin_specs: list[dict[str, Any]], target_precision: int) -> str:
+    return "\n".join(
+        f"{spec['label']}: {float(spec['value']):.{int(target_precision)}f}" for spec in bin_specs
+    )
+
+
+def _build_text_bin_reward_prompt(
+    prompt_text: str,
+    primary_output_text: str,
+    route_aliases: list[str],
+    route_idx: int,
+    bin_specs: list[dict[str, Any]],
+    target_precision: int,
+) -> str:
+    route_legend = ", ".join(route_aliases)
+    route_alias = route_aliases[route_idx]
+    reward_bin_table = _format_reward_bin_table(bin_specs, target_precision)
+    return (
+        "Predict the realized reward bin for one model route.\n"
+        "Choose exactly one label from the reward-bin table.\n"
+        "Respond with only the label.\n\n"
+        "[Reward Bins]\n"
+        f"{reward_bin_table}\n\n"
+        "[Model Order]\n"
+        f"{route_legend}\n"
+        "model_1 is the primary model whose attempt is shown below.\n\n"
+        "[Route To Score]\n"
+        f"{route_alias}\n\n"
+        "[Original Repair Prompt]\n"
+        f"{prompt_text}\n\n"
+        "[Primary Model Attempt]\n"
+        f"{primary_output_text}\n\n"
+        "Answer:"
+    )
+
+
 def _format_reward_target(values: list[float], precision: int) -> str:
     rounded = [float(f"{float(value):.{int(precision)}f}") for value in values]
     return json.dumps(rounded, separators=(",", ":"))
@@ -699,6 +755,28 @@ def _format_reward_target(values: list[float], precision: int) -> str:
 
 def _format_scalar_reward_target(value: float, precision: int) -> str:
     return f"{float(value):.{int(precision)}f}"
+
+
+def _reward_to_bin_idx(value: float, bin_specs: list[dict[str, Any]]) -> int:
+    if len(bin_specs) < 2:
+        raise ValueError("At least two reward bins are required")
+    clipped = min(1.0, max(0.0, float(value)))
+    return int(math.floor(clipped * (len(bin_specs) - 1) + 0.5))
+
+
+def _reward_bin_token_ids(tokenizer: Any, bin_specs: list[dict[str, Any]]) -> list[int]:
+    token_ids: list[int] = []
+    for spec in bin_specs:
+        ids = tokenizer(str(spec["target_text"]), add_special_tokens=False).input_ids
+        if len(ids) != 1:
+            raise ValueError(
+                "Reward bin label target_text=%r tokenized to %d tokens; expected one token"
+                % (spec["target_text"], len(ids))
+            )
+        token_ids.append(int(ids[0]))
+    if len(set(token_ids)) != len(token_ids):
+        raise ValueError("Reward bin labels do not map to unique token ids")
+    return token_ids
 
 
 def _truncate_from_left(token_ids: list[int], max_seq_length: int | None) -> list[int]:
@@ -981,6 +1059,129 @@ def _prepare_text_scalar_eval_rows(
                     "route_alias": route_aliases[route_idx],
                     "route_label": route_labels[route_idx],
                     "target_reward": float(target_reward),
+                    "input_ids": prompt_ids,
+                }
+            )
+    return prepared_rows
+
+
+def _prepare_text_bin_train_rows(
+    dataset: Any,
+    tokenizer: Any,
+    max_seq_length: int | None,
+    route_aliases: list[str],
+    route_labels: list[str],
+    target_dim: int,
+    target_precision: int,
+    bin_specs: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    prepared_rows: list[dict[str, Any]] = []
+    for row in dataset:
+        prompt_text = row.get("prompt_text")
+        primary_output_text = _get_primary_output_text(row)
+        targets = row.get("performance_targets")
+        if not isinstance(prompt_text, str) or not isinstance(primary_output_text, str):
+            continue
+        if not isinstance(targets, list) or len(targets) != target_dim:
+            continue
+        try:
+            problem_id = problem_id_from_item(row)
+        except ValueError:
+            continue
+        target_rewards = [float(value) for value in targets]
+        for route_idx, target_reward in enumerate(target_rewards):
+            bin_idx = _reward_to_bin_idx(target_reward, bin_specs)
+            bin_spec = bin_specs[bin_idx]
+            prompt = _build_text_bin_reward_prompt(
+                prompt_text=prompt_text,
+                primary_output_text=primary_output_text,
+                route_aliases=route_aliases,
+                route_idx=route_idx,
+                bin_specs=bin_specs,
+                target_precision=target_precision,
+            )
+            encoded = _tokenize_text_reward_target(
+                tokenizer=tokenizer,
+                prompt_text=prompt,
+                target_text=str(bin_spec["target_text"]),
+                max_seq_length=max_seq_length,
+            )
+            if encoded is None:
+                continue
+            prepared_rows.append(
+                {
+                    "problem_id": problem_id,
+                    "dataset": row.get("dataset"),
+                    "repo": row.get("repo"),
+                    "language": row.get("language"),
+                    "route_aliases": list(route_aliases),
+                    "route_idx": int(route_idx),
+                    "route_alias": route_aliases[route_idx],
+                    "route_label": route_labels[route_idx],
+                    "target_reward": float(target_reward),
+                    "target_bin_idx": int(bin_idx),
+                    "target_bin_label": str(bin_spec["label"]),
+                    "target_bin_value": float(bin_spec["value"]),
+                    "input_ids": encoded["input_ids"],
+                    "labels": encoded["labels"],
+                }
+            )
+    return prepared_rows
+
+
+def _prepare_text_bin_eval_rows(
+    dataset: Any,
+    tokenizer: Any,
+    max_seq_length: int | None,
+    route_aliases: list[str],
+    route_labels: list[str],
+    target_dim: int,
+    target_precision: int,
+    bin_specs: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    prepared_rows: list[dict[str, Any]] = []
+    for row in dataset:
+        prompt_text = row.get("prompt_text")
+        primary_output_text = _get_primary_output_text(row)
+        targets = row.get("performance_targets")
+        if not isinstance(prompt_text, str) or not isinstance(primary_output_text, str):
+            continue
+        if not isinstance(targets, list) or len(targets) != target_dim:
+            continue
+        try:
+            problem_id = problem_id_from_item(row)
+        except ValueError:
+            continue
+        target_rewards = [float(value) for value in targets]
+        for route_idx, target_reward in enumerate(target_rewards):
+            target_bin_idx = _reward_to_bin_idx(target_reward, bin_specs)
+            target_bin_spec = bin_specs[target_bin_idx]
+            prompt = _build_text_bin_reward_prompt(
+                prompt_text=prompt_text,
+                primary_output_text=primary_output_text,
+                route_aliases=route_aliases,
+                route_idx=route_idx,
+                bin_specs=bin_specs,
+                target_precision=target_precision,
+            )
+            prompt_ids = tokenizer(prompt, add_special_tokens=False).input_ids
+            prompt_ids = _truncate_from_left(prompt_ids, max_seq_length)
+            if not prompt_ids:
+                continue
+            prepared_rows.append(
+                {
+                    "problem_id": problem_id,
+                    "dataset": row.get("dataset"),
+                    "repo": row.get("repo"),
+                    "language": row.get("language"),
+                    "route_aliases": list(route_aliases),
+                    "route_idx": int(route_idx),
+                    "route_alias": route_aliases[route_idx],
+                    "route_label": route_labels[route_idx],
+                    "target_reward": float(target_reward),
+                    "target_bin_idx": int(target_bin_idx),
+                    "target_bin_label": str(target_bin_spec["label"]),
+                    "target_bin_value": float(target_bin_spec["value"]),
                     "input_ids": prompt_ids,
                 }
             )
@@ -1367,6 +1568,75 @@ def _run_text_scalar_reward_eval(
     return prediction_rows, local_squared_error_sum, local_value_count
 
 
+def _run_text_bin_reward_eval(
+    model: Any,
+    loader: DataLoader,
+    bin_token_ids: list[int],
+    bin_specs: list[dict[str, Any]],
+    clip_predictions: bool,
+) -> tuple[list[dict[str, Any]], float, int]:
+    model.eval()
+    prediction_rows: list[dict[str, Any]] = []
+    local_squared_error_sum = 0.0
+    local_value_count = 0
+    bin_values = [float(spec["value"]) for spec in bin_specs]
+    with torch.no_grad():
+        for batch in tqdm(loader, desc="Eval offline router", unit="batch", disable=not is_main_process()):
+            outputs = model(
+                input_ids=batch["input_ids"],
+                attention_mask=batch["attention_mask"],
+                return_dict=True,
+            )
+            last_indices = batch["attention_mask"].sum(dim=1).to(dtype=torch.long) - 1
+            batch_indices = torch.arange(outputs.logits.shape[0], device=outputs.logits.device)
+            next_logits = outputs.logits[batch_indices, last_indices]
+            bin_token_id_tensor = torch.tensor(bin_token_ids, dtype=torch.long, device=outputs.logits.device)
+            bin_value_tensor = torch.tensor(bin_values, dtype=torch.float32, device=outputs.logits.device)
+            bin_logits = next_logits.index_select(dim=1, index=bin_token_id_tensor)
+            bin_probs = torch.softmax(bin_logits.float(), dim=1)
+            pred_rewards = torch.matmul(bin_probs, bin_value_tensor)
+            if clip_predictions:
+                pred_rewards = pred_rewards.clamp(0.0, 1.0)
+            top_probs, top_indices = torch.max(bin_probs, dim=1)
+
+            pred_rewards_cpu = pred_rewards.detach().cpu().tolist()
+            top_probs_cpu = top_probs.detach().cpu().tolist()
+            top_indices_cpu = top_indices.detach().cpu().tolist()
+            bin_probs_cpu = bin_probs.detach().cpu().tolist()
+
+            for row_idx, problem_id in enumerate(batch["problem_ids"]):
+                pred_reward = float(pred_rewards_cpu[row_idx])
+                target_reward = float(batch["targets"][row_idx].item())
+                local_squared_error_sum += float((pred_reward - target_reward) ** 2)
+                local_value_count += 1
+                top_idx = int(top_indices_cpu[row_idx])
+                prediction_row = {
+                    "problem_id": problem_id,
+                    "dataset": batch["datasets"][row_idx],
+                    "repo": batch["repos"][row_idx],
+                    "language": batch["languages"][row_idx],
+                    "route_aliases": list(batch["route_aliases"][row_idx]),
+                    "route_idx": int(batch["route_indices"][row_idx].item()),
+                    "route_alias": batch["route_alias"][row_idx],
+                    "route_label": batch["route_label"][row_idx],
+                    "true_reward": target_reward,
+                    "generated_text": str(bin_specs[top_idx]["label"]),
+                    "parsed_reward": pred_reward,
+                    "pred_reward": pred_reward,
+                    "parse_success": True,
+                    "pred_bin_idx": int(top_idx),
+                    "pred_bin_label": str(bin_specs[top_idx]["label"]),
+                    "pred_bin_value": float(bin_specs[top_idx]["value"]),
+                    "pred_bin_probability": float(top_probs_cpu[row_idx]),
+                    "bin_probabilities": {
+                        str(spec["label"]): float(prob)
+                        for spec, prob in zip(bin_specs, bin_probs_cpu[row_idx])
+                    },
+                }
+                prediction_rows.append(prediction_row)
+    return prediction_rows, local_squared_error_sum, local_value_count
+
+
 def _save_offline_router_checkpoint(
     output_dir: Path,
     model: Any,
@@ -1567,6 +1837,15 @@ def _merge_text_scalar_reward_eval_rows(
             "parse_success": bool(row.get("parse_success", False)),
             "parse_error": row.get("parse_error"),
         }
+        for optional_key in (
+            "pred_bin_idx",
+            "pred_bin_label",
+            "pred_bin_value",
+            "pred_bin_probability",
+            "bin_probabilities",
+        ):
+            if optional_key in row:
+                entry["route_predictions"][route_idx][optional_key] = row.get(optional_key)
 
     filtered_rows: list[dict[str, Any]] = []
     for row in grouped.values():
@@ -1729,6 +2008,14 @@ def main(cfg: DictConfig) -> None:
         text_do_sample = bool(text_reward_cfg.get("do_sample", False))
         text_parse_failure_value = float(text_reward_cfg.get("parse_failure_value", 0.0))
         text_clip_predictions = bool(text_reward_cfg.get("clip_predictions", True))
+        text_reward_bin_count = int(text_reward_cfg.get("bin_count", 21))
+        text_reward_bin_label_prefix = str(text_reward_cfg.get("bin_label_prefix", " "))
+        text_reward_bin_specs = (
+            _build_reward_bin_specs(text_reward_bin_count, label_prefix=text_reward_bin_label_prefix)
+            if supervision_mode == "text_reward_bin"
+            else []
+        )
+        text_reward_bin_token_ids: list[int] = []
         train_sampling_strategy = str(train_cfg.get("train_sampling_strategy", "random"))
 
         train_dataset = _load_split(dataset_dir, "train")
@@ -1753,7 +2040,7 @@ def main(cfg: DictConfig) -> None:
         raw_eval_rows = int(len(eval_dataset))
         train_supervision_rows = int(len(train_dataset))
         eval_supervision_rows = int(len(eval_dataset))
-        if supervision_mode == "text_reward_scalar":
+        if supervision_mode in {"text_reward_scalar", "text_reward_bin"}:
             train_supervision_rows *= target_dim
             eval_supervision_rows *= target_dim
 
@@ -1812,6 +2099,13 @@ def main(cfg: DictConfig) -> None:
             trainable_prefixes = [
                 f"lora:{target_module}" for target_module in (text_lora_config_summary or {}).get("target_modules", [])
             ] or ["lora_adapters"]
+        if supervision_mode == "text_reward_bin":
+            text_reward_bin_token_ids = _reward_bin_token_ids(tokenizer, text_reward_bin_specs)
+            logger.info(
+                "Offline router reward-bin labels=%s token_ids=%s",
+                [str(spec["label"]) for spec in text_reward_bin_specs],
+                text_reward_bin_token_ids,
+            )
         total_parameters = count_parameters(model, trainable_only=False)
         trainable_parameters = count_parameters(model, trainable_only=True)
 
@@ -1856,6 +2150,13 @@ def main(cfg: DictConfig) -> None:
                 train_supervision_rows,
                 raw_eval_rows,
                 eval_supervision_rows,
+            )
+        if supervision_mode == "text_reward_bin":
+            logger.info(
+                "Offline router text reward bin settings: bin_count=%d label_prefix=%r bin_values=%s",
+                text_reward_bin_count,
+                text_reward_bin_label_prefix,
+                [float(spec["value"]) for spec in text_reward_bin_specs],
             )
         optimizer, optimizer_group_summaries = _build_optimizer(
             model,
@@ -1923,6 +2224,29 @@ def main(cfg: DictConfig) -> None:
                 route_aliases=route_aliases,
                 route_labels=route_labels,
                 target_dim=target_dim,
+            )
+            train_collate_fn = _make_text_scalar_train_collate_fn(pad_token_id=pad_token_id)
+            eval_collate_fn = _make_text_scalar_eval_collate_fn(pad_token_id=pad_token_id)
+        elif supervision_mode == "text_reward_bin":
+            train_dataset = _prepare_text_bin_train_rows(
+                train_dataset,
+                tokenizer=tokenizer,
+                max_seq_length=max_seq_length,
+                route_aliases=route_aliases,
+                route_labels=route_labels,
+                target_dim=target_dim,
+                target_precision=text_target_precision,
+                bin_specs=text_reward_bin_specs,
+            )
+            eval_dataset = _prepare_text_bin_eval_rows(
+                eval_dataset,
+                tokenizer=tokenizer,
+                max_seq_length=max_seq_length,
+                route_aliases=route_aliases,
+                route_labels=route_labels,
+                target_dim=target_dim,
+                target_precision=text_target_precision,
+                bin_specs=text_reward_bin_specs,
             )
             train_collate_fn = _make_text_scalar_train_collate_fn(pad_token_id=pad_token_id)
             eval_collate_fn = _make_text_scalar_eval_collate_fn(pad_token_id=pad_token_id)
@@ -2203,6 +2527,14 @@ def main(cfg: DictConfig) -> None:
                     parse_failure_value=text_parse_failure_value,
                     clip_predictions=text_clip_predictions,
                 )
+            elif supervision_mode == "text_reward_bin":
+                local_eval_rows, local_eval_squared_error_sum, local_eval_value_count = _run_text_bin_reward_eval(
+                    model,
+                    eval_loader,
+                    bin_token_ids=text_reward_bin_token_ids,
+                    bin_specs=text_reward_bin_specs,
+                    clip_predictions=text_clip_predictions,
+                )
             else:
                 raise ValueError(f"Unsupported supervision mode: {supervision_mode}")
             shard_path = _write_eval_shard(output_dir, epoch, local_eval_rows)
@@ -2238,7 +2570,7 @@ def main(cfg: DictConfig) -> None:
                         merged_shard_rows,
                         route_labels=route_labels,
                     )
-                elif supervision_mode == "text_reward_scalar":
+                elif supervision_mode in {"text_reward_scalar", "text_reward_bin"}:
                     eval_rows, y_true, y_pred, eval_extra = _merge_text_scalar_reward_eval_rows(
                         merged_shard_rows,
                         route_labels=route_labels,
@@ -2416,6 +2748,19 @@ def main(cfg: DictConfig) -> None:
                     "best_eval_problem_examples": int(best_eval_extra.get("eval_problem_examples", 0)),
                     "best_eval_route_examples": int(best_eval_extra.get("eval_route_examples", 0)),
                 }
+                if supervision_mode == "text_reward_bin":
+                    summary["text_reward"]["bin_count"] = text_reward_bin_count
+                    summary["text_reward"]["bin_label_prefix"] = text_reward_bin_label_prefix
+                    summary["text_reward"]["bin_specs"] = [
+                        {
+                            "idx": int(spec["idx"]),
+                            "label": str(spec["label"]),
+                            "target_text": str(spec["target_text"]),
+                            "value": float(spec["value"]),
+                            "token_id": int(token_id),
+                        }
+                        for spec, token_id in zip(text_reward_bin_specs, text_reward_bin_token_ids)
+                    ]
             write_json(output_dir / "summary.json", summary)
             if wandb_run is not None:
                 try:
