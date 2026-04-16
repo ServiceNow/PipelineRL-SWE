@@ -92,6 +92,13 @@ bash launch_offline_router_swe_smith_id_scalar_20bucket_train_only.sh
 bash launch_offline_router_swe_smith_id_bin_20bucket_train_only.sh
 ```
 
+For the reverse-label diagnostic, keep the same 21 reward values but assign them
+to letters in descending order (`A=1.00, ..., U=0.00`):
+
+```bash
+bash launch_offline_router_swe_smith_id_bin_reverse_20bucket_train_only.sh
+```
+
 To inspect whether numeric reward strings are single tokenizer tokens:
 
 ```bash

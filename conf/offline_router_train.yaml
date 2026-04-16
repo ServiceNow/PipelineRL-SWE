@@ -60,3 +60,4 @@ offline_router:
       clip_predictions: true
       bin_count: 21
       bin_label_prefix: " "
+      bin_value_order: ascending  # ascending: A=0.00,...; descending: A=1.00,...

@@ -717,21 +717,29 @@ def _build_text_scalar_reward_prompt(
 def _build_reward_bin_specs(
     bin_count: int,
     label_prefix: str = " ",
+    value_order: str = "ascending",
 ) -> list[dict[str, Any]]:
     if bin_count < 2:
         raise ValueError("offline_router.train.text_reward.bin_count must be at least 2")
     if bin_count > 26:
         raise ValueError("offline_router.train.text_reward.bin_count currently supports at most 26 letter bins")
+    if value_order not in {"ascending", "descending"}:
+        raise ValueError(
+            "offline_router.train.text_reward.bin_value_order must be 'ascending' or 'descending'"
+        )
     labels = [chr(ord("A") + idx) for idx in range(bin_count)]
-    return [
-        {
-            "idx": int(idx),
-            "label": label,
-            "target_text": f"{label_prefix}{label}",
-            "value": float(idx / (bin_count - 1)),
-        }
-        for idx, label in enumerate(labels)
-    ]
+    specs: list[dict[str, Any]] = []
+    for idx, label in enumerate(labels):
+        value_idx = idx if value_order == "ascending" else bin_count - 1 - idx
+        specs.append(
+            {
+                "idx": int(idx),
+                "label": label,
+                "target_text": f"{label_prefix}{label}",
+                "value": float(value_idx / (bin_count - 1)),
+            }
+        )
+    return specs
 
 
 def _format_reward_bin_table(bin_specs: list[dict[str, Any]], target_precision: int) -> str:
@@ -795,8 +803,11 @@ def _format_scalar_reward_target(value: float, precision: int, target_grid_count
 def _reward_to_bin_idx(value: float, bin_specs: list[dict[str, Any]]) -> int:
     if len(bin_specs) < 2:
         raise ValueError("At least two reward bins are required")
-    clipped = min(1.0, max(0.0, float(value)))
-    return int(math.floor(clipped * (len(bin_specs) - 1) + 0.5))
+    target_value = _quantize_reward_to_grid(float(value), len(bin_specs))
+    return min(
+        range(len(bin_specs)),
+        key=lambda idx: abs(float(bin_specs[idx]["value"]) - target_value),
+    )
 
 
 def _reward_bin_token_ids(tokenizer: Any, bin_specs: list[dict[str, Any]]) -> list[int]:
@@ -2081,8 +2092,13 @@ def main(cfg: DictConfig) -> None:
         text_clip_predictions = bool(text_reward_cfg.get("clip_predictions", True))
         text_reward_bin_count = int(text_reward_cfg.get("bin_count", 21))
         text_reward_bin_label_prefix = str(text_reward_cfg.get("bin_label_prefix", " "))
+        text_reward_bin_value_order = str(text_reward_cfg.get("bin_value_order", "ascending"))
         text_reward_bin_specs = (
-            _build_reward_bin_specs(text_reward_bin_count, label_prefix=text_reward_bin_label_prefix)
+            _build_reward_bin_specs(
+                text_reward_bin_count,
+                label_prefix=text_reward_bin_label_prefix,
+                value_order=text_reward_bin_value_order,
+            )
             if supervision_mode == "text_reward_bin"
             else []
         )
@@ -2225,9 +2241,10 @@ def main(cfg: DictConfig) -> None:
             )
         if supervision_mode == "text_reward_bin":
             logger.info(
-                "Offline router text reward bin settings: bin_count=%d label_prefix=%r bin_values=%s",
+                "Offline router text reward bin settings: bin_count=%d label_prefix=%r value_order=%s bin_values=%s",
                 text_reward_bin_count,
                 text_reward_bin_label_prefix,
+                text_reward_bin_value_order,
                 [float(spec["value"]) for spec in text_reward_bin_specs],
             )
         optimizer, optimizer_group_summaries = _build_optimizer(
@@ -2830,6 +2847,7 @@ def main(cfg: DictConfig) -> None:
                 if supervision_mode == "text_reward_bin":
                     summary["text_reward"]["bin_count"] = text_reward_bin_count
                     summary["text_reward"]["bin_label_prefix"] = text_reward_bin_label_prefix
+                    summary["text_reward"]["bin_value_order"] = text_reward_bin_value_order
                     summary["text_reward"]["bin_specs"] = [
                         {
                             "idx": int(spec["idx"]),
