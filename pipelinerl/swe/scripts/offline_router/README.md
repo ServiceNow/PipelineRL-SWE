@@ -82,6 +82,24 @@ expected reward, run:
 bash launch_offline_router_swe_smith_id_bin_train_only.sh
 ```
 
+For a matched 20-interval reward-grid comparison, use the `20bucket` launchers.
+These put all three text modes on the same `0.00, 0.05, ..., 1.00` training
+target grid:
+
+```bash
+bash launch_offline_router_swe_smith_id_vector_20bucket_train_only.sh
+bash launch_offline_router_swe_smith_id_scalar_20bucket_train_only.sh
+bash launch_offline_router_swe_smith_id_bin_20bucket_train_only.sh
+```
+
+To inspect whether numeric reward strings are single tokenizer tokens:
+
+```bash
+conda run --no-capture-output -n pipeline-rl python -m pipelinerl.swe.scripts.offline_router.probe_reward_tokenization \
+  --model-path /mnt/llmd/results/exps/aristides/reason/swe_smith_policy_conditioned_no_devstral_1773812579/finetune/current \
+  --output-json router_analysis/reward_tokenization_policy_checkpoint.json
+```
+
 `launch_offline_router_collect.sh` reserves a single 8-GPU node by default and starts:
 
 - primary-model vLLM on GPU `0`
@@ -154,3 +172,25 @@ If `wandb.use_wandb=true`, the trainer also logs epoch losses and per-route / pa
 - delta MAE
 - sign accuracy
 - ROC-AUC
+
+## 3) Compare Router Calibration
+
+To compare completed offline-router training runs, use:
+
+```bash
+conda run --no-capture-output -n pipeline-rl python -m pipelinerl.swe.scripts.offline_router.report_router_calibration \
+  --run vector=/path/to/vector_train_dir \
+  --run scalar=/path/to/scalar_train_dir \
+  --run bin=/path/to/bin_train_dir \
+  --output-dir router_analysis/offline_router_calibration
+```
+
+The report writes:
+
+- `run_summary.csv`
+- `route_metrics.csv`
+- `pairwise_metrics.csv`
+- `collapse_stats.csv`
+- `reliability_buckets.csv`
+- `decision_summary.csv`
+- `calibration_report.json`

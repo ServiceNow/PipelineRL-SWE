@@ -48,6 +48,7 @@ offline_router:
         - o_proj
     text_reward:
       target_precision: 2
+      target_grid_count: null  # Set to 21 for the same 0.00, 0.05, ..., 1.00 grid as text_reward_bin.
       lr: 5.0e-6
       weight_decay: 0.01
       warmup_steps: 100

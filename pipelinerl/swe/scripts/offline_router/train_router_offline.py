@@ -646,17 +646,31 @@ def _route_prompt_aliases(route_labels: list[str]) -> list[str]:
     return [f"model_{route_idx + 1}" for route_idx, _ in enumerate(route_labels)]
 
 
+def _format_reward_grid_values(grid_count: int, precision: int) -> str:
+    if grid_count < 2:
+        raise ValueError("Reward grid count must be at least 2")
+    return ", ".join(f"{idx / (grid_count - 1):.{int(precision)}f}" for idx in range(grid_count))
+
+
 def _build_text_reward_prompt(
     prompt_text: str,
     primary_output_text: str,
     route_aliases: list[str],
+    target_grid_count: int | None = None,
+    target_precision: int = 2,
 ) -> str:
     route_legend = ", ".join(route_aliases)
+    reward_instruction = "Each score must be between 0.000 and 1.000.\n"
+    if target_grid_count is not None:
+        reward_instruction = (
+            "Each score must be exactly one of these reward-grid values: "
+            f"{_format_reward_grid_values(target_grid_count, target_precision)}.\n"
+        )
     return (
         "Predict the realized reward for each model.\n"
         "Respond with only a compact JSON array of floats in the listed order.\n"
         "Do not include any keys, labels, or explanation text.\n"
-        "Each score must be between 0.000 and 1.000.\n\n"
+        f"{reward_instruction}\n"
         "[Model Order]\n"
         f"{route_legend}\n\n"
         "[Original Repair Prompt]\n"
@@ -672,12 +686,20 @@ def _build_text_scalar_reward_prompt(
     primary_output_text: str,
     route_aliases: list[str],
     route_idx: int,
+    target_grid_count: int | None = None,
+    target_precision: int = 2,
 ) -> str:
     route_legend = ", ".join(route_aliases)
     route_alias = route_aliases[route_idx]
+    reward_instruction = "Respond with only one float between 0.000 and 1.000.\n"
+    if target_grid_count is not None:
+        reward_instruction = (
+            "Respond with only one of these reward-grid values: "
+            f"{_format_reward_grid_values(target_grid_count, target_precision)}.\n"
+        )
     return (
         "Predict the realized reward for one model route.\n"
-        "Respond with only one float between 0.000 and 1.000.\n"
+        f"{reward_instruction}"
         "Do not include any keys, labels, JSON, or explanation text.\n\n"
         "[Model Order]\n"
         f"{route_legend}\n"
@@ -748,13 +770,26 @@ def _build_text_bin_reward_prompt(
     )
 
 
-def _format_reward_target(values: list[float], precision: int) -> str:
-    rounded = [float(f"{float(value):.{int(precision)}f}") for value in values]
+def _quantize_reward_to_grid(value: float, grid_count: int | None) -> float:
+    if grid_count is None:
+        return float(value)
+    if grid_count < 2:
+        raise ValueError("offline_router.train.text_reward.target_grid_count must be at least 2")
+    clipped = min(1.0, max(0.0, float(value)))
+    grid_idx = int(math.floor(clipped * (grid_count - 1) + 0.5))
+    return float(grid_idx / (grid_count - 1))
+
+
+def _format_reward_target(values: list[float], precision: int, target_grid_count: int | None = None) -> str:
+    rounded = [
+        float(f"{_quantize_reward_to_grid(float(value), target_grid_count):.{int(precision)}f}")
+        for value in values
+    ]
     return json.dumps(rounded, separators=(",", ":"))
 
 
-def _format_scalar_reward_target(value: float, precision: int) -> str:
-    return f"{float(value):.{int(precision)}f}"
+def _format_scalar_reward_target(value: float, precision: int, target_grid_count: int | None = None) -> str:
+    return f"{_quantize_reward_to_grid(float(value), target_grid_count):.{int(precision)}f}"
 
 
 def _reward_to_bin_idx(value: float, bin_specs: list[dict[str, Any]]) -> int:
@@ -819,6 +854,7 @@ def _prepare_text_train_rows(
     route_aliases: list[str],
     target_dim: int,
     target_precision: int,
+    target_grid_count: int | None = None,
 ) -> list[dict[str, Any]]:
     prepared_rows: list[dict[str, Any]] = []
     for row in dataset:
@@ -834,11 +870,21 @@ def _prepare_text_train_rows(
         except ValueError:
             continue
         target_rewards = [float(value) for value in targets]
-        prompt = _build_text_reward_prompt(prompt_text, primary_output_text, route_aliases)
+        prompt = _build_text_reward_prompt(
+            prompt_text,
+            primary_output_text,
+            route_aliases,
+            target_grid_count=target_grid_count,
+            target_precision=target_precision,
+        )
         encoded = _tokenize_text_reward_target(
             tokenizer=tokenizer,
             prompt_text=prompt,
-            target_text=_format_reward_target(target_rewards, target_precision),
+            target_text=_format_reward_target(
+                target_rewards,
+                target_precision,
+                target_grid_count=target_grid_count,
+            ),
             max_seq_length=max_seq_length,
         )
         if encoded is None:
@@ -897,6 +943,8 @@ def _prepare_text_eval_rows(
     max_seq_length: int | None,
     route_aliases: list[str],
     target_dim: int,
+    target_grid_count: int | None = None,
+    target_precision: int = 2,
 ) -> list[dict[str, Any]]:
     prepared_rows: list[dict[str, Any]] = []
     for row in dataset:
@@ -911,7 +959,13 @@ def _prepare_text_eval_rows(
             problem_id = problem_id_from_item(row)
         except ValueError:
             continue
-        prompt = _build_text_reward_prompt(prompt_text, primary_output_text, route_aliases)
+        prompt = _build_text_reward_prompt(
+            prompt_text,
+            primary_output_text,
+            route_aliases,
+            target_grid_count=target_grid_count,
+            target_precision=target_precision,
+        )
         prompt_ids = tokenizer(prompt, add_special_tokens=False).input_ids
         prompt_ids = _truncate_from_left(prompt_ids, max_seq_length)
         if not prompt_ids:
@@ -967,6 +1021,7 @@ def _prepare_text_scalar_train_rows(
     route_labels: list[str],
     target_dim: int,
     target_precision: int,
+    target_grid_count: int | None = None,
 ) -> list[dict[str, Any]]:
     prepared_rows: list[dict[str, Any]] = []
     for row in dataset:
@@ -988,11 +1043,17 @@ def _prepare_text_scalar_train_rows(
                 primary_output_text=primary_output_text,
                 route_aliases=route_aliases,
                 route_idx=route_idx,
+                target_grid_count=target_grid_count,
+                target_precision=target_precision,
             )
             encoded = _tokenize_text_reward_target(
                 tokenizer=tokenizer,
                 prompt_text=prompt,
-                target_text=_format_scalar_reward_target(target_reward, target_precision),
+                target_text=_format_scalar_reward_target(
+                    target_reward,
+                    target_precision,
+                    target_grid_count=target_grid_count,
+                ),
                 max_seq_length=max_seq_length,
             )
             if encoded is None:
@@ -1022,6 +1083,8 @@ def _prepare_text_scalar_eval_rows(
     route_aliases: list[str],
     route_labels: list[str],
     target_dim: int,
+    target_grid_count: int | None = None,
+    target_precision: int = 2,
 ) -> list[dict[str, Any]]:
     prepared_rows: list[dict[str, Any]] = []
     for row in dataset:
@@ -1043,6 +1106,8 @@ def _prepare_text_scalar_eval_rows(
                 primary_output_text=primary_output_text,
                 route_aliases=route_aliases,
                 route_idx=route_idx,
+                target_grid_count=target_grid_count,
+                target_precision=target_precision,
             )
             prompt_ids = tokenizer(prompt, add_special_tokens=False).input_ids
             prompt_ids = _truncate_from_left(prompt_ids, max_seq_length)
@@ -1999,6 +2064,12 @@ def main(cfg: DictConfig) -> None:
         if text_reward_cfg is None:
             text_reward_cfg = {}
         text_target_precision = int(text_reward_cfg.get("target_precision", 2))
+        text_target_grid_count_raw = text_reward_cfg.get("target_grid_count")
+        text_target_grid_count = (
+            int(text_target_grid_count_raw) if text_target_grid_count_raw is not None else None
+        )
+        if text_target_grid_count is not None and text_target_grid_count < 2:
+            raise ValueError("offline_router.train.text_reward.target_grid_count must be at least 2")
         text_lr = float(text_reward_cfg.get("lr", 5.0e-6))
         text_weight_decay = float(text_reward_cfg.get("weight_decay", 0.01))
         text_warmup_steps = int(text_reward_cfg.get("warmup_steps", 100))
@@ -2134,8 +2205,9 @@ def main(cfg: DictConfig) -> None:
             )
         if supervision_mode in TEXT_REWARD_SUPERVISION_MODES:
             logger.info(
-                "Offline router text reward settings: target_precision=%d lr=%.2e weight_decay=%.3f warmup_steps=%d gradient_clipping=%.3f debug_step_logging=%s max_new_tokens=%d do_sample=%s parse_failure_value=%.3f clip_predictions=%s train_sampling_strategy=%s train_rows=%d train_supervision_rows=%d eval_rows=%d eval_supervision_rows=%d",
+                "Offline router text reward settings: target_precision=%d target_grid_count=%s lr=%.2e weight_decay=%.3f warmup_steps=%d gradient_clipping=%.3f debug_step_logging=%s max_new_tokens=%d do_sample=%s parse_failure_value=%.3f clip_predictions=%s train_sampling_strategy=%s train_rows=%d train_supervision_rows=%d eval_rows=%d eval_supervision_rows=%d",
                 text_target_precision,
+                text_target_grid_count,
                 text_lr,
                 text_weight_decay,
                 text_warmup_steps,
@@ -2197,6 +2269,7 @@ def main(cfg: DictConfig) -> None:
                 route_aliases=route_aliases,
                 target_dim=target_dim,
                 target_precision=text_target_precision,
+                target_grid_count=text_target_grid_count,
             )
             eval_dataset = _prepare_text_eval_rows(
                 eval_dataset,
@@ -2204,6 +2277,8 @@ def main(cfg: DictConfig) -> None:
                 max_seq_length=max_seq_length,
                 route_aliases=route_aliases,
                 target_dim=target_dim,
+                target_grid_count=text_target_grid_count,
+                target_precision=text_target_precision,
             )
             train_collate_fn = _make_text_train_collate_fn(pad_token_id=pad_token_id, target_dim=target_dim)
             eval_collate_fn = _make_text_eval_collate_fn(pad_token_id=pad_token_id, target_dim=target_dim)
@@ -2216,6 +2291,7 @@ def main(cfg: DictConfig) -> None:
                 route_labels=route_labels,
                 target_dim=target_dim,
                 target_precision=text_target_precision,
+                target_grid_count=text_target_grid_count,
             )
             eval_dataset = _prepare_text_scalar_eval_rows(
                 eval_dataset,
@@ -2224,6 +2300,8 @@ def main(cfg: DictConfig) -> None:
                 route_aliases=route_aliases,
                 route_labels=route_labels,
                 target_dim=target_dim,
+                target_grid_count=text_target_grid_count,
+                target_precision=text_target_precision,
             )
             train_collate_fn = _make_text_scalar_train_collate_fn(pad_token_id=pad_token_id)
             eval_collate_fn = _make_text_scalar_eval_collate_fn(pad_token_id=pad_token_id)
@@ -2735,6 +2813,7 @@ def main(cfg: DictConfig) -> None:
                 summary["text_lora_config"] = text_lora_config_summary or {}
                 summary["text_reward"] = {
                     "target_precision": text_target_precision,
+                    "target_grid_count": text_target_grid_count,
                     "lr": text_lr,
                     "weight_decay": text_weight_decay,
                     "warmup_steps": text_warmup_steps,
