@@ -99,6 +99,13 @@ to letters in descending order (`A=1.00, ..., U=0.00`):
 bash launch_offline_router_swe_smith_id_bin_reverse_20bucket_train_only.sh
 ```
 
+To estimate forward-bin seed variability, run three sequential `bin20` trainings
+inside one job. Override `ROUTER_SEEDS` for a different seed list:
+
+```bash
+bash launch_offline_router_swe_smith_id_bin_20bucket_multiseed_train_only.sh
+```
+
 To inspect whether numeric reward strings are single tokenizer tokens:
 
 ```bash

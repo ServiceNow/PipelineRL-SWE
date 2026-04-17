@@ -73,6 +73,14 @@ def barrier_if_distributed() -> None:
         get_accelerator().wait_for_everyone()
 
 
+def _set_training_seed(seed: int) -> None:
+    random.seed(int(seed))
+    np.random.seed(int(seed))
+    torch.manual_seed(int(seed))
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(int(seed))
+
+
 def _pick_device(device_arg: str) -> torch.device:
     if device_arg == "auto":
         return get_accelerator().device
@@ -2052,6 +2060,9 @@ def main(cfg: DictConfig) -> None:
             gradient_accumulation_steps=grad_accum,
             dataloader_config=DataLoaderConfiguration(even_batches=True),
         )
+        base_seed = int(cfg.get("seed", 42))
+        _set_training_seed(base_seed)
+        logger.info("Offline router training seed=%d", base_seed)
         output_dir = Path(cfg.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         if is_main_process():
@@ -2110,7 +2121,6 @@ def main(cfg: DictConfig) -> None:
 
         max_train_rows = train_cfg.get("max_train_rows")
         max_eval_rows = train_cfg.get("max_eval_rows")
-        base_seed = int(cfg.get("seed", 42))
         train_dataset, train_sampling_summary = _sample_train_dataset(
             train_dataset,
             max_rows=int(max_train_rows) if max_train_rows else None,
@@ -2793,6 +2803,7 @@ def main(cfg: DictConfig) -> None:
             _save_predictions_jsonl(output_dir / "eval_predictions.jsonl", best_eval_rows)
 
             summary = {
+                "seed": base_seed,
                 "mode": str(train_cfg.mode),
                 "supervision_mode": supervision_mode,
                 "dataset_dir": str(dataset_dir),

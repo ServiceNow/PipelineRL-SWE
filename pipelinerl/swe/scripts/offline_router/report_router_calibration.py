@@ -365,6 +365,7 @@ def _summarize_run(
     run_summary = {
         "run_name": run_name,
         "run_dir": str(run_dir),
+        "seed": summary.get("seed"),
         "supervision_mode": summary.get("supervision_mode"),
         "target_precision": (summary.get("text_reward") or {}).get("target_precision"),
         "target_grid_count": (summary.get("text_reward") or {}).get("target_grid_count"),
@@ -477,6 +478,7 @@ def main() -> None:
         [
             "run_name",
             "run_dir",
+            "seed",
             "supervision_mode",
             "target_precision",
             "target_grid_count",
