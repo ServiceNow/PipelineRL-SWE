@@ -718,6 +718,8 @@ def _build_text_scalar_reward_prompt(
         f"{prompt_text}\n\n"
         "[Primary Model Attempt]\n"
         f"{primary_output_text}\n\n"
+        "[Route To Score]\n"
+        f"{route_alias}\n\n"
         "Answer:\n"
     )
 
@@ -782,6 +784,8 @@ def _build_text_bin_reward_prompt(
         f"{prompt_text}\n\n"
         "[Primary Model Attempt]\n"
         f"{primary_output_text}\n\n"
+        "[Route To Score]\n"
+        f"{route_alias}\n\n"
         "Answer:"
     )
 
