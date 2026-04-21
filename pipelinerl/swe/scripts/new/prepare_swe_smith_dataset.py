@@ -4,6 +4,10 @@ import json
 import logging
 import random
 import re
+import subprocess
+import urllib.error
+import urllib.parse
+import urllib.request
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
@@ -74,6 +78,14 @@ def _parse_repo_with_commit_suffix(repo_value: str) -> tuple[str | None, str | N
     text = (repo_value or "").strip()
     if not text:
         return None, None
+    # Official SWE-bench rows use ordinary GitHub repo names such as
+    # DataDog/integrations-core. Do not treat the owner as a dataset namespace.
+    if "/" in text:
+        payload_candidate = text.split("/", 1)[1]
+        has_swesmith_owner_repo = "__" in payload_candidate
+        has_commit_suffix = bool(re.search(r"\.[0-9a-fA-F]{6,40}$", payload_candidate))
+        if not has_swesmith_owner_repo and not has_commit_suffix:
+            return text.removesuffix(".git"), None
     payload = text.split("/", 1)[1] if "/" in text else text
     if "." not in payload:
         repo_name = payload.replace("__", "/")
@@ -132,17 +144,57 @@ def _parse_patch_files(patch: str) -> list[str]:
     return ordered
 
 
-def _ensure_repo(local_dir: Path, repo_name: str) -> Path | None:
+def _run_git_command(
+    args: list[str],
+    timeout_seconds: int,
+    cwd: Path | None = None,
+) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["git", *args],
+        cwd=str(cwd) if cwd is not None else None,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        timeout=timeout_seconds if timeout_seconds > 0 else None,
+    )
+
+
+def _ensure_repo(
+    local_dir: Path,
+    repo_name: str,
+    timeout_seconds: int,
+    partial_clone: bool,
+    fetch_existing: bool,
+) -> Path | None:
     repo_path = local_dir / repo_name.replace("/", "_")
     url = f"https://github.com/{repo_name}.git"
     try:
         if repo_path.exists() and (repo_path / ".git").exists():
-            repo = git.Repo(repo_path)
-            repo.remotes.origin.fetch()
+            _run_git_command(["rev-parse", "--is-inside-work-tree"], timeout_seconds, cwd=repo_path)
+            if fetch_existing:
+                fetch_args = ["fetch", "origin"]
+                if partial_clone:
+                    fetch_args.insert(1, "--filter=blob:none")
+                _run_git_command(fetch_args, timeout_seconds, cwd=repo_path)
             return repo_path
+        if repo_path.exists():
+            logger.warning("Repo path exists but is not a git repo, skipping %s (%s)", repo_name, repo_path)
+            return None
         repo_path.parent.mkdir(parents=True, exist_ok=True)
-        git.Repo.clone_from(url, repo_path)
+        clone_args = ["clone"]
+        if partial_clone:
+            clone_args.extend(["--filter=blob:none", "--no-checkout"])
+        clone_args.extend([url, str(repo_path)])
+        _run_git_command(clone_args, timeout_seconds)
         return repo_path
+    except subprocess.TimeoutExpired:
+        logger.warning("Timed out preparing repo %s after %ds (%s)", repo_name, timeout_seconds, repo_path)
+        return None
+    except subprocess.CalledProcessError as exc:
+        stderr = (exc.stderr or "").strip()
+        logger.warning("Failed to prepare repo %s (%s): %s", repo_name, repo_path, stderr)
+        return None
     except Exception as exc:
         logger.warning("Failed to prepare repo %s (%s): %s", repo_name, repo_path, exc)
         return None
@@ -168,6 +220,31 @@ def _fetch_gold_file_contents_from_repo(repo_path: Path, commit_hash: str, patch
         try:
             contents[file_path] = repo.git.show(f"{commit_hash}:{file_path}")
         except Exception:
+            continue
+    return contents
+
+
+def _fetch_gold_file_contents_from_raw_url(
+    repo_name: str,
+    commit_hash: str,
+    patch: str,
+    timeout_seconds: int,
+) -> dict[str, str]:
+    files = _parse_patch_files(patch)
+    if not files:
+        return {}
+    contents: dict[str, str] = {}
+    timeout = timeout_seconds if timeout_seconds > 0 else None
+    for file_path in files:
+        quoted_path = urllib.parse.quote(file_path, safe="/")
+        url = f"https://raw.githubusercontent.com/{repo_name}/{commit_hash}/{quoted_path}"
+        try:
+            with urllib.request.urlopen(url, timeout=timeout) as response:
+                if int(response.status) < 200 or int(response.status) >= 300:
+                    continue
+                contents[file_path] = response.read().decode("utf-8", errors="replace")
+        except (urllib.error.URLError, TimeoutError, ValueError) as exc:
+            logger.debug("Failed raw file fetch repo=%s file=%s url=%s: %s", repo_name, file_path, url, exc)
             continue
     return contents
 
@@ -313,8 +390,13 @@ def main() -> None:
         default="train",
         help="HF split name used for all datasets (default: train).",
     )
-    parser.add_argument("--train-output-path", required=True, help="Output path for processed train dataset (save_to_disk).")
-    parser.add_argument("--test-output-path", required=True, help="Output path for processed test dataset (save_to_disk).")
+    parser.add_argument("--train-output-path", default="", help="Output path for processed train dataset (save_to_disk).")
+    parser.add_argument("--test-output-path", default="", help="Output path for processed test dataset (save_to_disk).")
+    parser.add_argument(
+        "--single-output-path",
+        default="",
+        help="If set, save all normalized rows to this dataset path and skip train/test splitting.",
+    )
     parser.add_argument(
         "--split-strategy",
         choices=["field", "within-repo", "disjoint-repo"],
@@ -348,9 +430,47 @@ def main() -> None:
         action="store_true",
         help="If gold_file_contents is missing, clone/fetch repo and read patch files at base commit.",
     )
+    parser.add_argument(
+        "--gold-file-source",
+        choices=["git", "raw-url"],
+        default="git",
+        help=(
+            "How to reconstruct missing gold_file_contents. "
+            "git clones/fetches repos; raw-url fetches touched files directly from raw.githubusercontent.com."
+        ),
+    )
+    parser.add_argument(
+        "--max-normalized-rows",
+        type=int,
+        default=0,
+        help="Randomly sample this many normalized rows before reconstructing file contents. <=0 keeps all rows.",
+    )
+    parser.add_argument("--row-sample-seed", type=int, default=42)
+    parser.add_argument(
+        "--git-timeout-seconds",
+        type=int,
+        default=900,
+        help="Timeout for each git clone/fetch command. <=0 disables the timeout.",
+    )
+    parser.add_argument(
+        "--no-partial-clone",
+        action="store_true",
+        help="Use full git clones instead of blobless partial clones.",
+    )
+    parser.add_argument(
+        "--fetch-existing-repos",
+        action="store_true",
+        help="Run git fetch on repo caches that already exist. Disabled by default to avoid long resumes.",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+
+    if args.single_output_path:
+        if args.train_output_path or args.test_output_path:
+            raise ValueError("--single-output-path cannot be combined with --train-output-path/--test-output-path")
+    elif not args.train_output_path or not args.test_output_path:
+        raise ValueError("Provide either --single-output-path or both --train-output-path and --test-output-path")
 
     loaded: list[tuple[str, Any]] = []
     total_loaded_rows = 0
@@ -387,11 +507,27 @@ def main() -> None:
         )
     logger.info("Normalized rows=%d skipped=%d", len(normalized_rows), skipped)
 
+    sampled_before_reconstruct = 0
+    if args.max_normalized_rows and args.max_normalized_rows > 0 and len(normalized_rows) > args.max_normalized_rows:
+        rng = random.Random(int(args.row_sample_seed))
+        rng.shuffle(normalized_rows)
+        sampled_before_reconstruct = len(normalized_rows) - int(args.max_normalized_rows)
+        normalized_rows = normalized_rows[: int(args.max_normalized_rows)]
+        logger.info(
+            "Sampled normalized rows before reconstruction: kept=%d dropped=%d seed=%d",
+            len(normalized_rows),
+            sampled_before_reconstruct,
+            int(args.row_sample_seed),
+        )
+
     if args.reconstruct_missing_gold_files:
-        if not args.repos_base_dir:
+        if args.gold_file_source == "git" and not args.repos_base_dir:
             raise ValueError("--reconstruct-missing-gold-files requires --repos-base-dir")
         repos_base = Path(args.repos_base_dir)
-        repos_base.mkdir(parents=True, exist_ok=True)
+        if args.gold_file_source == "git":
+            repos_base.mkdir(parents=True, exist_ok=True)
+        repo_cache: dict[str, Path | None] = {}
+        commit_cache: dict[tuple[str, str], str | None] = {}
         reconstructed = 0
         reconstruction_failed = 0
         for row in tqdm(normalized_rows, desc="Reconstruct gold files", unit="row"):
@@ -404,15 +540,36 @@ def main() -> None:
             if not repo_name or not commit_prefix or not patch:
                 reconstruction_failed += 1
                 continue
-            repo_path = _ensure_repo(repos_base, repo_name)
-            if repo_path is None:
-                reconstruction_failed += 1
-                continue
-            full_commit = _resolve_commit(repo_path, commit_prefix)
-            if not full_commit:
-                reconstruction_failed += 1
-                continue
-            contents = _fetch_gold_file_contents_from_repo(repo_path, full_commit, patch)
+            if args.gold_file_source == "raw-url":
+                contents = _fetch_gold_file_contents_from_raw_url(
+                    repo_name=repo_name,
+                    commit_hash=commit_prefix,
+                    patch=patch,
+                    timeout_seconds=int(args.git_timeout_seconds),
+                )
+                full_commit = commit_prefix
+            else:
+                if repo_name not in repo_cache:
+                    logger.info("Preparing repo cache for %s", repo_name)
+                    repo_cache[repo_name] = _ensure_repo(
+                        repos_base,
+                        repo_name,
+                        timeout_seconds=int(args.git_timeout_seconds),
+                        partial_clone=not bool(args.no_partial_clone),
+                        fetch_existing=bool(args.fetch_existing_repos),
+                    )
+                repo_path = repo_cache[repo_name]
+                if repo_path is None:
+                    reconstruction_failed += 1
+                    continue
+                commit_key = (str(repo_path), commit_prefix)
+                if commit_key not in commit_cache:
+                    commit_cache[commit_key] = _resolve_commit(repo_path, commit_prefix)
+                full_commit = commit_cache[commit_key]
+                if not full_commit:
+                    reconstruction_failed += 1
+                    continue
+                contents = _fetch_gold_file_contents_from_repo(repo_path, full_commit, patch)
             if not contents:
                 reconstruction_failed += 1
                 continue
@@ -462,6 +619,51 @@ def main() -> None:
         if not normalized_rows:
             raise ValueError("Token filtering removed all rows; raise max_total_tokens or inspect dataset.")
 
+    if args.single_output_path:
+        single_ds = Dataset.from_list(normalized_rows)
+        single_output = Path(args.single_output_path)
+        single_output.parent.mkdir(parents=True, exist_ok=True)
+        logger.info("Saving single dataset: %s rows=%d", single_output, len(single_ds))
+        single_ds.save_to_disk(str(single_output))
+
+        repos = {row["repo"] for row in normalized_rows}
+        summary = {
+            "hf_datasets": args.hf_dataset,
+            "hf_split": args.hf_split,
+            "single_output_path": str(single_output),
+            "n_total": len(normalized_rows),
+            "n_sampled_before_reconstruct": sampled_before_reconstruct,
+            "max_normalized_rows": int(args.max_normalized_rows),
+            "row_sample_seed": int(args.row_sample_seed),
+            "n_skipped_schema_mismatch": skipped,
+            "schema_drop_reasons": dict(drop_reasons),
+            "reconstruct_missing_gold_files": bool(args.reconstruct_missing_gold_files),
+            "repos_base_dir": args.repos_base_dir,
+            "gold_file_source": args.gold_file_source,
+            "git_timeout_seconds": int(args.git_timeout_seconds),
+            "partial_clone": not bool(args.no_partial_clone),
+            "fetch_existing_repos": bool(args.fetch_existing_repos),
+            "n_filtered_by_token_limit": token_filtered_out,
+            "n_repos": len(repos),
+            "dataset_distribution": dict(Counter(row["dataset_source"] for row in normalized_rows)),
+        }
+        if token_counts:
+            token_counts_sorted = sorted(token_counts)
+            summary["token_stats_pre_filter"] = {
+                "min": token_counts_sorted[0],
+                "p50": token_counts_sorted[len(token_counts_sorted) // 2],
+                "p90": token_counts_sorted[int(0.9 * (len(token_counts_sorted) - 1))],
+                "p99": token_counts_sorted[int(0.99 * (len(token_counts_sorted) - 1))],
+                "max": token_counts_sorted[-1],
+            }
+            summary["max_total_tokens"] = args.max_total_tokens
+            summary["tokenizer_model"] = args.tokenizer_model
+        summary_path = single_output.parent / "prepare_swe_bench_single_summary.json"
+        with summary_path.open("w") as handle:
+            json.dump(summary, handle, indent=2)
+        logger.info("Summary written to %s", summary_path)
+        return
+
     if args.split_strategy == "field":
         train_rows = [row for row in normalized_rows if row["split"] == "train"]
         test_rows = [row for row in normalized_rows if row["split"] == "test"]
@@ -505,10 +707,17 @@ def main() -> None:
         "train_fraction": args.train_fraction,
         "split_seed": args.split_seed,
         "n_total": len(normalized_rows),
+        "n_sampled_before_reconstruct": sampled_before_reconstruct,
+        "max_normalized_rows": int(args.max_normalized_rows),
+        "row_sample_seed": int(args.row_sample_seed),
         "n_skipped_schema_mismatch": skipped,
         "schema_drop_reasons": dict(drop_reasons),
         "reconstruct_missing_gold_files": bool(args.reconstruct_missing_gold_files),
         "repos_base_dir": args.repos_base_dir,
+        "gold_file_source": args.gold_file_source,
+        "git_timeout_seconds": int(args.git_timeout_seconds),
+        "partial_clone": not bool(args.no_partial_clone),
+        "fetch_existing_repos": bool(args.fetch_existing_repos),
         "n_filtered_by_token_limit": token_filtered_out,
         "n_train": len(train_rows),
         "n_test": len(test_rows),

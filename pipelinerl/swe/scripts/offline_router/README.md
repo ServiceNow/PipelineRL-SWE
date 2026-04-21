@@ -66,6 +66,31 @@ If collection already finished and only router training needs to be retried, run
 bash launch_offline_router_swe_smith_id_train_only.sh
 ```
 
+For the 3-way generalization setup, first materialize official SWE-bench train
+into the local format expected by collection, if it is not already present:
+
+```bash
+bash prepare_swe_bench_train_local.sh
+```
+
+The preparation wrapper reconstructs touched-file contents from GitHub raw-file
+URLs by default, samples `MAX_NORMALIZED_ROWS=6000` rows before reconstruction,
+and applies `MAX_TOTAL_TOKENS=16000` to avoid overlong collection prompts.
+Override these variables if a larger router-train set is needed. Set
+`GOLD_FILE_SOURCE=git` to use repo clones instead of raw-file fetches.
+
+Then collect router-train traces from SWE-bench train and router-test traces
+from the existing SWE-bench Lite dataset:
+
+```bash
+bash launch_offline_router_swe_bench_router_split_collect.sh
+```
+
+This launcher is collection-only. It writes
+`collect/route_distribution_summary.json` and stops before router training.
+Override `TRAIN_DATASET_PATH`, `EVAL_DATASET_PATH`, `TRAIN_MAX_SAMPLES`, or
+`EVAL_MAX_SAMPLES` as needed.
+
 For the independent scalar text ablation, which trains one numeric reward example
 per `(problem, route)` and merges scalar predictions back into route vectors for
 the same metrics, run:
