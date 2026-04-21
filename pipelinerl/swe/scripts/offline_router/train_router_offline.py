@@ -844,26 +844,58 @@ def _tokenize_text_reward_target(
     prompt_text: str,
     target_text: str,
     max_seq_length: int | None,
-) -> dict[str, Any] | None:
-    prompt_ids = tokenizer(prompt_text, add_special_tokens=False).input_ids
-    full_ids = tokenizer(prompt_text + target_text, add_special_tokens=False).input_ids
+) -> tuple[dict[str, Any] | None, bool]:
+    return _tokenize_text_reward_target_with_limit(
+        tokenizer=tokenizer,
+        prompt_text=prompt_text,
+        target_text=target_text,
+        max_seq_length=max_seq_length,
+        drop_overlength=False,
+    )
+
+
+def _tokenize_text_reward_target_with_limit(
+    tokenizer: Any,
+    prompt_text: str,
+    target_text: str,
+    max_seq_length: int | None,
+    drop_overlength: bool,
+) -> tuple[dict[str, Any] | None, bool]:
+    prompt_ids = tokenizer(prompt_text, add_special_tokens=False, verbose=False).input_ids
+    full_ids = tokenizer(prompt_text + target_text, add_special_tokens=False, verbose=False).input_ids
     if not full_ids or len(full_ids) <= len(prompt_ids):
-        return None
+        return None, False
 
     prompt_len = len(prompt_ids)
     if max_seq_length is not None and max_seq_length > 0 and len(full_ids) > max_seq_length:
+        if drop_overlength:
+            return None, True
         drop = len(full_ids) - max_seq_length
         full_ids = full_ids[drop:]
         prompt_len = max(0, prompt_len - drop)
 
     if not full_ids or len(full_ids) <= prompt_len:
-        return None
+        return None, False
 
     labels = [-100] * prompt_len + full_ids[prompt_len:]
     return {
         "input_ids": full_ids,
         "labels": labels,
-    }
+    }, False
+
+
+def _prepare_eval_prompt_ids(
+    tokenizer: Any,
+    prompt_text: str,
+    max_seq_length: int | None,
+    drop_overlength: bool,
+) -> tuple[list[int], bool]:
+    prompt_ids = tokenizer(prompt_text, add_special_tokens=False, verbose=False).input_ids
+    if max_seq_length is not None and max_seq_length > 0 and len(prompt_ids) > max_seq_length:
+        if drop_overlength:
+            return [], True
+        prompt_ids = _truncate_from_left(prompt_ids, max_seq_length)
+    return prompt_ids, False
 
 
 def _prepare_text_train_rows(
@@ -874,8 +906,10 @@ def _prepare_text_train_rows(
     target_dim: int,
     target_precision: int,
     target_grid_count: int | None = None,
-) -> list[dict[str, Any]]:
+    drop_overlength: bool = False,
+) -> tuple[list[dict[str, Any]], int]:
     prepared_rows: list[dict[str, Any]] = []
+    dropped_overlength_rows = 0
     for row in dataset:
         prompt_text = row.get("prompt_text")
         primary_output_text = _get_primary_output_text(row)
@@ -896,7 +930,7 @@ def _prepare_text_train_rows(
             target_grid_count=target_grid_count,
             target_precision=target_precision,
         )
-        encoded = _tokenize_text_reward_target(
+        encoded, dropped_overlength = _tokenize_text_reward_target_with_limit(
             tokenizer=tokenizer,
             prompt_text=prompt,
             target_text=_format_reward_target(
@@ -905,7 +939,10 @@ def _prepare_text_train_rows(
                 target_grid_count=target_grid_count,
             ),
             max_seq_length=max_seq_length,
+            drop_overlength=drop_overlength,
         )
+        if dropped_overlength:
+            dropped_overlength_rows += 1
         if encoded is None:
             continue
         prepared_rows.append(
@@ -920,7 +957,7 @@ def _prepare_text_train_rows(
                 "labels": encoded["labels"],
             }
         )
-    return prepared_rows
+    return prepared_rows, dropped_overlength_rows
 
 
 def _make_text_train_collate_fn(pad_token_id: int, target_dim: int):
@@ -964,8 +1001,10 @@ def _prepare_text_eval_rows(
     target_dim: int,
     target_grid_count: int | None = None,
     target_precision: int = 2,
-) -> list[dict[str, Any]]:
+    drop_overlength: bool = False,
+) -> tuple[list[dict[str, Any]], int]:
     prepared_rows: list[dict[str, Any]] = []
+    dropped_overlength_rows = 0
     for row in dataset:
         prompt_text = row.get("prompt_text")
         primary_output_text = _get_primary_output_text(row)
@@ -985,8 +1024,14 @@ def _prepare_text_eval_rows(
             target_grid_count=target_grid_count,
             target_precision=target_precision,
         )
-        prompt_ids = tokenizer(prompt, add_special_tokens=False).input_ids
-        prompt_ids = _truncate_from_left(prompt_ids, max_seq_length)
+        prompt_ids, dropped_overlength = _prepare_eval_prompt_ids(
+            tokenizer=tokenizer,
+            prompt_text=prompt,
+            max_seq_length=max_seq_length,
+            drop_overlength=drop_overlength,
+        )
+        if dropped_overlength:
+            dropped_overlength_rows += 1
         if not prompt_ids:
             continue
         prepared_rows.append(
@@ -1000,7 +1045,7 @@ def _prepare_text_eval_rows(
                 "input_ids": prompt_ids,
             }
         )
-    return prepared_rows
+    return prepared_rows, dropped_overlength_rows
 
 
 def _make_text_eval_collate_fn(pad_token_id: int, target_dim: int):
@@ -1041,8 +1086,10 @@ def _prepare_text_scalar_train_rows(
     target_dim: int,
     target_precision: int,
     target_grid_count: int | None = None,
-) -> list[dict[str, Any]]:
+    drop_overlength: bool = False,
+) -> tuple[list[dict[str, Any]], int]:
     prepared_rows: list[dict[str, Any]] = []
+    dropped_overlength_rows = 0
     for row in dataset:
         prompt_text = row.get("prompt_text")
         primary_output_text = _get_primary_output_text(row)
@@ -1065,7 +1112,7 @@ def _prepare_text_scalar_train_rows(
                 target_grid_count=target_grid_count,
                 target_precision=target_precision,
             )
-            encoded = _tokenize_text_reward_target(
+            encoded, dropped_overlength = _tokenize_text_reward_target_with_limit(
                 tokenizer=tokenizer,
                 prompt_text=prompt,
                 target_text=_format_scalar_reward_target(
@@ -1074,7 +1121,10 @@ def _prepare_text_scalar_train_rows(
                     target_grid_count=target_grid_count,
                 ),
                 max_seq_length=max_seq_length,
+                drop_overlength=drop_overlength,
             )
+            if dropped_overlength:
+                dropped_overlength_rows += 1
             if encoded is None:
                 continue
             prepared_rows.append(
@@ -1092,7 +1142,7 @@ def _prepare_text_scalar_train_rows(
                     "labels": encoded["labels"],
                 }
             )
-    return prepared_rows
+    return prepared_rows, dropped_overlength_rows
 
 
 def _prepare_text_scalar_eval_rows(
@@ -1104,8 +1154,10 @@ def _prepare_text_scalar_eval_rows(
     target_dim: int,
     target_grid_count: int | None = None,
     target_precision: int = 2,
-) -> list[dict[str, Any]]:
+    drop_overlength: bool = False,
+) -> tuple[list[dict[str, Any]], int]:
     prepared_rows: list[dict[str, Any]] = []
+    dropped_overlength_rows = 0
     for row in dataset:
         prompt_text = row.get("prompt_text")
         primary_output_text = _get_primary_output_text(row)
@@ -1128,8 +1180,14 @@ def _prepare_text_scalar_eval_rows(
                 target_grid_count=target_grid_count,
                 target_precision=target_precision,
             )
-            prompt_ids = tokenizer(prompt, add_special_tokens=False).input_ids
-            prompt_ids = _truncate_from_left(prompt_ids, max_seq_length)
+            prompt_ids, dropped_overlength = _prepare_eval_prompt_ids(
+                tokenizer=tokenizer,
+                prompt_text=prompt,
+                max_seq_length=max_seq_length,
+                drop_overlength=drop_overlength,
+            )
+            if dropped_overlength:
+                dropped_overlength_rows += 1
             if not prompt_ids:
                 continue
             prepared_rows.append(
@@ -1146,7 +1204,7 @@ def _prepare_text_scalar_eval_rows(
                     "input_ids": prompt_ids,
                 }
             )
-    return prepared_rows
+    return prepared_rows, dropped_overlength_rows
 
 
 def _prepare_text_bin_train_rows(
@@ -1158,8 +1216,10 @@ def _prepare_text_bin_train_rows(
     target_dim: int,
     target_precision: int,
     bin_specs: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
+    drop_overlength: bool = False,
+) -> tuple[list[dict[str, Any]], int]:
     prepared_rows: list[dict[str, Any]] = []
+    dropped_overlength_rows = 0
     for row in dataset:
         prompt_text = row.get("prompt_text")
         primary_output_text = _get_primary_output_text(row)
@@ -1184,12 +1244,15 @@ def _prepare_text_bin_train_rows(
                 bin_specs=bin_specs,
                 target_precision=target_precision,
             )
-            encoded = _tokenize_text_reward_target(
+            encoded, dropped_overlength = _tokenize_text_reward_target_with_limit(
                 tokenizer=tokenizer,
                 prompt_text=prompt,
                 target_text=str(bin_spec["target_text"]),
                 max_seq_length=max_seq_length,
+                drop_overlength=drop_overlength,
             )
+            if dropped_overlength:
+                dropped_overlength_rows += 1
             if encoded is None:
                 continue
             prepared_rows.append(
@@ -1210,7 +1273,7 @@ def _prepare_text_bin_train_rows(
                     "labels": encoded["labels"],
                 }
             )
-    return prepared_rows
+    return prepared_rows, dropped_overlength_rows
 
 
 def _prepare_text_bin_eval_rows(
@@ -1222,8 +1285,10 @@ def _prepare_text_bin_eval_rows(
     target_dim: int,
     target_precision: int,
     bin_specs: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
+    drop_overlength: bool = False,
+) -> tuple[list[dict[str, Any]], int]:
     prepared_rows: list[dict[str, Any]] = []
+    dropped_overlength_rows = 0
     for row in dataset:
         prompt_text = row.get("prompt_text")
         primary_output_text = _get_primary_output_text(row)
@@ -1248,8 +1313,14 @@ def _prepare_text_bin_eval_rows(
                 bin_specs=bin_specs,
                 target_precision=target_precision,
             )
-            prompt_ids = tokenizer(prompt, add_special_tokens=False).input_ids
-            prompt_ids = _truncate_from_left(prompt_ids, max_seq_length)
+            prompt_ids, dropped_overlength = _prepare_eval_prompt_ids(
+                tokenizer=tokenizer,
+                prompt_text=prompt,
+                max_seq_length=max_seq_length,
+                drop_overlength=drop_overlength,
+            )
+            if dropped_overlength:
+                dropped_overlength_rows += 1
             if not prompt_ids:
                 continue
             prepared_rows.append(
@@ -1269,7 +1340,7 @@ def _prepare_text_bin_eval_rows(
                     "input_ids": prompt_ids,
                 }
             )
-    return prepared_rows
+    return prepared_rows, dropped_overlength_rows
 
 
 def _make_text_scalar_train_collate_fn(pad_token_id: int):
@@ -2101,6 +2172,7 @@ def main(cfg: DictConfig) -> None:
         text_do_sample = bool(text_reward_cfg.get("do_sample", False))
         text_parse_failure_value = float(text_reward_cfg.get("parse_failure_value", 0.0))
         text_clip_predictions = bool(text_reward_cfg.get("clip_predictions", True))
+        text_drop_overlength_rows = bool(text_reward_cfg.get("drop_overlength_rows", False))
         text_reward_bin_count = int(text_reward_cfg.get("bin_count", 21))
         text_reward_bin_label_prefix = str(text_reward_cfg.get("bin_label_prefix", " "))
         text_reward_bin_value_order = str(text_reward_cfg.get("bin_value_order", "ascending"))
@@ -2231,7 +2303,7 @@ def main(cfg: DictConfig) -> None:
             )
         if supervision_mode in TEXT_REWARD_SUPERVISION_MODES:
             logger.info(
-                "Offline router text reward settings: target_precision=%d target_grid_count=%s lr=%.2e weight_decay=%.3f warmup_steps=%d gradient_clipping=%.3f debug_step_logging=%s max_new_tokens=%d do_sample=%s parse_failure_value=%.3f clip_predictions=%s train_sampling_strategy=%s train_rows=%d train_supervision_rows=%d eval_rows=%d eval_supervision_rows=%d",
+                "Offline router text reward settings: target_precision=%d target_grid_count=%s lr=%.2e weight_decay=%.3f warmup_steps=%d gradient_clipping=%.3f debug_step_logging=%s max_new_tokens=%d do_sample=%s parse_failure_value=%.3f clip_predictions=%s drop_overlength_rows=%s train_sampling_strategy=%s train_rows=%d train_supervision_rows=%d eval_rows=%d eval_supervision_rows=%d",
                 text_target_precision,
                 text_target_grid_count,
                 text_lr,
@@ -2243,6 +2315,7 @@ def main(cfg: DictConfig) -> None:
                 text_do_sample,
                 text_parse_failure_value,
                 text_clip_predictions,
+                text_drop_overlength_rows,
                 train_sampling_strategy,
                 raw_train_rows,
                 train_supervision_rows,
@@ -2269,6 +2342,8 @@ def main(cfg: DictConfig) -> None:
         pad_token_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id
         if pad_token_id is None:
             raise ValueError("Tokenizer must define pad_token_id or eos_token_id for offline router training")
+        dropped_overlength_train_rows = 0
+        dropped_overlength_eval_rows = 0
 
         if supervision_mode == "representation_head":
             train_dataset = _prepare_representation_rows(
@@ -2289,7 +2364,7 @@ def main(cfg: DictConfig) -> None:
             )
             eval_collate_fn = train_collate_fn
         elif supervision_mode == "text_reward_vector":
-            train_dataset = _prepare_text_train_rows(
+            train_dataset, dropped_overlength_train_rows = _prepare_text_train_rows(
                 train_dataset,
                 tokenizer=tokenizer,
                 max_seq_length=max_seq_length,
@@ -2297,8 +2372,9 @@ def main(cfg: DictConfig) -> None:
                 target_dim=target_dim,
                 target_precision=text_target_precision,
                 target_grid_count=text_target_grid_count,
+                drop_overlength=text_drop_overlength_rows,
             )
-            eval_dataset = _prepare_text_eval_rows(
+            eval_dataset, dropped_overlength_eval_rows = _prepare_text_eval_rows(
                 eval_dataset,
                 tokenizer=tokenizer,
                 max_seq_length=max_seq_length,
@@ -2306,11 +2382,12 @@ def main(cfg: DictConfig) -> None:
                 target_dim=target_dim,
                 target_grid_count=text_target_grid_count,
                 target_precision=text_target_precision,
+                drop_overlength=text_drop_overlength_rows,
             )
             train_collate_fn = _make_text_train_collate_fn(pad_token_id=pad_token_id, target_dim=target_dim)
             eval_collate_fn = _make_text_eval_collate_fn(pad_token_id=pad_token_id, target_dim=target_dim)
         elif supervision_mode == "text_reward_scalar":
-            train_dataset = _prepare_text_scalar_train_rows(
+            train_dataset, dropped_overlength_train_rows = _prepare_text_scalar_train_rows(
                 train_dataset,
                 tokenizer=tokenizer,
                 max_seq_length=max_seq_length,
@@ -2319,8 +2396,9 @@ def main(cfg: DictConfig) -> None:
                 target_dim=target_dim,
                 target_precision=text_target_precision,
                 target_grid_count=text_target_grid_count,
+                drop_overlength=text_drop_overlength_rows,
             )
-            eval_dataset = _prepare_text_scalar_eval_rows(
+            eval_dataset, dropped_overlength_eval_rows = _prepare_text_scalar_eval_rows(
                 eval_dataset,
                 tokenizer=tokenizer,
                 max_seq_length=max_seq_length,
@@ -2329,11 +2407,12 @@ def main(cfg: DictConfig) -> None:
                 target_dim=target_dim,
                 target_grid_count=text_target_grid_count,
                 target_precision=text_target_precision,
+                drop_overlength=text_drop_overlength_rows,
             )
             train_collate_fn = _make_text_scalar_train_collate_fn(pad_token_id=pad_token_id)
             eval_collate_fn = _make_text_scalar_eval_collate_fn(pad_token_id=pad_token_id)
         elif supervision_mode == "text_reward_bin":
-            train_dataset = _prepare_text_bin_train_rows(
+            train_dataset, dropped_overlength_train_rows = _prepare_text_bin_train_rows(
                 train_dataset,
                 tokenizer=tokenizer,
                 max_seq_length=max_seq_length,
@@ -2342,8 +2421,9 @@ def main(cfg: DictConfig) -> None:
                 target_dim=target_dim,
                 target_precision=text_target_precision,
                 bin_specs=text_reward_bin_specs,
+                drop_overlength=text_drop_overlength_rows,
             )
-            eval_dataset = _prepare_text_bin_eval_rows(
+            eval_dataset, dropped_overlength_eval_rows = _prepare_text_bin_eval_rows(
                 eval_dataset,
                 tokenizer=tokenizer,
                 max_seq_length=max_seq_length,
@@ -2352,6 +2432,7 @@ def main(cfg: DictConfig) -> None:
                 target_dim=target_dim,
                 target_precision=text_target_precision,
                 bin_specs=text_reward_bin_specs,
+                drop_overlength=text_drop_overlength_rows,
             )
             train_collate_fn = _make_text_scalar_train_collate_fn(pad_token_id=pad_token_id)
             eval_collate_fn = _make_text_scalar_eval_collate_fn(pad_token_id=pad_token_id)
@@ -2372,6 +2453,14 @@ def main(cfg: DictConfig) -> None:
             preprocessed_eval_rows,
             supervision_mode,
         )
+        if supervision_mode in TEXT_REWARD_SUPERVISION_MODES and text_drop_overlength_rows:
+            logger.info(
+                "Offline router dropped overlength text rows: train=%d eval=%d max_seq_length=%s supervision_mode=%s",
+                dropped_overlength_train_rows,
+                dropped_overlength_eval_rows,
+                max_seq_length,
+                supervision_mode,
+            )
 
         train_loader = DataLoader(
             train_dataset,
@@ -2850,6 +2939,9 @@ def main(cfg: DictConfig) -> None:
                     "do_sample": text_do_sample,
                     "parse_failure_value": text_parse_failure_value,
                     "clip_predictions": text_clip_predictions,
+                    "drop_overlength_rows": text_drop_overlength_rows,
+                    "dropped_overlength_train_rows": int(dropped_overlength_train_rows),
+                    "dropped_overlength_eval_rows": int(dropped_overlength_eval_rows),
                     "best_eval_parse_failures": int(best_eval_extra.get("parse_failures", 0)),
                     "best_eval_parse_failure_rate": float(best_eval_extra.get("parse_failure_rate", 0.0)),
                     "best_eval_problem_examples": int(best_eval_extra.get("eval_problem_examples", 0)),
