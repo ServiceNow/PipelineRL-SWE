@@ -46,6 +46,8 @@ from pipelinerl.swe.scripts.offline_router.common import (
 logger = logging.getLogger(__name__)
 
 TEXT_REWARD_SUPERVISION_MODES = {"text_reward_vector", "text_reward_scalar", "text_reward_bin"}
+TEXT_PAIRWISE_SUPERVISION_MODES = {"text_pairwise_sign"}
+TEXT_LM_SUPERVISION_MODES = TEXT_REWARD_SUPERVISION_MODES | TEXT_PAIRWISE_SUPERVISION_MODES
 
 
 def get_world_size() -> int:
@@ -208,7 +210,7 @@ def _build_optimizer(
             }
         )
 
-    if supervision_mode in TEXT_REWARD_SUPERVISION_MODES:
+    if supervision_mode in TEXT_LM_SUPERVISION_MODES:
         default_lr = float(text_reward_cfg.get("lr", 5.0e-6))
         group_weight_decay = float(text_reward_cfg.get("weight_decay", 0.01))
         _add_group("lora_adapters", model.parameters(), default_lr)
@@ -543,7 +545,7 @@ def _configure_training_mode(
 ) -> list[str]:
     if supervision_mode == "representation_head":
         return configure_router_training_mode(model, training_mode)
-    if supervision_mode not in TEXT_REWARD_SUPERVISION_MODES:
+    if supervision_mode not in TEXT_LM_SUPERVISION_MODES:
         raise ValueError(f"Unsupported supervision mode: {supervision_mode}")
     if training_mode != "full_backbone":
         raise ValueError(
@@ -790,6 +792,70 @@ def _build_text_bin_reward_prompt(
     )
 
 
+def _build_pairwise_label_specs(
+    label_prefix: str = " ",
+    primary_better_label: str = "A",
+    expert_better_label: str = "B",
+) -> list[dict[str, Any]]:
+    primary_better_label = str(primary_better_label).strip()
+    expert_better_label = str(expert_better_label).strip()
+    if not primary_better_label or not expert_better_label:
+        raise ValueError("Pairwise labels must be non-empty")
+    if primary_better_label == expert_better_label:
+        raise ValueError("Pairwise labels must be distinct")
+    return [
+        {
+            "winner_idx": 0,
+            "label": primary_better_label,
+            "target_text": f"{label_prefix}{primary_better_label}",
+        },
+        {
+            "winner_idx": 1,
+            "label": expert_better_label,
+            "target_text": f"{label_prefix}{expert_better_label}",
+        },
+    ]
+
+
+def _format_pairwise_label_table(
+    label_specs: list[dict[str, Any]],
+    route_aliases: list[str],
+) -> str:
+    lines: list[str] = []
+    for spec in label_specs:
+        winner_idx = int(spec["winner_idx"])
+        lines.append(f"{spec['label']}: {route_aliases[winner_idx]} better")
+    return "\n".join(lines)
+
+
+def _build_text_pairwise_sign_prompt(
+    prompt_text: str,
+    primary_output_text: str,
+    route_aliases: list[str],
+    label_specs: list[dict[str, Any]],
+) -> str:
+    if len(route_aliases) != 2:
+        raise ValueError("text_pairwise_sign currently requires exactly two routes")
+    label_table = _format_pairwise_label_table(label_specs, route_aliases)
+    route_legend = ", ".join(route_aliases)
+    return (
+        "Predict which model route achieved the higher realized reward.\n"
+        "Choose exactly one label from the outcome table.\n"
+        "Respond with only the label.\n\n"
+        "[Outcome Labels]\n"
+        f"{label_table}\n\n"
+        "[Model Order]\n"
+        f"{route_legend}\n"
+        f"{route_aliases[0]} is the primary model whose attempt is shown below.\n"
+        f"Only the {route_aliases[0]} attempt is shown below.\n\n"
+        "[Original Repair Prompt]\n"
+        f"{prompt_text}\n\n"
+        "[Primary Model Attempt]\n"
+        f"{primary_output_text}\n\n"
+        "Answer:"
+    )
+
+
 def _quantize_reward_to_grid(value: float, grid_count: int | None) -> float:
     if grid_count is None:
         return float(value)
@@ -822,19 +888,23 @@ def _reward_to_bin_idx(value: float, bin_specs: list[dict[str, Any]]) -> int:
     )
 
 
-def _reward_bin_token_ids(tokenizer: Any, bin_specs: list[dict[str, Any]]) -> list[int]:
+def _label_target_token_ids(tokenizer: Any, specs: list[dict[str, Any]]) -> list[int]:
     token_ids: list[int] = []
-    for spec in bin_specs:
+    for spec in specs:
         ids = tokenizer(str(spec["target_text"]), add_special_tokens=False).input_ids
         if len(ids) != 1:
             raise ValueError(
-                "Reward bin label target_text=%r tokenized to %d tokens; expected one token"
+                "Label target_text=%r tokenized to %d tokens; expected one token"
                 % (spec["target_text"], len(ids))
             )
         token_ids.append(int(ids[0]))
     if len(set(token_ids)) != len(token_ids):
-        raise ValueError("Reward bin labels do not map to unique token ids")
+        raise ValueError("Labels do not map to unique token ids")
     return token_ids
+
+
+def _reward_bin_token_ids(tokenizer: Any, bin_specs: list[dict[str, Any]]) -> list[int]:
+    return _label_target_token_ids(tokenizer, bin_specs)
 
 
 def _truncate_from_left(token_ids: list[int], max_seq_length: int | None) -> list[int]:
@@ -1347,6 +1417,163 @@ def _prepare_text_bin_eval_rows(
     return prepared_rows, dropped_overlength_rows
 
 
+def _pairwise_target_winner_idx(target_rewards: list[float], tie_margin: float) -> int | None:
+    if len(target_rewards) != 2:
+        raise ValueError("text_pairwise_sign currently requires exactly two target rewards")
+    delta = float(target_rewards[0]) - float(target_rewards[1])
+    if abs(delta) <= float(tie_margin):
+        return None
+    return 0 if delta > 0.0 else 1
+
+
+def _pairwise_target_vector(target_dim: int, winner_idx: int) -> list[float]:
+    target = [0.0] * int(target_dim)
+    target[int(winner_idx)] = 1.0
+    return target
+
+
+def _prepare_text_pairwise_sign_train_rows(
+    dataset: Any,
+    tokenizer: Any,
+    max_seq_length: int | None,
+    route_aliases: list[str],
+    route_labels: list[str],
+    target_dim: int,
+    label_specs: list[dict[str, Any]],
+    tie_margin: float,
+    drop_overlength: bool = False,
+) -> tuple[list[dict[str, Any]], int, int]:
+    if target_dim != 2:
+        raise ValueError("text_pairwise_sign currently requires exactly two routes")
+    prepared_rows: list[dict[str, Any]] = []
+    dropped_overlength_rows = 0
+    dropped_tie_rows = 0
+    label_specs_by_winner = {int(spec["winner_idx"]): spec for spec in label_specs}
+    for row in dataset:
+        prompt_text = row.get("prompt_text")
+        primary_output_text = _get_primary_output_text(row)
+        targets = row.get("performance_targets")
+        if not isinstance(prompt_text, str) or not isinstance(primary_output_text, str):
+            continue
+        if not isinstance(targets, list) or len(targets) != target_dim:
+            continue
+        try:
+            problem_id = problem_id_from_item(row)
+        except ValueError:
+            continue
+        target_rewards = [float(value) for value in targets]
+        winner_idx = _pairwise_target_winner_idx(target_rewards, tie_margin=tie_margin)
+        if winner_idx is None:
+            dropped_tie_rows += 1
+            continue
+        prompt = _build_text_pairwise_sign_prompt(
+            prompt_text=prompt_text,
+            primary_output_text=primary_output_text,
+            route_aliases=route_aliases,
+            label_specs=label_specs,
+        )
+        winner_spec = label_specs_by_winner[winner_idx]
+        encoded, dropped_overlength = _tokenize_text_reward_target_with_limit(
+            tokenizer=tokenizer,
+            prompt_text=prompt,
+            target_text=str(winner_spec["target_text"]),
+            max_seq_length=max_seq_length,
+            drop_overlength=drop_overlength,
+        )
+        if dropped_overlength:
+            dropped_overlength_rows += 1
+        if encoded is None:
+            continue
+        prepared_rows.append(
+            {
+                "problem_id": problem_id,
+                "dataset": row.get("dataset"),
+                "repo": row.get("repo"),
+                "language": row.get("language"),
+                "route_aliases": list(route_aliases),
+                "target_rewards": target_rewards,
+                "target_pairwise": _pairwise_target_vector(target_dim, winner_idx),
+                "target_winner_idx": int(winner_idx),
+                "target_winner_alias": route_aliases[winner_idx],
+                "target_winner_label": route_labels[winner_idx],
+                "target_label": str(winner_spec["label"]),
+                "input_ids": encoded["input_ids"],
+                "labels": encoded["labels"],
+            }
+        )
+    return prepared_rows, dropped_overlength_rows, dropped_tie_rows
+
+
+def _prepare_text_pairwise_sign_eval_rows(
+    dataset: Any,
+    tokenizer: Any,
+    max_seq_length: int | None,
+    route_aliases: list[str],
+    route_labels: list[str],
+    target_dim: int,
+    label_specs: list[dict[str, Any]],
+    tie_margin: float,
+    drop_overlength: bool = False,
+) -> tuple[list[dict[str, Any]], int, int]:
+    if target_dim != 2:
+        raise ValueError("text_pairwise_sign currently requires exactly two routes")
+    prepared_rows: list[dict[str, Any]] = []
+    dropped_overlength_rows = 0
+    dropped_tie_rows = 0
+    label_specs_by_winner = {int(spec["winner_idx"]): spec for spec in label_specs}
+    for row in dataset:
+        prompt_text = row.get("prompt_text")
+        primary_output_text = _get_primary_output_text(row)
+        targets = row.get("performance_targets")
+        if not isinstance(prompt_text, str) or not isinstance(primary_output_text, str):
+            continue
+        if not isinstance(targets, list) or len(targets) != target_dim:
+            continue
+        try:
+            problem_id = problem_id_from_item(row)
+        except ValueError:
+            continue
+        target_rewards = [float(value) for value in targets]
+        winner_idx = _pairwise_target_winner_idx(target_rewards, tie_margin=tie_margin)
+        if winner_idx is None:
+            dropped_tie_rows += 1
+            continue
+        prompt = _build_text_pairwise_sign_prompt(
+            prompt_text=prompt_text,
+            primary_output_text=primary_output_text,
+            route_aliases=route_aliases,
+            label_specs=label_specs,
+        )
+        prompt_ids, dropped_overlength = _prepare_eval_prompt_ids(
+            tokenizer=tokenizer,
+            prompt_text=prompt,
+            max_seq_length=max_seq_length,
+            drop_overlength=drop_overlength,
+        )
+        if dropped_overlength:
+            dropped_overlength_rows += 1
+        if not prompt_ids:
+            continue
+        winner_spec = label_specs_by_winner[winner_idx]
+        prepared_rows.append(
+            {
+                "problem_id": problem_id,
+                "dataset": row.get("dataset"),
+                "repo": row.get("repo"),
+                "language": row.get("language"),
+                "route_aliases": list(route_aliases),
+                "target_rewards": target_rewards,
+                "target_pairwise": _pairwise_target_vector(target_dim, winner_idx),
+                "target_winner_idx": int(winner_idx),
+                "target_winner_alias": route_aliases[winner_idx],
+                "target_winner_label": route_labels[winner_idx],
+                "target_label": str(winner_spec["label"]),
+                "input_ids": prompt_ids,
+            }
+        )
+    return prepared_rows, dropped_overlength_rows, dropped_tie_rows
+
+
 def _make_text_scalar_train_collate_fn(pad_token_id: int):
     def _collate(rows: list[dict[str, Any]]) -> dict[str, Any]:
         max_len = max(len(row["input_ids"]) for row in rows)
@@ -1412,6 +1639,86 @@ def _make_text_scalar_eval_collate_fn(pad_token_id: int):
             "route_alias": [row["route_alias"] for row in rows],
             "route_label": [row["route_label"] for row in rows],
             "targets": targets,
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+        }
+
+    return _collate
+
+
+def _make_text_pairwise_train_collate_fn(pad_token_id: int, target_dim: int):
+    def _collate(rows: list[dict[str, Any]]) -> dict[str, Any]:
+        max_len = max(len(row["input_ids"]) for row in rows)
+        batch_size = len(rows)
+        input_ids = torch.full((batch_size, max_len), fill_value=pad_token_id, dtype=torch.long)
+        attention_mask = torch.zeros((batch_size, max_len), dtype=torch.long)
+        labels = torch.full((batch_size, max_len), fill_value=-100, dtype=torch.long)
+        targets = torch.zeros((batch_size, target_dim), dtype=torch.float32)
+        true_rewards = torch.zeros((batch_size, target_dim), dtype=torch.float32)
+        winner_indices = torch.zeros((batch_size,), dtype=torch.long)
+
+        for batch_idx, row in enumerate(rows):
+            ids = row["input_ids"]
+            row_labels = row["labels"]
+            seq_len = len(ids)
+            input_ids[batch_idx, :seq_len] = torch.tensor(ids, dtype=torch.long)
+            attention_mask[batch_idx, :seq_len] = 1
+            labels[batch_idx, :seq_len] = torch.tensor(row_labels, dtype=torch.long)
+            targets[batch_idx] = torch.tensor(row["target_pairwise"], dtype=torch.float32)
+            true_rewards[batch_idx] = torch.tensor(row["target_rewards"], dtype=torch.float32)
+            winner_indices[batch_idx] = int(row["target_winner_idx"])
+
+        return {
+            "problem_ids": [row["problem_id"] for row in rows],
+            "datasets": [row["dataset"] for row in rows],
+            "repos": [row["repo"] for row in rows],
+            "languages": [row["language"] for row in rows],
+            "route_aliases": [row["route_aliases"] for row in rows],
+            "winner_indices": winner_indices,
+            "winner_alias": [row["target_winner_alias"] for row in rows],
+            "winner_label": [row["target_winner_label"] for row in rows],
+            "target_label": [row["target_label"] for row in rows],
+            "targets": targets,
+            "true_rewards": true_rewards,
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "labels": labels,
+        }
+
+    return _collate
+
+
+def _make_text_pairwise_eval_collate_fn(pad_token_id: int, target_dim: int):
+    def _collate(rows: list[dict[str, Any]]) -> dict[str, Any]:
+        max_len = max(len(row["input_ids"]) for row in rows)
+        batch_size = len(rows)
+        input_ids = torch.full((batch_size, max_len), fill_value=pad_token_id, dtype=torch.long)
+        attention_mask = torch.zeros((batch_size, max_len), dtype=torch.long)
+        targets = torch.zeros((batch_size, target_dim), dtype=torch.float32)
+        true_rewards = torch.zeros((batch_size, target_dim), dtype=torch.float32)
+        winner_indices = torch.zeros((batch_size,), dtype=torch.long)
+
+        for batch_idx, row in enumerate(rows):
+            ids = row["input_ids"]
+            seq_len = len(ids)
+            input_ids[batch_idx, :seq_len] = torch.tensor(ids, dtype=torch.long)
+            attention_mask[batch_idx, :seq_len] = 1
+            targets[batch_idx] = torch.tensor(row["target_pairwise"], dtype=torch.float32)
+            true_rewards[batch_idx] = torch.tensor(row["target_rewards"], dtype=torch.float32)
+            winner_indices[batch_idx] = int(row["target_winner_idx"])
+
+        return {
+            "problem_ids": [row["problem_id"] for row in rows],
+            "datasets": [row["dataset"] for row in rows],
+            "repos": [row["repo"] for row in rows],
+            "languages": [row["language"] for row in rows],
+            "route_aliases": [row["route_aliases"] for row in rows],
+            "winner_indices": winner_indices,
+            "winner_alias": [row["target_winner_alias"] for row in rows],
+            "winner_label": [row["target_winner_label"] for row in rows],
+            "target_label": [row["target_label"] for row in rows],
+            "targets": targets,
+            "true_rewards": true_rewards,
             "input_ids": input_ids,
             "attention_mask": attention_mask,
         }
@@ -1796,13 +2103,81 @@ def _run_text_bin_reward_eval(
     return prediction_rows, local_squared_error_sum, local_value_count
 
 
+def _run_text_pairwise_sign_eval(
+    model: Any,
+    loader: DataLoader,
+    label_token_ids: list[int],
+    label_specs: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], float, int]:
+    model.eval()
+    prediction_rows: list[dict[str, Any]] = []
+    local_squared_error_sum = 0.0
+    local_value_count = 0
+    with torch.no_grad():
+        for batch in tqdm(loader, desc="Eval offline router", unit="batch", disable=not is_main_process()):
+            outputs = model(
+                input_ids=batch["input_ids"],
+                attention_mask=batch["attention_mask"],
+                return_dict=True,
+            )
+            last_indices = batch["attention_mask"].sum(dim=1).to(dtype=torch.long) - 1
+            batch_indices = torch.arange(outputs.logits.shape[0], device=outputs.logits.device)
+            next_logits = outputs.logits[batch_indices, last_indices]
+            label_token_id_tensor = torch.tensor(label_token_ids, dtype=torch.long, device=outputs.logits.device)
+            label_logits = next_logits.index_select(dim=1, index=label_token_id_tensor)
+            label_probs = torch.softmax(label_logits.float(), dim=1)
+            top_probs, top_indices = torch.max(label_probs, dim=1)
+
+            local_squared_error_sum += float(torch.sum((label_probs - batch["targets"]) ** 2).item())
+            local_value_count += int(batch["targets"].numel())
+
+            label_probs_cpu = label_probs.detach().cpu().tolist()
+            top_probs_cpu = top_probs.detach().cpu().tolist()
+            top_indices_cpu = top_indices.detach().cpu().tolist()
+
+            for row_idx, problem_id in enumerate(batch["problem_ids"]):
+                pred_pairwise_probabilities = [float(value) for value in label_probs_cpu[row_idx]]
+                pred_spec = label_specs[int(top_indices_cpu[row_idx])]
+                pred_winner_idx = int(pred_spec["winner_idx"])
+                prediction_rows.append(
+                    {
+                        "problem_id": problem_id,
+                        "dataset": batch["datasets"][row_idx],
+                        "repo": batch["repos"][row_idx],
+                        "language": batch["languages"][row_idx],
+                        "route_aliases": list(batch["route_aliases"][row_idx]),
+                        "true_rewards": [float(value) for value in batch["true_rewards"][row_idx].tolist()],
+                        "true_pairwise_targets": [float(value) for value in batch["targets"][row_idx].tolist()],
+                        "generated_text": str(pred_spec["label"]),
+                        "pred_pairwise_probabilities": pred_pairwise_probabilities,
+                        "pred_rewards": pred_pairwise_probabilities,
+                        "parse_success": True,
+                        "pred_winner_idx": pred_winner_idx,
+                        "pred_winner_alias": batch["route_aliases"][row_idx][pred_winner_idx],
+                        "pred_label_probability": float(top_probs_cpu[row_idx]),
+                        "pred_delta": float(
+                            pred_pairwise_probabilities[0] - pred_pairwise_probabilities[1]
+                        ),
+                        "target_winner_idx": int(batch["winner_indices"][row_idx].item()),
+                        "target_winner_alias": batch["winner_alias"][row_idx],
+                        "target_winner_label": batch["winner_label"][row_idx],
+                        "target_label": batch["target_label"][row_idx],
+                        "label_probabilities": {
+                            str(spec["label"]): float(prob)
+                            for spec, prob in zip(label_specs, pred_pairwise_probabilities)
+                        },
+                    }
+                )
+    return prediction_rows, local_squared_error_sum, local_value_count
+
+
 def _save_offline_router_checkpoint(
     output_dir: Path,
     model: Any,
     tokenizer: Any,
     supervision_mode: str,
 ) -> None:
-    if supervision_mode in TEXT_REWARD_SUPERVISION_MODES:
+    if supervision_mode in TEXT_LM_SUPERVISION_MODES:
         save_model_and_tokenizer(output_dir, model, tokenizer, lora=True)
         return
     save_model_only(output_dir, model)
@@ -2036,6 +2411,62 @@ def _merge_text_scalar_reward_eval_rows(
     )
 
 
+def _merge_text_pairwise_sign_eval_rows(
+    rows: list[dict[str, Any]],
+    route_labels: list[str],
+) -> tuple[list[dict[str, Any]], np.ndarray, np.ndarray, dict[str, Any]]:
+    target_dim = len(route_labels)
+    merged_problem_rows: list[dict[str, Any]] = []
+    seen_keys: set[str] = set()
+    for row in rows:
+        key = _prediction_row_key(row)
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        merged_problem_rows.append(row)
+
+    if not merged_problem_rows:
+        raise ValueError("No valid eval examples after tokenization/collation")
+
+    filtered_rows: list[dict[str, Any]] = []
+    for row in merged_problem_rows:
+        true_pairwise_targets = row.get("true_pairwise_targets")
+        pred_pairwise_probabilities = row.get("pred_pairwise_probabilities")
+        true_rewards = row.get("true_rewards")
+        route_aliases = row.get("route_aliases")
+        if (
+            not isinstance(true_pairwise_targets, list)
+            or not isinstance(pred_pairwise_probabilities, list)
+            or not isinstance(true_rewards, list)
+            or not isinstance(route_aliases, list)
+            or len(true_pairwise_targets) != target_dim
+            or len(pred_pairwise_probabilities) != target_dim
+            or len(true_rewards) != target_dim
+            or len(route_aliases) != target_dim
+        ):
+            continue
+        normalized_row = dict(row)
+        normalized_row["route_labels"] = list(route_labels)
+        filtered_rows.append(normalized_row)
+
+    if not filtered_rows:
+        raise ValueError("No complete eval problems after parsing pairwise text predictions")
+
+    y_true = np.asarray([row["true_pairwise_targets"] for row in filtered_rows], dtype=np.float32)
+    y_pred = np.asarray([row["pred_pairwise_probabilities"] for row in filtered_rows], dtype=np.float32)
+    return (
+        filtered_rows,
+        y_true,
+        y_pred,
+        {
+            "parse_failures": 0,
+            "parse_failure_rate": 0.0,
+            "eval_problem_examples": int(len(filtered_rows)),
+            "eval_route_examples": int(len(filtered_rows) * target_dim),
+        },
+    )
+
+
 def _flatten_dict(value: Any, prefix: str = "") -> dict[str, Any]:
     result: dict[str, Any] = {}
     if isinstance(value, dict):
@@ -2155,11 +2586,14 @@ def main(cfg: DictConfig) -> None:
         route_aliases = _route_prompt_aliases(route_labels)
         target_dim = len(route_labels)
         supervision_mode = str(train_cfg.get("supervision_mode", "representation_head"))
-        if supervision_mode not in {"representation_head", *TEXT_REWARD_SUPERVISION_MODES}:
+        if supervision_mode not in {"representation_head", *TEXT_LM_SUPERVISION_MODES}:
             raise ValueError(f"Unsupported offline_router.train.supervision_mode: {supervision_mode}")
         text_reward_cfg = train_cfg.get("text_reward")
         if text_reward_cfg is None:
             text_reward_cfg = {}
+        text_pairwise_cfg = train_cfg.get("text_pairwise")
+        if text_pairwise_cfg is None:
+            text_pairwise_cfg = {}
         text_target_precision = int(text_reward_cfg.get("target_precision", 2))
         text_target_grid_count_raw = text_reward_cfg.get("target_grid_count")
         text_target_grid_count = (
@@ -2180,6 +2614,12 @@ def main(cfg: DictConfig) -> None:
         text_reward_bin_count = int(text_reward_cfg.get("bin_count", 21))
         text_reward_bin_label_prefix = str(text_reward_cfg.get("bin_label_prefix", " "))
         text_reward_bin_value_order = str(text_reward_cfg.get("bin_value_order", "ascending"))
+        text_pairwise_tie_margin = float(text_pairwise_cfg.get("tie_margin", 0.05))
+        if text_pairwise_tie_margin < 0.0:
+            raise ValueError("offline_router.train.text_pairwise.tie_margin must be non-negative")
+        text_pairwise_label_prefix = str(text_pairwise_cfg.get("label_prefix", " "))
+        text_pairwise_primary_better_label = str(text_pairwise_cfg.get("primary_better_label", "A"))
+        text_pairwise_expert_better_label = str(text_pairwise_cfg.get("expert_better_label", "B"))
         text_reward_bin_specs = (
             _build_reward_bin_specs(
                 text_reward_bin_count,
@@ -2189,7 +2629,17 @@ def main(cfg: DictConfig) -> None:
             if supervision_mode == "text_reward_bin"
             else []
         )
+        text_pairwise_label_specs = (
+            _build_pairwise_label_specs(
+                label_prefix=text_pairwise_label_prefix,
+                primary_better_label=text_pairwise_primary_better_label,
+                expert_better_label=text_pairwise_expert_better_label,
+            )
+            if supervision_mode == "text_pairwise_sign"
+            else []
+        )
         text_reward_bin_token_ids: list[int] = []
+        text_pairwise_label_token_ids: list[int] = []
         train_sampling_strategy = str(train_cfg.get("train_sampling_strategy", "random"))
 
         train_dataset = _load_split(dataset_dir, "train")
@@ -2279,6 +2729,15 @@ def main(cfg: DictConfig) -> None:
                 [str(spec["label"]) for spec in text_reward_bin_specs],
                 text_reward_bin_token_ids,
             )
+        if supervision_mode == "text_pairwise_sign":
+            if target_dim != 2:
+                raise ValueError("offline_router.train.supervision_mode=text_pairwise_sign requires exactly two routes")
+            text_pairwise_label_token_ids = _label_target_token_ids(tokenizer, text_pairwise_label_specs)
+            logger.info(
+                "Offline router pairwise labels=%s token_ids=%s",
+                [str(spec["label"]) for spec in text_pairwise_label_specs],
+                text_pairwise_label_token_ids,
+            )
         total_parameters = count_parameters(model, trainable_only=False)
         trainable_parameters = count_parameters(model, trainable_only=True)
 
@@ -2305,9 +2764,9 @@ def main(cfg: DictConfig) -> None:
                 text_lora_adapter_source,
                 text_lora_config_summary,
             )
-        if supervision_mode in TEXT_REWARD_SUPERVISION_MODES:
+        if supervision_mode in TEXT_LM_SUPERVISION_MODES:
             logger.info(
-                "Offline router text reward settings: target_precision=%d target_grid_count=%s lr=%.2e weight_decay=%.3f warmup_steps=%d gradient_clipping=%.3f debug_step_logging=%s max_new_tokens=%d do_sample=%s parse_failure_value=%.3f clip_predictions=%s drop_overlength_rows=%s train_sampling_strategy=%s train_rows=%d train_supervision_rows=%d eval_rows=%d eval_supervision_rows=%d",
+                "Offline router text LM settings: target_precision=%d target_grid_count=%s lr=%.2e weight_decay=%.3f warmup_steps=%d gradient_clipping=%.3f debug_step_logging=%s max_new_tokens=%d do_sample=%s parse_failure_value=%.3f clip_predictions=%s drop_overlength_rows=%s train_sampling_strategy=%s train_rows=%d train_supervision_rows=%d eval_rows=%d eval_supervision_rows=%d",
                 text_target_precision,
                 text_target_grid_count,
                 text_lr,
@@ -2334,6 +2793,13 @@ def main(cfg: DictConfig) -> None:
                 text_reward_bin_value_order,
                 [float(spec["value"]) for spec in text_reward_bin_specs],
             )
+        if supervision_mode == "text_pairwise_sign":
+            logger.info(
+                "Offline router text pairwise settings: tie_margin=%.3f label_prefix=%r labels=%s",
+                text_pairwise_tie_margin,
+                text_pairwise_label_prefix,
+                [str(spec["label"]) for spec in text_pairwise_label_specs],
+            )
         optimizer, optimizer_group_summaries = _build_optimizer(
             model,
             train_cfg,
@@ -2348,6 +2814,8 @@ def main(cfg: DictConfig) -> None:
             raise ValueError("Tokenizer must define pad_token_id or eos_token_id for offline router training")
         dropped_overlength_train_rows = 0
         dropped_overlength_eval_rows = 0
+        dropped_tie_train_rows = 0
+        dropped_tie_eval_rows = 0
 
         if supervision_mode == "representation_head":
             train_dataset = _prepare_representation_rows(
@@ -2440,6 +2908,37 @@ def main(cfg: DictConfig) -> None:
             )
             train_collate_fn = _make_text_scalar_train_collate_fn(pad_token_id=pad_token_id)
             eval_collate_fn = _make_text_scalar_eval_collate_fn(pad_token_id=pad_token_id)
+        elif supervision_mode == "text_pairwise_sign":
+            train_dataset, dropped_overlength_train_rows, dropped_tie_train_rows = _prepare_text_pairwise_sign_train_rows(
+                train_dataset,
+                tokenizer=tokenizer,
+                max_seq_length=max_seq_length,
+                route_aliases=route_aliases,
+                route_labels=route_labels,
+                target_dim=target_dim,
+                label_specs=text_pairwise_label_specs,
+                tie_margin=text_pairwise_tie_margin,
+                drop_overlength=text_drop_overlength_rows,
+            )
+            eval_dataset, dropped_overlength_eval_rows, dropped_tie_eval_rows = _prepare_text_pairwise_sign_eval_rows(
+                eval_dataset,
+                tokenizer=tokenizer,
+                max_seq_length=max_seq_length,
+                route_aliases=route_aliases,
+                route_labels=route_labels,
+                target_dim=target_dim,
+                label_specs=text_pairwise_label_specs,
+                tie_margin=text_pairwise_tie_margin,
+                drop_overlength=text_drop_overlength_rows,
+            )
+            train_collate_fn = _make_text_pairwise_train_collate_fn(
+                pad_token_id=pad_token_id,
+                target_dim=target_dim,
+            )
+            eval_collate_fn = _make_text_pairwise_eval_collate_fn(
+                pad_token_id=pad_token_id,
+                target_dim=target_dim,
+            )
         else:
             raise ValueError(f"Unsupported supervision mode: {supervision_mode}")
 
@@ -2457,13 +2956,20 @@ def main(cfg: DictConfig) -> None:
             preprocessed_eval_rows,
             supervision_mode,
         )
-        if supervision_mode in TEXT_REWARD_SUPERVISION_MODES and text_drop_overlength_rows:
+        if supervision_mode in TEXT_LM_SUPERVISION_MODES and text_drop_overlength_rows:
             logger.info(
                 "Offline router dropped overlength text rows: train=%d eval=%d max_seq_length=%s supervision_mode=%s",
                 dropped_overlength_train_rows,
                 dropped_overlength_eval_rows,
                 max_seq_length,
                 supervision_mode,
+            )
+        if supervision_mode == "text_pairwise_sign":
+            logger.info(
+                "Offline router dropped near-tie pairwise rows: train=%d eval=%d tie_margin=%.3f",
+                dropped_tie_train_rows,
+                dropped_tie_eval_rows,
+                text_pairwise_tie_margin,
             )
 
         train_loader = DataLoader(
@@ -2499,7 +3005,7 @@ def main(cfg: DictConfig) -> None:
         save_checkpoints = bool(train_cfg.get("save_checkpoints", True))
         text_scheduler = None
         text_trainable_params: list[torch.nn.Parameter] = []
-        if supervision_mode in TEXT_REWARD_SUPERVISION_MODES:
+        if supervision_mode in TEXT_LM_SUPERVISION_MODES:
             optimizer_steps_per_epoch = max(1, math.ceil(len(train_loader) / grad_accum))
             total_optimizer_steps = max(1, optimizer_steps_per_epoch * num_epochs)
             text_scheduler = get_constant_schedule_with_warmup(
@@ -2563,7 +3069,7 @@ def main(cfg: DictConfig) -> None:
                         )
                     running_losses.append(float(loss.item()))
                     get_accelerator().backward(loss)
-                    if supervision_mode in TEXT_REWARD_SUPERVISION_MODES:
+                    if supervision_mode in TEXT_LM_SUPERVISION_MODES:
                         _log_text_train_step_debug(
                             text_debug_step_logging,
                             epoch,
@@ -2575,7 +3081,7 @@ def main(cfg: DictConfig) -> None:
                             loss=loss,
                         )
                     if (
-                        supervision_mode in TEXT_REWARD_SUPERVISION_MODES
+                        supervision_mode in TEXT_LM_SUPERVISION_MODES
                         and get_accelerator().sync_gradients
                         and text_gradient_clipping > 0.0
                     ):
@@ -2600,7 +3106,7 @@ def main(cfg: DictConfig) -> None:
                             optimizer,
                             loss=loss,
                         )
-                    if supervision_mode in TEXT_REWARD_SUPERVISION_MODES:
+                    if supervision_mode in TEXT_LM_SUPERVISION_MODES:
                         _log_text_train_step_debug(
                             text_debug_step_logging,
                             epoch,
@@ -2612,7 +3118,7 @@ def main(cfg: DictConfig) -> None:
                             loss=loss,
                         )
                     optimizer.step()
-                    if supervision_mode in TEXT_REWARD_SUPERVISION_MODES:
+                    if supervision_mode in TEXT_LM_SUPERVISION_MODES:
                         _log_text_train_step_debug(
                             text_debug_step_logging,
                             epoch,
@@ -2626,7 +3132,7 @@ def main(cfg: DictConfig) -> None:
                     if text_scheduler is not None and get_accelerator().sync_gradients:
                         text_scheduler.step()
                     optimizer.zero_grad(set_to_none=True)
-                    if supervision_mode in TEXT_REWARD_SUPERVISION_MODES:
+                    if supervision_mode in TEXT_LM_SUPERVISION_MODES:
                         _log_text_train_step_debug(
                             text_debug_step_logging,
                             epoch,
@@ -2733,6 +3239,13 @@ def main(cfg: DictConfig) -> None:
                     bin_specs=text_reward_bin_specs,
                     clip_predictions=text_clip_predictions,
                 )
+            elif supervision_mode == "text_pairwise_sign":
+                local_eval_rows, local_eval_squared_error_sum, local_eval_value_count = _run_text_pairwise_sign_eval(
+                    model,
+                    eval_loader,
+                    label_token_ids=text_pairwise_label_token_ids,
+                    label_specs=text_pairwise_label_specs,
+                )
             else:
                 raise ValueError(f"Unsupported supervision mode: {supervision_mode}")
             shard_path = _write_eval_shard(output_dir, epoch, local_eval_rows)
@@ -2773,6 +3286,11 @@ def main(cfg: DictConfig) -> None:
                         merged_shard_rows,
                         route_labels=route_labels,
                         route_aliases=route_aliases,
+                    )
+                elif supervision_mode == "text_pairwise_sign":
+                    eval_rows, y_true, y_pred, eval_extra = _merge_text_pairwise_sign_eval_rows(
+                        merged_shard_rows,
+                        route_labels=route_labels,
                     )
                 else:
                     raise ValueError(f"Unsupported supervision mode: {supervision_mode}")
@@ -2926,12 +3444,13 @@ def main(cfg: DictConfig) -> None:
                 "distributed": is_distributed(),
                 "world_size": get_world_size(),
             }
-            if supervision_mode in TEXT_REWARD_SUPERVISION_MODES:
+            if supervision_mode in TEXT_LM_SUPERVISION_MODES:
                 summary["text_lora"] = True
                 summary["text_lora_base_model_path"] = text_lora_base_model_path
                 summary["text_lora_adapter_source"] = text_lora_adapter_source
                 summary["text_lora_trainable_parameters"] = trainable_parameters
                 summary["text_lora_config"] = text_lora_config_summary or {}
+            if supervision_mode in TEXT_REWARD_SUPERVISION_MODES:
                 summary["text_reward"] = {
                     "target_precision": text_target_precision,
                     "target_grid_count": text_target_grid_count,
@@ -2965,6 +3484,31 @@ def main(cfg: DictConfig) -> None:
                         }
                         for spec, token_id in zip(text_reward_bin_specs, text_reward_bin_token_ids)
                     ]
+            if supervision_mode == "text_pairwise_sign":
+                summary["text_pairwise"] = {
+                    "tie_margin": text_pairwise_tie_margin,
+                    "label_prefix": text_pairwise_label_prefix,
+                    "primary_better_label": text_pairwise_primary_better_label,
+                    "expert_better_label": text_pairwise_expert_better_label,
+                    "drop_overlength_rows": text_drop_overlength_rows,
+                    "dropped_overlength_train_rows": int(dropped_overlength_train_rows),
+                    "dropped_overlength_eval_rows": int(dropped_overlength_eval_rows),
+                    "dropped_tie_train_rows": int(dropped_tie_train_rows),
+                    "dropped_tie_eval_rows": int(dropped_tie_eval_rows),
+                    "best_eval_parse_failures": int(best_eval_extra.get("parse_failures", 0)),
+                    "best_eval_parse_failure_rate": float(best_eval_extra.get("parse_failure_rate", 0.0)),
+                    "best_eval_problem_examples": int(best_eval_extra.get("eval_problem_examples", 0)),
+                    "best_eval_route_examples": int(best_eval_extra.get("eval_route_examples", 0)),
+                    "label_specs": [
+                        {
+                            "winner_idx": int(spec["winner_idx"]),
+                            "label": str(spec["label"]),
+                            "target_text": str(spec["target_text"]),
+                            "token_id": int(token_id),
+                        }
+                        for spec, token_id in zip(text_pairwise_label_specs, text_pairwise_label_token_ids)
+                    ],
+                }
             write_json(output_dir / "summary.json", summary)
             if wandb_run is not None:
                 try:
