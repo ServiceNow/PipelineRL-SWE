@@ -48,6 +48,7 @@ logger = logging.getLogger(__name__)
 TEXT_REWARD_SUPERVISION_MODES = {"text_reward_vector", "text_reward_scalar", "text_reward_bin"}
 TEXT_PAIRWISE_SUPERVISION_MODES = {"text_pairwise_sign"}
 TEXT_LM_SUPERVISION_MODES = TEXT_REWARD_SUPERVISION_MODES | TEXT_PAIRWISE_SUPERVISION_MODES
+DEFAULT_UTILITY_LAMBDAS = [0.0, 1.0e-5, 2.0e-5, 5.0e-5, 1.0e-4, 2.0e-4]
 
 
 def get_world_size() -> int:
@@ -461,6 +462,222 @@ def _write_csv(path: Path, rows: list[dict[str, Any]], headers: list[str]) -> No
         writer.writeheader()
         for row in rows:
             writer.writerow({key: row.get(key) for key in headers})
+
+
+def _normalize_utility_lambdas(values: Any) -> list[float]:
+    if values is None:
+        return [float(value) for value in DEFAULT_UTILITY_LAMBDAS]
+    if isinstance(values, (int, float)):
+        return [float(values)]
+    normalized: list[float] = []
+    for value in values:
+        normalized.append(float(value))
+    return normalized or [float(value) for value in DEFAULT_UTILITY_LAMBDAS]
+
+
+def _mean_or_nan(total: float, count: int) -> float:
+    if count <= 0:
+        return math.nan
+    return float(total / count)
+
+
+def _argmax_index(values: list[float]) -> int:
+    if not values:
+        raise ValueError("Cannot choose argmax for an empty list")
+    best_idx = 0
+    best_value = float(values[0])
+    for idx, value in enumerate(values[1:], start=1):
+        numeric = float(value)
+        if numeric > best_value:
+            best_idx = idx
+            best_value = numeric
+    return int(best_idx)
+
+
+def _compute_utility_report(
+    eval_rows: list[dict[str, Any]],
+    eval_dataset: Any,
+    route_labels: list[str],
+    lambdas: list[float],
+) -> dict[str, Any]:
+    target_dim = len(route_labels)
+    eval_lookup: dict[str, dict[str, Any]] = {}
+    duplicate_eval_lookup_rows = 0
+    invalid_eval_lookup_rows = 0
+    for row in eval_dataset:
+        try:
+            problem_id = problem_id_from_item(row)
+        except ValueError:
+            invalid_eval_lookup_rows += 1
+            continue
+        key = _prediction_problem_key({"dataset": row.get("dataset"), "problem_id": problem_id})
+        if key in eval_lookup:
+            duplicate_eval_lookup_rows += 1
+            continue
+        eval_lookup[key] = row
+
+    valid_examples: list[dict[str, Any]] = []
+    skipped_missing_eval_row = 0
+    skipped_invalid_route_stats = 0
+    for row in eval_rows:
+        pred_rewards = row.get("pred_rewards")
+        if not isinstance(pred_rewards, list) or len(pred_rewards) != target_dim:
+            skipped_invalid_route_stats += 1
+            continue
+        key = _prediction_problem_key(row)
+        source_row = eval_lookup.get(key)
+        if source_row is None:
+            skipped_missing_eval_row += 1
+            continue
+        rewards = source_row.get("performance_targets")
+        prompt_tokens = source_row.get("route_prompt_tokens")
+        output_tokens = source_row.get("route_output_tokens")
+        if (
+            not isinstance(rewards, list)
+            or not isinstance(prompt_tokens, list)
+            or not isinstance(output_tokens, list)
+            or len(rewards) != target_dim
+            or len(prompt_tokens) != target_dim
+            or len(output_tokens) != target_dim
+        ):
+            skipped_invalid_route_stats += 1
+            continue
+        try:
+            rewards = [float(value) for value in rewards]
+            prompt_tokens = [float(value) for value in prompt_tokens]
+            output_tokens = [float(value) for value in output_tokens]
+            pred_rewards = [float(value) for value in pred_rewards]
+        except (TypeError, ValueError):
+            skipped_invalid_route_stats += 1
+            continue
+        valid_examples.append(
+            {
+                "problem_id": row.get("problem_id"),
+                "dataset": row.get("dataset"),
+                "rewards": rewards,
+                "prompt_tokens": prompt_tokens,
+                "output_tokens": output_tokens,
+                "router_choice_idx": _argmax_index(pred_rewards),
+                "oracle_choice_idx": _argmax_index(rewards),
+            }
+        )
+
+    policy_defs = [
+        {
+            "policy": "router",
+            "policy_type": "router",
+            "route_idx": None,
+            "route_label": None,
+        }
+    ]
+    for route_idx, route_label in enumerate(route_labels):
+        policy_defs.append(
+            {
+                "policy": f"always::{route_label}",
+                "policy_type": "always_route",
+                "route_idx": int(route_idx),
+                "route_label": str(route_label),
+            }
+        )
+    policy_defs.append(
+        {
+            "policy": "oracle",
+            "policy_type": "oracle",
+            "route_idx": None,
+            "route_label": None,
+        }
+    )
+
+    policy_summaries: dict[str, dict[str, Any]] = {}
+    utility_rows: list[dict[str, Any]] = []
+    valid_count = len(valid_examples)
+
+    for policy_def in policy_defs:
+        policy_name = str(policy_def["policy"])
+        policy_type = str(policy_def["policy_type"])
+        fixed_route_idx = policy_def["route_idx"]
+        route_choice_counts = [0] * target_dim
+        reward_sum = 0.0
+        prompt_token_sum = 0.0
+        output_token_sum = 0.0
+        total_token_sum = 0.0
+
+        for example in valid_examples:
+            if policy_type == "router":
+                route_idx = int(example["router_choice_idx"])
+            elif policy_type == "oracle":
+                route_idx = int(example["oracle_choice_idx"])
+            else:
+                route_idx = int(fixed_route_idx)
+            route_choice_counts[route_idx] += 1
+            reward_sum += float(example["rewards"][route_idx])
+            prompt_token_sum += float(example["prompt_tokens"][route_idx])
+            output_token_sum += float(example["output_tokens"][route_idx])
+            total_token_sum += float(example["prompt_tokens"][route_idx] + example["output_tokens"][route_idx])
+
+        mean_reward = _mean_or_nan(reward_sum, valid_count)
+        mean_prompt_tokens = _mean_or_nan(prompt_token_sum, valid_count)
+        mean_output_tokens = _mean_or_nan(output_token_sum, valid_count)
+        mean_total_tokens = _mean_or_nan(total_token_sum, valid_count)
+        choice_counts_by_route = {
+            str(route_label): int(route_choice_counts[idx]) for idx, route_label in enumerate(route_labels)
+        }
+        policy_summary = {
+            "policy": policy_name,
+            "policy_type": policy_type,
+            "route_idx": None if fixed_route_idx is None else int(fixed_route_idx),
+            "route_label": policy_def["route_label"],
+            "n_examples": int(valid_count),
+            "choice_counts_by_route": choice_counts_by_route,
+            "mean_reward": mean_reward,
+            "mean_prompt_tokens": mean_prompt_tokens,
+            "mean_output_tokens": mean_output_tokens,
+            "mean_total_tokens": mean_total_tokens,
+        }
+        policy_summaries[policy_name] = policy_summary
+
+        for lambda_value in lambdas:
+            lambda_value = float(lambda_value)
+            utility_rows.append(
+                {
+                    "policy": policy_name,
+                    "policy_type": policy_type,
+                    "route_idx": policy_summary["route_idx"],
+                    "route_label": policy_summary["route_label"],
+                    "lambda": lambda_value,
+                    "cost_metric": "output_tokens",
+                    "mean_reward": mean_reward,
+                    "mean_cost": mean_output_tokens,
+                    "mean_utility": mean_reward - (lambda_value * mean_output_tokens),
+                }
+            )
+            utility_rows.append(
+                {
+                    "policy": policy_name,
+                    "policy_type": policy_type,
+                    "route_idx": policy_summary["route_idx"],
+                    "route_label": policy_summary["route_label"],
+                    "lambda": lambda_value,
+                    "cost_metric": "total_tokens",
+                    "mean_reward": mean_reward,
+                    "mean_cost": mean_total_tokens,
+                    "mean_utility": mean_reward - (lambda_value * mean_total_tokens),
+                }
+            )
+
+    return {
+        "n_eval_examples": int(len(eval_rows)),
+        "n_examples_with_utility": int(valid_count),
+        "skipped_missing_eval_row": int(skipped_missing_eval_row),
+        "skipped_invalid_route_stats": int(skipped_invalid_route_stats),
+        "eval_lookup_rows": int(len(eval_lookup)),
+        "duplicate_eval_lookup_rows": int(duplicate_eval_lookup_rows),
+        "invalid_eval_lookup_rows": int(invalid_eval_lookup_rows),
+        "lambdas": [float(value) for value in lambdas],
+        "route_labels": list(route_labels),
+        "policies": policy_summaries,
+        "utility_rows": utility_rows,
+    }
 
 
 def _get_primary_output_text(row: dict[str, Any]) -> str | None:
@@ -2594,6 +2811,9 @@ def main(cfg: DictConfig) -> None:
         text_pairwise_cfg = train_cfg.get("text_pairwise")
         if text_pairwise_cfg is None:
             text_pairwise_cfg = {}
+        utility_cfg = train_cfg.get("utility")
+        if utility_cfg is None:
+            utility_cfg = {}
         text_target_precision = int(text_reward_cfg.get("target_precision", 2))
         text_target_grid_count_raw = text_reward_cfg.get("target_grid_count")
         text_target_grid_count = (
@@ -2620,6 +2840,8 @@ def main(cfg: DictConfig) -> None:
         text_pairwise_label_prefix = str(text_pairwise_cfg.get("label_prefix", " "))
         text_pairwise_primary_better_label = str(text_pairwise_cfg.get("primary_better_label", "A"))
         text_pairwise_expert_better_label = str(text_pairwise_cfg.get("expert_better_label", "B"))
+        utility_enabled = bool(utility_cfg.get("enabled", True))
+        utility_lambdas = _normalize_utility_lambdas(utility_cfg.get("lambdas"))
         text_reward_bin_specs = (
             _build_reward_bin_specs(
                 text_reward_bin_count,
@@ -2659,6 +2881,7 @@ def main(cfg: DictConfig) -> None:
             seed=base_seed + 1,
             split_name="eval",
         )
+        raw_eval_dataset = eval_dataset
         raw_train_rows = int(len(train_dataset))
         raw_eval_rows = int(len(eval_dataset))
         train_supervision_rows = int(len(train_dataset))
@@ -3412,6 +3635,36 @@ def main(cfg: DictConfig) -> None:
             _write_csv(output_dir / "route_metrics.csv", route_rows, csv_headers_for_route_metrics())
             _write_csv(output_dir / "pairwise_metrics.csv", pair_rows, csv_headers_for_pairwise_metrics())
             _save_predictions_jsonl(output_dir / "eval_predictions.jsonl", best_eval_rows)
+            utility_report = None
+            if utility_enabled:
+                utility_report = _compute_utility_report(
+                    eval_rows=best_eval_rows,
+                    eval_dataset=raw_eval_dataset,
+                    route_labels=route_labels,
+                    lambdas=utility_lambdas,
+                )
+                _write_csv(
+                    output_dir / "utility_vs_baselines.csv",
+                    utility_report["utility_rows"],
+                    [
+                        "policy",
+                        "policy_type",
+                        "route_idx",
+                        "route_label",
+                        "lambda",
+                        "cost_metric",
+                        "mean_reward",
+                        "mean_cost",
+                        "mean_utility",
+                    ],
+                )
+                write_json(output_dir / "utility_vs_baselines.json", utility_report)
+                logger.info(
+                    "Offline router wrote utility report: json=%s csv=%s n_examples=%d",
+                    output_dir / "utility_vs_baselines.json",
+                    output_dir / "utility_vs_baselines.csv",
+                    int(utility_report.get("n_examples_with_utility", 0)),
+                )
 
             summary = {
                 "seed": base_seed,
@@ -3422,6 +3675,10 @@ def main(cfg: DictConfig) -> None:
                 "route_labels": route_labels,
                 "target_dim": target_dim,
                 "train_sampling": train_sampling_summary,
+                "utility": {
+                    "enabled": utility_enabled,
+                    "lambdas": [float(value) for value in utility_lambdas],
+                },
                 "train_rows": raw_train_rows,
                 "eval_rows": raw_eval_rows,
                 "train_supervision_rows": train_supervision_rows,
@@ -3444,6 +3701,17 @@ def main(cfg: DictConfig) -> None:
                 "distributed": is_distributed(),
                 "world_size": get_world_size(),
             }
+            if utility_report is not None:
+                summary["utility"]["report_json"] = str(output_dir / "utility_vs_baselines.json")
+                summary["utility"]["report_csv"] = str(output_dir / "utility_vs_baselines.csv")
+                summary["utility"]["n_eval_examples"] = int(utility_report.get("n_eval_examples", 0))
+                summary["utility"]["n_examples_with_utility"] = int(utility_report.get("n_examples_with_utility", 0))
+                summary["utility"]["skipped_missing_eval_row"] = int(
+                    utility_report.get("skipped_missing_eval_row", 0)
+                )
+                summary["utility"]["skipped_invalid_route_stats"] = int(
+                    utility_report.get("skipped_invalid_route_stats", 0)
+                )
             if supervision_mode in TEXT_LM_SUPERVISION_MODES:
                 summary["text_lora"] = True
                 summary["text_lora_base_model_path"] = text_lora_base_model_path

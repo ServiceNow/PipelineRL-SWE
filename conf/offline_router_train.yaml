@@ -67,3 +67,12 @@ offline_router:
       label_prefix: " "
       primary_better_label: A
       expert_better_label: B
+    utility:
+      enabled: true
+      lambdas:
+        - 0.0
+        - 1.0e-5
+        - 2.0e-5
+        - 5.0e-5
+        - 1.0e-4
+        - 2.0e-4
