@@ -47,6 +47,7 @@ logger = logging.getLogger(__name__)
 
 TEXT_REWARD_SUPERVISION_MODES = {
     "text_reward_vector",
+    "text_reward_vector_bin",
     "text_reward_scalar",
     "text_reward_bin",
     "text_reward_bin_delta",
@@ -56,9 +57,14 @@ TEXT_OUTPUT_SUPERVISION_MODES = {"text_output_bin"}
 TEXT_PAIRWISE_SUPERVISION_MODES = {"text_pairwise_sign"}
 TEXT_LM_SUPERVISION_MODES = TEXT_REWARD_SUPERVISION_MODES | TEXT_OUTPUT_SUPERVISION_MODES | TEXT_PAIRWISE_SUPERVISION_MODES
 TEXT_REWARD_BIN_SUPERVISION_MODES = {"text_reward_bin", "text_reward_bin_delta"}
+TEXT_REWARD_VECTOR_BIN_SUPERVISION_MODES = {"text_reward_vector_bin"}
 TEXT_OUTPUT_BIN_SUPERVISION_MODES = {"text_output_bin"}
 TEXT_JOINT_REWARD_OUTPUT_BIN_SUPERVISION_MODES = {"text_reward_output_bin"}
-TEXT_BIN_SUPERVISION_MODES = TEXT_REWARD_BIN_SUPERVISION_MODES | TEXT_OUTPUT_BIN_SUPERVISION_MODES
+TEXT_BIN_SUPERVISION_MODES = (
+    TEXT_REWARD_BIN_SUPERVISION_MODES
+    | TEXT_REWARD_VECTOR_BIN_SUPERVISION_MODES
+    | TEXT_OUTPUT_BIN_SUPERVISION_MODES
+)
 UTILITY_COMPATIBLE_SUPERVISION_MODES = TEXT_REWARD_SUPERVISION_MODES | TEXT_PAIRWISE_SUPERVISION_MODES
 DEFAULT_UTILITY_LAMBDAS = [0.0, 1.0e-5, 2.0e-5, 5.0e-5, 1.0e-4, 2.0e-4]
 
@@ -932,6 +938,32 @@ def _build_text_reward_prompt(
     )
 
 
+def _build_text_vector_bin_reward_prompt(
+    prompt_text: str,
+    primary_output_text: str,
+    route_aliases: list[str],
+    bin_specs: list[dict[str, Any]],
+    target_precision: int,
+) -> str:
+    route_legend = ", ".join(route_aliases)
+    reward_bin_table = _format_reward_bin_table(bin_specs, target_precision)
+    return (
+        "Predict the realized reward bin for each model.\n"
+        "Respond with only a compact JSON array of labels in the listed order.\n"
+        'Example format: ["A","C"]\n'
+        "Do not include any keys, labels, or explanation text.\n\n"
+        "[Reward Bins]\n"
+        f"{reward_bin_table}\n\n"
+        "[Model Order]\n"
+        f"{route_legend}\n\n"
+        "[Original Repair Prompt]\n"
+        f"{prompt_text}\n\n"
+        "[Primary Model Attempt]\n"
+        f"{primary_output_text}\n\n"
+        "Answer:\n"
+    )
+
+
 def _build_text_scalar_reward_prompt(
     prompt_text: str,
     primary_output_text: str,
@@ -1220,6 +1252,11 @@ def _format_reward_target(values: list[float], precision: int, target_grid_count
     return json.dumps(rounded, separators=(",", ":"))
 
 
+def _format_reward_bin_vector_target(values: list[float], bin_specs: list[dict[str, Any]]) -> str:
+    labels = [str(bin_specs[_reward_to_bin_idx(float(value), bin_specs)]["label"]) for value in values]
+    return json.dumps(labels, separators=(",", ":"))
+
+
 def _format_scalar_reward_target(value: float, precision: int, target_grid_count: int | None = None) -> str:
     return f"{_quantize_reward_to_grid(float(value), target_grid_count):.{int(precision)}f}"
 
@@ -1391,6 +1428,64 @@ def _prepare_text_train_rows(
     return prepared_rows, dropped_overlength_rows
 
 
+def _prepare_text_vector_bin_train_rows(
+    dataset: Any,
+    tokenizer: Any,
+    max_seq_length: int | None,
+    route_aliases: list[str],
+    target_dim: int,
+    target_precision: int,
+    bin_specs: list[dict[str, Any]],
+    drop_overlength: bool = False,
+) -> tuple[list[dict[str, Any]], int]:
+    prepared_rows: list[dict[str, Any]] = []
+    dropped_overlength_rows = 0
+    for row in dataset:
+        prompt_text = row.get("prompt_text")
+        primary_output_text = _get_primary_output_text(row)
+        targets = row.get("performance_targets")
+        if not isinstance(prompt_text, str) or not isinstance(primary_output_text, str):
+            continue
+        if not isinstance(targets, list) or len(targets) != target_dim:
+            continue
+        try:
+            problem_id = problem_id_from_item(row)
+        except ValueError:
+            continue
+        target_rewards = [float(value) for value in targets]
+        prompt = _build_text_vector_bin_reward_prompt(
+            prompt_text=prompt_text,
+            primary_output_text=primary_output_text,
+            route_aliases=route_aliases,
+            bin_specs=bin_specs,
+            target_precision=target_precision,
+        )
+        encoded, dropped_overlength = _tokenize_text_reward_target_with_limit(
+            tokenizer=tokenizer,
+            prompt_text=prompt,
+            target_text=_format_reward_bin_vector_target(target_rewards, bin_specs),
+            max_seq_length=max_seq_length,
+            drop_overlength=drop_overlength,
+        )
+        if dropped_overlength:
+            dropped_overlength_rows += 1
+        if encoded is None:
+            continue
+        prepared_rows.append(
+            {
+                "problem_id": problem_id,
+                "dataset": row.get("dataset"),
+                "repo": row.get("repo"),
+                "language": row.get("language"),
+                "route_aliases": list(route_aliases),
+                "target_rewards": target_rewards,
+                "input_ids": encoded["input_ids"],
+                "labels": encoded["labels"],
+            }
+        )
+    return prepared_rows, dropped_overlength_rows
+
+
 def _make_text_train_collate_fn(pad_token_id: int, target_dim: int):
     def _collate(rows: list[dict[str, Any]]) -> dict[str, Any]:
         max_len = max(len(row["input_ids"]) for row in rows)
@@ -1453,6 +1548,61 @@ def _prepare_text_eval_rows(
             primary_output_text,
             route_aliases,
             target_grid_count=target_grid_count,
+            target_precision=target_precision,
+        )
+        prompt_ids, dropped_overlength = _prepare_eval_prompt_ids(
+            tokenizer=tokenizer,
+            prompt_text=prompt,
+            max_seq_length=max_seq_length,
+            drop_overlength=drop_overlength,
+        )
+        if dropped_overlength:
+            dropped_overlength_rows += 1
+        if not prompt_ids:
+            continue
+        prepared_rows.append(
+            {
+                "problem_id": problem_id,
+                "dataset": row.get("dataset"),
+                "repo": row.get("repo"),
+                "language": row.get("language"),
+                "route_aliases": list(route_aliases),
+                "target_rewards": [float(value) for value in targets],
+                "input_ids": prompt_ids,
+            }
+        )
+    return prepared_rows, dropped_overlength_rows
+
+
+def _prepare_text_vector_bin_eval_rows(
+    dataset: Any,
+    tokenizer: Any,
+    max_seq_length: int | None,
+    route_aliases: list[str],
+    target_dim: int,
+    target_precision: int,
+    bin_specs: list[dict[str, Any]],
+    drop_overlength: bool = False,
+) -> tuple[list[dict[str, Any]], int]:
+    prepared_rows: list[dict[str, Any]] = []
+    dropped_overlength_rows = 0
+    for row in dataset:
+        prompt_text = row.get("prompt_text")
+        primary_output_text = _get_primary_output_text(row)
+        targets = row.get("performance_targets")
+        if not isinstance(prompt_text, str) or not isinstance(primary_output_text, str):
+            continue
+        if not isinstance(targets, list) or len(targets) != target_dim:
+            continue
+        try:
+            problem_id = problem_id_from_item(row)
+        except ValueError:
+            continue
+        prompt = _build_text_vector_bin_reward_prompt(
+            prompt_text=prompt_text,
+            primary_output_text=primary_output_text,
+            route_aliases=route_aliases,
+            bin_specs=bin_specs,
             target_precision=target_precision,
         )
         prompt_ids, dropped_overlength = _prepare_eval_prompt_ids(
@@ -3011,6 +3161,60 @@ def _parse_generated_reward(text: str, target_dim: int) -> tuple[list[float] | N
     return None, "json_array_not_found"
 
 
+def _parse_generated_reward_bin_vector(
+    text: str,
+    target_dim: int,
+    bin_specs: list[dict[str, Any]],
+) -> tuple[list[float] | None, list[str] | None, str | None]:
+    label_to_value = {str(spec["label"]): float(spec["value"]) for spec in bin_specs}
+
+    def _coerce_label_list(parsed: Any) -> tuple[list[float] | None, list[str] | None, str | None]:
+        if not isinstance(parsed, list):
+            return None, None, f"json_type_error:{type(parsed).__name__}"
+        if len(parsed) != target_dim:
+            return None, None, f"json_length_error:{len(parsed)}"
+        values: list[float] = []
+        labels: list[str] = []
+        for idx, value in enumerate(parsed):
+            if not isinstance(value, str):
+                return None, None, f"json_value_error:index={idx}"
+            label = value.strip()
+            if label not in label_to_value:
+                return None, None, f"json_label_error:index={idx}"
+            labels.append(label)
+            values.append(float(label_to_value[label]))
+        return values, labels, None
+
+    if not isinstance(text, str):
+        return None, None, "generated_text_not_string"
+    stripped = text.strip()
+    if not stripped:
+        return None, None, "generated_text_empty"
+
+    decoder = json.JSONDecoder()
+
+    try:
+        parsed = json.loads(stripped)
+        return _coerce_label_list(parsed)
+    except json.JSONDecodeError:
+        pass
+
+    for start_idx, char in enumerate(stripped):
+        if char != "[":
+            continue
+        try:
+            parsed, _ = decoder.raw_decode(stripped[start_idx:])
+        except json.JSONDecodeError:
+            continue
+        values, labels, error = _coerce_label_list(parsed)
+        if values is not None:
+            return values, labels, None
+        if error is not None and not error.startswith("json_length_error"):
+            return None, None, error
+
+    return None, None, "json_array_not_found"
+
+
 def _parse_generated_scalar_reward(text: str) -> tuple[float | None, str | None]:
     if not isinstance(text, str):
         return None, "generated_text_not_string"
@@ -3153,6 +3357,72 @@ def _run_text_reward_eval(
                     "pred_rewards": [float(value) for value in parsed_rewards],
                     "parse_success": bool(parse_success),
                 }
+                if parse_error is not None:
+                    prediction_row["parse_error"] = parse_error
+                prediction_rows.append(prediction_row)
+    return prediction_rows, local_squared_error_sum, local_value_count
+
+
+def _run_text_reward_vector_bin_eval(
+    model: Any,
+    loader: DataLoader,
+    tokenizer: Any,
+    max_new_tokens: int,
+    do_sample: bool,
+    parse_failure_value: float,
+    clip_predictions: bool,
+    target_dim: int,
+    bin_specs: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], float, int]:
+    model.eval()
+    prediction_rows: list[dict[str, Any]] = []
+    local_squared_error_sum = 0.0
+    local_value_count = 0
+    with torch.no_grad():
+        for batch in tqdm(loader, desc="Eval offline router", unit="batch", disable=not is_main_process()):
+            generated_tokens = _generate_text_reward_tokens(
+                model=model,
+                input_ids=batch["input_ids"],
+                attention_mask=batch["attention_mask"],
+                max_new_tokens=max_new_tokens,
+                do_sample=do_sample,
+                tokenizer=tokenizer,
+            )
+            if generated_tokens.shape[1] == 0:
+                generated_texts = [""] * int(batch["input_ids"].shape[0])
+            else:
+                generated_texts = tokenizer.batch_decode(generated_tokens.detach().cpu(), skip_special_tokens=True)
+            for row_idx, problem_id in enumerate(batch["problem_ids"]):
+                parsed_rewards, parsed_labels, parse_error = _parse_generated_reward_bin_vector(
+                    generated_texts[row_idx],
+                    target_dim=target_dim,
+                    bin_specs=bin_specs,
+                )
+                parse_success = parsed_rewards is not None
+                if not parse_success:
+                    parsed_rewards = [float(parse_failure_value)] * target_dim
+                    parsed_labels = None
+                if clip_predictions:
+                    parsed_rewards = [float(min(1.0, max(0.0, value))) for value in parsed_rewards]
+                target_rewards = [float(value) for value in batch["targets"][row_idx].tolist()]
+                local_squared_error_sum += float(
+                    sum((pred - target) ** 2 for pred, target in zip(parsed_rewards, target_rewards))
+                )
+                local_value_count += target_dim
+                prediction_row = {
+                    "problem_id": problem_id,
+                    "dataset": batch["datasets"][row_idx],
+                    "repo": batch["repos"][row_idx],
+                    "language": batch["languages"][row_idx],
+                    "route_aliases": list(batch["route_aliases"][row_idx]),
+                    "true_rewards": target_rewards,
+                    "generated_text": generated_texts[row_idx],
+                    "parsed_rewards": [float(value) for value in parsed_rewards],
+                    "pred_rewards": [float(value) for value in parsed_rewards],
+                    "parse_success": bool(parse_success),
+                }
+                if parsed_labels is not None:
+                    prediction_row["parsed_bin_labels"] = list(parsed_labels)
                 if parse_error is not None:
                     prediction_row["parse_error"] = parse_error
                 prediction_rows.append(prediction_row)
@@ -4470,6 +4740,29 @@ def main(cfg: DictConfig) -> None:
             )
             train_collate_fn = _make_text_train_collate_fn(pad_token_id=pad_token_id, target_dim=target_dim)
             eval_collate_fn = _make_text_eval_collate_fn(pad_token_id=pad_token_id, target_dim=target_dim)
+        elif supervision_mode == "text_reward_vector_bin":
+            train_dataset, dropped_overlength_train_rows = _prepare_text_vector_bin_train_rows(
+                train_dataset,
+                tokenizer=tokenizer,
+                max_seq_length=max_seq_length,
+                route_aliases=route_aliases,
+                target_dim=target_dim,
+                target_precision=text_target_precision,
+                bin_specs=text_reward_bin_specs,
+                drop_overlength=text_drop_overlength_rows,
+            )
+            eval_dataset, dropped_overlength_eval_rows = _prepare_text_vector_bin_eval_rows(
+                eval_dataset,
+                tokenizer=tokenizer,
+                max_seq_length=max_seq_length,
+                route_aliases=route_aliases,
+                target_dim=target_dim,
+                target_precision=text_target_precision,
+                bin_specs=text_reward_bin_specs,
+                drop_overlength=text_drop_overlength_rows,
+            )
+            train_collate_fn = _make_text_train_collate_fn(pad_token_id=pad_token_id, target_dim=target_dim)
+            eval_collate_fn = _make_text_eval_collate_fn(pad_token_id=pad_token_id, target_dim=target_dim)
         elif supervision_mode == "text_reward_scalar":
             train_dataset, dropped_overlength_train_rows = _prepare_text_scalar_train_rows(
                 train_dataset,
@@ -4939,6 +5232,18 @@ def main(cfg: DictConfig) -> None:
                     clip_predictions=text_clip_predictions,
                     target_dim=target_dim,
                 )
+            elif supervision_mode == "text_reward_vector_bin":
+                local_eval_rows, local_eval_squared_error_sum, local_eval_value_count = _run_text_reward_vector_bin_eval(
+                    model,
+                    eval_loader,
+                    tokenizer=tokenizer,
+                    max_new_tokens=text_max_new_tokens,
+                    do_sample=text_do_sample,
+                    parse_failure_value=text_parse_failure_value,
+                    clip_predictions=text_clip_predictions,
+                    target_dim=target_dim,
+                    bin_specs=text_reward_bin_specs,
+                )
             elif supervision_mode == "text_reward_scalar":
                 local_eval_rows, local_eval_squared_error_sum, local_eval_value_count = _run_text_scalar_reward_eval(
                     model,
@@ -5014,7 +5319,7 @@ def main(cfg: DictConfig) -> None:
                 merged_shard_rows = _load_eval_shard_rows(output_dir, epoch)
                 if supervision_mode == "representation_head":
                     eval_rows, y_true, y_pred, eval_extra = _merge_representation_eval_rows(merged_shard_rows)
-                elif supervision_mode == "text_reward_vector":
+                elif supervision_mode in {"text_reward_vector", "text_reward_vector_bin"}:
                     eval_rows, y_true, y_pred, eval_extra = _merge_text_reward_eval_rows(
                         merged_shard_rows,
                         route_labels=route_labels,
@@ -5286,7 +5591,11 @@ def main(cfg: DictConfig) -> None:
                     "best_eval_problem_examples": int(best_eval_extra.get("eval_problem_examples", 0)),
                     "best_eval_route_examples": int(best_eval_extra.get("eval_route_examples", 0)),
                 }
-                if supervision_mode in (TEXT_REWARD_BIN_SUPERVISION_MODES | TEXT_JOINT_REWARD_OUTPUT_BIN_SUPERVISION_MODES):
+                if supervision_mode in (
+                    TEXT_REWARD_BIN_SUPERVISION_MODES
+                    | TEXT_REWARD_VECTOR_BIN_SUPERVISION_MODES
+                    | TEXT_JOINT_REWARD_OUTPUT_BIN_SUPERVISION_MODES
+                ):
                     summary["text_reward"]["bin_count"] = text_reward_bin_count
                     summary["text_reward"]["bin_label_prefix"] = text_reward_bin_label_prefix
                     summary["text_reward"]["bin_value_order"] = text_reward_bin_value_order
