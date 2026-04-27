@@ -3866,31 +3866,31 @@ def _read_predictions_jsonl(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
-def _eval_shard_dir(output_dir: Path, epoch: int) -> Path:
-    return output_dir / ".eval_shards" / f"epoch_{epoch:04d}"
+def _prediction_shard_dir(output_dir: Path, epoch: int, split_tag: str = "eval") -> Path:
+    return output_dir / f".{split_tag}_shards" / f"epoch_{epoch:04d}"
 
 
-def _eval_shard_path(output_dir: Path, epoch: int, rank: int) -> Path:
-    return _eval_shard_dir(output_dir, epoch) / f"rank_{rank:05d}.jsonl"
+def _prediction_shard_path(output_dir: Path, epoch: int, rank: int, split_tag: str = "eval") -> Path:
+    return _prediction_shard_dir(output_dir, epoch, split_tag=split_tag) / f"rank_{rank:05d}.jsonl"
 
 
-def _write_eval_shard(output_dir: Path, epoch: int, rows: list[dict[str, Any]]) -> Path:
-    shard_path = _eval_shard_path(output_dir, epoch, get_rank())
+def _write_eval_shard(output_dir: Path, epoch: int, rows: list[dict[str, Any]], split_tag: str = "eval") -> Path:
+    shard_path = _prediction_shard_path(output_dir, epoch, get_rank(), split_tag=split_tag)
     shard_path.parent.mkdir(parents=True, exist_ok=True)
     _save_predictions_jsonl(shard_path, rows)
     return shard_path
 
 
-def _load_eval_shard_rows(output_dir: Path, epoch: int) -> list[dict[str, Any]]:
-    shard_dir = _eval_shard_dir(output_dir, epoch)
+def _load_eval_shard_rows(output_dir: Path, epoch: int, split_tag: str = "eval") -> list[dict[str, Any]]:
+    shard_dir = _prediction_shard_dir(output_dir, epoch, split_tag=split_tag)
     rows: list[dict[str, Any]] = []
     for shard_path in sorted(shard_dir.glob("rank_*.jsonl")):
         rows.extend(_read_predictions_jsonl(shard_path))
     return rows
 
 
-def _cleanup_eval_shards(output_dir: Path, epoch: int) -> None:
-    shard_dir = _eval_shard_dir(output_dir, epoch)
+def _cleanup_eval_shards(output_dir: Path, epoch: int, split_tag: str = "eval") -> None:
+    shard_dir = _prediction_shard_dir(output_dir, epoch, split_tag=split_tag)
     if shard_dir.exists():
         shutil.rmtree(shard_dir)
 
@@ -4420,6 +4420,9 @@ def main(cfg: DictConfig) -> None:
         utility_cfg = train_cfg.get("utility")
         if utility_cfg is None:
             utility_cfg = {}
+        train_prediction_dump_cfg = train_cfg.get("train_prediction_dump")
+        if train_prediction_dump_cfg is None:
+            train_prediction_dump_cfg = {}
         text_target_precision = int(text_reward_cfg.get("target_precision", 2))
         text_target_grid_count_raw = text_reward_cfg.get("target_grid_count")
         text_target_grid_count = (
@@ -4462,13 +4465,20 @@ def main(cfg: DictConfig) -> None:
             )
             utility_enabled = False
         utility_lambdas = _normalize_utility_lambdas(utility_cfg.get("lambdas"))
+        train_prediction_dump_enabled = bool(train_prediction_dump_cfg.get("enabled", False))
+        train_prediction_dump_max_rows = train_prediction_dump_cfg.get("max_rows")
+        train_prediction_dump_seed_offset = int(train_prediction_dump_cfg.get("seed_offset", 1000))
         text_reward_bin_specs = (
             _build_reward_bin_specs(
                 text_reward_bin_count,
                 label_prefix=text_reward_bin_label_prefix,
                 value_order=text_reward_bin_value_order,
             )
-            if supervision_mode in (TEXT_REWARD_BIN_SUPERVISION_MODES | TEXT_JOINT_REWARD_OUTPUT_BIN_SUPERVISION_MODES)
+            if supervision_mode in (
+                TEXT_REWARD_BIN_SUPERVISION_MODES
+                | TEXT_REWARD_VECTOR_BIN_SUPERVISION_MODES
+                | TEXT_JOINT_REWARD_OUTPUT_BIN_SUPERVISION_MODES
+            )
             else []
         )
         text_output_bin_specs = (
@@ -4515,6 +4525,16 @@ def main(cfg: DictConfig) -> None:
         raw_eval_dataset = eval_dataset
         raw_train_rows = int(len(train_dataset))
         raw_eval_rows = int(len(eval_dataset))
+        train_prediction_source_dataset = None
+        train_prediction_source_rows = 0
+        if train_prediction_dump_enabled:
+            train_prediction_source_dataset = _shuffle_and_truncate_dataset(
+                train_dataset,
+                max_rows=int(train_prediction_dump_max_rows) if train_prediction_dump_max_rows else None,
+                seed=base_seed + train_prediction_dump_seed_offset,
+                split_name="train_prediction_dump",
+            )
+            train_prediction_source_rows = int(len(train_prediction_source_dataset))
         train_supervision_rows = int(len(train_dataset))
         eval_supervision_rows = int(len(eval_dataset))
         if supervision_mode in {"text_reward_scalar", *TEXT_BIN_SUPERVISION_MODES, "text_reward_output_bin"}:
@@ -4576,7 +4596,11 @@ def main(cfg: DictConfig) -> None:
             trainable_prefixes = [
                 f"lora:{target_module}" for target_module in (text_lora_config_summary or {}).get("target_modules", [])
             ] or ["lora_adapters"]
-        if supervision_mode in (TEXT_REWARD_BIN_SUPERVISION_MODES | TEXT_JOINT_REWARD_OUTPUT_BIN_SUPERVISION_MODES):
+        if supervision_mode in (
+            TEXT_REWARD_BIN_SUPERVISION_MODES
+            | TEXT_REWARD_VECTOR_BIN_SUPERVISION_MODES
+            | TEXT_JOINT_REWARD_OUTPUT_BIN_SUPERVISION_MODES
+        ):
             text_reward_bin_token_ids = _reward_bin_token_ids(tokenizer, text_reward_bin_specs)
             logger.info(
                 "Offline router reward-bin labels=%s token_ids=%s",
@@ -4650,7 +4674,11 @@ def main(cfg: DictConfig) -> None:
                 raw_eval_rows,
                 eval_supervision_rows,
             )
-        if supervision_mode in (TEXT_REWARD_BIN_SUPERVISION_MODES | TEXT_JOINT_REWARD_OUTPUT_BIN_SUPERVISION_MODES):
+        if supervision_mode in (
+            TEXT_REWARD_BIN_SUPERVISION_MODES
+            | TEXT_REWARD_VECTOR_BIN_SUPERVISION_MODES
+            | TEXT_JOINT_REWARD_OUTPUT_BIN_SUPERVISION_MODES
+        ):
             logger.info(
                 "Offline router text reward bin settings: bin_count=%d label_prefix=%r value_order=%s bin_values=%s",
                 text_reward_bin_count,
@@ -4696,8 +4724,11 @@ def main(cfg: DictConfig) -> None:
             raise ValueError("Tokenizer must define pad_token_id or eos_token_id for offline router training")
         dropped_overlength_train_rows = 0
         dropped_overlength_eval_rows = 0
+        dropped_overlength_train_prediction_rows = 0
         dropped_tie_train_rows = 0
         dropped_tie_eval_rows = 0
+        dropped_tie_train_prediction_rows = 0
+        train_prediction_dataset = None
 
         if supervision_mode == "representation_head":
             train_dataset = _prepare_representation_rows(
@@ -4712,6 +4743,13 @@ def main(cfg: DictConfig) -> None:
                 max_seq_length=max_seq_length,
                 target_dim=target_dim,
             )
+            if train_prediction_source_dataset is not None:
+                train_prediction_dataset = _prepare_representation_rows(
+                    train_prediction_source_dataset,
+                    tokenizer=tokenizer,
+                    max_seq_length=max_seq_length,
+                    target_dim=target_dim,
+                )
             train_collate_fn = _make_collate_fn(
                 pad_token_id=pad_token_id,
                 target_dim=target_dim,
@@ -4738,6 +4776,17 @@ def main(cfg: DictConfig) -> None:
                 target_precision=text_target_precision,
                 drop_overlength=text_drop_overlength_rows,
             )
+            if train_prediction_source_dataset is not None:
+                train_prediction_dataset, dropped_overlength_train_prediction_rows = _prepare_text_eval_rows(
+                    train_prediction_source_dataset,
+                    tokenizer=tokenizer,
+                    max_seq_length=max_seq_length,
+                    route_aliases=route_aliases,
+                    target_dim=target_dim,
+                    target_grid_count=text_target_grid_count,
+                    target_precision=text_target_precision,
+                    drop_overlength=text_drop_overlength_rows,
+                )
             train_collate_fn = _make_text_train_collate_fn(pad_token_id=pad_token_id, target_dim=target_dim)
             eval_collate_fn = _make_text_eval_collate_fn(pad_token_id=pad_token_id, target_dim=target_dim)
         elif supervision_mode == "text_reward_vector_bin":
@@ -4761,6 +4810,17 @@ def main(cfg: DictConfig) -> None:
                 bin_specs=text_reward_bin_specs,
                 drop_overlength=text_drop_overlength_rows,
             )
+            if train_prediction_source_dataset is not None:
+                train_prediction_dataset, dropped_overlength_train_prediction_rows = _prepare_text_vector_bin_eval_rows(
+                    train_prediction_source_dataset,
+                    tokenizer=tokenizer,
+                    max_seq_length=max_seq_length,
+                    route_aliases=route_aliases,
+                    target_dim=target_dim,
+                    target_precision=text_target_precision,
+                    bin_specs=text_reward_bin_specs,
+                    drop_overlength=text_drop_overlength_rows,
+                )
             train_collate_fn = _make_text_train_collate_fn(pad_token_id=pad_token_id, target_dim=target_dim)
             eval_collate_fn = _make_text_eval_collate_fn(pad_token_id=pad_token_id, target_dim=target_dim)
         elif supervision_mode == "text_reward_scalar":
@@ -4786,6 +4846,18 @@ def main(cfg: DictConfig) -> None:
                 target_precision=text_target_precision,
                 drop_overlength=text_drop_overlength_rows,
             )
+            if train_prediction_source_dataset is not None:
+                train_prediction_dataset, dropped_overlength_train_prediction_rows = _prepare_text_scalar_eval_rows(
+                    train_prediction_source_dataset,
+                    tokenizer=tokenizer,
+                    max_seq_length=max_seq_length,
+                    route_aliases=route_aliases,
+                    route_labels=route_labels,
+                    target_dim=target_dim,
+                    target_grid_count=text_target_grid_count,
+                    target_precision=text_target_precision,
+                    drop_overlength=text_drop_overlength_rows,
+                )
             train_collate_fn = _make_text_scalar_train_collate_fn(pad_token_id=pad_token_id)
             eval_collate_fn = _make_text_scalar_eval_collate_fn(pad_token_id=pad_token_id)
         elif supervision_mode == "text_reward_bin":
@@ -4811,6 +4883,18 @@ def main(cfg: DictConfig) -> None:
                 bin_specs=text_reward_bin_specs,
                 drop_overlength=text_drop_overlength_rows,
             )
+            if train_prediction_source_dataset is not None:
+                train_prediction_dataset, dropped_overlength_train_prediction_rows = _prepare_text_bin_eval_rows(
+                    train_prediction_source_dataset,
+                    tokenizer=tokenizer,
+                    max_seq_length=max_seq_length,
+                    route_aliases=route_aliases,
+                    route_labels=route_labels,
+                    target_dim=target_dim,
+                    target_precision=text_target_precision,
+                    bin_specs=text_reward_bin_specs,
+                    drop_overlength=text_drop_overlength_rows,
+                )
             train_collate_fn = _make_text_scalar_train_collate_fn(pad_token_id=pad_token_id)
             eval_collate_fn = _make_text_scalar_eval_collate_fn(pad_token_id=pad_token_id)
         elif supervision_mode == "text_reward_bin_delta":
@@ -4836,6 +4920,18 @@ def main(cfg: DictConfig) -> None:
                 bin_specs=text_reward_bin_specs,
                 drop_overlength=text_drop_overlength_rows,
             )
+            if train_prediction_source_dataset is not None:
+                train_prediction_dataset, dropped_overlength_train_prediction_rows = _prepare_text_bin_eval_rows(
+                    train_prediction_source_dataset,
+                    tokenizer=tokenizer,
+                    max_seq_length=max_seq_length,
+                    route_aliases=route_aliases,
+                    route_labels=route_labels,
+                    target_dim=target_dim,
+                    target_precision=text_target_precision,
+                    bin_specs=text_reward_bin_specs,
+                    drop_overlength=text_drop_overlength_rows,
+                )
             train_collate_fn = _make_text_bin_delta_train_collate_fn(
                 pad_token_id=pad_token_id,
                 target_dim=target_dim,
@@ -4862,6 +4958,17 @@ def main(cfg: DictConfig) -> None:
                 bin_specs=text_output_bin_specs,
                 drop_overlength=text_drop_overlength_rows,
             )
+            if train_prediction_source_dataset is not None:
+                train_prediction_dataset, dropped_overlength_train_prediction_rows = _prepare_text_output_bin_eval_rows(
+                    train_prediction_source_dataset,
+                    tokenizer=tokenizer,
+                    max_seq_length=max_seq_length,
+                    route_aliases=route_aliases,
+                    route_labels=route_labels,
+                    target_dim=target_dim,
+                    bin_specs=text_output_bin_specs,
+                    drop_overlength=text_drop_overlength_rows,
+                )
             train_collate_fn = _make_text_scalar_train_collate_fn(pad_token_id=pad_token_id)
             eval_collate_fn = _make_text_scalar_eval_collate_fn(pad_token_id=pad_token_id)
         elif supervision_mode == "text_reward_output_bin":
@@ -4889,6 +4996,19 @@ def main(cfg: DictConfig) -> None:
                 output_bin_specs=text_output_bin_specs,
                 drop_overlength=text_drop_overlength_rows,
             )
+            if train_prediction_source_dataset is not None:
+                train_prediction_dataset, dropped_overlength_train_prediction_rows = _prepare_text_reward_output_bin_eval_rows(
+                    train_prediction_source_dataset,
+                    tokenizer=tokenizer,
+                    max_seq_length=max_seq_length,
+                    route_aliases=route_aliases,
+                    route_labels=route_labels,
+                    target_dim=target_dim,
+                    target_precision=text_target_precision,
+                    reward_bin_specs=text_reward_bin_specs,
+                    output_bin_specs=text_output_bin_specs,
+                    drop_overlength=text_drop_overlength_rows,
+                )
             train_collate_fn = _make_text_reward_output_bin_train_collate_fn(target_dim=target_dim)
             eval_collate_fn = _make_text_reward_output_bin_eval_collate_fn(pad_token_id=pad_token_id)
         elif supervision_mode == "text_pairwise_sign":
@@ -4914,6 +5034,22 @@ def main(cfg: DictConfig) -> None:
                 tie_margin=text_pairwise_tie_margin,
                 drop_overlength=text_drop_overlength_rows,
             )
+            if train_prediction_source_dataset is not None:
+                (
+                    train_prediction_dataset,
+                    dropped_overlength_train_prediction_rows,
+                    dropped_tie_train_prediction_rows,
+                ) = _prepare_text_pairwise_sign_eval_rows(
+                    train_prediction_source_dataset,
+                    tokenizer=tokenizer,
+                    max_seq_length=max_seq_length,
+                    route_aliases=route_aliases,
+                    route_labels=route_labels,
+                    target_dim=target_dim,
+                    label_specs=text_pairwise_label_specs,
+                    tie_margin=text_pairwise_tie_margin,
+                    drop_overlength=text_drop_overlength_rows,
+                )
             train_collate_fn = _make_text_pairwise_train_collate_fn(
                 pad_token_id=pad_token_id,
                 target_dim=target_dim,
@@ -4929,29 +5065,35 @@ def main(cfg: DictConfig) -> None:
             raise ValueError("No valid training rows remain after preprocessing/tokenization")
         if not eval_dataset:
             raise ValueError("No valid eval rows remain after preprocessing/tokenization")
+        if train_prediction_dump_enabled and not train_prediction_dataset:
+            raise ValueError("No valid train-prediction rows remain after preprocessing/tokenization")
 
         preprocessed_train_rows = int(len(train_dataset))
         preprocessed_eval_rows = int(len(eval_dataset))
+        preprocessed_train_prediction_rows = int(len(train_prediction_dataset)) if train_prediction_dataset is not None else 0
 
         logger.info(
-            "Offline router preprocessed rows: train=%d eval=%d supervision_mode=%s",
+            "Offline router preprocessed rows: train=%d eval=%d train_prediction=%d supervision_mode=%s",
             preprocessed_train_rows,
             preprocessed_eval_rows,
+            preprocessed_train_prediction_rows,
             supervision_mode,
         )
         if supervision_mode in TEXT_LM_SUPERVISION_MODES and text_drop_overlength_rows:
             logger.info(
-                "Offline router dropped overlength text rows: train=%d eval=%d max_seq_length=%s supervision_mode=%s",
+                "Offline router dropped overlength text rows: train=%d eval=%d train_prediction=%d max_seq_length=%s supervision_mode=%s",
                 dropped_overlength_train_rows,
                 dropped_overlength_eval_rows,
+                dropped_overlength_train_prediction_rows,
                 max_seq_length,
                 supervision_mode,
             )
         if supervision_mode == "text_pairwise_sign":
             logger.info(
-                "Offline router dropped near-tie pairwise rows: train=%d eval=%d tie_margin=%.3f",
+                "Offline router dropped near-tie pairwise rows: train=%d eval=%d train_prediction=%d tie_margin=%.3f",
                 dropped_tie_train_rows,
                 dropped_tie_eval_rows,
+                dropped_tie_train_prediction_rows,
                 text_pairwise_tie_margin,
             )
 
@@ -4969,12 +5111,30 @@ def main(cfg: DictConfig) -> None:
             num_workers=int(train_cfg.get("num_workers", 0)),
             collate_fn=eval_collate_fn,
         )
-        model, optimizer, train_loader, eval_loader = get_accelerator().prepare(
-            model,
-            optimizer,
-            train_loader,
-            eval_loader,
-        )
+        train_prediction_loader = None
+        if train_prediction_dataset is not None:
+            train_prediction_loader = DataLoader(
+                train_prediction_dataset,
+                batch_size=int(train_cfg.eval_batch_size),
+                shuffle=False,
+                num_workers=int(train_cfg.get("num_workers", 0)),
+                collate_fn=eval_collate_fn,
+            )
+        if train_prediction_loader is None:
+            model, optimizer, train_loader, eval_loader = get_accelerator().prepare(
+                model,
+                optimizer,
+                train_loader,
+                eval_loader,
+            )
+        else:
+            model, optimizer, train_loader, eval_loader, train_prediction_loader = get_accelerator().prepare(
+                model,
+                optimizer,
+                train_loader,
+                eval_loader,
+                train_prediction_loader,
+            )
         _log_auxiliary_head_dtypes("post_prepare", model)
         logger.info(
             "Offline router accelerator prepared: distributed=%s world_size=%d deepspeed=%s",
@@ -5012,6 +5172,186 @@ def main(cfg: DictConfig) -> None:
         best_output_y_true: np.ndarray | None = None
         best_output_y_pred: np.ndarray | None = None
         best_eval_extra: dict[str, Any] = {}
+        best_train_prediction_rows: list[dict[str, Any]] = []
+        best_train_y_true: np.ndarray | None = None
+        best_train_y_pred: np.ndarray | None = None
+        best_train_output_y_true: np.ndarray | None = None
+        best_train_output_y_pred: np.ndarray | None = None
+        best_train_prediction_extra: dict[str, Any] = {}
+
+        def _run_prediction_split(
+            loader: DataLoader,
+            *,
+            epoch: int,
+            split_tag: str,
+        ) -> tuple[float, list[dict[str, Any]], np.ndarray, np.ndarray, dict[str, Any]]:
+            split_start_time = time.time()
+            if supervision_mode == "representation_head":
+                local_rows, local_squared_error_sum, local_value_count = _run_representation_eval(
+                    model,
+                    loader,
+                )
+            elif supervision_mode == "text_reward_vector":
+                local_rows, local_squared_error_sum, local_value_count = _run_text_reward_eval(
+                    model,
+                    loader,
+                    tokenizer=tokenizer,
+                    max_new_tokens=text_max_new_tokens,
+                    do_sample=text_do_sample,
+                    parse_failure_value=text_parse_failure_value,
+                    clip_predictions=text_clip_predictions,
+                    target_dim=target_dim,
+                )
+            elif supervision_mode == "text_reward_vector_bin":
+                local_rows, local_squared_error_sum, local_value_count = _run_text_reward_vector_bin_eval(
+                    model,
+                    loader,
+                    tokenizer=tokenizer,
+                    max_new_tokens=text_max_new_tokens,
+                    do_sample=text_do_sample,
+                    parse_failure_value=text_parse_failure_value,
+                    clip_predictions=text_clip_predictions,
+                    target_dim=target_dim,
+                    bin_specs=text_reward_bin_specs,
+                )
+            elif supervision_mode == "text_reward_scalar":
+                local_rows, local_squared_error_sum, local_value_count = _run_text_scalar_reward_eval(
+                    model,
+                    loader,
+                    tokenizer=tokenizer,
+                    max_new_tokens=text_max_new_tokens,
+                    do_sample=text_do_sample,
+                    parse_failure_value=text_parse_failure_value,
+                    clip_predictions=text_clip_predictions,
+                )
+            elif supervision_mode in TEXT_BIN_SUPERVISION_MODES:
+                if supervision_mode in TEXT_REWARD_BIN_SUPERVISION_MODES:
+                    local_rows, local_squared_error_sum, local_value_count = _run_text_bin_reward_eval(
+                        model,
+                        loader,
+                        bin_token_ids=text_reward_bin_token_ids,
+                        bin_specs=text_reward_bin_specs,
+                        clip_predictions=text_clip_predictions,
+                    )
+                else:
+                    local_rows, local_squared_error_sum, local_value_count = _run_text_output_bin_eval(
+                        model,
+                        loader,
+                        bin_token_ids=text_output_bin_token_ids,
+                        bin_specs=text_output_bin_specs,
+                        clip_predictions=text_output_clip_predictions,
+                    )
+            elif supervision_mode == "text_reward_output_bin":
+                local_rows, local_squared_error_sum, local_value_count = _run_text_reward_output_bin_eval(
+                    model,
+                    loader,
+                    reward_bin_token_ids=text_reward_bin_token_ids,
+                    reward_bin_specs=text_reward_bin_specs,
+                    output_bin_token_ids=text_output_bin_token_ids,
+                    output_bin_specs=text_output_bin_specs,
+                    clip_reward_predictions=text_clip_predictions,
+                    clip_output_predictions=text_output_clip_predictions,
+                )
+            elif supervision_mode == "text_pairwise_sign":
+                local_rows, local_squared_error_sum, local_value_count = _run_text_pairwise_sign_eval(
+                    model,
+                    loader,
+                    label_token_ids=text_pairwise_label_token_ids,
+                    label_specs=text_pairwise_label_specs,
+                )
+            else:
+                raise ValueError(f"Unsupported supervision mode: {supervision_mode}")
+
+            shard_path = _write_eval_shard(output_dir, epoch, local_rows, split_tag=split_tag)
+            logger.info(
+                "Offline router epoch=%d rank=%d finished %s rows=%d values=%d shard=%s",
+                epoch,
+                get_rank(),
+                split_tag,
+                len(local_rows),
+                local_value_count,
+                shard_path,
+            )
+            total_squared_error_sum = _reduce_scalar_sum(local_squared_error_sum)
+            total_value_count = int(round(_reduce_scalar_sum(float(local_value_count))))
+            split_loss = (
+                total_squared_error_sum / total_value_count
+                if total_value_count > 0
+                else math.nan
+            )
+            logger.info("Offline router epoch=%d rank=%d entering post-%s barrier", epoch, get_rank(), split_tag)
+            barrier_if_distributed()
+            logger.info("Offline router epoch=%d rank=%d exited post-%s barrier", epoch, get_rank(), split_tag)
+            merged_rows: list[dict[str, Any]] = []
+            y_true = np.empty((0, 0), dtype=np.float32)
+            y_pred = np.empty((0, 0), dtype=np.float32)
+            split_extra: dict[str, Any] = {}
+            if is_main_process():
+                logger.info(
+                    "Offline router epoch=%d merging %s shards from %s",
+                    epoch,
+                    split_tag,
+                    _prediction_shard_dir(output_dir, epoch, split_tag=split_tag),
+                )
+                merged_shard_rows = _load_eval_shard_rows(output_dir, epoch, split_tag=split_tag)
+                if supervision_mode == "representation_head":
+                    merged_rows, y_true, y_pred, split_extra = _merge_representation_eval_rows(merged_shard_rows)
+                elif supervision_mode in {"text_reward_vector", "text_reward_vector_bin"}:
+                    merged_rows, y_true, y_pred, split_extra = _merge_text_reward_eval_rows(
+                        merged_shard_rows,
+                        route_labels=route_labels,
+                    )
+                elif supervision_mode in {"text_reward_scalar", *TEXT_BIN_SUPERVISION_MODES}:
+                    merged_rows, y_true, y_pred, split_extra = _merge_text_scalar_reward_eval_rows(
+                        merged_shard_rows,
+                        route_labels=route_labels,
+                        route_aliases=route_aliases,
+                    )
+                elif supervision_mode == "text_reward_output_bin":
+                    merged_rows, y_true, y_pred, split_extra = _merge_text_reward_output_bin_eval_rows(
+                        merged_shard_rows,
+                        route_labels=route_labels,
+                        route_aliases=route_aliases,
+                    )
+                elif supervision_mode == "text_pairwise_sign":
+                    merged_rows, y_true, y_pred, split_extra = _merge_text_pairwise_sign_eval_rows(
+                        merged_shard_rows,
+                        route_labels=route_labels,
+                    )
+                else:
+                    raise ValueError(f"Unsupported supervision mode: {supervision_mode}")
+                logger.info(
+                    "Offline router epoch=%d finished %s metric preparation merged_rows=%d elapsed_seconds=%.1f",
+                    epoch,
+                    split_tag,
+                    len(merged_rows),
+                    time.time() - split_start_time,
+                )
+                _cleanup_eval_shards(output_dir, epoch, split_tag=split_tag)
+            barrier_if_distributed()
+            if is_main_process():
+                if supervision_mode == "representation_head":
+                    logger.info(
+                        "Offline router epoch=%d finished %s loss=%.6f rows=%d elapsed_seconds=%.1f",
+                        epoch,
+                        split_tag,
+                        split_loss,
+                        len(merged_rows),
+                        time.time() - split_start_time,
+                    )
+                else:
+                    logger.info(
+                        "Offline router epoch=%d finished %s loss=%.6f rows=%d problem_examples=%d parse_failures=%d parse_failure_rate=%.4f elapsed_seconds=%.1f",
+                        epoch,
+                        split_tag,
+                        split_loss,
+                        len(merged_rows),
+                        int(split_extra.get("eval_problem_examples", 0)),
+                        int(split_extra.get("parse_failures", 0)),
+                        float(split_extra.get("parse_failure_rate", 0.0)),
+                        time.time() - split_start_time,
+                    )
+            return split_loss, merged_rows, y_true, y_pred, split_extra
 
         for epoch in range(num_epochs):
             model.train()
@@ -5215,162 +5555,11 @@ def main(cfg: DictConfig) -> None:
             logger.info("Offline router epoch=%d rank=%d entering eval", epoch, get_rank())
             if is_main_process():
                 logger.info("Offline router epoch=%d starting eval", epoch)
-            eval_start_time = time.time()
-            if supervision_mode == "representation_head":
-                local_eval_rows, local_eval_squared_error_sum, local_eval_value_count = _run_representation_eval(
-                    model,
-                    eval_loader,
-                )
-            elif supervision_mode == "text_reward_vector":
-                local_eval_rows, local_eval_squared_error_sum, local_eval_value_count = _run_text_reward_eval(
-                    model,
-                    eval_loader,
-                    tokenizer=tokenizer,
-                    max_new_tokens=text_max_new_tokens,
-                    do_sample=text_do_sample,
-                    parse_failure_value=text_parse_failure_value,
-                    clip_predictions=text_clip_predictions,
-                    target_dim=target_dim,
-                )
-            elif supervision_mode == "text_reward_vector_bin":
-                local_eval_rows, local_eval_squared_error_sum, local_eval_value_count = _run_text_reward_vector_bin_eval(
-                    model,
-                    eval_loader,
-                    tokenizer=tokenizer,
-                    max_new_tokens=text_max_new_tokens,
-                    do_sample=text_do_sample,
-                    parse_failure_value=text_parse_failure_value,
-                    clip_predictions=text_clip_predictions,
-                    target_dim=target_dim,
-                    bin_specs=text_reward_bin_specs,
-                )
-            elif supervision_mode == "text_reward_scalar":
-                local_eval_rows, local_eval_squared_error_sum, local_eval_value_count = _run_text_scalar_reward_eval(
-                    model,
-                    eval_loader,
-                    tokenizer=tokenizer,
-                    max_new_tokens=text_max_new_tokens,
-                    do_sample=text_do_sample,
-                    parse_failure_value=text_parse_failure_value,
-                    clip_predictions=text_clip_predictions,
-                )
-            elif supervision_mode in TEXT_BIN_SUPERVISION_MODES:
-                if supervision_mode in TEXT_REWARD_BIN_SUPERVISION_MODES:
-                    local_eval_rows, local_eval_squared_error_sum, local_eval_value_count = _run_text_bin_reward_eval(
-                        model,
-                        eval_loader,
-                        bin_token_ids=text_reward_bin_token_ids,
-                        bin_specs=text_reward_bin_specs,
-                        clip_predictions=text_clip_predictions,
-                    )
-                else:
-                    local_eval_rows, local_eval_squared_error_sum, local_eval_value_count = _run_text_output_bin_eval(
-                        model,
-                        eval_loader,
-                        bin_token_ids=text_output_bin_token_ids,
-                        bin_specs=text_output_bin_specs,
-                        clip_predictions=text_output_clip_predictions,
-                    )
-            elif supervision_mode == "text_reward_output_bin":
-                local_eval_rows, local_eval_squared_error_sum, local_eval_value_count = _run_text_reward_output_bin_eval(
-                    model,
-                    eval_loader,
-                    reward_bin_token_ids=text_reward_bin_token_ids,
-                    reward_bin_specs=text_reward_bin_specs,
-                    output_bin_token_ids=text_output_bin_token_ids,
-                    output_bin_specs=text_output_bin_specs,
-                    clip_reward_predictions=text_clip_predictions,
-                    clip_output_predictions=text_output_clip_predictions,
-                )
-            elif supervision_mode == "text_pairwise_sign":
-                local_eval_rows, local_eval_squared_error_sum, local_eval_value_count = _run_text_pairwise_sign_eval(
-                    model,
-                    eval_loader,
-                    label_token_ids=text_pairwise_label_token_ids,
-                    label_specs=text_pairwise_label_specs,
-                )
-            else:
-                raise ValueError(f"Unsupported supervision mode: {supervision_mode}")
-            shard_path = _write_eval_shard(output_dir, epoch, local_eval_rows)
-            logger.info(
-                "Offline router epoch=%d rank=%d finished local eval rows=%d values=%d shard=%s",
-                epoch,
-                get_rank(),
-                len(local_eval_rows),
-                local_eval_value_count,
-                shard_path,
+            eval_loss, eval_rows, y_true, y_pred, eval_extra = _run_prediction_split(
+                eval_loader,
+                epoch=epoch,
+                split_tag="eval",
             )
-            total_eval_squared_error_sum = _reduce_scalar_sum(local_eval_squared_error_sum)
-            total_eval_value_count = int(round(_reduce_scalar_sum(float(local_eval_value_count))))
-            eval_loss = (
-                total_eval_squared_error_sum / total_eval_value_count
-                if total_eval_value_count > 0
-                else math.nan
-            )
-            logger.info("Offline router epoch=%d rank=%d entering post-eval barrier", epoch, get_rank())
-            barrier_if_distributed()
-            logger.info("Offline router epoch=%d rank=%d exited post-eval barrier", epoch, get_rank())
-            eval_rows: list[dict[str, Any]] = []
-            y_true = np.empty((0, 0), dtype=np.float32)
-            y_pred = np.empty((0, 0), dtype=np.float32)
-            eval_extra: dict[str, Any] = {}
-            if is_main_process():
-                logger.info("Offline router epoch=%d merging eval shards from %s", epoch, _eval_shard_dir(output_dir, epoch))
-                merged_shard_rows = _load_eval_shard_rows(output_dir, epoch)
-                if supervision_mode == "representation_head":
-                    eval_rows, y_true, y_pred, eval_extra = _merge_representation_eval_rows(merged_shard_rows)
-                elif supervision_mode in {"text_reward_vector", "text_reward_vector_bin"}:
-                    eval_rows, y_true, y_pred, eval_extra = _merge_text_reward_eval_rows(
-                        merged_shard_rows,
-                        route_labels=route_labels,
-                    )
-                elif supervision_mode in {"text_reward_scalar", *TEXT_BIN_SUPERVISION_MODES}:
-                    eval_rows, y_true, y_pred, eval_extra = _merge_text_scalar_reward_eval_rows(
-                        merged_shard_rows,
-                        route_labels=route_labels,
-                        route_aliases=route_aliases,
-                    )
-                elif supervision_mode == "text_reward_output_bin":
-                    eval_rows, y_true, y_pred, eval_extra = _merge_text_reward_output_bin_eval_rows(
-                        merged_shard_rows,
-                        route_labels=route_labels,
-                        route_aliases=route_aliases,
-                    )
-                elif supervision_mode == "text_pairwise_sign":
-                    eval_rows, y_true, y_pred, eval_extra = _merge_text_pairwise_sign_eval_rows(
-                        merged_shard_rows,
-                        route_labels=route_labels,
-                    )
-                else:
-                    raise ValueError(f"Unsupported supervision mode: {supervision_mode}")
-                logger.info(
-                    "Offline router epoch=%d finished metric preparation merged_rows=%d elapsed_seconds=%.1f",
-                    epoch,
-                    len(eval_rows),
-                    time.time() - eval_start_time,
-                )
-                _cleanup_eval_shards(output_dir, epoch)
-            barrier_if_distributed()
-            if is_main_process():
-                if supervision_mode == "representation_head":
-                    logger.info(
-                        "Offline router epoch=%d finished eval eval_loss=%.6f eval_rows=%d elapsed_seconds=%.1f",
-                        epoch,
-                        eval_loss,
-                        len(eval_rows),
-                        time.time() - eval_start_time,
-                    )
-                else:
-                    logger.info(
-                        "Offline router epoch=%d finished eval eval_loss=%.6f eval_rows=%d eval_problem_examples=%d parse_failures=%d parse_failure_rate=%.4f elapsed_seconds=%.1f",
-                        epoch,
-                        eval_loss,
-                        len(eval_rows),
-                        int(eval_extra.get("eval_problem_examples", 0)),
-                        int(eval_extra.get("parse_failures", 0)),
-                        float(eval_extra.get("parse_failure_rate", 0.0)),
-                        time.time() - eval_start_time,
-                    )
 
             if is_main_process():
                 epoch_route_rows = compute_per_route_metrics(y_true, y_pred, route_labels)
@@ -5424,6 +5613,33 @@ def main(cfg: DictConfig) -> None:
                 best_output_y_true = output_y_true if isinstance(output_y_true, np.ndarray) else None
                 best_output_y_pred = output_y_pred if isinstance(output_y_pred, np.ndarray) else None
                 best_eval_extra = dict(eval_extra)
+            if should_save_best and train_prediction_loader is not None:
+                if is_main_process():
+                    logger.info("Offline router epoch=%d starting train prediction dump", epoch)
+                (
+                    _train_prediction_loss,
+                    train_prediction_rows,
+                    train_prediction_y_true,
+                    train_prediction_y_pred,
+                    train_prediction_extra,
+                ) = _run_prediction_split(
+                    train_prediction_loader,
+                    epoch=epoch,
+                    split_tag="train_predictions",
+                )
+                if is_main_process():
+                    best_train_prediction_rows = train_prediction_rows
+                    best_train_y_true = train_prediction_y_true
+                    best_train_y_pred = train_prediction_y_pred
+                    train_output_y_true = train_prediction_extra.get("output_y_true")
+                    train_output_y_pred = train_prediction_extra.get("output_y_pred")
+                    best_train_output_y_true = (
+                        train_output_y_true if isinstance(train_output_y_true, np.ndarray) else None
+                    )
+                    best_train_output_y_pred = (
+                        train_output_y_pred if isinstance(train_output_y_pred, np.ndarray) else None
+                    )
+                    best_train_prediction_extra = dict(train_prediction_extra)
             if should_save_best and save_checkpoints:
                 best_dir = output_dir / "checkpoints" / "best"
                 if is_main_process():
@@ -5485,6 +5701,43 @@ def main(cfg: DictConfig) -> None:
                 _write_csv(output_dir / "output_token_route_metrics.csv", output_route_rows, csv_headers_for_route_metrics())
                 _write_csv(output_dir / "output_token_pairwise_metrics.csv", output_pair_rows, csv_headers_for_pairwise_metrics())
             _save_predictions_jsonl(output_dir / "eval_predictions.jsonl", best_eval_rows)
+            if best_train_y_true is not None and best_train_y_pred is not None:
+                train_route_rows = compute_per_route_metrics(best_train_y_true, best_train_y_pred, route_labels)
+                train_pair_y_true, train_pair_y_pred = _pairwise_metric_targets_for_supervision(
+                    best_train_y_true,
+                    best_train_y_pred,
+                    supervision_mode=supervision_mode,
+                )
+                train_pair_rows = compute_pairwise_metrics(train_pair_y_true, train_pair_y_pred, route_labels)
+                _write_csv(output_dir / "train_route_metrics.csv", train_route_rows, csv_headers_for_route_metrics())
+                _write_csv(output_dir / "train_pairwise_metrics.csv", train_pair_rows, csv_headers_for_pairwise_metrics())
+                _save_predictions_jsonl(output_dir / "train_predictions.jsonl", best_train_prediction_rows)
+                if best_train_output_y_true is not None and best_train_output_y_pred is not None:
+                    train_output_route_rows = compute_per_route_metrics(
+                        best_train_output_y_true,
+                        best_train_output_y_pred,
+                        route_labels,
+                    )
+                    train_output_pair_y_true, train_output_pair_y_pred = _pairwise_metric_targets_for_supervision(
+                        best_train_output_y_true,
+                        best_train_output_y_pred,
+                        supervision_mode="text_output_bin",
+                    )
+                    train_output_pair_rows = compute_pairwise_metrics(
+                        train_output_pair_y_true,
+                        train_output_pair_y_pred,
+                        route_labels,
+                    )
+                    _write_csv(
+                        output_dir / "train_output_token_route_metrics.csv",
+                        train_output_route_rows,
+                        csv_headers_for_route_metrics(),
+                    )
+                    _write_csv(
+                        output_dir / "train_output_token_pairwise_metrics.csv",
+                        train_output_pair_rows,
+                        csv_headers_for_pairwise_metrics(),
+                    )
             utility_report = None
             if utility_enabled:
                 utility_report = _compute_utility_report(
@@ -5534,10 +5787,12 @@ def main(cfg: DictConfig) -> None:
                 ),
                 "train_rows": raw_train_rows,
                 "eval_rows": raw_eval_rows,
+                "train_prediction_source_rows": train_prediction_source_rows,
                 "train_supervision_rows": train_supervision_rows,
                 "eval_supervision_rows": eval_supervision_rows,
                 "train_preprocessed_rows": preprocessed_train_rows,
                 "eval_preprocessed_rows": preprocessed_eval_rows,
+                "train_prediction_preprocessed_rows": preprocessed_train_prediction_rows,
                 "num_epochs": num_epochs,
                 "performance_value_hidden_dims": performance_value_hidden_dims or [],
                 "performance_value_activation": performance_value_activation,
@@ -5554,6 +5809,29 @@ def main(cfg: DictConfig) -> None:
                 "distributed": is_distributed(),
                 "world_size": get_world_size(),
             }
+            if train_prediction_dump_enabled:
+                summary["train_prediction_dump"] = {
+                    "enabled": True,
+                    "max_rows": int(train_prediction_dump_max_rows) if train_prediction_dump_max_rows else None,
+                    "seed_offset": int(train_prediction_dump_seed_offset),
+                    "source_rows": int(train_prediction_source_rows),
+                    "preprocessed_rows": int(preprocessed_train_prediction_rows),
+                    "dropped_overlength_rows": int(dropped_overlength_train_prediction_rows),
+                    "predictions_jsonl": str(output_dir / "train_predictions.jsonl"),
+                    "route_metrics_csv": str(output_dir / "train_route_metrics.csv"),
+                    "pairwise_metrics_csv": str(output_dir / "train_pairwise_metrics.csv"),
+                    "best_parse_failures": int(best_train_prediction_extra.get("parse_failures", 0)),
+                    "best_parse_failure_rate": float(best_train_prediction_extra.get("parse_failure_rate", 0.0)),
+                    "best_problem_examples": int(best_train_prediction_extra.get("eval_problem_examples", 0)),
+                    "best_route_examples": int(best_train_prediction_extra.get("eval_route_examples", 0)),
+                }
+                if best_train_output_y_true is not None and best_train_output_y_pred is not None:
+                    summary["train_prediction_dump"]["output_route_metrics_csv"] = str(
+                        output_dir / "train_output_token_route_metrics.csv"
+                    )
+                    summary["train_prediction_dump"]["output_pairwise_metrics_csv"] = str(
+                        output_dir / "train_output_token_pairwise_metrics.csv"
+                    )
             if utility_report is not None:
                 summary["utility"]["report_json"] = str(output_dir / "utility_vs_baselines.json")
                 summary["utility"]["report_csv"] = str(output_dir / "utility_vs_baselines.csv")
@@ -5586,6 +5864,7 @@ def main(cfg: DictConfig) -> None:
                     "drop_overlength_rows": text_drop_overlength_rows,
                     "dropped_overlength_train_rows": int(dropped_overlength_train_rows),
                     "dropped_overlength_eval_rows": int(dropped_overlength_eval_rows),
+                    "dropped_overlength_train_prediction_rows": int(dropped_overlength_train_prediction_rows),
                     "best_eval_parse_failures": int(best_eval_extra.get("parse_failures", 0)),
                     "best_eval_parse_failure_rate": float(best_eval_extra.get("parse_failure_rate", 0.0)),
                     "best_eval_problem_examples": int(best_eval_extra.get("eval_problem_examples", 0)),
@@ -5622,6 +5901,7 @@ def main(cfg: DictConfig) -> None:
                     "drop_overlength_rows": text_drop_overlength_rows,
                     "dropped_overlength_train_rows": int(dropped_overlength_train_rows),
                     "dropped_overlength_eval_rows": int(dropped_overlength_eval_rows),
+                    "dropped_overlength_train_prediction_rows": int(dropped_overlength_train_prediction_rows),
                     "best_eval_parse_failures": int(best_eval_extra.get("parse_failures", 0)),
                     "best_eval_parse_failure_rate": float(best_eval_extra.get("parse_failure_rate", 0.0)),
                     "best_eval_problem_examples": int(best_eval_extra.get("eval_problem_examples", 0)),
@@ -5648,6 +5928,7 @@ def main(cfg: DictConfig) -> None:
                     "drop_overlength_rows": text_drop_overlength_rows,
                     "dropped_overlength_train_rows": int(dropped_overlength_train_rows),
                     "dropped_overlength_eval_rows": int(dropped_overlength_eval_rows),
+                    "dropped_overlength_train_prediction_rows": int(dropped_overlength_train_prediction_rows),
                     "best_eval_parse_failures": int(best_eval_extra.get("parse_failures", 0)),
                     "best_eval_parse_failure_rate": float(best_eval_extra.get("parse_failure_rate", 0.0)),
                     "best_eval_problem_examples": int(best_eval_extra.get("eval_problem_examples", 0)),
@@ -5674,8 +5955,10 @@ def main(cfg: DictConfig) -> None:
                     "drop_overlength_rows": text_drop_overlength_rows,
                     "dropped_overlength_train_rows": int(dropped_overlength_train_rows),
                     "dropped_overlength_eval_rows": int(dropped_overlength_eval_rows),
+                    "dropped_overlength_train_prediction_rows": int(dropped_overlength_train_prediction_rows),
                     "dropped_tie_train_rows": int(dropped_tie_train_rows),
                     "dropped_tie_eval_rows": int(dropped_tie_eval_rows),
+                    "dropped_tie_train_prediction_rows": int(dropped_tie_train_prediction_rows),
                     "best_eval_parse_failures": int(best_eval_extra.get("parse_failures", 0)),
                     "best_eval_parse_failure_rate": float(best_eval_extra.get("parse_failure_rate", 0.0)),
                     "best_eval_problem_examples": int(best_eval_extra.get("eval_problem_examples", 0)),

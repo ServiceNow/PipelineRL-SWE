@@ -85,3 +85,7 @@ offline_router:
         - 5.0e-5
         - 1.0e-4
         - 2.0e-4
+    train_prediction_dump:
+      enabled: false
+      max_rows: 512
+      seed_offset: 1000
