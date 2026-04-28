@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+REPO_ROOT=$(cd "${SCRIPT_DIR}/../.." && pwd)
+
 TIMESTAMP=${TIMESTAMP:-$(date +%s)}
 
 JOB_NAME=${JOB_NAME:-offline_router_swe_bench_router_split_collect}
@@ -79,4 +82,4 @@ export RUN_COLLECT
 export RUN_TRAIN
 export TRAIN_NPROC
 
-bash launch_offline_router_swe_smith_id.sh
+bash "${SCRIPT_DIR}/launch_offline_router_swe_smith_id.sh"

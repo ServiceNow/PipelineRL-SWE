@@ -1,18 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+REPO_ROOT=$(cd "${SCRIPT_DIR}/../.." && pwd)
+
 TIMESTAMP=${TIMESTAMP:-$(date +%s)}
 
 SOURCE_RUN_DIR=${SOURCE_RUN_DIR:-/mnt/llmd/results/exps/aristides/reason/offline_router_swe_bench_router_split_collect_1776749732}
 COLLECT_OUTPUT_DIR=${COLLECT_OUTPUT_DIR:-${SOURCE_RUN_DIR}/collect}
 
-JOB_NAME=${JOB_NAME:-offline_router_swe_bench_router_split_bin_20bucket_delta_aux_seq_mse_w20_train_only}
+JOB_NAME=${JOB_NAME:-offline_router_swe_bench_router_split_bin_20bucket_delta_aux_seq_mse_w20_full_5epoch}
 OUTPUT_ROOT=${OUTPUT_ROOT:-/mnt/llmd/results/exps/aristides/reason/${JOB_NAME}_${TIMESTAMP}}
-TRAIN_OUTPUT_DIR=${TRAIN_OUTPUT_DIR:-${OUTPUT_ROOT}/train_text_lora_bin_expectation_20bucket_delta_aux_seq_mse_w20_random}
+TRAIN_OUTPUT_DIR=${TRAIN_OUTPUT_DIR:-${OUTPUT_ROOT}/train_text_lora_bin_expectation_20bucket_delta_aux_seq_mse_w20_full_5epoch}
 
 JOB_NPROC=${JOB_NPROC:-4}
 TRAIN_NPROC=${TRAIN_NPROC:-4}
 MAX_SEQ_LENGTH=${MAX_SEQ_LENGTH:-24000}
+NUM_EPOCHS=${NUM_EPOCHS:-5}
 RUN_COLLECT=0
 RUN_TRAIN=1
 ROUTER_SUPERVISION_MODE=text_reward_bin_delta_seq
@@ -31,10 +35,11 @@ export TRAIN_OUTPUT_DIR
 export JOB_NPROC
 export TRAIN_NPROC
 export MAX_SEQ_LENGTH
+export NUM_EPOCHS
 export RUN_COLLECT
 export RUN_TRAIN
 export COLLECT_OUTPUT_DIR
 export ROUTER_SUPERVISION_MODE
 export TRAIN_EXTRA_ARGS
 
-bash launch_offline_router_swe_smith_id.sh
+bash "${SCRIPT_DIR}/launch_offline_router_swe_smith_id.sh"

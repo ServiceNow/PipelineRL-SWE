@@ -22,7 +22,7 @@ The plain collector entrypoint assumes the primary model and expert endpoints ar
 If you want one-node orchestration that starts the endpoints first and then collects, use:
 
 - `pipelinerl.swe.scripts.offline_router.run_collection_job`
-- or the wrapper `launch_offline_router_collect.sh`
+- or the wrapper `launchers/offline_router/launch_offline_router_collect.sh`
 
 Each route can now specify:
 
@@ -43,14 +43,14 @@ conda run --no-capture-output -n pipeline-rl python -m pipelinerl.swe.scripts.of
 Convenience launcher:
 
 ```bash
-bash launch_offline_router_collect.sh
+bash launchers/offline_router/launch_offline_router_collect.sh
 ```
 
 For the SWE-smith in-distribution control, use the one-node launcher from the
 repo root:
 
 ```bash
-bash launch_offline_router_swe_smith_id.sh
+bash launchers/offline_router/launch_offline_router_swe_smith_id.sh
 ```
 
 It collects router-train traces from `/mnt/llmd/data/swe_smith/ds_train`, router
@@ -63,7 +63,7 @@ collection-only run.
 If collection already finished and only router training needs to be retried, run:
 
 ```bash
-bash launch_offline_router_swe_smith_id_train_only.sh
+bash launchers/offline_router/launch_offline_router_swe_smith_id_train_only.sh
 ```
 
 For the 3-way generalization setup, first materialize official SWE-bench train
@@ -83,7 +83,7 @@ Then collect router-train traces from SWE-bench train and router-test traces
 from the existing SWE-bench Lite dataset:
 
 ```bash
-bash launch_offline_router_swe_bench_router_split_collect.sh
+bash launchers/offline_router/launch_offline_router_swe_bench_router_split_collect.sh
 ```
 
 This launcher is collection-only. It writes
@@ -96,7 +96,7 @@ per `(problem, route)` and merges scalar predictions back into route vectors for
 the same metrics, run:
 
 ```bash
-bash launch_offline_router_swe_smith_id_scalar_train_only.sh
+bash launchers/offline_router/launch_offline_router_swe_smith_id_scalar_train_only.sh
 ```
 
 For the independent reward-bin ablation, which trains one bin-label example per
@@ -104,7 +104,7 @@ For the independent reward-bin ablation, which trains one bin-label example per
 expected reward, run:
 
 ```bash
-bash launch_offline_router_swe_smith_id_bin_train_only.sh
+bash launchers/offline_router/launch_offline_router_swe_smith_id_bin_train_only.sh
 ```
 
 For a matched 20-interval reward-grid comparison, use the `20bucket` launchers.
@@ -112,23 +112,23 @@ These put all three text modes on the same `0.00, 0.05, ..., 1.00` training
 target grid:
 
 ```bash
-bash launch_offline_router_swe_smith_id_vector_20bucket_train_only.sh
-bash launch_offline_router_swe_smith_id_scalar_20bucket_train_only.sh
-bash launch_offline_router_swe_smith_id_bin_20bucket_train_only.sh
+bash launchers/offline_router/launch_offline_router_swe_smith_id_vector_20bucket_train_only.sh
+bash launchers/offline_router/launch_offline_router_swe_smith_id_scalar_20bucket_train_only.sh
+bash launchers/offline_router/launch_offline_router_swe_smith_id_bin_20bucket_train_only.sh
 ```
 
 For the reverse-label diagnostic, keep the same 21 reward values but assign them
 to letters in descending order (`A=1.00, ..., U=0.00`):
 
 ```bash
-bash launch_offline_router_swe_smith_id_bin_reverse_20bucket_train_only.sh
+bash launchers/offline_router/launch_offline_router_swe_smith_id_bin_reverse_20bucket_train_only.sh
 ```
 
 To estimate forward-bin seed variability, run three sequential `bin20` trainings
 inside one job. Override `ROUTER_SEEDS` for a different seed list:
 
 ```bash
-bash launch_offline_router_swe_smith_id_bin_20bucket_multiseed_train_only.sh
+bash launchers/offline_router/launch_offline_router_swe_smith_id_bin_20bucket_multiseed_train_only.sh
 ```
 
 To inspect whether numeric reward strings are single tokenizer tokens:
@@ -139,7 +139,7 @@ conda run --no-capture-output -n pipeline-rl python -m pipelinerl.swe.scripts.of
   --output-json router_analysis/reward_tokenization_policy_checkpoint.json
 ```
 
-`launch_offline_router_collect.sh` reserves a single 8-GPU node by default and starts:
+`launchers/offline_router/launch_offline_router_collect.sh` reserves a single 8-GPU node by default and starts:
 
 - primary-model vLLM on GPU `0`
 - Devstral on GPU `1`
@@ -180,7 +180,7 @@ Convenience launcher:
 ```bash
 DATASET_DIR=/mnt/llmd/results/offline_router_collect_example \
 MODEL_PATH=/mnt/llmd/results/exps/aristides/reason/some_run/finetune/current \
-bash launch_offline_router_train.sh
+bash launchers/offline_router/launch_offline_router_train.sh
 ```
 
 Outputs:

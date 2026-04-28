@@ -52,13 +52,19 @@ TEXT_REWARD_SUPERVISION_MODES = {
     "text_reward_bin",
     "text_reward_bin_delta",
     "text_reward_bin_delta_seq",
+    "text_reward_bin_restricted_delta_seq",
+    "text_reward_delta_bin",
     "text_reward_output_bin",
 }
 TEXT_OUTPUT_SUPERVISION_MODES = {"text_output_bin"}
 TEXT_PAIRWISE_SUPERVISION_MODES = {"text_pairwise_sign"}
 TEXT_LM_SUPERVISION_MODES = TEXT_REWARD_SUPERVISION_MODES | TEXT_OUTPUT_SUPERVISION_MODES | TEXT_PAIRWISE_SUPERVISION_MODES
 TEXT_REWARD_BIN_SUPERVISION_MODES = {"text_reward_bin", "text_reward_bin_delta"}
-TEXT_REWARD_BIN_SEQUENTIAL_DELTA_SUPERVISION_MODES = {"text_reward_bin_delta_seq"}
+TEXT_REWARD_BIN_SEQUENTIAL_DELTA_SUPERVISION_MODES = {
+    "text_reward_bin_delta_seq",
+    "text_reward_bin_restricted_delta_seq",
+}
+TEXT_REWARD_DELTA_BIN_SUPERVISION_MODES = {"text_reward_delta_bin"}
 TEXT_REWARD_VECTOR_BIN_SUPERVISION_MODES = {"text_reward_vector_bin"}
 TEXT_OUTPUT_BIN_SUPERVISION_MODES = {"text_output_bin"}
 TEXT_JOINT_REWARD_OUTPUT_BIN_SUPERVISION_MODES = {"text_reward_output_bin"}
@@ -1040,9 +1046,61 @@ def _build_reward_bin_specs(
     return specs
 
 
+def _build_delta_bin_specs(
+    bin_count: int,
+    label_prefix: str = " ",
+) -> list[dict[str, Any]]:
+    if bin_count < 2:
+        raise ValueError("offline_router.train.text_reward.bin_count must be at least 2")
+    if bin_count > 26:
+        raise ValueError("offline_router.train.text_reward.bin_count currently supports at most 26 letter bins")
+    labels = [chr(ord("A") + idx) for idx in range(bin_count)]
+    return [
+        {
+            "idx": int(idx),
+            "label": label,
+            "target_text": f"{label_prefix}{label}",
+            "value": float(-1.0 + (2.0 * idx / (bin_count - 1))),
+        }
+        for idx, label in enumerate(labels)
+    ]
+
+
 def _format_reward_bin_table(bin_specs: list[dict[str, Any]], target_precision: int) -> str:
     return "\n".join(
         f"{spec['label']}: {float(spec['value']):.{int(target_precision)}f}" for spec in bin_specs
+    )
+
+
+def _build_text_delta_bin_prompt(
+    prompt_text: str,
+    primary_output_text: str,
+    route_aliases: list[str],
+    bin_specs: list[dict[str, Any]],
+    target_precision: int,
+) -> str:
+    if len(route_aliases) != 2:
+        raise ValueError("text_reward_delta_bin currently requires exactly two routes")
+    route_legend = ", ".join(route_aliases)
+    delta_bin_table = _format_reward_bin_table(bin_specs, target_precision)
+    return (
+        "Predict the realized signed proxy-reward delta between two model routes.\n"
+        f"Delta means {route_aliases[0]} reward minus {route_aliases[1]} reward.\n"
+        "Choose exactly one label from the delta-bin table.\n"
+        "Respond with only the label.\n\n"
+        "The proxy reward is computed after the run by comparing each route's repair against the gold patch.\n"
+        "[Delta Bins]\n"
+        f"{delta_bin_table}\n\n"
+        "[Model Order]\n"
+        f"{route_legend}\n"
+        f"{route_aliases[0]} is the primary model whose attempt is shown below.\n"
+        f"Only the {route_aliases[0]} attempt is shown below.\n"
+        f"Use the shown {route_aliases[0]} attempt as context when estimating the signed delta.\n\n"
+        "[Original Repair Prompt]\n"
+        f"{prompt_text}\n\n"
+        "[Primary Model Attempt]\n"
+        f"{primary_output_text}\n\n"
+        "Answer:"
     )
 
 
@@ -1289,6 +1347,17 @@ def _reward_to_bin_idx(value: float, bin_specs: list[dict[str, Any]]) -> int:
     return min(
         range(len(bin_specs)),
         key=lambda idx: abs(float(bin_specs[idx]["value"]) - target_value),
+    )
+
+
+def _delta_to_bin_idx(value: float, bin_specs: list[dict[str, Any]]) -> int:
+    if len(bin_specs) < 2:
+        raise ValueError("At least two delta bins are required")
+    bin_values = [float(spec["value"]) for spec in bin_specs]
+    clipped_value = min(max(float(value), min(bin_values)), max(bin_values))
+    return min(
+        range(len(bin_specs)),
+        key=lambda idx: abs(float(bin_specs[idx]["value"]) - clipped_value),
     )
 
 
@@ -2062,6 +2131,146 @@ def _prepare_text_bin_delta_train_rows(
     return prepared_rows, dropped_overlength_rows
 
 
+def _prepare_text_delta_bin_train_rows(
+    dataset: Any,
+    tokenizer: Any,
+    max_seq_length: int | None,
+    route_aliases: list[str],
+    route_labels: list[str],
+    target_dim: int,
+    target_precision: int,
+    bin_specs: list[dict[str, Any]],
+    drop_overlength: bool = False,
+) -> tuple[list[dict[str, Any]], int]:
+    if target_dim != 2:
+        raise ValueError("text_reward_delta_bin currently requires exactly two routes")
+    prepared_rows: list[dict[str, Any]] = []
+    dropped_overlength_rows = 0
+    for row in dataset:
+        prompt_text = row.get("prompt_text")
+        primary_output_text = _get_primary_output_text(row)
+        targets = row.get("performance_targets")
+        if not isinstance(prompt_text, str) or not isinstance(primary_output_text, str):
+            continue
+        if not isinstance(targets, list) or len(targets) != target_dim:
+            continue
+        try:
+            problem_id = problem_id_from_item(row)
+        except ValueError:
+            continue
+        target_rewards = [float(value) for value in targets]
+        target_delta = float(target_rewards[0] - target_rewards[1])
+        bin_idx = _delta_to_bin_idx(target_delta, bin_specs)
+        bin_spec = bin_specs[bin_idx]
+        prompt = _build_text_delta_bin_prompt(
+            prompt_text=prompt_text,
+            primary_output_text=primary_output_text,
+            route_aliases=route_aliases,
+            bin_specs=bin_specs,
+            target_precision=target_precision,
+        )
+        encoded, dropped_overlength = _tokenize_text_reward_target_with_limit(
+            tokenizer=tokenizer,
+            prompt_text=prompt,
+            target_text=str(bin_spec["target_text"]),
+            max_seq_length=max_seq_length,
+            drop_overlength=drop_overlength,
+        )
+        if dropped_overlength:
+            dropped_overlength_rows += 1
+        if encoded is None:
+            continue
+        answer_position = _answer_position_from_labels(encoded["labels"])
+        if answer_position is None:
+            continue
+        prepared_rows.append(
+            {
+                "problem_id": problem_id,
+                "dataset": row.get("dataset"),
+                "repo": row.get("repo"),
+                "language": row.get("language"),
+                "route_aliases": list(route_aliases),
+                "route_labels": list(route_labels),
+                "target_rewards": target_rewards,
+                "target_delta": target_delta,
+                "target_bin_idx": int(bin_idx),
+                "target_bin_label": str(bin_spec["label"]),
+                "target_bin_value": float(bin_spec["value"]),
+                "input_ids": encoded["input_ids"],
+                "labels": encoded["labels"],
+                "answer_position": int(answer_position),
+            }
+        )
+    return prepared_rows, dropped_overlength_rows
+
+
+def _prepare_text_delta_bin_eval_rows(
+    dataset: Any,
+    tokenizer: Any,
+    max_seq_length: int | None,
+    route_aliases: list[str],
+    route_labels: list[str],
+    target_dim: int,
+    target_precision: int,
+    bin_specs: list[dict[str, Any]],
+    drop_overlength: bool = False,
+) -> tuple[list[dict[str, Any]], int]:
+    if target_dim != 2:
+        raise ValueError("text_reward_delta_bin currently requires exactly two routes")
+    prepared_rows: list[dict[str, Any]] = []
+    dropped_overlength_rows = 0
+    for row in dataset:
+        prompt_text = row.get("prompt_text")
+        primary_output_text = _get_primary_output_text(row)
+        targets = row.get("performance_targets")
+        if not isinstance(prompt_text, str) or not isinstance(primary_output_text, str):
+            continue
+        if not isinstance(targets, list) or len(targets) != target_dim:
+            continue
+        try:
+            problem_id = problem_id_from_item(row)
+        except ValueError:
+            continue
+        target_rewards = [float(value) for value in targets]
+        target_delta = float(target_rewards[0] - target_rewards[1])
+        target_bin_idx = _delta_to_bin_idx(target_delta, bin_specs)
+        target_bin_spec = bin_specs[target_bin_idx]
+        prompt = _build_text_delta_bin_prompt(
+            prompt_text=prompt_text,
+            primary_output_text=primary_output_text,
+            route_aliases=route_aliases,
+            bin_specs=bin_specs,
+            target_precision=target_precision,
+        )
+        prompt_ids, dropped_overlength = _prepare_eval_prompt_ids(
+            tokenizer=tokenizer,
+            prompt_text=prompt,
+            max_seq_length=max_seq_length,
+            drop_overlength=drop_overlength,
+        )
+        if dropped_overlength:
+            dropped_overlength_rows += 1
+        if not prompt_ids:
+            continue
+        prepared_rows.append(
+            {
+                "problem_id": problem_id,
+                "dataset": row.get("dataset"),
+                "repo": row.get("repo"),
+                "language": row.get("language"),
+                "route_aliases": list(route_aliases),
+                "route_labels": list(route_labels),
+                "target_rewards": target_rewards,
+                "target_delta": target_delta,
+                "target_bin_idx": int(target_bin_idx),
+                "target_bin_label": str(target_bin_spec["label"]),
+                "target_bin_value": float(target_bin_spec["value"]),
+                "input_ids": prompt_ids,
+            }
+        )
+    return prepared_rows, dropped_overlength_rows
+
+
 def _prepare_text_bin_eval_rows(
     dataset: Any,
     tokenizer: Any,
@@ -2812,6 +3021,89 @@ def _make_text_bin_delta_seq_train_collate_fn(target_dim: int):
     return _collate
 
 
+def _make_text_delta_bin_train_collate_fn(pad_token_id: int, target_dim: int):
+    if target_dim != 2:
+        raise ValueError("text_reward_delta_bin currently requires exactly two routes")
+
+    def _collate(rows: list[dict[str, Any]]) -> dict[str, Any]:
+        max_len = max(len(row["input_ids"]) for row in rows)
+        batch_size = len(rows)
+        input_ids = torch.full((batch_size, max_len), fill_value=pad_token_id, dtype=torch.long)
+        attention_mask = torch.zeros((batch_size, max_len), dtype=torch.long)
+        labels = torch.full((batch_size, max_len), fill_value=-100, dtype=torch.long)
+        target_rewards = torch.zeros((batch_size, target_dim), dtype=torch.float32)
+        target_deltas = torch.zeros((batch_size,), dtype=torch.float32)
+        target_bin_indices = torch.zeros((batch_size,), dtype=torch.long)
+        answer_positions = torch.zeros((batch_size,), dtype=torch.long)
+
+        for batch_idx, row in enumerate(rows):
+            ids = row["input_ids"]
+            row_labels = row["labels"]
+            seq_len = len(ids)
+            input_ids[batch_idx, :seq_len] = torch.tensor(ids, dtype=torch.long)
+            attention_mask[batch_idx, :seq_len] = 1
+            labels[batch_idx, :seq_len] = torch.tensor(row_labels, dtype=torch.long)
+            target_rewards[batch_idx] = torch.tensor(row["target_rewards"], dtype=torch.float32)
+            target_deltas[batch_idx] = float(row["target_delta"])
+            target_bin_indices[batch_idx] = int(row["target_bin_idx"])
+            answer_positions[batch_idx] = int(row["answer_position"])
+
+        return {
+            "problem_ids": [row["problem_id"] for row in rows],
+            "datasets": [row["dataset"] for row in rows],
+            "repos": [row["repo"] for row in rows],
+            "languages": [row["language"] for row in rows],
+            "route_aliases": [row["route_aliases"] for row in rows],
+            "targets": target_rewards,
+            "target_deltas": target_deltas,
+            "target_bin_indices": target_bin_indices,
+            "answer_positions": answer_positions,
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "labels": labels,
+        }
+
+    return _collate
+
+
+def _make_text_delta_bin_eval_collate_fn(pad_token_id: int, target_dim: int):
+    if target_dim != 2:
+        raise ValueError("text_reward_delta_bin currently requires exactly two routes")
+
+    def _collate(rows: list[dict[str, Any]]) -> dict[str, Any]:
+        max_len = max(len(row["input_ids"]) for row in rows)
+        batch_size = len(rows)
+        input_ids = torch.full((batch_size, max_len), fill_value=pad_token_id, dtype=torch.long)
+        attention_mask = torch.zeros((batch_size, max_len), dtype=torch.long)
+        target_rewards = torch.zeros((batch_size, target_dim), dtype=torch.float32)
+        target_deltas = torch.zeros((batch_size,), dtype=torch.float32)
+        target_bin_indices = torch.zeros((batch_size,), dtype=torch.long)
+
+        for batch_idx, row in enumerate(rows):
+            ids = row["input_ids"]
+            seq_len = len(ids)
+            input_ids[batch_idx, :seq_len] = torch.tensor(ids, dtype=torch.long)
+            attention_mask[batch_idx, :seq_len] = 1
+            target_rewards[batch_idx] = torch.tensor(row["target_rewards"], dtype=torch.float32)
+            target_deltas[batch_idx] = float(row["target_delta"])
+            target_bin_indices[batch_idx] = int(row["target_bin_idx"])
+
+        return {
+            "problem_ids": [row["problem_id"] for row in rows],
+            "datasets": [row["dataset"] for row in rows],
+            "repos": [row["repo"] for row in rows],
+            "languages": [row["language"] for row in rows],
+            "route_aliases": [row["route_aliases"] for row in rows],
+            "targets": target_rewards,
+            "target_deltas": target_deltas,
+            "target_bin_indices": target_bin_indices,
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+        }
+
+    return _collate
+
+
 def _make_text_pairwise_train_collate_fn(pad_token_id: int, target_dim: int):
     def _collate(rows: list[dict[str, Any]]) -> dict[str, Any]:
         max_len = max(len(row["input_ids"]) for row in rows)
@@ -2931,6 +3223,7 @@ def _forward_text_bin_delta_seq_route(
     reward_bin_value_tensor: torch.Tensor,
     reward_bin_token_ids: list[int],
     include_loss: bool,
+    restricted_ce: bool = False,
 ) -> tuple[torch.Tensor | None, torch.Tensor]:
     device = reward_bin_token_id_tensor.device
     input_ids, labels = _route_row_device_batch(route_row, device=device)
@@ -2948,15 +3241,26 @@ def _forward_text_bin_delta_seq_route(
 
     route_loss: torch.Tensor | None = None
     if include_loss:
-        reward_target_token_id = torch.tensor(
-            [int(reward_bin_token_ids[int(route_row["target_bin_idx"])])],
-            dtype=torch.long,
-            device=device,
-        )
-        route_loss = F.cross_entropy(
-            reward_next_logits.unsqueeze(0).float(),
-            reward_target_token_id,
-        ).float()
+        if restricted_ce:
+            reward_target_bin_idx = torch.tensor(
+                [int(route_row["target_bin_idx"])],
+                dtype=torch.long,
+                device=device,
+            )
+            route_loss = F.cross_entropy(
+                reward_bin_logits.unsqueeze(0).float(),
+                reward_target_bin_idx,
+            ).float()
+        else:
+            reward_target_token_id = torch.tensor(
+                [int(reward_bin_token_ids[int(route_row["target_bin_idx"])])],
+                dtype=torch.long,
+                device=device,
+            )
+            route_loss = F.cross_entropy(
+                reward_next_logits.unsqueeze(0).float(),
+                reward_target_token_id,
+            ).float()
     return route_loss, pred_reward
 
 
@@ -2967,6 +3271,7 @@ def _forward_text_bin_delta_seq_backward(
     bin_specs: list[dict[str, Any]],
     delta_aux_weight: float,
     delta_aux_huber_delta: float,
+    restricted_ce: bool = False,
 ) -> torch.Tensor:
     target_dim = int(batch["targets"].shape[1])
     if target_dim != 2:
@@ -2995,6 +3300,7 @@ def _forward_text_bin_delta_seq_backward(
                 reward_bin_value_tensor=reward_bin_value_tensor,
                 reward_bin_token_ids=bin_token_ids,
                 include_loss=False,
+                restricted_ce=restricted_ce,
             )
 
         route_1_loss, pred_reward_1 = _forward_text_bin_delta_seq_route(
@@ -3004,6 +3310,7 @@ def _forward_text_bin_delta_seq_backward(
             reward_bin_value_tensor=reward_bin_value_tensor,
             reward_bin_token_ids=bin_token_ids,
             include_loss=True,
+            restricted_ce=restricted_ce,
         )
         if route_1_loss is None:
             raise ValueError("text_reward_bin_delta_seq route loss unexpectedly missing for route 1")
@@ -3032,6 +3339,7 @@ def _forward_text_bin_delta_seq_backward(
             reward_bin_value_tensor=reward_bin_value_tensor,
             reward_bin_token_ids=bin_token_ids,
             include_loss=True,
+            restricted_ce=restricted_ce,
         )
         if route_0_loss is None:
             raise ValueError("text_reward_bin_delta_seq route loss unexpectedly missing for route 0")
@@ -3281,6 +3589,25 @@ def _forward_text_bin_delta_aux_loss(
     else:
         delta_loss = F.mse_loss(pred_deltas, true_deltas).float()
     return ce_loss + (float(delta_aux_weight) * delta_loss)
+
+
+def _forward_text_delta_bin_loss(
+    model: Any,
+    batch: dict[str, Any],
+    bin_token_ids: list[int],
+) -> torch.Tensor:
+    outputs = model(
+        input_ids=batch["input_ids"],
+        attention_mask=batch["attention_mask"],
+        return_dict=True,
+    )
+    batch_indices = torch.arange(outputs.logits.shape[0], device=outputs.logits.device)
+    answer_positions = batch["answer_positions"].to(device=outputs.logits.device, dtype=torch.long)
+    next_logits = outputs.logits[batch_indices, answer_positions]
+    bin_token_id_tensor = torch.tensor(bin_token_ids, dtype=torch.long, device=outputs.logits.device)
+    bin_logits = next_logits.index_select(dim=1, index=bin_token_id_tensor)
+    target_bin_indices = batch["target_bin_indices"].to(device=outputs.logits.device, dtype=torch.long)
+    return F.cross_entropy(bin_logits.float(), target_bin_indices).float()
 
 
 def _run_representation_eval(
@@ -3754,6 +4081,74 @@ def _run_text_bin_reward_eval(
     return prediction_rows, local_squared_error_sum, local_value_count
 
 
+def _run_text_delta_bin_eval(
+    model: Any,
+    loader: DataLoader,
+    bin_token_ids: list[int],
+    bin_specs: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], float, int]:
+    model.eval()
+    prediction_rows: list[dict[str, Any]] = []
+    local_squared_error_sum = 0.0
+    local_value_count = 0
+    bin_values = [float(spec["value"]) for spec in bin_specs]
+    with torch.no_grad():
+        for batch in tqdm(loader, desc="Eval offline router", unit="batch", disable=not is_main_process()):
+            outputs = model(
+                input_ids=batch["input_ids"],
+                attention_mask=batch["attention_mask"],
+                return_dict=True,
+            )
+            last_indices = batch["attention_mask"].sum(dim=1).to(dtype=torch.long) - 1
+            batch_indices = torch.arange(outputs.logits.shape[0], device=outputs.logits.device)
+            next_logits = outputs.logits[batch_indices, last_indices]
+            bin_token_id_tensor = torch.tensor(bin_token_ids, dtype=torch.long, device=outputs.logits.device)
+            bin_value_tensor = torch.tensor(bin_values, dtype=torch.float32, device=outputs.logits.device)
+            bin_logits = next_logits.index_select(dim=1, index=bin_token_id_tensor)
+            bin_probs = torch.softmax(bin_logits.float(), dim=1)
+            pred_deltas = torch.matmul(bin_probs, bin_value_tensor).clamp(-1.0, 1.0)
+            top_probs, top_indices = torch.max(bin_probs, dim=1)
+
+            pred_deltas_cpu = pred_deltas.detach().cpu().tolist()
+            top_probs_cpu = top_probs.detach().cpu().tolist()
+            top_indices_cpu = top_indices.detach().cpu().tolist()
+            bin_probs_cpu = bin_probs.detach().cpu().tolist()
+
+            for row_idx, problem_id in enumerate(batch["problem_ids"]):
+                pred_delta = float(pred_deltas_cpu[row_idx])
+                target_delta = float(batch["target_deltas"][row_idx].item())
+                true_rewards = [float(value) for value in batch["targets"][row_idx].tolist()]
+                local_squared_error_sum += float((pred_delta - target_delta) ** 2)
+                local_value_count += 1
+                top_idx = int(top_indices_cpu[row_idx])
+                prediction_rows.append(
+                    {
+                        "problem_id": problem_id,
+                        "dataset": batch["datasets"][row_idx],
+                        "repo": batch["repos"][row_idx],
+                        "language": batch["languages"][row_idx],
+                        "route_aliases": list(batch["route_aliases"][row_idx]),
+                        "true_rewards": true_rewards,
+                        "true_delta": target_delta,
+                        "generated_text": str(bin_specs[top_idx]["label"]),
+                        "parsed_delta": pred_delta,
+                        "pred_delta": pred_delta,
+                        # Keep existing utility and pairwise code usable: route 0 is chosen iff pred_delta > 0.
+                        "pred_rewards": [pred_delta, 0.0],
+                        "parse_success": True,
+                        "pred_bin_idx": int(top_idx),
+                        "pred_bin_label": str(bin_specs[top_idx]["label"]),
+                        "pred_bin_value": float(bin_specs[top_idx]["value"]),
+                        "pred_bin_probability": float(top_probs_cpu[row_idx]),
+                        "bin_probabilities": {
+                            str(spec["label"]): float(prob)
+                            for spec, prob in zip(bin_specs, bin_probs_cpu[row_idx])
+                        },
+                    }
+                )
+    return prediction_rows, local_squared_error_sum, local_value_count
+
+
 def _run_text_output_bin_eval(
     model: Any,
     loader: DataLoader,
@@ -4168,6 +4563,58 @@ def _merge_text_reward_eval_rows(
             "parse_failures": int(total_parse_failures),
             "parse_failure_rate": parse_failure_rate,
             "eval_problem_examples": int(len(filtered_rows)),
+        },
+    )
+
+
+def _merge_text_delta_bin_eval_rows(
+    rows: list[dict[str, Any]],
+    route_labels: list[str],
+) -> tuple[list[dict[str, Any]], np.ndarray, np.ndarray, dict[str, Any]]:
+    target_dim = len(route_labels)
+    if target_dim != 2:
+        raise ValueError("text_reward_delta_bin currently requires exactly two routes")
+    merged_problem_rows: list[dict[str, Any]] = []
+    seen_keys: set[str] = set()
+    for row in rows:
+        key = _prediction_row_key(row)
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        true_rewards = row.get("true_rewards")
+        pred_rewards = row.get("pred_rewards")
+        route_aliases = row.get("route_aliases")
+        if (
+            not isinstance(true_rewards, list)
+            or not isinstance(pred_rewards, list)
+            or not isinstance(route_aliases, list)
+            or len(true_rewards) != target_dim
+            or len(pred_rewards) != target_dim
+            or len(route_aliases) != target_dim
+        ):
+            continue
+        normalized_row = dict(row)
+        normalized_row["route_labels"] = list(route_labels)
+        normalized_row["true_rewards"] = [float(value) for value in true_rewards]
+        normalized_row["pred_rewards"] = [float(pred_rewards[0]), 0.0]
+        normalized_row["metric_true_rewards"] = [float(true_rewards[0]) - float(true_rewards[1]), 0.0]
+        normalized_row["metric_pred_rewards"] = [float(pred_rewards[0]), 0.0]
+        merged_problem_rows.append(normalized_row)
+
+    if not merged_problem_rows:
+        raise ValueError("No complete eval problems after parsing delta-bin text predictions")
+
+    y_true = np.asarray([row["metric_true_rewards"] for row in merged_problem_rows], dtype=np.float32)
+    y_pred = np.asarray([row["metric_pred_rewards"] for row in merged_problem_rows], dtype=np.float32)
+    return (
+        merged_problem_rows,
+        y_true,
+        y_pred,
+        {
+            "parse_failures": 0,
+            "parse_failure_rate": 0.0,
+            "eval_problem_examples": int(len(merged_problem_rows)),
+            "eval_route_examples": int(len(merged_problem_rows) * target_dim),
         },
     )
 
@@ -4667,14 +5114,22 @@ def main(cfg: DictConfig) -> None:
         train_prediction_dump_max_rows = train_prediction_dump_cfg.get("max_rows")
         train_prediction_dump_seed_offset = int(train_prediction_dump_cfg.get("seed_offset", 1000))
         text_reward_bin_specs = (
-            _build_reward_bin_specs(
-                text_reward_bin_count,
-                label_prefix=text_reward_bin_label_prefix,
-                value_order=text_reward_bin_value_order,
+            (
+                _build_delta_bin_specs(
+                    text_reward_bin_count,
+                    label_prefix=text_reward_bin_label_prefix,
+                )
+                if supervision_mode in TEXT_REWARD_DELTA_BIN_SUPERVISION_MODES
+                else _build_reward_bin_specs(
+                    text_reward_bin_count,
+                    label_prefix=text_reward_bin_label_prefix,
+                    value_order=text_reward_bin_value_order,
+                )
             )
             if supervision_mode in (
                 TEXT_REWARD_BIN_SUPERVISION_MODES
                 | TEXT_REWARD_BIN_SEQUENTIAL_DELTA_SUPERVISION_MODES
+                | TEXT_REWARD_DELTA_BIN_SUPERVISION_MODES
                 | TEXT_REWARD_VECTOR_BIN_SUPERVISION_MODES
                 | TEXT_JOINT_REWARD_OUTPUT_BIN_SUPERVISION_MODES
             )
@@ -4800,6 +5255,7 @@ def main(cfg: DictConfig) -> None:
         if supervision_mode in (
             TEXT_REWARD_BIN_SUPERVISION_MODES
             | TEXT_REWARD_BIN_SEQUENTIAL_DELTA_SUPERVISION_MODES
+            | TEXT_REWARD_DELTA_BIN_SUPERVISION_MODES
             | TEXT_REWARD_VECTOR_BIN_SUPERVISION_MODES
             | TEXT_JOINT_REWARD_OUTPUT_BIN_SUPERVISION_MODES
         ):
@@ -4825,7 +5281,13 @@ def main(cfg: DictConfig) -> None:
                 [str(spec["label"]) for spec in text_pairwise_label_specs],
                 text_pairwise_label_token_ids,
             )
-        if supervision_mode in {"text_reward_bin_delta", "text_reward_bin_delta_seq", "text_reward_output_bin"} and target_dim != 2:
+        if supervision_mode in {
+            "text_reward_bin_delta",
+            "text_reward_bin_delta_seq",
+            "text_reward_bin_restricted_delta_seq",
+            "text_reward_delta_bin",
+            "text_reward_output_bin",
+        } and target_dim != 2:
             raise ValueError(
                 f"offline_router.train.supervision_mode={supervision_mode} requires exactly two routes"
             )
@@ -4879,6 +5341,7 @@ def main(cfg: DictConfig) -> None:
         if supervision_mode in (
             TEXT_REWARD_BIN_SUPERVISION_MODES
             | TEXT_REWARD_BIN_SEQUENTIAL_DELTA_SUPERVISION_MODES
+            | TEXT_REWARD_DELTA_BIN_SUPERVISION_MODES
             | TEXT_REWARD_VECTOR_BIN_SUPERVISION_MODES
             | TEXT_JOINT_REWARD_OUTPUT_BIN_SUPERVISION_MODES
         ):
@@ -4900,7 +5363,12 @@ def main(cfg: DictConfig) -> None:
                 text_output_loss_weight,
                 [float(spec["value"]) for spec in text_output_bin_specs],
             )
-        if supervision_mode in {"text_reward_bin_delta", "text_reward_bin_delta_seq", "text_reward_output_bin"}:
+        if supervision_mode in {
+            "text_reward_bin_delta",
+            "text_reward_bin_delta_seq",
+            "text_reward_bin_restricted_delta_seq",
+            "text_reward_output_bin",
+        }:
             logger.info(
                 "Offline router text reward bin delta-aux settings: delta_aux_weight=%.3f delta_aux_huber_delta=%.3f",
                 text_reward_delta_aux_weight,
@@ -5174,9 +5642,89 @@ def main(cfg: DictConfig) -> None:
                     target_precision=text_target_precision,
                     bin_specs=text_reward_bin_specs,
                     drop_overlength=text_drop_overlength_rows,
+            )
+            train_collate_fn = _make_text_bin_delta_seq_train_collate_fn(target_dim=target_dim)
+            eval_collate_fn = _make_text_scalar_eval_collate_fn(pad_token_id=pad_token_id)
+        elif supervision_mode == "text_reward_bin_restricted_delta_seq":
+            train_dataset, dropped_overlength_train_rows = _prepare_text_bin_delta_train_rows(
+                train_dataset,
+                tokenizer=tokenizer,
+                max_seq_length=max_seq_length,
+                route_aliases=route_aliases,
+                route_labels=route_labels,
+                target_dim=target_dim,
+                target_precision=text_target_precision,
+                bin_specs=text_reward_bin_specs,
+                drop_overlength=text_drop_overlength_rows,
+            )
+            eval_dataset, dropped_overlength_eval_rows = _prepare_text_bin_eval_rows(
+                eval_dataset,
+                tokenizer=tokenizer,
+                max_seq_length=max_seq_length,
+                route_aliases=route_aliases,
+                route_labels=route_labels,
+                target_dim=target_dim,
+                target_precision=text_target_precision,
+                bin_specs=text_reward_bin_specs,
+                drop_overlength=text_drop_overlength_rows,
+            )
+            if train_prediction_source_dataset is not None:
+                train_prediction_dataset, dropped_overlength_train_prediction_rows = _prepare_text_bin_eval_rows(
+                    train_prediction_source_dataset,
+                    tokenizer=tokenizer,
+                    max_seq_length=max_seq_length,
+                    route_aliases=route_aliases,
+                    route_labels=route_labels,
+                    target_dim=target_dim,
+                    target_precision=text_target_precision,
+                    bin_specs=text_reward_bin_specs,
+                    drop_overlength=text_drop_overlength_rows,
                 )
             train_collate_fn = _make_text_bin_delta_seq_train_collate_fn(target_dim=target_dim)
             eval_collate_fn = _make_text_scalar_eval_collate_fn(pad_token_id=pad_token_id)
+        elif supervision_mode == "text_reward_delta_bin":
+            train_dataset, dropped_overlength_train_rows = _prepare_text_delta_bin_train_rows(
+                train_dataset,
+                tokenizer=tokenizer,
+                max_seq_length=max_seq_length,
+                route_aliases=route_aliases,
+                route_labels=route_labels,
+                target_dim=target_dim,
+                target_precision=text_target_precision,
+                bin_specs=text_reward_bin_specs,
+                drop_overlength=text_drop_overlength_rows,
+            )
+            eval_dataset, dropped_overlength_eval_rows = _prepare_text_delta_bin_eval_rows(
+                eval_dataset,
+                tokenizer=tokenizer,
+                max_seq_length=max_seq_length,
+                route_aliases=route_aliases,
+                route_labels=route_labels,
+                target_dim=target_dim,
+                target_precision=text_target_precision,
+                bin_specs=text_reward_bin_specs,
+                drop_overlength=text_drop_overlength_rows,
+            )
+            if train_prediction_source_dataset is not None:
+                train_prediction_dataset, dropped_overlength_train_prediction_rows = _prepare_text_delta_bin_eval_rows(
+                    train_prediction_source_dataset,
+                    tokenizer=tokenizer,
+                    max_seq_length=max_seq_length,
+                    route_aliases=route_aliases,
+                    route_labels=route_labels,
+                    target_dim=target_dim,
+                    target_precision=text_target_precision,
+                    bin_specs=text_reward_bin_specs,
+                    drop_overlength=text_drop_overlength_rows,
+                )
+            train_collate_fn = _make_text_delta_bin_train_collate_fn(
+                pad_token_id=pad_token_id,
+                target_dim=target_dim,
+            )
+            eval_collate_fn = _make_text_delta_bin_eval_collate_fn(
+                pad_token_id=pad_token_id,
+                target_dim=target_dim,
+            )
         elif supervision_mode == "text_output_bin":
             train_dataset, dropped_overlength_train_rows = _prepare_text_output_bin_train_rows(
                 train_dataset,
@@ -5481,6 +6029,13 @@ def main(cfg: DictConfig) -> None:
                         bin_specs=text_output_bin_specs,
                         clip_predictions=text_output_clip_predictions,
                     )
+            elif supervision_mode == "text_reward_delta_bin":
+                local_rows, local_squared_error_sum, local_value_count = _run_text_delta_bin_eval(
+                    model,
+                    loader,
+                    bin_token_ids=text_reward_bin_token_ids,
+                    bin_specs=text_reward_bin_specs,
+                )
             elif supervision_mode == "text_reward_output_bin":
                 local_rows, local_squared_error_sum, local_value_count = _run_text_reward_output_bin_eval(
                     model,
@@ -5546,6 +6101,17 @@ def main(cfg: DictConfig) -> None:
                         merged_shard_rows,
                         route_labels=route_labels,
                         route_aliases=route_aliases,
+                    )
+                elif supervision_mode == "text_reward_bin_restricted_delta_seq":
+                    merged_rows, y_true, y_pred, split_extra = _merge_text_scalar_reward_eval_rows(
+                        merged_shard_rows,
+                        route_labels=route_labels,
+                        route_aliases=route_aliases,
+                    )
+                elif supervision_mode == "text_reward_delta_bin":
+                    merged_rows, y_true, y_pred, split_extra = _merge_text_delta_bin_eval_rows(
+                        merged_shard_rows,
+                        route_labels=route_labels,
                     )
                 elif supervision_mode == "text_reward_output_bin":
                     merged_rows, y_true, y_pred, split_extra = _merge_text_reward_output_bin_eval_rows(
@@ -5638,6 +6204,17 @@ def main(cfg: DictConfig) -> None:
                                 bin_specs=text_reward_bin_specs,
                                 delta_aux_weight=text_reward_delta_aux_weight,
                                 delta_aux_huber_delta=text_reward_delta_aux_huber_delta,
+                                restricted_ce=False,
+                            )
+                        elif supervision_mode == "text_reward_bin_restricted_delta_seq":
+                            loss = _forward_text_bin_delta_seq_backward(
+                                model,
+                                batch,
+                                bin_token_ids=text_reward_bin_token_ids,
+                                bin_specs=text_reward_bin_specs,
+                                delta_aux_weight=text_reward_delta_aux_weight,
+                                delta_aux_huber_delta=text_reward_delta_aux_huber_delta,
+                                restricted_ce=True,
                             )
                         elif supervision_mode == "text_reward_output_bin":
                             loss = _forward_text_reward_output_bin_delta_aux_backward(
@@ -5650,6 +6227,12 @@ def main(cfg: DictConfig) -> None:
                                 output_loss_weight=text_output_loss_weight,
                                 delta_aux_weight=text_reward_delta_aux_weight,
                                 delta_aux_huber_delta=text_reward_delta_aux_huber_delta,
+                            )
+                        elif supervision_mode == "text_reward_delta_bin":
+                            loss = _forward_text_delta_bin_loss(
+                                model,
+                                batch,
+                                bin_token_ids=text_reward_bin_token_ids,
                             )
                         else:
                             loss = _forward_text_reward_loss(model, batch)
@@ -5664,7 +6247,11 @@ def main(cfg: DictConfig) -> None:
                             loss=loss,
                         )
                     running_losses.append(float(loss.item()))
-                    if supervision_mode not in {"text_reward_bin_delta_seq", "text_reward_output_bin"}:
+                    if supervision_mode not in {
+                        "text_reward_bin_delta_seq",
+                        "text_reward_bin_restricted_delta_seq",
+                        "text_reward_output_bin",
+                    }:
                         get_accelerator().backward(loss)
                     if supervision_mode in TEXT_LM_SUPERVISION_MODES:
                         _log_text_train_step_debug(
@@ -6121,6 +6708,8 @@ def main(cfg: DictConfig) -> None:
                 }
                 if supervision_mode in (
                     TEXT_REWARD_BIN_SUPERVISION_MODES
+                    | TEXT_REWARD_BIN_SEQUENTIAL_DELTA_SUPERVISION_MODES
+                    | TEXT_REWARD_DELTA_BIN_SUPERVISION_MODES
                     | TEXT_REWARD_VECTOR_BIN_SUPERVISION_MODES
                     | TEXT_JOINT_REWARD_OUTPUT_BIN_SUPERVISION_MODES
                 ):
@@ -6137,7 +6726,12 @@ def main(cfg: DictConfig) -> None:
                         }
                         for spec, token_id in zip(text_reward_bin_specs, text_reward_bin_token_ids)
                     ]
-                if supervision_mode in {"text_reward_bin_delta", "text_reward_bin_delta_seq", "text_reward_output_bin"}:
+                if supervision_mode in {
+                    "text_reward_bin_delta",
+                    "text_reward_bin_delta_seq",
+                    "text_reward_bin_restricted_delta_seq",
+                    "text_reward_output_bin",
+                }:
                     summary["text_reward"]["delta_aux_weight"] = text_reward_delta_aux_weight
                     summary["text_reward"]["delta_aux_huber_delta"] = text_reward_delta_aux_huber_delta
             if supervision_mode in TEXT_OUTPUT_SUPERVISION_MODES:

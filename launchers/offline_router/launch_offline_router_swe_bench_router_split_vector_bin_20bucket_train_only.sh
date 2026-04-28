@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+REPO_ROOT=$(cd "${SCRIPT_DIR}/../.." && pwd)
+
 TIMESTAMP=${TIMESTAMP:-$(date +%s)}
 
 SOURCE_RUN_DIR=${SOURCE_RUN_DIR:-/mnt/llmd/results/exps/aristides/reason/offline_router_swe_bench_router_split_collect_1776749732}
@@ -37,4 +40,4 @@ export COLLECT_OUTPUT_DIR
 export ROUTER_SUPERVISION_MODE
 export TRAIN_EXTRA_ARGS
 
-bash launch_offline_router_swe_smith_id.sh
+bash "${SCRIPT_DIR}/launch_offline_router_swe_smith_id.sh"

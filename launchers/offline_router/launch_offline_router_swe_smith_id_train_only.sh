@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+REPO_ROOT=$(cd "${SCRIPT_DIR}/../.." && pwd)
+
 SOURCE_RUN_DIR=${SOURCE_RUN_DIR:-/mnt/llmd/results/exps/aristides/reason/offline_router_swe_smith_id_1776113427}
 COLLECT_OUTPUT_DIR=${COLLECT_OUTPUT_DIR:-${SOURCE_RUN_DIR}/collect}
 
@@ -17,4 +20,4 @@ export RUN_COLLECT
 export RUN_TRAIN
 export COLLECT_OUTPUT_DIR
 
-bash launch_offline_router_swe_smith_id.sh
+bash "${SCRIPT_DIR}/launch_offline_router_swe_smith_id.sh"

@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+REPO_ROOT=$(cd "${SCRIPT_DIR}/../.." && pwd)
+
 TIMESTAMP=$(date +%s)
 JOB_NAME=offline_router_collect
 OUTPUT_DIR=/mnt/llmd/results/exps/aristides/reason/${JOB_NAME}_${TIMESTAMP}
@@ -29,7 +32,7 @@ make job \
   CONDA_EXE=${CONDA_EXE} \
   SNAPSHOT=1 \
   NPROC=${NPROC} \
-  COMMAND="cd /home/toolkit/PipelineRL-SWE; mkdir -p ${LOG_DIR}; \
+  COMMAND="cd ${REPO_ROOT}; mkdir -p ${LOG_DIR}; \
     python -m pipelinerl.swe.scripts.offline_router.run_collection_job \
     output_dir=${OUTPUT_DIR} \
     offline_router.primary_model.model_path=${PRIMARY_MODEL_PATH} \

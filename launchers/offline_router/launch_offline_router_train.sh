@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+REPO_ROOT=$(cd "${SCRIPT_DIR}/../.." && pwd)
+
 TIMESTAMP=$(date +%s)
 JOB_NAME=offline_router_text_lora_medium_balanced_50_50
 OUTPUT_DIR=/mnt/llmd/results/exps/aristides/reason/${JOB_NAME}_${TIMESTAMP}
@@ -29,7 +32,7 @@ make job \
   CONDA_EXE=/opt/conda/bin/conda \
   SNAPSHOT=1 \
   NPROC=${NPROC} \
-  COMMAND="cd /home/toolkit/PipelineRL-SWE; mkdir -p ${OUTPUT_DIR}; set -o pipefail; { ${TRAIN_CMD} \
+  COMMAND="cd ${REPO_ROOT}; mkdir -p ${OUTPUT_DIR}; set -o pipefail; { ${TRAIN_CMD} \
     output_dir=${OUTPUT_DIR} \
     offline_router.train.dataset_dir=${DATASET_DIR} \
     offline_router.train.model_path=${MODEL_PATH} \
