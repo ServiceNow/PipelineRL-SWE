@@ -9,7 +9,7 @@ offline_router:
     dataset_dir: ???
     model_path: Qwen/Qwen2.5-Coder-7B-Instruct
     mode: frozen_backbone  # representation_head only: frozen_backbone | full_backbone
-    supervision_mode: representation_head  # representation_head | text_reward_vector | text_reward_vector_bin | text_reward_scalar | text_reward_bin | text_reward_bin_delta | text_reward_output_bin | text_output_bin | text_pairwise_sign
+    supervision_mode: representation_head  # representation_head | text_reward_vector | text_reward_vector_bin | text_reward_scalar | text_reward_bin | text_reward_bin_delta | text_reward_bin_delta_seq | text_reward_output_bin | text_output_bin | text_pairwise_sign
     device: auto
     num_epochs: 10
     performance_value_hidden_dims:
@@ -62,8 +62,8 @@ offline_router:
       bin_count: 21
       bin_label_prefix: " "
       bin_value_order: ascending  # ascending: A=0.00,...; descending: A=1.00,...
-      delta_aux_weight: 0.0  # text_reward_bin_delta only
-      delta_aux_huber_delta: 0.05  # text_reward_bin_delta only
+      delta_aux_weight: 0.0  # text_reward_bin_delta | text_reward_bin_delta_seq | text_reward_output_bin
+      delta_aux_huber_delta: 0.05  # text_reward_bin_delta | text_reward_bin_delta_seq | text_reward_output_bin
     text_output:
       bin_count: 21
       bin_label_prefix: " "

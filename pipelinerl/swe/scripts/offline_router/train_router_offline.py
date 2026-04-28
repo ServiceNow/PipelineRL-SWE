@@ -51,12 +51,14 @@ TEXT_REWARD_SUPERVISION_MODES = {
     "text_reward_scalar",
     "text_reward_bin",
     "text_reward_bin_delta",
+    "text_reward_bin_delta_seq",
     "text_reward_output_bin",
 }
 TEXT_OUTPUT_SUPERVISION_MODES = {"text_output_bin"}
 TEXT_PAIRWISE_SUPERVISION_MODES = {"text_pairwise_sign"}
 TEXT_LM_SUPERVISION_MODES = TEXT_REWARD_SUPERVISION_MODES | TEXT_OUTPUT_SUPERVISION_MODES | TEXT_PAIRWISE_SUPERVISION_MODES
 TEXT_REWARD_BIN_SUPERVISION_MODES = {"text_reward_bin", "text_reward_bin_delta"}
+TEXT_REWARD_BIN_SEQUENTIAL_DELTA_SUPERVISION_MODES = {"text_reward_bin_delta_seq"}
 TEXT_REWARD_VECTOR_BIN_SUPERVISION_MODES = {"text_reward_vector_bin"}
 TEXT_OUTPUT_BIN_SUPERVISION_MODES = {"text_output_bin"}
 TEXT_JOINT_REWARD_OUTPUT_BIN_SUPERVISION_MODES = {"text_reward_output_bin"}
@@ -924,9 +926,13 @@ def _build_text_reward_prompt(
             f"{_format_reward_grid_values(target_grid_count, target_precision)}.\n"
         )
     return (
-        "Predict the realized reward for each model.\n"
+        "Predict the realized proxy reward for each model route.\n"
         "Respond with only a compact JSON array of floats in the listed order.\n"
         "Do not include any keys, labels, or explanation text.\n"
+        "The proxy reward is computed after the run by comparing the produced repair against the gold patch.\n"
+        f"{route_aliases[0]} is the primary model whose attempt is shown below.\n"
+        f"Only the {route_aliases[0]} attempt is shown below.\n"
+        "Use the shown primary attempt as context when estimating the other routes.\n"
         f"{reward_instruction}\n"
         "[Model Order]\n"
         f"{route_legend}\n\n"
@@ -948,10 +954,14 @@ def _build_text_vector_bin_reward_prompt(
     route_legend = ", ".join(route_aliases)
     reward_bin_table = _format_reward_bin_table(bin_specs, target_precision)
     return (
-        "Predict the realized reward bin for each model.\n"
+        "Predict the realized proxy-reward bin for each model route.\n"
         "Respond with only a compact JSON array of labels in the listed order.\n"
         'Example format: ["A","C"]\n'
         "Do not include any keys, labels, or explanation text.\n\n"
+        "The proxy reward is computed after the run by comparing the produced repair against the gold patch.\n"
+        f"{route_aliases[0]} is the primary model whose attempt is shown below.\n"
+        f"Only the {route_aliases[0]} attempt is shown below.\n"
+        "Use the shown primary attempt as context when estimating the other routes.\n\n"
         "[Reward Bins]\n"
         f"{reward_bin_table}\n\n"
         "[Model Order]\n"
@@ -981,12 +991,15 @@ def _build_text_scalar_reward_prompt(
             f"{_format_reward_grid_values(target_grid_count, target_precision)}.\n"
         )
     return (
-        "Predict the realized reward for one model route.\n"
+        "Predict the realized proxy reward for one model route.\n"
         f"{reward_instruction}"
         "Do not include any keys, labels, JSON, or explanation text.\n\n"
+        "The proxy reward is computed after the run by comparing the route's repair against the gold patch.\n"
         "[Model Order]\n"
         f"{route_legend}\n"
         "model_1 is the primary model whose attempt is shown below.\n\n"
+        f"Only the {route_aliases[0]} attempt is shown below.\n"
+        "If the route to score is not model_1, use the shown primary attempt only as context.\n\n"
         "[Route To Score]\n"
         f"{route_alias}\n\n"
         "[Original Repair Prompt]\n"
@@ -1045,14 +1058,17 @@ def _build_text_bin_reward_prompt(
     route_alias = route_aliases[route_idx]
     reward_bin_table = _format_reward_bin_table(bin_specs, target_precision)
     return (
-        "Predict the realized reward bin for one model route.\n"
+        "Predict the realized proxy-reward bin for one model route.\n"
         "Choose exactly one label from the reward-bin table.\n"
         "Respond with only the label.\n\n"
+        "The proxy reward is computed after the run by comparing the route's repair against the gold patch.\n"
         "[Reward Bins]\n"
         f"{reward_bin_table}\n\n"
         "[Model Order]\n"
         f"{route_legend}\n"
-        "model_1 is the primary model whose attempt is shown below.\n\n"
+        "model_1 is the primary model whose attempt is shown below.\n"
+        f"Only the {route_aliases[0]} attempt is shown below.\n"
+        "If the route to score is not model_1, use the shown primary attempt only as context.\n\n"
         "[Route To Score]\n"
         f"{route_alias}\n\n"
         "[Original Repair Prompt]\n"
@@ -1122,6 +1138,7 @@ def _build_text_output_bin_prompt(
         "[Model Order]\n"
         f"{route_legend}\n"
         f"{route_aliases[0]} is the primary model.\n"
+        "Predict the output tokens produced by the route named below on the completed run.\n"
         "Only the original repair prompt is shown below.\n\n"
         "[Route To Score]\n"
         f"{route_alias}\n\n"
@@ -1148,16 +1165,19 @@ def _build_text_reward_output_bin_prompt(
     output_bin_table = _format_output_token_bin_table(output_bin_specs)
     return (
         "Predict two labels for one model route.\n"
-        "First choose the realized reward bin.\n"
-        "Then choose the output-token bin.\n"
+        "First choose the realized proxy-reward bin.\n"
+        "Then choose the realized output-token bin.\n"
         "Respond with only two labels separated by a space.\n\n"
+        "The proxy reward is computed after the run by comparing the route's repair against the gold patch.\n"
         "[Reward Bins]\n"
         f"{reward_bin_table}\n\n"
         "[Output Token Bins]\n"
         f"{output_bin_table}\n\n"
         "[Model Order]\n"
         f"{route_legend}\n"
-        "model_1 is the primary model whose attempt is shown below.\n\n"
+        "model_1 is the primary model whose attempt is shown below.\n"
+        f"Only the {route_aliases[0]} attempt is shown below.\n"
+        "If the route to score is not model_1, use the shown primary attempt only as context.\n\n"
         "[Route To Score]\n"
         f"{route_alias}\n\n"
         "[Original Repair Prompt]\n"
@@ -1217,9 +1237,10 @@ def _build_text_pairwise_sign_prompt(
     label_table = _format_pairwise_label_table(label_specs, route_aliases)
     route_legend = ", ".join(route_aliases)
     return (
-        "Predict which model route achieved the higher realized reward.\n"
+        "Predict which model route achieved the higher realized proxy reward.\n"
         "Choose exactly one label from the outcome table.\n"
         "Respond with only the label.\n\n"
+        "The proxy reward is computed after the run by comparing the produced repair against the gold patch.\n"
         "[Outcome Labels]\n"
         f"{label_table}\n\n"
         "[Model Order]\n"
@@ -2747,6 +2768,50 @@ def _make_text_reward_output_bin_train_collate_fn(target_dim: int):
     return _collate
 
 
+def _make_text_bin_delta_seq_train_collate_fn(target_dim: int):
+    if target_dim != 2:
+        raise ValueError("text_reward_bin_delta_seq currently requires exactly two routes")
+
+    def _collate(rows: list[dict[str, Any]]) -> dict[str, Any]:
+        target_rewards = torch.zeros((len(rows), target_dim), dtype=torch.float32)
+        target_deltas = torch.zeros((len(rows),), dtype=torch.float32)
+        route_rows: list[list[dict[str, Any]]] = []
+
+        for problem_idx, row in enumerate(rows):
+            if len(row["route_rows"]) != target_dim:
+                raise ValueError("Each text_reward_bin_delta_seq example must include one row per route")
+            target_rewards[problem_idx] = torch.tensor(row["target_rewards"], dtype=torch.float32)
+            target_deltas[problem_idx] = float(row["target_delta"])
+            problem_route_rows: list[dict[str, Any]] = []
+            for route_row in row["route_rows"]:
+                problem_route_rows.append(
+                    {
+                        "route_idx": int(route_row["route_idx"]),
+                        "route_alias": str(route_row["route_alias"]),
+                        "route_label": str(route_row["route_label"]),
+                        "target_reward": float(route_row["target_reward"]),
+                        "target_bin_idx": int(route_row["target_bin_idx"]),
+                        "answer_position": int(route_row["answer_position"]),
+                        "input_ids": torch.tensor(route_row["input_ids"], dtype=torch.long),
+                        "labels": torch.tensor(route_row["labels"], dtype=torch.long),
+                    }
+                )
+            route_rows.append(problem_route_rows)
+
+        return {
+            "problem_ids": [row["problem_id"] for row in rows],
+            "datasets": [row["dataset"] for row in rows],
+            "repos": [row["repo"] for row in rows],
+            "languages": [row["language"] for row in rows],
+            "route_aliases": [row["route_aliases"] for row in rows],
+            "targets": target_rewards,
+            "target_deltas": target_deltas,
+            "route_rows": route_rows,
+        }
+
+    return _collate
+
+
 def _make_text_pairwise_train_collate_fn(pad_token_id: int, target_dim: int):
     def _collate(rows: list[dict[str, Any]]) -> dict[str, Any]:
         max_len = max(len(row["input_ids"]) for row in rows)
@@ -2857,6 +2922,139 @@ def _route_row_device_batch(route_row: dict[str, Any], device: torch.device) -> 
     input_ids = route_row["input_ids"].to(device=device, dtype=torch.long).unsqueeze(0)
     labels = route_row["labels"].to(device=device, dtype=torch.long).unsqueeze(0)
     return input_ids, labels
+
+
+def _forward_text_bin_delta_seq_route(
+    model: Any,
+    route_row: dict[str, Any],
+    reward_bin_token_id_tensor: torch.Tensor,
+    reward_bin_value_tensor: torch.Tensor,
+    reward_bin_token_ids: list[int],
+    include_loss: bool,
+) -> tuple[torch.Tensor | None, torch.Tensor]:
+    device = reward_bin_token_id_tensor.device
+    input_ids, labels = _route_row_device_batch(route_row, device=device)
+    attention_mask = torch.ones_like(input_ids)
+    outputs = model(
+        input_ids=input_ids,
+        attention_mask=attention_mask,
+        return_dict=True,
+    )
+    reward_answer_position = int(route_row["answer_position"])
+    reward_next_logits = outputs.logits[0, reward_answer_position]
+    reward_bin_logits = reward_next_logits.index_select(dim=0, index=reward_bin_token_id_tensor)
+    reward_bin_probs = torch.softmax(reward_bin_logits.float(), dim=0)
+    pred_reward = torch.dot(reward_bin_probs, reward_bin_value_tensor)
+
+    route_loss: torch.Tensor | None = None
+    if include_loss:
+        reward_target_token_id = torch.tensor(
+            [int(reward_bin_token_ids[int(route_row["target_bin_idx"])])],
+            dtype=torch.long,
+            device=device,
+        )
+        route_loss = F.cross_entropy(
+            reward_next_logits.unsqueeze(0).float(),
+            reward_target_token_id,
+        ).float()
+    return route_loss, pred_reward
+
+
+def _forward_text_bin_delta_seq_backward(
+    model: Any,
+    batch: dict[str, Any],
+    bin_token_ids: list[int],
+    bin_specs: list[dict[str, Any]],
+    delta_aux_weight: float,
+    delta_aux_huber_delta: float,
+) -> torch.Tensor:
+    target_dim = int(batch["targets"].shape[1])
+    if target_dim != 2:
+        raise ValueError("text_reward_bin_delta_seq currently requires exactly two routes")
+    device = get_accelerator().device
+    reward_bin_token_id_tensor = torch.tensor(bin_token_ids, dtype=torch.long, device=device)
+    reward_bin_value_tensor = torch.tensor(
+        [float(spec["value"]) for spec in bin_specs],
+        dtype=torch.float32,
+        device=device,
+    )
+
+    total_loss_value = 0.0
+    num_route_losses = 0
+
+    for problem_idx, route_rows in enumerate(batch["route_rows"]):
+        if len(route_rows) != target_dim:
+            raise ValueError("Each text_reward_bin_delta_seq batch example must include one row per route")
+        target_delta = batch["target_deltas"][problem_idx].to(device=device, dtype=torch.float32)
+
+        with torch.no_grad():
+            _, pred_reward_0_detached = _forward_text_bin_delta_seq_route(
+                model=model,
+                route_row=route_rows[0],
+                reward_bin_token_id_tensor=reward_bin_token_id_tensor,
+                reward_bin_value_tensor=reward_bin_value_tensor,
+                reward_bin_token_ids=bin_token_ids,
+                include_loss=False,
+            )
+
+        route_1_loss, pred_reward_1 = _forward_text_bin_delta_seq_route(
+            model=model,
+            route_row=route_rows[1],
+            reward_bin_token_id_tensor=reward_bin_token_id_tensor,
+            reward_bin_value_tensor=reward_bin_value_tensor,
+            reward_bin_token_ids=bin_token_ids,
+            include_loss=True,
+        )
+        if route_1_loss is None:
+            raise ValueError("text_reward_bin_delta_seq route loss unexpectedly missing for route 1")
+        if delta_aux_weight > 0.0:
+            pred_delta_1 = pred_reward_0_detached - pred_reward_1
+            if delta_aux_huber_delta > 0.0:
+                delta_loss_1 = F.huber_loss(
+                    pred_delta_1,
+                    target_delta,
+                    delta=float(delta_aux_huber_delta),
+                    reduction="mean",
+                ).float()
+            else:
+                delta_loss_1 = F.mse_loss(pred_delta_1, target_delta).float()
+            route_1_loss = route_1_loss + (float(delta_aux_weight) * delta_loss_1)
+        route_1_loss = route_1_loss / float(target_dim)
+        get_accelerator().backward(route_1_loss)
+        total_loss_value += float(route_1_loss.detach().item())
+        num_route_losses += 1
+        pred_reward_1_detached = pred_reward_1.detach()
+
+        route_0_loss, pred_reward_0 = _forward_text_bin_delta_seq_route(
+            model=model,
+            route_row=route_rows[0],
+            reward_bin_token_id_tensor=reward_bin_token_id_tensor,
+            reward_bin_value_tensor=reward_bin_value_tensor,
+            reward_bin_token_ids=bin_token_ids,
+            include_loss=True,
+        )
+        if route_0_loss is None:
+            raise ValueError("text_reward_bin_delta_seq route loss unexpectedly missing for route 0")
+        if delta_aux_weight > 0.0:
+            pred_delta_0 = pred_reward_0 - pred_reward_1_detached
+            if delta_aux_huber_delta > 0.0:
+                delta_loss_0 = F.huber_loss(
+                    pred_delta_0,
+                    target_delta,
+                    delta=float(delta_aux_huber_delta),
+                    reduction="mean",
+                ).float()
+            else:
+                delta_loss_0 = F.mse_loss(pred_delta_0, target_delta).float()
+            route_0_loss = route_0_loss + (float(delta_aux_weight) * delta_loss_0)
+        route_0_loss = route_0_loss / float(target_dim)
+        get_accelerator().backward(route_0_loss)
+        total_loss_value += float(route_0_loss.detach().item())
+        num_route_losses += 1
+
+    if num_route_losses == 0:
+        raise ValueError("No valid text_reward_bin_delta_seq route losses were computed")
+    return torch.tensor(total_loss_value / float(num_route_losses), dtype=torch.float32, device=device)
 
 
 def _forward_text_reward_output_bin_route(
@@ -4476,6 +4674,7 @@ def main(cfg: DictConfig) -> None:
             )
             if supervision_mode in (
                 TEXT_REWARD_BIN_SUPERVISION_MODES
+                | TEXT_REWARD_BIN_SEQUENTIAL_DELTA_SUPERVISION_MODES
                 | TEXT_REWARD_VECTOR_BIN_SUPERVISION_MODES
                 | TEXT_JOINT_REWARD_OUTPUT_BIN_SUPERVISION_MODES
             )
@@ -4540,6 +4739,8 @@ def main(cfg: DictConfig) -> None:
         if supervision_mode in {"text_reward_scalar", *TEXT_BIN_SUPERVISION_MODES, "text_reward_output_bin"}:
             train_supervision_rows *= target_dim
             eval_supervision_rows *= target_dim
+        elif supervision_mode in TEXT_REWARD_BIN_SEQUENTIAL_DELTA_SUPERVISION_MODES:
+            eval_supervision_rows *= target_dim
 
         device = _pick_device(str(train_cfg.get("device", "auto")))
         model_path = str(train_cfg.model_path)
@@ -4598,6 +4799,7 @@ def main(cfg: DictConfig) -> None:
             ] or ["lora_adapters"]
         if supervision_mode in (
             TEXT_REWARD_BIN_SUPERVISION_MODES
+            | TEXT_REWARD_BIN_SEQUENTIAL_DELTA_SUPERVISION_MODES
             | TEXT_REWARD_VECTOR_BIN_SUPERVISION_MODES
             | TEXT_JOINT_REWARD_OUTPUT_BIN_SUPERVISION_MODES
         ):
@@ -4623,7 +4825,7 @@ def main(cfg: DictConfig) -> None:
                 [str(spec["label"]) for spec in text_pairwise_label_specs],
                 text_pairwise_label_token_ids,
             )
-        if supervision_mode in {"text_reward_bin_delta", "text_reward_output_bin"} and target_dim != 2:
+        if supervision_mode in {"text_reward_bin_delta", "text_reward_bin_delta_seq", "text_reward_output_bin"} and target_dim != 2:
             raise ValueError(
                 f"offline_router.train.supervision_mode={supervision_mode} requires exactly two routes"
             )
@@ -4676,6 +4878,7 @@ def main(cfg: DictConfig) -> None:
             )
         if supervision_mode in (
             TEXT_REWARD_BIN_SUPERVISION_MODES
+            | TEXT_REWARD_BIN_SEQUENTIAL_DELTA_SUPERVISION_MODES
             | TEXT_REWARD_VECTOR_BIN_SUPERVISION_MODES
             | TEXT_JOINT_REWARD_OUTPUT_BIN_SUPERVISION_MODES
         ):
@@ -4697,7 +4900,7 @@ def main(cfg: DictConfig) -> None:
                 text_output_loss_weight,
                 [float(spec["value"]) for spec in text_output_bin_specs],
             )
-        if supervision_mode in {"text_reward_bin_delta", "text_reward_output_bin"}:
+        if supervision_mode in {"text_reward_bin_delta", "text_reward_bin_delta_seq", "text_reward_output_bin"}:
             logger.info(
                 "Offline router text reward bin delta-aux settings: delta_aux_weight=%.3f delta_aux_huber_delta=%.3f",
                 text_reward_delta_aux_weight,
@@ -4936,6 +5139,43 @@ def main(cfg: DictConfig) -> None:
                 pad_token_id=pad_token_id,
                 target_dim=target_dim,
             )
+            eval_collate_fn = _make_text_scalar_eval_collate_fn(pad_token_id=pad_token_id)
+        elif supervision_mode == "text_reward_bin_delta_seq":
+            train_dataset, dropped_overlength_train_rows = _prepare_text_bin_delta_train_rows(
+                train_dataset,
+                tokenizer=tokenizer,
+                max_seq_length=max_seq_length,
+                route_aliases=route_aliases,
+                route_labels=route_labels,
+                target_dim=target_dim,
+                target_precision=text_target_precision,
+                bin_specs=text_reward_bin_specs,
+                drop_overlength=text_drop_overlength_rows,
+            )
+            eval_dataset, dropped_overlength_eval_rows = _prepare_text_bin_eval_rows(
+                eval_dataset,
+                tokenizer=tokenizer,
+                max_seq_length=max_seq_length,
+                route_aliases=route_aliases,
+                route_labels=route_labels,
+                target_dim=target_dim,
+                target_precision=text_target_precision,
+                bin_specs=text_reward_bin_specs,
+                drop_overlength=text_drop_overlength_rows,
+            )
+            if train_prediction_source_dataset is not None:
+                train_prediction_dataset, dropped_overlength_train_prediction_rows = _prepare_text_bin_eval_rows(
+                    train_prediction_source_dataset,
+                    tokenizer=tokenizer,
+                    max_seq_length=max_seq_length,
+                    route_aliases=route_aliases,
+                    route_labels=route_labels,
+                    target_dim=target_dim,
+                    target_precision=text_target_precision,
+                    bin_specs=text_reward_bin_specs,
+                    drop_overlength=text_drop_overlength_rows,
+                )
+            train_collate_fn = _make_text_bin_delta_seq_train_collate_fn(target_dim=target_dim)
             eval_collate_fn = _make_text_scalar_eval_collate_fn(pad_token_id=pad_token_id)
         elif supervision_mode == "text_output_bin":
             train_dataset, dropped_overlength_train_rows = _prepare_text_output_bin_train_rows(
@@ -5224,8 +5464,8 @@ def main(cfg: DictConfig) -> None:
                     parse_failure_value=text_parse_failure_value,
                     clip_predictions=text_clip_predictions,
                 )
-            elif supervision_mode in TEXT_BIN_SUPERVISION_MODES:
-                if supervision_mode in TEXT_REWARD_BIN_SUPERVISION_MODES:
+            elif supervision_mode in (TEXT_BIN_SUPERVISION_MODES | TEXT_REWARD_BIN_SEQUENTIAL_DELTA_SUPERVISION_MODES):
+                if supervision_mode in (TEXT_REWARD_BIN_SUPERVISION_MODES | TEXT_REWARD_BIN_SEQUENTIAL_DELTA_SUPERVISION_MODES):
                     local_rows, local_squared_error_sum, local_value_count = _run_text_bin_reward_eval(
                         model,
                         loader,
@@ -5301,7 +5541,7 @@ def main(cfg: DictConfig) -> None:
                         merged_shard_rows,
                         route_labels=route_labels,
                     )
-                elif supervision_mode in {"text_reward_scalar", *TEXT_BIN_SUPERVISION_MODES}:
+                elif supervision_mode in {"text_reward_scalar", *TEXT_BIN_SUPERVISION_MODES, "text_reward_bin_delta_seq"}:
                     merged_rows, y_true, y_pred, split_extra = _merge_text_scalar_reward_eval_rows(
                         merged_shard_rows,
                         route_labels=route_labels,
@@ -5390,6 +5630,15 @@ def main(cfg: DictConfig) -> None:
                                 delta_aux_weight=text_reward_delta_aux_weight,
                                 delta_aux_huber_delta=text_reward_delta_aux_huber_delta,
                             )
+                        elif supervision_mode == "text_reward_bin_delta_seq":
+                            loss = _forward_text_bin_delta_seq_backward(
+                                model,
+                                batch,
+                                bin_token_ids=text_reward_bin_token_ids,
+                                bin_specs=text_reward_bin_specs,
+                                delta_aux_weight=text_reward_delta_aux_weight,
+                                delta_aux_huber_delta=text_reward_delta_aux_huber_delta,
+                            )
                         elif supervision_mode == "text_reward_output_bin":
                             loss = _forward_text_reward_output_bin_delta_aux_backward(
                                 model,
@@ -5415,7 +5664,7 @@ def main(cfg: DictConfig) -> None:
                             loss=loss,
                         )
                     running_losses.append(float(loss.item()))
-                    if supervision_mode != "text_reward_output_bin":
+                    if supervision_mode not in {"text_reward_bin_delta_seq", "text_reward_output_bin"}:
                         get_accelerator().backward(loss)
                     if supervision_mode in TEXT_LM_SUPERVISION_MODES:
                         _log_text_train_step_debug(
@@ -5888,7 +6137,7 @@ def main(cfg: DictConfig) -> None:
                         }
                         for spec, token_id in zip(text_reward_bin_specs, text_reward_bin_token_ids)
                     ]
-                if supervision_mode in {"text_reward_bin_delta", "text_reward_output_bin"}:
+                if supervision_mode in {"text_reward_bin_delta", "text_reward_bin_delta_seq", "text_reward_output_bin"}:
                     summary["text_reward"]["delta_aux_weight"] = text_reward_delta_aux_weight
                     summary["text_reward"]["delta_aux_huber_delta"] = text_reward_delta_aux_huber_delta
             if supervision_mode in TEXT_OUTPUT_SUPERVISION_MODES:
