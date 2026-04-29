@@ -193,6 +193,7 @@ async def chat_completion(
     messages: List[Dict[str, str]],
     parameters: Dict[str, Any] | DictConfig,
     api_key: str | None = None,
+    extra_headers: Dict[str, str] | None = None,
     debug_dump_dir: str | None = None,
     debug_metadata: Dict[str, Any] | None = None,
 ) -> Tuple[str, Dict[str, Any], float]:
@@ -200,8 +201,8 @@ async def chat_completion(
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
-        key_preview = f"{api_key[:5]}...{api_key[-4:]}" if len(api_key) >= 9 else api_key
-        print("chat_completion using api key %s", key_preview)
+    if extra_headers:
+        headers.update(extra_headers)
     if isinstance(parameters, DictConfig):
         parameters = OmegaConf.to_container(parameters, resolve=True) or {}
     payload = {"model": model_name, "messages": messages} | (parameters or {})
