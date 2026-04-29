@@ -62,6 +62,7 @@ offline_router:
       bin_count: 21
       bin_label_prefix: " "
       bin_value_order: ascending  # ascending: A=0.00,...; descending: A=1.00,...
+      reward_mse_weight: 1.0  # text_reward_bin_mse_seq | text_reward_bin_ce_mse_seq | text_reward_bin_mse_delta_seq
       delta_aux_weight: 0.0  # text_reward_bin_delta | text_reward_bin_delta_seq | text_reward_output_bin
       delta_aux_huber_delta: 0.05  # text_reward_bin_delta | text_reward_bin_delta_seq | text_reward_output_bin
     text_output:
