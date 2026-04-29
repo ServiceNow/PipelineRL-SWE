@@ -90,7 +90,7 @@ make job \
   LOCAL="${LOCAL}" \
   DRY_RUN="${DRY_RUN}" \
   JOB_NAME="${JOB_NAME}" \
-  COMMAND="cd ${REPO_ROOT}; mkdir -p ${OUTPUT_ROOT}; set -o pipefail; python -m pipelinerl.swe.scripts.offline_router.collect_openrouter_expert_from_existing \
+  COMMAND="cd ${REPO_ROOT}; mkdir -p ${OUTPUT_ROOT}; set -o pipefail; python pipelinerl/swe/scripts/offline_router/collect_openrouter_expert_from_existing.py \
     --source-collection-dir '${SOURCE_COLLECTION_DIR}' \
     --output-dir '${COLLECT_OUTPUT_DIR}' \
     --model '${OPENROUTER_MODEL}' \

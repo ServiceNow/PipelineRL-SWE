@@ -3,9 +3,11 @@
 
 import argparse
 import asyncio
+import difflib
 import json
 import logging
 import os
+import random
 import time
 from pathlib import Path
 from typing import Any
@@ -13,22 +15,78 @@ from typing import Any
 import aiohttp
 import pyarrow as pa
 import pyarrow.parquet as pq
-
-from pipelinerl.swe.load_datasets import load_local_swe_dataset
-from pipelinerl.swe.scripts.offline_router.common import (
-    infer_language_from_problem,
-    problem_id_from_item,
-    sanitize_for_json,
-    write_json,
-)
-from pipelinerl.swe.scripts.repair_eval_utils import (
-    build_repair_messages,
-    chat_completion,
-    extract_search_replace_edits,
-)
-from pipelinerl.swe.utils.repair_utils import calculate_precise_reward
+from datasets import load_from_disk
+from unidiff import PatchSet
+from unidiff.errors import UnidiffParseError
 
 logger = logging.getLogger(__name__)
+
+REPAIR_SYSTEM_PROMPT = (
+    "You are a helpful coding assistant. You will see a bug report and the relevant files. "
+    "Produce SEARCH/REPLACE patches using the exact format requested."
+)
+
+REPAIR_TEMPLATE = (
+    "Analyze the following code to find and fix bugs. Use this format:\n\n"
+    "<think>\n"
+    "[Your analysis process - be as detailed as you want until you're confident in your solution]\n"
+    "</think>\n\n"
+    "<solution>\n"
+    "[Your SEARCH/REPLACE edits using this format:]\n\n"
+    "### filename.py\n"
+    "<<<<<<< SEARCH\n"
+    "[exact code to find]\n"
+    "=======\n"
+    "[replacement code]\n"
+    ">>>>>>> REPLACE\n"
+    "</solution>\n\n"
+    "IMPORTANT REQUIREMENTS:\n"
+    "- Every SEARCH/REPLACE edit must use the exact format above\n"
+    "- The SEARCH block must contain a contiguous chunk of lines that exist in the source code\n"
+    "- PROPER INDENTATION IS CRITICAL - if you want to add '    print(x)', you must include all those spaces\n"
+    "- Wrap each SEARCH/REPLACE edit in a code block\n"
+    "- Use separate code blocks for multiple edits\n\n"
+    "Example:\n"
+    "```python\n"
+    "### mathweb/flask/app.py\n"
+    "<<<<<<< SEARCH\n"
+    "from flask import Flask\n"
+    "=======\n"
+    "import math\n"
+    "from flask import Flask\n"
+    ">>>>>>> REPLACE\n"
+    "```\n\n"
+    "Here is the issue:\n"
+    "--- BEGIN ISSUE ---\n"
+    "{problem_statement}\n"
+    "--- END ISSUE ---\n\n"
+    "Below are the code files that may contain bugs:\n"
+    "{file_contents}"
+)
+
+EXT_LANGUAGE_MAP = {
+    ".py": "Python",
+    ".pyi": "Python",
+    ".ipynb": "Python",
+    ".go": "Go",
+    ".rs": "Rust",
+    ".java": "Java",
+    ".kt": "Kotlin",
+    ".js": "JavaScript",
+    ".ts": "TypeScript",
+    ".cpp": "C++",
+    ".cc": "C++",
+    ".c": "C",
+    ".cs": "C#",
+    ".rb": "Ruby",
+    ".php": "PHP",
+    ".swift": "Swift",
+    ".scala": "Scala",
+}
+
+
+class FormatError(Exception):
+    pass
 
 
 def _parse_args() -> argparse.Namespace:
@@ -69,6 +127,70 @@ def _split_names(raw: str) -> list[str]:
     return [part.strip() for part in raw.split(",") if part.strip()]
 
 
+def _parse_file_contents(raw: Any) -> dict[str, str]:
+    if isinstance(raw, dict):
+        return {str(key): str(value) for key, value in raw.items()}
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return {}
+        if isinstance(parsed, dict):
+            return {str(key): str(value) for key, value in parsed.items()}
+    return {}
+
+
+def _resolve_dataset_label(item: dict[str, Any], dataset_names: list[str], dataset_label: str | None) -> str:
+    if dataset_label:
+        return dataset_label
+    row_dataset = item.get("dataset")
+    if isinstance(row_dataset, str) and row_dataset:
+        return row_dataset
+    if dataset_names:
+        return str(dataset_names[0])
+    return "swe"
+
+
+def load_local_swe_dataset(
+    dataset_names: list[str],
+    dataset_path: str,
+    shuffle: bool = True,
+    seed: int = 42,
+    dataset_label: str | None = None,
+    max_samples: int | None = None,
+) -> list[dict[str, Any]]:
+    dataset = load_from_disk(dataset_path)
+    samples: list[dict[str, Any]] = []
+    for item in dataset:
+        file_contents = _parse_file_contents(item.get("gold_file_contents", "{}"))
+        if not file_contents:
+            continue
+        item_id = item.get("issue_id", "") or item.get("instance_id", "") or item.get("id", "")
+        all_file_stats = item.get("all_file_stats", "{}")
+        if isinstance(all_file_stats, dict):
+            all_file_stats = json.dumps(all_file_stats)
+        elif not isinstance(all_file_stats, str):
+            all_file_stats = "{}"
+        samples.append(
+            {
+                "id": item_id,
+                "dataset": _resolve_dataset_label(item, dataset_names, dataset_label),
+                "repo": item.get("repo", ""),
+                "base_commit": item.get("base_commit", ""),
+                "problem_statement": item.get("problem_statement"),
+                "patch": item.get("patch"),
+                "file_contents": file_contents,
+                "all_file_stats": all_file_stats,
+            }
+        )
+    if shuffle:
+        random.seed(seed)
+        random.shuffle(samples)
+    if max_samples is not None and max_samples > 0 and len(samples) > max_samples:
+        samples = samples[:max_samples]
+    return samples
+
+
 def _load_dataset_for_split(args: argparse.Namespace, split_name: str) -> list[dict[str, Any]]:
     if split_name == "train":
         dataset_names = _split_names(args.train_dataset_names)
@@ -92,6 +214,81 @@ def _load_dataset_for_split(args: argparse.Namespace, split_name: str) -> list[d
         max_samples=max_samples,
     )
     return sorted(dataset, key=problem_id_from_item)
+
+
+def problem_id_from_item(item: dict[str, Any]) -> str:
+    for key in ("problem_id", "issue_id", "instance_id", "id"):
+        value = item.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    repo = str(item.get("repo") or "").strip()
+    base_commit = str(item.get("base_commit") or "").strip()
+    if repo and base_commit:
+        return f"{repo}@{base_commit}"
+    raise ValueError("Missing problem identifier (problem_id/issue_id/instance_id/id)")
+
+
+def infer_language_from_problem(problem: dict[str, Any]) -> str:
+    for key in ("language", "lang", "repo_language"):
+        value = problem.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    dataset = str(problem.get("dataset") or "").lower()
+    if "smith_py" in dataset or dataset.endswith("_py"):
+        return "Python"
+    if "smith_go" in dataset or dataset.endswith("_go"):
+        return "Go"
+    if "smith_rs" in dataset or dataset.endswith("_rs"):
+        return "Rust"
+    if "smith_java" in dataset or dataset.endswith("_java"):
+        return "Java"
+
+    file_contents = problem.get("file_contents") or {}
+    ext_counts: dict[str, int] = {}
+    if isinstance(file_contents, dict):
+        for path in file_contents:
+            label = EXT_LANGUAGE_MAP.get(Path(str(path)).suffix.lower())
+            if label:
+                ext_counts[label] = ext_counts.get(label, 0) + 1
+    if ext_counts:
+        return max(ext_counts.items(), key=lambda item: item[1])[0]
+    return "Unknown"
+
+
+def sanitize_for_json(value: Any) -> Any:
+    if isinstance(value, dict):
+        sanitized: dict[str, Any] = {}
+        for key, subvalue in value.items():
+            if "api_key" in str(key).lower():
+                sanitized[key] = "***"
+            else:
+                sanitized[key] = sanitize_for_json(subvalue)
+        return sanitized
+    if isinstance(value, list):
+        return [sanitize_for_json(item) for item in value]
+    return value
+
+
+def write_json(path: Path, payload: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w") as handle:
+        json.dump(payload, handle, indent=2, sort_keys=True)
+
+
+def _format_file_context(file_contents: dict[str, str]) -> str:
+    return "\n".join(f"### {path}\n```\n{content}\n```\n" for path, content in file_contents.items())
+
+
+def build_repair_messages(problem_statement: str, file_contents: dict[str, str]) -> tuple[list[dict[str, str]], str]:
+    file_context = _format_file_context(file_contents)
+    user_content = REPAIR_TEMPLATE.format(
+        problem_statement=problem_statement,
+        file_contents=file_context,
+    )
+    return [
+        {"role": "system", "content": REPAIR_SYSTEM_PROMPT},
+        {"role": "user", "content": user_content},
+    ], file_context
 
 
 def _read_api_key(args: argparse.Namespace) -> str:
@@ -170,6 +367,184 @@ def _derive_failure_type(success: bool, reward_metadata: dict[str, Any], request
     if success:
         return "none"
     return "semantic"
+
+
+def extract_search_replace_edits(solution_text: str) -> list[dict[str, str]]:
+    edits: list[dict[str, str]] = []
+    code_blocks: list[str] = []
+    in_block = False
+    current: list[str] = []
+
+    for line in solution_text.split("\n"):
+        if line.strip().startswith("```"):
+            if in_block:
+                code_blocks.append("\n".join(current))
+                current = []
+            in_block = not in_block
+        elif in_block:
+            current.append(line)
+
+    for block in code_blocks:
+        lines = block.split("\n")
+        file_path = None
+        start_index = 0
+        for i, line in enumerate(lines):
+            if line.strip().startswith("###"):
+                file_path = line.strip()[3:].strip()
+                start_index = i + 1
+                break
+        if not file_path:
+            continue
+
+        search_start = search_end = replace_start = replace_end = None
+        for i, line in enumerate(lines[start_index:], start=start_index):
+            if "<<<<<<< SEARCH" in line:
+                search_start = i + 1
+            elif "=======" in line and search_start is not None:
+                search_end = i
+                replace_start = i + 1
+            elif ">>>>>>> REPLACE" in line and replace_start is not None:
+                replace_end = i
+                break
+        if None in (search_start, search_end, replace_start, replace_end):
+            continue
+        edits.append(
+            {
+                "file_path": file_path,
+                "search": "\n".join(lines[search_start:search_end]),
+                "replace": "\n".join(lines[replace_start:replace_end]),
+            }
+        )
+    return edits
+
+
+async def chat_completion(
+    session: aiohttp.ClientSession,
+    base_url: str,
+    model_name: str,
+    messages: list[dict[str, str]],
+    parameters: dict[str, Any],
+    api_key: str | None = None,
+    extra_headers: dict[str, str] | None = None,
+) -> tuple[str, dict[str, Any], float]:
+    url = base_url.rstrip("/") + "/v1/chat/completions"
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    if extra_headers:
+        headers.update(extra_headers)
+    payload = {"model": model_name, "messages": messages} | (parameters or {})
+    start = time.time()
+    async with session.post(url, json=payload, headers=headers) as response:
+        response.raise_for_status()
+        data = await response.json()
+    latency = time.time() - start
+    text = data["choices"][0]["message"]["content"] or ""
+    usage = data.get("usage", {})
+    return text, usage, latency
+
+
+def _generate_unified_diff(old_code: str, new_code: str, n_context: int = 3) -> str:
+    diff = difflib.unified_diff(
+        old_code.splitlines(),
+        new_code.splitlines(),
+        fromfile="old",
+        tofile="new",
+        lineterm="",
+        n=n_context,
+    )
+    try:
+        next(diff)
+        next(diff)
+        return "\n".join(diff)
+    except StopIteration:
+        return ""
+
+
+def _apply_edits_to_files(file_contents: dict[str, str], edits: list[dict[str, str]]) -> dict[str, str]:
+    new_content_dict = dict(file_contents)
+    for edit in edits:
+        file_path = edit.get("file_path", "")
+        search_text = edit.get("search", "")
+        replace_text = edit.get("replace", "")
+        if search_text == replace_text:
+            raise FormatError("Search and replace blocks are identical")
+        if file_path not in new_content_dict:
+            raise FormatError(f"File {file_path} not found in file_contents")
+        current_content = new_content_dict[file_path]
+        if search_text not in current_content:
+            raise FormatError(f"Search text not found in {file_path}: {search_text}")
+        new_content_dict[file_path] = current_content.replace(search_text, replace_text, 1)
+    return new_content_dict
+
+
+def _get_normalized_patch(code_context: dict[str, str], new_content_dict: dict[str, str]) -> dict[str, str]:
+    patch_dict: dict[str, str] = {}
+    for path, new_content in new_content_dict.items():
+        patch = _generate_unified_diff(code_context.get(path, ""), new_content)
+        if patch:
+            patch_dict[path] = patch
+    return patch_dict
+
+
+def _get_filelevel_diff(patch_text: str) -> dict[str, str]:
+    try:
+        patch = PatchSet(patch_text)
+    except (UnidiffParseError, Exception):
+        return {}
+    return {patchfile.path: "\n".join(str(hunk).strip() for hunk in patchfile).strip() for patchfile in patch}
+
+
+def _compute_change_similarities(
+    pred_patch: dict[str, str],
+    oracle_patch: dict[str, str],
+) -> list[dict[str, Any]]:
+    similarities: list[dict[str, Any]] = []
+    for path in set(oracle_patch.keys()).union(set(pred_patch.keys())):
+        pred_change = pred_patch.get(path, "")
+        oracle_change = oracle_patch.get(path, "")
+        if oracle_change == "" or pred_change == "":
+            similarity = 0.0
+        else:
+            similarity = difflib.SequenceMatcher(None, pred_change, oracle_change, autojunk=False).ratio()
+        similarities.append(
+            {
+                "path": path,
+                "pred_change": pred_change,
+                "oracle_change": oracle_change,
+                "similarity": similarity,
+            }
+        )
+    return similarities
+
+
+def calculate_precise_reward(
+    file_contents: dict[str, str],
+    oracle_patch_text: str,
+    predicted_edits: list[dict[str, str]],
+) -> tuple[float, dict[str, Any]]:
+    try:
+        if len(predicted_edits) == 0:
+            raise FormatError("No valid search blocks found")
+        oracle_patch = _get_filelevel_diff(oracle_patch_text)
+        pred_new_content = _apply_edits_to_files(file_contents, predicted_edits)
+        pred_patch = _get_normalized_patch(file_contents, pred_new_content)
+        similarities = _compute_change_similarities(pred_patch, oracle_patch)
+        if len(similarities) == 0:
+            return 1.0, {"similarities": []}
+        reward = sum(sim["similarity"] for sim in similarities) / len(similarities)
+        return reward, {
+            "similarities": similarities,
+            "num_files_changed": len(similarities),
+            "oracle_files": list(oracle_patch.keys()),
+            "predicted_files": list(pred_patch.keys()),
+        }
+    except FormatError as exc:
+        logger.warning("Format error calculating precise reward: %s", exc)
+        return 0.0, {"format_error": True, "error_message": str(exc)}
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.error("Unexpected error calculating precise reward: %s", exc)
+        return 0.0, {"error": str(exc)}
 
 
 async def _run_openrouter_expert(
