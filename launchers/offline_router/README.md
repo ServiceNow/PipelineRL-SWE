@@ -21,3 +21,15 @@ The wrapper launches:
 Each script accepts the usual overrides, including `TIMESTAMP`, `SOURCE_RUN_DIR`,
 `COLLECT_OUTPUT_DIR`, `OUTPUT_ROOT`, `TRAIN_OUTPUT_DIR`, `TRAIN_NPROC`,
 `MAX_SEQ_LENGTH`, `MAX_TRAIN_ROWS`, `NUM_EPOCHS`, and `TRAIN_EXTRA_ARGS`.
+
+## MSE Objective Sweep
+
+```bash
+TIMESTAMP=$(date +%s) bash launchers/offline_router/launch_offline_router_swe_bench_router_split_mse_objective_experiments_parallel.sh
+```
+
+The wrapper launches:
+
+- `bin_20bucket_mse_seq_w20_full_5epoch`: expected reward-bin value trained with MSE only.
+- `bin_20bucket_ce_mse_seq_w20_full_5epoch`: regular CE plus expected-value MSE.
+- `bin_20bucket_mse_delta_seq_w20_full_5epoch`: expected-value MSE plus delta MSE.

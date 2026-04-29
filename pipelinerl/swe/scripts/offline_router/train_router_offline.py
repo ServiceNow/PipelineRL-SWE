@@ -53,6 +53,9 @@ TEXT_REWARD_SUPERVISION_MODES = {
     "text_reward_bin_delta",
     "text_reward_bin_delta_seq",
     "text_reward_bin_restricted_delta_seq",
+    "text_reward_bin_mse_seq",
+    "text_reward_bin_ce_mse_seq",
+    "text_reward_bin_mse_delta_seq",
     "text_reward_delta_bin",
     "text_reward_output_bin",
 }
@@ -63,6 +66,9 @@ TEXT_REWARD_BIN_SUPERVISION_MODES = {"text_reward_bin", "text_reward_bin_delta"}
 TEXT_REWARD_BIN_SEQUENTIAL_DELTA_SUPERVISION_MODES = {
     "text_reward_bin_delta_seq",
     "text_reward_bin_restricted_delta_seq",
+    "text_reward_bin_mse_seq",
+    "text_reward_bin_ce_mse_seq",
+    "text_reward_bin_mse_delta_seq",
 }
 TEXT_REWARD_DELTA_BIN_SUPERVISION_MODES = {"text_reward_delta_bin"}
 TEXT_REWARD_VECTOR_BIN_SUPERVISION_MODES = {"text_reward_vector_bin"}
@@ -3223,6 +3229,8 @@ def _forward_text_bin_delta_seq_route(
     reward_bin_value_tensor: torch.Tensor,
     reward_bin_token_ids: list[int],
     include_loss: bool,
+    reward_loss_mode: str = "ce",
+    reward_mse_weight: float = 1.0,
     restricted_ce: bool = False,
 ) -> tuple[torch.Tensor | None, torch.Tensor]:
     device = reward_bin_token_id_tensor.device
@@ -3241,27 +3249,53 @@ def _forward_text_bin_delta_seq_route(
 
     route_loss: torch.Tensor | None = None
     if include_loss:
-        if restricted_ce:
-            reward_target_bin_idx = torch.tensor(
-                [int(route_row["target_bin_idx"])],
-                dtype=torch.long,
+        loss_terms: list[torch.Tensor] = []
+        if reward_loss_mode in {"ce", "ce_mse"}:
+            if restricted_ce:
+                reward_target_bin_idx = torch.tensor(
+                    [int(route_row["target_bin_idx"])],
+                    dtype=torch.long,
+                    device=device,
+                )
+                ce_loss = F.cross_entropy(
+                    reward_bin_logits.unsqueeze(0).float(),
+                    reward_target_bin_idx,
+                ).float()
+            else:
+                reward_target_token_id = torch.tensor(
+                    [int(reward_bin_token_ids[int(route_row["target_bin_idx"])])],
+                    dtype=torch.long,
+                    device=device,
+                )
+                ce_loss = F.cross_entropy(
+                    reward_next_logits.unsqueeze(0).float(),
+                    reward_target_token_id,
+                ).float()
+            loss_terms.append(ce_loss)
+        if reward_loss_mode in {"mse", "ce_mse"}:
+            reward_target = torch.tensor(
+                float(route_row["target_reward"]),
+                dtype=torch.float32,
                 device=device,
             )
-            route_loss = F.cross_entropy(
-                reward_bin_logits.unsqueeze(0).float(),
-                reward_target_bin_idx,
-            ).float()
-        else:
-            reward_target_token_id = torch.tensor(
-                [int(reward_bin_token_ids[int(route_row["target_bin_idx"])])],
-                dtype=torch.long,
-                device=device,
-            )
-            route_loss = F.cross_entropy(
-                reward_next_logits.unsqueeze(0).float(),
-                reward_target_token_id,
-            ).float()
+            reward_mse_loss = F.mse_loss(pred_reward.float(), reward_target).float()
+            loss_terms.append(float(reward_mse_weight) * reward_mse_loss)
+        if not loss_terms:
+            raise ValueError(f"Unsupported reward_loss_mode for text reward bin route: {reward_loss_mode}")
+        route_loss = torch.stack(loss_terms).sum()
     return route_loss, pred_reward
+
+
+def _text_reward_seq_loss_settings(supervision_mode: str) -> tuple[str, bool]:
+    if supervision_mode in {"text_reward_bin_delta_seq", "text_reward_bin_restricted_delta_seq"}:
+        return "ce", supervision_mode == "text_reward_bin_restricted_delta_seq"
+    if supervision_mode == "text_reward_bin_mse_seq":
+        return "mse", False
+    if supervision_mode == "text_reward_bin_ce_mse_seq":
+        return "ce_mse", False
+    if supervision_mode == "text_reward_bin_mse_delta_seq":
+        return "mse", False
+    raise ValueError(f"Unsupported sequential text reward bin supervision mode: {supervision_mode}")
 
 
 def _forward_text_bin_delta_seq_backward(
@@ -3271,11 +3305,13 @@ def _forward_text_bin_delta_seq_backward(
     bin_specs: list[dict[str, Any]],
     delta_aux_weight: float,
     delta_aux_huber_delta: float,
+    reward_loss_mode: str = "ce",
+    reward_mse_weight: float = 1.0,
     restricted_ce: bool = False,
 ) -> torch.Tensor:
     target_dim = int(batch["targets"].shape[1])
     if target_dim != 2:
-        raise ValueError("text_reward_bin_delta_seq currently requires exactly two routes")
+        raise ValueError("Sequential text_reward_bin supervision currently requires exactly two routes")
     device = get_accelerator().device
     reward_bin_token_id_tensor = torch.tensor(bin_token_ids, dtype=torch.long, device=device)
     reward_bin_value_tensor = torch.tensor(
@@ -3289,7 +3325,7 @@ def _forward_text_bin_delta_seq_backward(
 
     for problem_idx, route_rows in enumerate(batch["route_rows"]):
         if len(route_rows) != target_dim:
-            raise ValueError("Each text_reward_bin_delta_seq batch example must include one row per route")
+            raise ValueError("Each sequential text_reward_bin batch example must include one row per route")
         target_delta = batch["target_deltas"][problem_idx].to(device=device, dtype=torch.float32)
 
         with torch.no_grad():
@@ -3300,6 +3336,8 @@ def _forward_text_bin_delta_seq_backward(
                 reward_bin_value_tensor=reward_bin_value_tensor,
                 reward_bin_token_ids=bin_token_ids,
                 include_loss=False,
+                reward_loss_mode=reward_loss_mode,
+                reward_mse_weight=reward_mse_weight,
                 restricted_ce=restricted_ce,
             )
 
@@ -3310,10 +3348,12 @@ def _forward_text_bin_delta_seq_backward(
             reward_bin_value_tensor=reward_bin_value_tensor,
             reward_bin_token_ids=bin_token_ids,
             include_loss=True,
+            reward_loss_mode=reward_loss_mode,
+            reward_mse_weight=reward_mse_weight,
             restricted_ce=restricted_ce,
         )
         if route_1_loss is None:
-            raise ValueError("text_reward_bin_delta_seq route loss unexpectedly missing for route 1")
+            raise ValueError("Sequential text_reward_bin route loss unexpectedly missing for route 1")
         if delta_aux_weight > 0.0:
             pred_delta_1 = pred_reward_0_detached - pred_reward_1
             if delta_aux_huber_delta > 0.0:
@@ -3339,10 +3379,12 @@ def _forward_text_bin_delta_seq_backward(
             reward_bin_value_tensor=reward_bin_value_tensor,
             reward_bin_token_ids=bin_token_ids,
             include_loss=True,
+            reward_loss_mode=reward_loss_mode,
+            reward_mse_weight=reward_mse_weight,
             restricted_ce=restricted_ce,
         )
         if route_0_loss is None:
-            raise ValueError("text_reward_bin_delta_seq route loss unexpectedly missing for route 0")
+            raise ValueError("Sequential text_reward_bin route loss unexpectedly missing for route 0")
         if delta_aux_weight > 0.0:
             pred_delta_0 = pred_reward_0 - pred_reward_1_detached
             if delta_aux_huber_delta > 0.0:
@@ -3361,7 +3403,7 @@ def _forward_text_bin_delta_seq_backward(
         num_route_losses += 1
 
     if num_route_losses == 0:
-        raise ValueError("No valid text_reward_bin_delta_seq route losses were computed")
+        raise ValueError("No valid sequential text_reward_bin route losses were computed")
     return torch.tensor(total_loss_value / float(num_route_losses), dtype=torch.float32, device=device)
 
 
@@ -5090,6 +5132,7 @@ def main(cfg: DictConfig) -> None:
         text_reward_bin_value_order = str(text_reward_cfg.get("bin_value_order", "ascending"))
         text_reward_delta_aux_weight = float(text_reward_cfg.get("delta_aux_weight", 0.0))
         text_reward_delta_aux_huber_delta = float(text_reward_cfg.get("delta_aux_huber_delta", 0.05))
+        text_reward_mse_weight = float(text_reward_cfg.get("reward_mse_weight", 1.0))
         text_output_bin_count = int(text_output_cfg.get("bin_count", 21))
         text_output_bin_label_prefix = str(text_output_cfg.get("bin_label_prefix", " "))
         text_output_max_value = float(text_output_cfg.get("max_value", 6000.0))
@@ -5365,14 +5408,14 @@ def main(cfg: DictConfig) -> None:
             )
         if supervision_mode in {
             "text_reward_bin_delta",
-            "text_reward_bin_delta_seq",
-            "text_reward_bin_restricted_delta_seq",
+            *TEXT_REWARD_BIN_SEQUENTIAL_DELTA_SUPERVISION_MODES,
             "text_reward_output_bin",
         }:
             logger.info(
-                "Offline router text reward bin delta-aux settings: delta_aux_weight=%.3f delta_aux_huber_delta=%.3f",
+                "Offline router text reward bin auxiliary settings: delta_aux_weight=%.3f delta_aux_huber_delta=%.3f reward_mse_weight=%.3f",
                 text_reward_delta_aux_weight,
                 text_reward_delta_aux_huber_delta,
+                text_reward_mse_weight,
             )
         if supervision_mode == "text_pairwise_sign":
             logger.info(
@@ -5608,44 +5651,7 @@ def main(cfg: DictConfig) -> None:
                 target_dim=target_dim,
             )
             eval_collate_fn = _make_text_scalar_eval_collate_fn(pad_token_id=pad_token_id)
-        elif supervision_mode == "text_reward_bin_delta_seq":
-            train_dataset, dropped_overlength_train_rows = _prepare_text_bin_delta_train_rows(
-                train_dataset,
-                tokenizer=tokenizer,
-                max_seq_length=max_seq_length,
-                route_aliases=route_aliases,
-                route_labels=route_labels,
-                target_dim=target_dim,
-                target_precision=text_target_precision,
-                bin_specs=text_reward_bin_specs,
-                drop_overlength=text_drop_overlength_rows,
-            )
-            eval_dataset, dropped_overlength_eval_rows = _prepare_text_bin_eval_rows(
-                eval_dataset,
-                tokenizer=tokenizer,
-                max_seq_length=max_seq_length,
-                route_aliases=route_aliases,
-                route_labels=route_labels,
-                target_dim=target_dim,
-                target_precision=text_target_precision,
-                bin_specs=text_reward_bin_specs,
-                drop_overlength=text_drop_overlength_rows,
-            )
-            if train_prediction_source_dataset is not None:
-                train_prediction_dataset, dropped_overlength_train_prediction_rows = _prepare_text_bin_eval_rows(
-                    train_prediction_source_dataset,
-                    tokenizer=tokenizer,
-                    max_seq_length=max_seq_length,
-                    route_aliases=route_aliases,
-                    route_labels=route_labels,
-                    target_dim=target_dim,
-                    target_precision=text_target_precision,
-                    bin_specs=text_reward_bin_specs,
-                    drop_overlength=text_drop_overlength_rows,
-            )
-            train_collate_fn = _make_text_bin_delta_seq_train_collate_fn(target_dim=target_dim)
-            eval_collate_fn = _make_text_scalar_eval_collate_fn(pad_token_id=pad_token_id)
-        elif supervision_mode == "text_reward_bin_restricted_delta_seq":
+        elif supervision_mode in TEXT_REWARD_BIN_SEQUENTIAL_DELTA_SUPERVISION_MODES:
             train_dataset, dropped_overlength_train_rows = _prepare_text_bin_delta_train_rows(
                 train_dataset,
                 tokenizer=tokenizer,
@@ -6096,13 +6102,11 @@ def main(cfg: DictConfig) -> None:
                         merged_shard_rows,
                         route_labels=route_labels,
                     )
-                elif supervision_mode in {"text_reward_scalar", *TEXT_BIN_SUPERVISION_MODES, "text_reward_bin_delta_seq"}:
-                    merged_rows, y_true, y_pred, split_extra = _merge_text_scalar_reward_eval_rows(
-                        merged_shard_rows,
-                        route_labels=route_labels,
-                        route_aliases=route_aliases,
-                    )
-                elif supervision_mode == "text_reward_bin_restricted_delta_seq":
+                elif supervision_mode in {
+                    "text_reward_scalar",
+                    *TEXT_BIN_SUPERVISION_MODES,
+                    *TEXT_REWARD_BIN_SEQUENTIAL_DELTA_SUPERVISION_MODES,
+                }:
                     merged_rows, y_true, y_pred, split_extra = _merge_text_scalar_reward_eval_rows(
                         merged_shard_rows,
                         route_labels=route_labels,
@@ -6196,7 +6200,8 @@ def main(cfg: DictConfig) -> None:
                                 delta_aux_weight=text_reward_delta_aux_weight,
                                 delta_aux_huber_delta=text_reward_delta_aux_huber_delta,
                             )
-                        elif supervision_mode == "text_reward_bin_delta_seq":
+                        elif supervision_mode in TEXT_REWARD_BIN_SEQUENTIAL_DELTA_SUPERVISION_MODES:
+                            reward_loss_mode, restricted_ce = _text_reward_seq_loss_settings(supervision_mode)
                             loss = _forward_text_bin_delta_seq_backward(
                                 model,
                                 batch,
@@ -6204,17 +6209,9 @@ def main(cfg: DictConfig) -> None:
                                 bin_specs=text_reward_bin_specs,
                                 delta_aux_weight=text_reward_delta_aux_weight,
                                 delta_aux_huber_delta=text_reward_delta_aux_huber_delta,
-                                restricted_ce=False,
-                            )
-                        elif supervision_mode == "text_reward_bin_restricted_delta_seq":
-                            loss = _forward_text_bin_delta_seq_backward(
-                                model,
-                                batch,
-                                bin_token_ids=text_reward_bin_token_ids,
-                                bin_specs=text_reward_bin_specs,
-                                delta_aux_weight=text_reward_delta_aux_weight,
-                                delta_aux_huber_delta=text_reward_delta_aux_huber_delta,
-                                restricted_ce=True,
+                                reward_loss_mode=reward_loss_mode,
+                                reward_mse_weight=text_reward_mse_weight,
+                                restricted_ce=restricted_ce,
                             )
                         elif supervision_mode == "text_reward_output_bin":
                             loss = _forward_text_reward_output_bin_delta_aux_backward(
@@ -6247,11 +6244,7 @@ def main(cfg: DictConfig) -> None:
                             loss=loss,
                         )
                     running_losses.append(float(loss.item()))
-                    if supervision_mode not in {
-                        "text_reward_bin_delta_seq",
-                        "text_reward_bin_restricted_delta_seq",
-                        "text_reward_output_bin",
-                    }:
+                    if supervision_mode not in {*TEXT_REWARD_BIN_SEQUENTIAL_DELTA_SUPERVISION_MODES, "text_reward_output_bin"}:
                         get_accelerator().backward(loss)
                     if supervision_mode in TEXT_LM_SUPERVISION_MODES:
                         _log_text_train_step_debug(
@@ -6728,12 +6721,12 @@ def main(cfg: DictConfig) -> None:
                     ]
                 if supervision_mode in {
                     "text_reward_bin_delta",
-                    "text_reward_bin_delta_seq",
-                    "text_reward_bin_restricted_delta_seq",
+                    *TEXT_REWARD_BIN_SEQUENTIAL_DELTA_SUPERVISION_MODES,
                     "text_reward_output_bin",
                 }:
                     summary["text_reward"]["delta_aux_weight"] = text_reward_delta_aux_weight
                     summary["text_reward"]["delta_aux_huber_delta"] = text_reward_delta_aux_huber_delta
+                    summary["text_reward"]["reward_mse_weight"] = text_reward_mse_weight
             if supervision_mode in TEXT_OUTPUT_SUPERVISION_MODES:
                 summary["text_output"] = {
                     "bin_count": text_output_bin_count,
