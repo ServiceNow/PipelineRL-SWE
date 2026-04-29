@@ -371,6 +371,39 @@ def _derive_failure_type(success: bool, reward_metadata: dict[str, Any], request
 
 def extract_search_replace_edits(solution_text: str) -> list[dict[str, str]]:
     edits: list[dict[str, str]] = []
+
+    def _extract_from_block(block: str) -> None:
+        lines = block.split("\n")
+        file_path = None
+        start_index = 0
+        for i, line in enumerate(lines):
+            if line.strip().startswith("###"):
+                file_path = line.strip()[3:].strip()
+                start_index = i + 1
+                break
+        if not file_path:
+            return
+
+        search_start = search_end = replace_start = replace_end = None
+        for i, line in enumerate(lines[start_index:], start=start_index):
+            if "<<<<<<< SEARCH" in line:
+                search_start = i + 1
+            elif "=======" in line and search_start is not None:
+                search_end = i
+                replace_start = i + 1
+            elif ">>>>>>> REPLACE" in line and replace_start is not None:
+                replace_end = i
+                break
+        if None in (search_start, search_end, replace_start, replace_end):
+            return
+        edits.append(
+            {
+                "file_path": file_path,
+                "search": "\n".join(lines[search_start:search_end]),
+                "replace": "\n".join(lines[replace_start:replace_end]),
+            }
+        )
+
     code_blocks: list[str] = []
     in_block = False
     current: list[str] = []
@@ -385,36 +418,9 @@ def extract_search_replace_edits(solution_text: str) -> list[dict[str, str]]:
             current.append(line)
 
     for block in code_blocks:
-        lines = block.split("\n")
-        file_path = None
-        start_index = 0
-        for i, line in enumerate(lines):
-            if line.strip().startswith("###"):
-                file_path = line.strip()[3:].strip()
-                start_index = i + 1
-                break
-        if not file_path:
-            continue
-
-        search_start = search_end = replace_start = replace_end = None
-        for i, line in enumerate(lines[start_index:], start=start_index):
-            if "<<<<<<< SEARCH" in line:
-                search_start = i + 1
-            elif "=======" in line and search_start is not None:
-                search_end = i
-                replace_start = i + 1
-            elif ">>>>>>> REPLACE" in line and replace_start is not None:
-                replace_end = i
-                break
-        if None in (search_start, search_end, replace_start, replace_end):
-            continue
-        edits.append(
-            {
-                "file_path": file_path,
-                "search": "\n".join(lines[search_start:search_end]),
-                "replace": "\n".join(lines[replace_start:replace_end]),
-            }
-        )
+        _extract_from_block(block)
+    if not edits and "<<<<<<< SEARCH" in solution_text and ">>>>>>> REPLACE" in solution_text:
+        _extract_from_block(solution_text)
     return edits
 
 
