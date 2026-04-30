@@ -2,6 +2,20 @@
 
 Launch from the repo root unless noted otherwise.
 
+## Expanded SWE-bench Train Dataset
+
+Build a local SWE-bench train dataset from all official train rows, without the
+old 6k pre-reconstruction sampling cap:
+
+```bash
+TIMESTAMP=$(date +%s) bash launchers/offline_router/launch_prepare_swe_bench_train_all_16k.sh
+```
+
+Defaults write the dataset to `/mnt/llmd/data/swebench/all_16k/ds_train` and the
+job log to `/mnt/llmd/results/exps/aristides/reason/prepare_swe_bench_train_all_16k_${TIMESTAMP}`.
+Override `MAX_TOTAL_TOKENS`, `DATASET_ROOT`, or `SINGLE_OUTPUT_PATH` to create
+larger-context variants such as `24k` or `32k`.
+
 ## Current SWE-bench Router-Split Experiments
 
 Submit the four next-step jobs sequentially locally. Remote jobs run concurrently
