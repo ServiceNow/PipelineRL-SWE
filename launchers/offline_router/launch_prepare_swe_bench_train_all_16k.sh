@@ -53,7 +53,7 @@ make job \
   LOCAL="${LOCAL}" \
   DRY_RUN="${DRY_RUN}" \
   JOB_NAME="${JOB_NAME}_${TIMESTAMP}" \
-  COMMAND="cd ${REPO_ROOT}; mkdir -p ${OUTPUT_ROOT} ${DATASET_ROOT}; set -euo pipefail; python -m pipelinerl.swe.scripts.new.prepare_swe_smith_dataset \
+  COMMAND="cd ${REPO_ROOT}; mkdir -p ${OUTPUT_ROOT} ${DATASET_ROOT}; set -euo pipefail; python pipelinerl/swe/scripts/new/prepare_swe_smith_dataset.py \
     --hf-dataset '${HF_DATASET}' \
     --hf-split '${HF_SPLIT}' \
     --single-output-path '${SINGLE_OUTPUT_PATH}' \
