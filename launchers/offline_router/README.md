@@ -33,3 +33,15 @@ The wrapper launches:
 - `bin_20bucket_mse_seq_w20_full_5epoch`: expected reward-bin value trained with MSE only.
 - `bin_20bucket_ce_mse_seq_w20_full_5epoch`: regular CE plus expected-value MSE.
 - `bin_20bucket_mse_delta_seq_w20_full_5epoch`: expected-value MSE plus delta MSE.
+
+## ModernBERT Encoder Baseline
+
+```bash
+TIMESTAMP=$(date +%s) bash launchers/offline_router/launch_offline_router_swe_bench_router_split_modernbert_large_mse_full_5epoch.sh
+```
+
+This trains `answerdotai/ModernBERT-large` as a two-output reward regressor over the
+same collected router dataset. It uses the original repair prompt plus the primary
+attempt as input, predicts both route rewards directly, and writes the usual
+`route_metrics.csv`, `pairwise_metrics.csv`, `utility_vs_baselines.csv`, and
+`summary.json`.
