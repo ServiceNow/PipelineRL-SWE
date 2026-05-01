@@ -106,6 +106,7 @@ class RouterPairDataset(Dataset):
                     "input_ids": [int(value) for value in input_ids],
                     "attention_mask": [int(value) for value in attention_mask],
                     "targets": target_rewards,
+                    "class_target": _argmax_index(target_rewards),
                 }
             )
 
@@ -121,12 +122,14 @@ def _collate(batch: list[dict[str, Any]], pad_token_id: int, target_dim: int) ->
     input_ids = torch.full((len(batch), max_len), int(pad_token_id), dtype=torch.long)
     attention_mask = torch.zeros((len(batch), max_len), dtype=torch.long)
     targets = torch.zeros((len(batch), target_dim), dtype=torch.float32)
+    class_targets = torch.zeros((len(batch),), dtype=torch.long)
     row_indices = torch.zeros((len(batch),), dtype=torch.long)
     for idx, row in enumerate(batch):
         seq_len = len(row["input_ids"])
         input_ids[idx, :seq_len] = torch.tensor(row["input_ids"], dtype=torch.long)
         attention_mask[idx, :seq_len] = torch.tensor(row["attention_mask"], dtype=torch.long)
         targets[idx] = torch.tensor(row["targets"], dtype=torch.float32)
+        class_targets[idx] = int(row["class_target"])
         row_indices[idx] = int(row["row_idx"])
     return {
         "problem_ids": [row["problem_id"] for row in batch],
@@ -136,6 +139,7 @@ def _collate(batch: list[dict[str, Any]], pad_token_id: int, target_dim: int) ->
         "input_ids": input_ids,
         "attention_mask": attention_mask,
         "targets": targets,
+        "class_targets": class_targets,
         "row_indices": row_indices,
     }
 
@@ -341,6 +345,47 @@ def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
             handle.write(json.dumps(row, sort_keys=True) + "\n")
 
 
+def _compute_classifier_metrics(
+    y_true_rewards: np.ndarray,
+    y_pred_scores: np.ndarray,
+    route_labels: list[str],
+) -> dict[str, Any]:
+    if y_true_rewards.size == 0 or y_pred_scores.size == 0:
+        return {
+            "n_eval": 0,
+            "accuracy": math.nan,
+            "target_counts_by_route": {label: 0 for label in route_labels},
+            "pred_counts_by_route": {label: 0 for label in route_labels},
+        }
+
+    target_classes = np.argmax(y_true_rewards, axis=1)
+    pred_classes = np.argmax(y_pred_scores, axis=1)
+    target_counts = np.bincount(target_classes, minlength=len(route_labels))
+    pred_counts = np.bincount(pred_classes, minlength=len(route_labels))
+    metrics: dict[str, Any] = {
+        "n_eval": int(target_classes.shape[0]),
+        "accuracy": float(np.mean(target_classes == pred_classes)),
+        "target_counts_by_route": {
+            route_labels[idx]: int(target_counts[idx]) for idx in range(len(route_labels))
+        },
+        "pred_counts_by_route": {
+            route_labels[idx]: int(pred_counts[idx]) for idx in range(len(route_labels))
+        },
+    }
+
+    if len(route_labels) == 2:
+        # Positive class is route 1, which is expert in the current two-route setup.
+        positive_labels = (target_classes == 1).astype(np.int64)
+        positive_scores = y_pred_scores[:, 1]
+        try:
+            from pipelinerl.swe.scripts.offline_router.common import _roc_auc_binary
+
+            metrics["route_1_auc"] = _roc_auc_binary(positive_labels, positive_scores)
+        except Exception:
+            metrics["route_1_auc"] = None
+    return metrics
+
+
 def _load_route_labels(dataset_dir: Path) -> list[str]:
     metadata_path = dataset_dir / "metadata.json"
     if metadata_path.exists():
@@ -368,22 +413,30 @@ def _evaluate(
     loader: DataLoader,
     eval_dataset: RouterPairDataset,
     route_labels: list[str],
+    objective: str,
 ) -> tuple[float, list[dict[str, Any]], np.ndarray, np.ndarray]:
     model.eval()
-    total_squared_error = 0.0
-    total_values = 0
+    total_loss = 0.0
+    total_examples = 0
     rows: list[dict[str, Any]] = []
     y_true_chunks: list[np.ndarray] = []
     y_pred_chunks: list[np.ndarray] = []
     for batch in tqdm(loader, desc="Eval ModernBERT router", disable=not accelerator.is_main_process):
-        preds = model(input_ids=batch["input_ids"], attention_mask=batch["attention_mask"]).float()
+        logits = model(input_ids=batch["input_ids"], attention_mask=batch["attention_mask"]).float()
         targets = batch["targets"].float()
+        if objective == "route_classifier":
+            loss = F.cross_entropy(logits, batch["class_targets"].long(), reduction="sum")
+            preds = torch.softmax(logits, dim=-1)
+        else:
+            loss = F.mse_loss(logits, targets, reduction="sum")
+            preds = logits
+        gathered_loss = accelerator.gather_for_metrics(loss.detach().reshape(1)).detach().cpu()
         gathered_preds = accelerator.gather_for_metrics(preds).detach().cpu()
         gathered_targets = accelerator.gather_for_metrics(targets).detach().cpu()
         gathered_indices = accelerator.gather_for_metrics(batch["row_indices"]).detach().cpu().tolist()
         if accelerator.is_main_process:
-            total_squared_error += float(torch.sum((gathered_preds - gathered_targets) ** 2).item())
-            total_values += int(gathered_targets.numel())
+            total_loss += float(torch.sum(gathered_loss).item())
+            total_examples += int(gathered_targets.shape[0])
 
         for idx in range(gathered_preds.shape[0]):
             source_meta = eval_dataset.rows[int(gathered_indices[idx])]
@@ -407,7 +460,11 @@ def _evaluate(
         return math.nan, [], np.empty((0, len(route_labels))), np.empty((0, len(route_labels)))
     y_true = np.concatenate(y_true_chunks, axis=0) if y_true_chunks else np.empty((0, len(route_labels)))
     y_pred = np.concatenate(y_pred_chunks, axis=0) if y_pred_chunks else np.empty((0, len(route_labels)))
-    eval_loss = float(total_squared_error / total_values) if total_values > 0 else math.nan
+    if objective == "route_classifier":
+        eval_loss = float(total_loss / total_examples) if total_examples > 0 else math.nan
+    else:
+        total_values = total_examples * len(route_labels)
+        eval_loss = float(total_loss / total_values) if total_values > 0 else math.nan
     return eval_loss, rows, y_true, y_pred
 
 
@@ -416,6 +473,7 @@ def main() -> None:
     parser.add_argument("--dataset-dir", required=True)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--model-name", default="answerdotai/ModernBERT-large")
+    parser.add_argument("--objective", choices=["reward_mse", "route_classifier"], default="reward_mse")
     parser.add_argument("--max-seq-length", type=int, default=8192)
     parser.add_argument("--num-epochs", type=int, default=5)
     parser.add_argument("--batch-size", type=int, default=1)
@@ -486,6 +544,7 @@ def main() -> None:
 
     config = {
         "model_name": args.model_name,
+        "objective": args.objective,
         "dataset_dir": str(dataset_dir),
         "route_labels": route_labels,
         "max_seq_length": int(args.max_seq_length),
@@ -514,15 +573,25 @@ def main() -> None:
         running_losses: list[float] = []
         for batch in tqdm(train_loader, desc=f"Train ModernBERT router epoch {epoch}", disable=not accelerator.is_main_process):
             with accelerator.accumulate(model):
-                preds = model(input_ids=batch["input_ids"], attention_mask=batch["attention_mask"]).float()
-                loss = F.mse_loss(preds, batch["targets"].float())
+                logits = model(input_ids=batch["input_ids"], attention_mask=batch["attention_mask"]).float()
+                if args.objective == "route_classifier":
+                    loss = F.cross_entropy(logits, batch["class_targets"].long())
+                else:
+                    loss = F.mse_loss(logits, batch["targets"].float())
                 accelerator.backward(loss)
                 optimizer.step()
                 scheduler.step()
                 optimizer.zero_grad(set_to_none=True)
                 running_losses.append(float(loss.detach().item()))
         accelerator.wait_for_everyone()
-        eval_loss, pred_rows, y_true, y_pred = _evaluate(accelerator, model, eval_loader, eval_dataset, route_labels)
+        eval_loss, pred_rows, y_true, y_pred = _evaluate(
+            accelerator,
+            model,
+            eval_loader,
+            eval_dataset,
+            route_labels,
+            objective=str(args.objective),
+        )
         train_loss = float(np.mean(running_losses)) if running_losses else math.nan
         if accelerator.is_main_process:
             epoch_summary = {"epoch": epoch, "train_loss": train_loss, "eval_loss": eval_loss}
@@ -547,11 +616,13 @@ def main() -> None:
     y_pred = best_payload["y_pred"]
     route_metrics = compute_per_route_metrics(y_true, y_pred, route_labels)
     pairwise_metrics = compute_pairwise_metrics(y_true, y_pred, route_labels)
+    classifier_metrics = _compute_classifier_metrics(y_true, y_pred, route_labels)
     utility_report = _compute_utility_report(pred_rows, eval_rows_source, route_labels, DEFAULT_UTILITY_LAMBDAS)
 
     _write_jsonl(output_dir / "eval_predictions.jsonl", pred_rows)
     _write_csv(output_dir / "route_metrics.csv", route_metrics, csv_headers_for_route_metrics())
     _write_csv(output_dir / "pairwise_metrics.csv", pairwise_metrics, csv_headers_for_pairwise_metrics())
+    write_json(output_dir / "classifier_metrics.json", classifier_metrics)
     utility_headers = [
         "policy",
         "policy_type",
@@ -572,6 +643,7 @@ def main() -> None:
         "history": history,
         "route_metrics": route_metrics,
         "pairwise_metrics": pairwise_metrics,
+        "classifier_metrics": classifier_metrics,
         "utility": utility_report,
         "config": config,
     }

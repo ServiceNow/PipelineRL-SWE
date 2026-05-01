@@ -77,3 +77,14 @@ same collected router dataset. It uses the original repair prompt plus the prima
 attempt as input, predicts both route rewards directly, and writes the usual
 `route_metrics.csv`, `pairwise_metrics.csv`, `utility_vs_baselines.csv`, and
 `summary.json`.
+
+Direct routing classifier baseline on the same old SWE-bench router split
+collection:
+
+```bash
+TIMESTAMP=$(date +%s) bash launchers/offline_router/launch_offline_router_swe_bench_router_split_modernbert_large_classifier_12epoch.sh
+```
+
+This uses `answerdotai/ModernBERT-large` with cross-entropy over the better
+route, defaults to 12 epochs, and keeps the existing 178-row eval subset for
+apples-to-apples comparison with prior ModernBERT and text-mode runs.
