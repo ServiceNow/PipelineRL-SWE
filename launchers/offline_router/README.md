@@ -25,6 +25,15 @@ TIMESTAMP=$(date +%s) bash launchers/offline_router/launch_prepare_swe_bench_lit
 
 Defaults write this eval dataset to `/mnt/llmd/data/swebench_lite/all_16k/ds`.
 
+Build the SWE-bench Verified eval set from all 500 official test rows with the
+same 16k token filter:
+
+```bash
+TIMESTAMP=$(date +%s) bash launchers/offline_router/launch_prepare_swe_bench_verified_all_16k.sh
+```
+
+Defaults write this eval dataset to `/mnt/llmd/data/swebench_verified/all_16k/ds`.
+
 ## Current SWE-bench Router-Split Experiments
 
 Submit the four next-step jobs sequentially locally. Remote jobs run concurrently
