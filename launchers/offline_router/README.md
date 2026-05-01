@@ -16,6 +16,15 @@ job log to `/mnt/llmd/results/exps/aristides/reason/prepare_swe_bench_train_all_
 Override `MAX_TOTAL_TOKENS`, `DATASET_ROOT`, or `SINGLE_OUTPUT_PATH` to create
 larger-context variants such as `24k` or `32k`.
 
+Build the matching SWE-bench Lite eval set from all 300 official test rows with
+the same 16k token filter:
+
+```bash
+TIMESTAMP=$(date +%s) bash launchers/offline_router/launch_prepare_swe_bench_lite_all_16k.sh
+```
+
+Defaults write this eval dataset to `/mnt/llmd/data/swebench_lite/all_16k/ds`.
+
 ## Current SWE-bench Router-Split Experiments
 
 Submit the four next-step jobs sequentially locally. Remote jobs run concurrently
