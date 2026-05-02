@@ -92,14 +92,45 @@ class QwenEmbeddingRouter(torch.nn.Module):
         mlp_hidden_size: int,
         torch_dtype: torch.dtype,
         attn_implementation: str | None,
+        encoder_frozen: bool,
+        use_lora: bool,
+        lora_r: int,
+        lora_alpha: int,
+        lora_dropout: float,
+        lora_target_modules: list[str],
+        gradient_checkpointing: bool,
     ) -> None:
         super().__init__()
+        if bool(use_lora) and bool(encoder_frozen):
+            raise ValueError("use_lora=true requires encoder_frozen=false")
+        self.encoder_frozen = bool(encoder_frozen)
         model_kwargs: dict[str, Any] = {"torch_dtype": torch_dtype}
         if attn_implementation:
             model_kwargs["attn_implementation"] = attn_implementation
         self.encoder = AutoModel.from_pretrained(model_name, **model_kwargs)
-        for parameter in self.encoder.parameters():
-            parameter.requires_grad_(False)
+        if gradient_checkpointing and hasattr(self.encoder, "gradient_checkpointing_enable"):
+            self.encoder.gradient_checkpointing_enable()
+            if hasattr(self.encoder, "enable_input_require_grads"):
+                self.encoder.enable_input_require_grads()
+            if hasattr(self.encoder.config, "use_cache"):
+                self.encoder.config.use_cache = False
+        if use_lora:
+            try:
+                from peft import LoraConfig, TaskType, get_peft_model
+            except ImportError as exc:
+                raise ImportError("PEFT is required for --use-lora. Run in the pipeline-rl env.") from exc
+            lora_config = LoraConfig(
+                r=int(lora_r),
+                lora_alpha=int(lora_alpha),
+                target_modules=list(lora_target_modules),
+                lora_dropout=float(lora_dropout),
+                bias="none",
+                task_type=TaskType.FEATURE_EXTRACTION,
+            )
+            self.encoder = get_peft_model(self.encoder, lora_config)
+        else:
+            for parameter in self.encoder.parameters():
+                parameter.requires_grad_(False)
         hidden_size = int(self.encoder.config.hidden_size)
         if int(mlp_hidden_size) > 0:
             self.head = torch.nn.Sequential(
@@ -117,13 +148,15 @@ class QwenEmbeddingRouter(torch.nn.Module):
 
     def train(self, mode: bool = True) -> "QwenEmbeddingRouter":
         super().train(mode)
-        if hasattr(self, "encoder"):
+        if hasattr(self, "encoder") and self.encoder_frozen:
             self.encoder.eval()
         return self
 
     def encode_inputs(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
-        self.encoder.eval()
-        with torch.no_grad():
+        if self.encoder_frozen:
+            self.encoder.eval()
+        grad_context = torch.no_grad() if self.encoder_frozen else torch.enable_grad()
+        with grad_context:
             outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask, return_dict=True)
             pooled = _last_token_pool(outputs.last_hidden_state, attention_mask)
             return F.normalize(pooled.float(), p=2, dim=1)
@@ -333,6 +366,13 @@ def main() -> None:
     parser.add_argument("--torch-dtype", choices=["bf16", "fp16", "fp32", "float32"], default="bf16")
     parser.add_argument("--attn-implementation", default="flash_attention_2")
     parser.add_argument("--precompute-embeddings", action="store_true")
+    parser.add_argument("--encoder-frozen", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--use-lora", action="store_true")
+    parser.add_argument("--lora-r", type=int, default=16)
+    parser.add_argument("--lora-alpha", type=int, default=32)
+    parser.add_argument("--lora-dropout", type=float, default=0.05)
+    parser.add_argument("--lora-target-modules", default="q_proj,k_proj,v_proj,o_proj")
+    parser.add_argument("--gradient-checkpointing", action="store_true")
     parser.add_argument("--reward-mse-weight", type=float, default=1.0)
     parser.add_argument("--delta-aux-weight", type=float, default=1.0)
     parser.add_argument("--delta-aux-huber-delta", type=float, default=0.0)
@@ -352,6 +392,10 @@ def main() -> None:
     target_dim = len(route_labels)
     if args.objective == "reward_mse_delta_aux" and target_dim != 2:
         raise ValueError("reward_mse_delta_aux currently expects exactly two routes")
+    if args.precompute_embeddings and not args.encoder_frozen:
+        raise ValueError("--precompute-embeddings requires --encoder-frozen")
+    if args.use_lora and args.encoder_frozen:
+        raise ValueError("--use-lora requires --no-encoder-frozen")
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_name, padding_side="left")
     pad_token_id = tokenizer.pad_token_id
@@ -388,6 +432,13 @@ def main() -> None:
         mlp_hidden_size=int(args.mlp_hidden_size),
         torch_dtype=_dtype_from_name(str(args.torch_dtype)),
         attn_implementation=str(args.attn_implementation) if args.attn_implementation else None,
+        encoder_frozen=bool(args.encoder_frozen),
+        use_lora=bool(args.use_lora),
+        lora_r=int(args.lora_r),
+        lora_alpha=int(args.lora_alpha),
+        lora_dropout=float(args.lora_dropout),
+        lora_target_modules=[module.strip() for module in str(args.lora_target_modules).split(",") if module.strip()],
+        gradient_checkpointing=bool(args.gradient_checkpointing),
     )
     if args.precompute_embeddings:
         model.to(accelerator.device)
@@ -456,10 +507,16 @@ def main() -> None:
         "torch_dtype": str(args.torch_dtype),
         "attn_implementation": str(args.attn_implementation),
         "precompute_embeddings": bool(args.precompute_embeddings),
+        "encoder_frozen": bool(args.encoder_frozen),
+        "use_lora": bool(args.use_lora),
+        "lora_r": int(args.lora_r),
+        "lora_alpha": int(args.lora_alpha),
+        "lora_dropout": float(args.lora_dropout),
+        "lora_target_modules": [module.strip() for module in str(args.lora_target_modules).split(",") if module.strip()],
+        "gradient_checkpointing": bool(args.gradient_checkpointing),
         "reward_mse_weight": float(args.reward_mse_weight),
         "delta_aux_weight": float(args.delta_aux_weight),
         "delta_aux_huber_delta": float(args.delta_aux_huber_delta),
-        "encoder_frozen": True,
     }
     if accelerator.is_main_process:
         write_json(output_dir / "train_config.json", config)
@@ -556,6 +613,8 @@ def main() -> None:
     if args.save_model:
         unwrapped = accelerator.unwrap_model(model)
         torch.save(unwrapped.head.state_dict(), output_dir / "head.pt")
+        if hasattr(unwrapped, "encoder") and hasattr(unwrapped.encoder, "save_pretrained"):
+            unwrapped.encoder.save_pretrained(output_dir / "encoder")
         tokenizer.save_pretrained(output_dir / "tokenizer")
 
 
