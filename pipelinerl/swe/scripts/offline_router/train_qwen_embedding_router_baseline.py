@@ -155,8 +155,11 @@ class QwenEmbeddingRouter(torch.nn.Module):
     def encode_inputs(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
         if self.encoder_frozen:
             self.encoder.eval()
-        grad_context = torch.no_grad() if self.encoder_frozen else torch.enable_grad()
-        with grad_context:
+            with torch.no_grad():
+                outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask, return_dict=True)
+                pooled = _last_token_pool(outputs.last_hidden_state, attention_mask)
+                return F.normalize(pooled.float(), p=2, dim=1)
+        else:
             outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask, return_dict=True)
             pooled = _last_token_pool(outputs.last_hidden_state, attention_mask)
             return F.normalize(pooled.float(), p=2, dim=1)
