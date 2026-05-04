@@ -26,8 +26,8 @@ from pipelinerl.swe.scripts.offline_router.common import (
 )
 from pipelinerl.swe.scripts.offline_router.train_modernbert_router_baseline import (
     DEFAULT_UTILITY_LAMBDAS,
-    RouterPairDataset,
     _argmax_index,
+    _build_input_text,
     _compute_classifier_metrics,
     _compute_utility_report,
     _load_route_labels,
@@ -60,6 +60,7 @@ def _collate_left_pad(batch: list[dict[str, Any]], pad_token_id: int, target_dim
     input_ids = torch.full((len(batch), max_len), int(pad_token_id), dtype=torch.long)
     attention_mask = torch.zeros((len(batch), max_len), dtype=torch.long)
     targets = torch.zeros((len(batch), target_dim), dtype=torch.float32)
+    output_token_targets_log = torch.zeros((len(batch), target_dim), dtype=torch.float32)
     class_targets = torch.zeros((len(batch),), dtype=torch.long)
     row_indices = torch.zeros((len(batch),), dtype=torch.long)
     for idx, row in enumerate(batch):
@@ -68,6 +69,7 @@ def _collate_left_pad(batch: list[dict[str, Any]], pad_token_id: int, target_dim
         input_ids[idx, start:] = torch.tensor(row["input_ids"], dtype=torch.long)
         attention_mask[idx, start:] = torch.tensor(row["attention_mask"], dtype=torch.long)
         targets[idx] = torch.tensor(row["targets"], dtype=torch.float32)
+        output_token_targets_log[idx] = torch.tensor(row["output_token_targets_log"], dtype=torch.float32)
         class_targets[idx] = int(row["class_target"])
         row_indices[idx] = int(row["row_idx"])
     return {
@@ -78,9 +80,73 @@ def _collate_left_pad(batch: list[dict[str, Any]], pad_token_id: int, target_dim
         "input_ids": input_ids,
         "attention_mask": attention_mask,
         "targets": targets,
+        "output_token_targets_log": output_token_targets_log,
         "class_targets": class_targets,
         "row_indices": row_indices,
     }
+
+
+class RouterCostDataset(Dataset):
+    def __init__(
+        self,
+        rows: list[dict[str, Any]],
+        tokenizer: Any,
+        route_labels: list[str],
+        max_seq_length: int,
+        require_cost_targets: bool,
+    ) -> None:
+        self.rows: list[dict[str, Any]] = []
+        target_dim = len(route_labels)
+        for row in rows:
+            targets = row.get("performance_targets")
+            output_tokens = row.get("route_output_tokens")
+            if not isinstance(targets, list) or len(targets) != target_dim:
+                continue
+            if require_cost_targets and (not isinstance(output_tokens, list) or len(output_tokens) != target_dim):
+                continue
+            try:
+                target_rewards = [float(value) for value in targets]
+                output_token_targets_log = (
+                    [float(math.log1p(float(value))) for value in output_tokens]
+                    if isinstance(output_tokens, list) and len(output_tokens) == target_dim
+                    else [0.0] * target_dim
+                )
+                problem_id = str(row.get("problem_id") or row.get("instance_id") or row.get("id"))
+            except (TypeError, ValueError):
+                continue
+            input_text = _build_input_text(row, route_labels)
+            if not input_text:
+                continue
+            encoded = tokenizer(
+                input_text,
+                add_special_tokens=True,
+                truncation=True,
+                max_length=max_seq_length,
+            )
+            input_ids = encoded.get("input_ids")
+            attention_mask = encoded.get("attention_mask")
+            if not input_ids or not attention_mask:
+                continue
+            self.rows.append(
+                {
+                    "row_idx": len(self.rows),
+                    "problem_id": problem_id,
+                    "dataset": row.get("dataset"),
+                    "repo": row.get("repo"),
+                    "language": row.get("language"),
+                    "input_ids": [int(value) for value in input_ids],
+                    "attention_mask": [int(value) for value in attention_mask],
+                    "targets": target_rewards,
+                    "output_token_targets_log": output_token_targets_log,
+                    "class_target": _argmax_index(target_rewards),
+                }
+            )
+
+    def __len__(self) -> int:
+        return len(self.rows)
+
+    def __getitem__(self, idx: int) -> dict[str, Any]:
+        return self.rows[idx]
 
 
 class QwenEmbeddingRouter(torch.nn.Module):
@@ -99,6 +165,7 @@ class QwenEmbeddingRouter(torch.nn.Module):
         lora_dropout: float,
         lora_target_modules: list[str],
         gradient_checkpointing: bool,
+        predict_costs: bool,
     ) -> None:
         super().__init__()
         if bool(use_lora) and bool(encoder_frozen):
@@ -132,19 +199,30 @@ class QwenEmbeddingRouter(torch.nn.Module):
             for parameter in self.encoder.parameters():
                 parameter.requires_grad_(False)
         hidden_size = int(self.encoder.config.hidden_size)
+        self.predict_costs = bool(predict_costs)
+        self.reward_head = self._make_head(hidden_size, target_dim, dropout, mlp_hidden_size)
+        self.head = self.reward_head
+        self.cost_head = self._make_head(hidden_size, target_dim, dropout, mlp_hidden_size) if self.predict_costs else None
+
+    @staticmethod
+    def _make_head(
+        hidden_size: int,
+        target_dim: int,
+        dropout: float,
+        mlp_hidden_size: int,
+    ) -> torch.nn.Module:
         if int(mlp_hidden_size) > 0:
-            self.head = torch.nn.Sequential(
+            return torch.nn.Sequential(
                 torch.nn.Dropout(float(dropout)),
                 torch.nn.Linear(hidden_size, int(mlp_hidden_size)),
                 torch.nn.GELU(),
                 torch.nn.Dropout(float(dropout)),
                 torch.nn.Linear(int(mlp_hidden_size), int(target_dim)),
             )
-        else:
-            self.head = torch.nn.Sequential(
-                torch.nn.Dropout(float(dropout)),
-                torch.nn.Linear(hidden_size, int(target_dim)),
-            )
+        return torch.nn.Sequential(
+            torch.nn.Dropout(float(dropout)),
+            torch.nn.Linear(hidden_size, int(target_dim)),
+        )
 
     def train(self, mode: bool = True) -> "QwenEmbeddingRouter":
         super().train(mode)
@@ -164,8 +242,12 @@ class QwenEmbeddingRouter(torch.nn.Module):
             pooled = _last_token_pool(outputs.last_hidden_state, attention_mask)
             return F.normalize(pooled.float(), p=2, dim=1)
 
-    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
-        return self.head(self.encode_inputs(input_ids, attention_mask))
+    def predict_from_embeddings(self, embeddings: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor | None]:
+        cost_logits = self.cost_head(embeddings) if self.cost_head is not None else None
+        return self.reward_head(embeddings), cost_logits
+
+    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor | None]:
+        return self.predict_from_embeddings(self.encode_inputs(input_ids, attention_mask))
 
 
 class PrecomputedEmbeddingDataset(Dataset):
@@ -182,10 +264,12 @@ class PrecomputedEmbeddingDataset(Dataset):
 def _collate_embeddings(batch: list[dict[str, Any]], target_dim: int) -> dict[str, Any]:
     embeddings = torch.stack([row["embedding"] for row in batch], dim=0).float()
     targets = torch.zeros((len(batch), target_dim), dtype=torch.float32)
+    output_token_targets_log = torch.zeros((len(batch), target_dim), dtype=torch.float32)
     class_targets = torch.zeros((len(batch),), dtype=torch.long)
     row_indices = torch.zeros((len(batch),), dtype=torch.long)
     for idx, row in enumerate(batch):
         targets[idx] = torch.tensor(row["targets"], dtype=torch.float32)
+        output_token_targets_log[idx] = torch.tensor(row["output_token_targets_log"], dtype=torch.float32)
         class_targets[idx] = int(row["class_target"])
         row_indices[idx] = int(row["row_idx"])
     return {
@@ -195,6 +279,7 @@ def _collate_embeddings(batch: list[dict[str, Any]], target_dim: int) -> dict[st
         "languages": [row["language"] for row in batch],
         "embeddings": embeddings,
         "targets": targets,
+        "output_token_targets_log": output_token_targets_log,
         "class_targets": class_targets,
         "row_indices": row_indices,
     }
@@ -205,7 +290,7 @@ def _precompute_embeddings(
     accelerator: Accelerator,
     model: QwenEmbeddingRouter,
     loader: DataLoader,
-    source_dataset: RouterPairDataset,
+    source_dataset: RouterCostDataset,
     desc: str,
 ) -> PrecomputedEmbeddingDataset:
     if accelerator.num_processes != 1:
@@ -227,6 +312,9 @@ def _precompute_embeddings(
                     "language": source_meta["language"],
                     "embedding": embeddings[idx].float(),
                     "targets": [float(value) for value in batch["targets"][idx].tolist()],
+                    "output_token_targets_log": [
+                        float(value) for value in batch["output_token_targets_log"][idx].tolist()
+                    ],
                     "class_target": int(batch["class_targets"][idx].item()),
                 }
             )
@@ -249,6 +337,159 @@ def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
             handle.write(json.dumps(row, sort_keys=True) + "\n")
 
 
+def _safe_corr(left: np.ndarray, right: np.ndarray) -> float:
+    if left.size < 2 or right.size < 2 or float(np.std(left)) == 0.0 or float(np.std(right)) == 0.0:
+        return math.nan
+    return float(np.corrcoef(left, right)[0, 1])
+
+
+def _compute_output_token_metrics(
+    y_true_log: np.ndarray,
+    y_pred_log: np.ndarray,
+    route_labels: list[str],
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    if y_true_log.size == 0 or y_pred_log.size == 0:
+        return rows
+    y_true_raw = np.expm1(y_true_log)
+    y_pred_raw = np.maximum(0.0, np.expm1(y_pred_log))
+    for idx, route_label in enumerate(route_labels):
+        true_log = y_true_log[:, idx]
+        pred_log = y_pred_log[:, idx]
+        true_raw = y_true_raw[:, idx]
+        pred_raw = y_pred_raw[:, idx]
+        raw_err = pred_raw - true_raw
+        log_err = pred_log - true_log
+        rows.append(
+            {
+                "route_idx": idx,
+                "route_label": route_label,
+                "n_eval": int(true_log.shape[0]),
+                "mean_true_output_tokens": float(np.mean(true_raw)),
+                "mean_pred_output_tokens": float(np.mean(pred_raw)),
+                "std_true_output_tokens": float(np.std(true_raw)),
+                "std_pred_output_tokens": float(np.std(pred_raw)),
+                "mae_output_tokens": float(np.mean(np.abs(raw_err))),
+                "rmse_output_tokens": float(np.sqrt(np.mean(raw_err * raw_err))),
+                "pearson_output_tokens": _safe_corr(true_raw, pred_raw),
+                "mean_true_log1p_output_tokens": float(np.mean(true_log)),
+                "mean_pred_log1p_output_tokens": float(np.mean(pred_log)),
+                "std_true_log1p_output_tokens": float(np.std(true_log)),
+                "std_pred_log1p_output_tokens": float(np.std(pred_log)),
+                "mae_log1p_output_tokens": float(np.mean(np.abs(log_err))),
+                "rmse_log1p_output_tokens": float(np.sqrt(np.mean(log_err * log_err))),
+                "pearson_log1p_output_tokens": _safe_corr(true_log, pred_log),
+            }
+        )
+    return rows
+
+
+def _compute_predicted_cost_utility_report(
+    prediction_rows: list[dict[str, Any]],
+    eval_source_rows: list[dict[str, Any]],
+    route_labels: list[str],
+    lambdas: list[float],
+) -> dict[str, Any]:
+    target_dim = len(route_labels)
+    eval_lookup: dict[str, dict[str, Any]] = {}
+    for row in eval_source_rows:
+        problem_id = str(row.get("problem_id") or row.get("instance_id") or row.get("id"))
+        eval_lookup[f"{row.get('dataset')}::{problem_id}"] = row
+
+    valid_examples: list[dict[str, Any]] = []
+    skipped_missing_eval_row = 0
+    skipped_invalid_stats = 0
+    for row in prediction_rows:
+        pred_rewards = row.get("pred_rewards")
+        pred_output_tokens = row.get("pred_output_tokens")
+        if (
+            not isinstance(pred_rewards, list)
+            or not isinstance(pred_output_tokens, list)
+            or len(pred_rewards) != target_dim
+            or len(pred_output_tokens) != target_dim
+        ):
+            skipped_invalid_stats += 1
+            continue
+        source_row = eval_lookup.get(f"{row.get('dataset')}::{row.get('problem_id')}")
+        if source_row is None:
+            skipped_missing_eval_row += 1
+            continue
+        rewards = source_row.get("performance_targets")
+        prompt_tokens = source_row.get("route_prompt_tokens")
+        output_tokens = source_row.get("route_output_tokens")
+        if (
+            not isinstance(rewards, list)
+            or not isinstance(prompt_tokens, list)
+            or not isinstance(output_tokens, list)
+            or len(rewards) != target_dim
+            or len(prompt_tokens) != target_dim
+            or len(output_tokens) != target_dim
+        ):
+            skipped_invalid_stats += 1
+            continue
+        valid_examples.append(
+            {
+                "rewards": [float(value) for value in rewards],
+                "prompt_tokens": [float(value) for value in prompt_tokens],
+                "output_tokens": [float(value) for value in output_tokens],
+                "pred_rewards": [float(value) for value in pred_rewards],
+                "pred_output_tokens": [max(0.0, float(value)) for value in pred_output_tokens],
+            }
+        )
+
+    utility_rows: list[dict[str, Any]] = []
+    valid_count = len(valid_examples)
+    for lambda_value in [float(value) for value in lambdas]:
+        for cost_metric in ("output_tokens", "total_tokens"):
+            route_choice_counts = [0] * target_dim
+            reward_sum = 0.0
+            prompt_token_sum = 0.0
+            output_token_sum = 0.0
+            total_token_sum = 0.0
+            for example in valid_examples:
+                scores = []
+                for route_idx in range(target_dim):
+                    pred_cost = example["pred_output_tokens"][route_idx]
+                    if cost_metric == "total_tokens":
+                        pred_cost += example["prompt_tokens"][route_idx]
+                    scores.append(example["pred_rewards"][route_idx] - (lambda_value * pred_cost))
+                route_idx = _argmax_index(scores)
+                route_choice_counts[route_idx] += 1
+                reward_sum += example["rewards"][route_idx]
+                prompt_token_sum += example["prompt_tokens"][route_idx]
+                output_token_sum += example["output_tokens"][route_idx]
+                total_token_sum += example["prompt_tokens"][route_idx] + example["output_tokens"][route_idx]
+            mean_reward = math.nan if valid_count == 0 else reward_sum / valid_count
+            mean_output_tokens = math.nan if valid_count == 0 else output_token_sum / valid_count
+            mean_total_tokens = math.nan if valid_count == 0 else total_token_sum / valid_count
+            mean_cost = mean_output_tokens if cost_metric == "output_tokens" else mean_total_tokens
+            utility_rows.append(
+                {
+                    "policy": "router_predicted_cost",
+                    "policy_type": "router_predicted_cost",
+                    "route_idx": None,
+                    "route_label": None,
+                    "lambda": lambda_value,
+                    "cost_metric": cost_metric,
+                    "mean_reward": mean_reward,
+                    "mean_cost": mean_cost,
+                    "mean_utility": mean_reward - (lambda_value * mean_cost),
+                    "choice_counts_by_route": {
+                        str(route_labels[idx]): int(route_choice_counts[idx]) for idx in range(target_dim)
+                    },
+                }
+            )
+    return {
+        "n_eval_examples": len(prediction_rows),
+        "n_examples_with_utility": valid_count,
+        "skipped_missing_eval_row": skipped_missing_eval_row,
+        "skipped_invalid_stats": skipped_invalid_stats,
+        "lambdas": [float(value) for value in lambdas],
+        "route_labels": list(route_labels),
+        "utility_rows": utility_rows,
+    }
+
+
 def _delta_loss(preds: torch.Tensor, targets: torch.Tensor, huber_delta: float) -> torch.Tensor:
     if preds.shape[1] != 2:
         raise ValueError("Delta auxiliary loss currently expects exactly two routes")
@@ -260,27 +501,43 @@ def _delta_loss(preds: torch.Tensor, targets: torch.Tensor, huber_delta: float) 
 
 
 def _compute_train_loss(
-    logits: torch.Tensor,
+    reward_logits: torch.Tensor,
+    cost_logits: torch.Tensor | None,
     targets: torch.Tensor,
+    output_token_targets_log: torch.Tensor,
     class_targets: torch.Tensor,
     objective: str,
     reward_mse_weight: float,
     delta_aux_weight: float,
     delta_aux_huber_delta: float,
+    predict_costs: bool,
+    cost_mse_weight: float,
+    cost_delta_aux_weight: float,
 ) -> torch.Tensor:
     if objective == "route_classifier":
-        return F.cross_entropy(logits, class_targets.long())
-    reward_loss = F.mse_loss(logits, targets.float()) * float(reward_mse_weight)
+        return F.cross_entropy(reward_logits, class_targets.long())
+    reward_loss = F.mse_loss(reward_logits, targets.float()) * float(reward_mse_weight)
     if objective == "reward_mse_delta_aux":
         reward_loss = reward_loss + (
-            float(delta_aux_weight) * _delta_loss(logits, targets.float(), float(delta_aux_huber_delta))
+            float(delta_aux_weight) * _delta_loss(reward_logits, targets.float(), float(delta_aux_huber_delta))
         )
+    if predict_costs:
+        if cost_logits is None:
+            raise ValueError("predict_costs=true but model did not return cost logits")
+        reward_loss = reward_loss + (
+            float(cost_mse_weight) * F.mse_loss(cost_logits, output_token_targets_log.float())
+        )
+        if float(cost_delta_aux_weight) != 0.0:
+            reward_loss = reward_loss + (
+                float(cost_delta_aux_weight)
+                * _delta_loss(cost_logits, output_token_targets_log.float(), float(delta_aux_huber_delta))
+            )
     return reward_loss
 
 
-def _predict_from_batch(model: QwenEmbeddingRouter, batch: dict[str, Any]) -> torch.Tensor:
+def _predict_from_batch(model: QwenEmbeddingRouter, batch: dict[str, Any]) -> tuple[torch.Tensor, torch.Tensor | None]:
     if "embeddings" in batch:
-        return model.head(batch["embeddings"].float())
+        return model.predict_from_embeddings(batch["embeddings"].float())
     return model(input_ids=batch["input_ids"], attention_mask=batch["attention_mask"])
 
 
@@ -289,18 +546,22 @@ def _evaluate(
     accelerator: Accelerator,
     model: torch.nn.Module,
     loader: DataLoader,
-    eval_dataset: RouterPairDataset,
+    eval_dataset: RouterCostDataset,
     route_labels: list[str],
     objective: str,
-) -> tuple[float, list[dict[str, Any]], np.ndarray, np.ndarray]:
+    predict_costs: bool,
+) -> tuple[float, list[dict[str, Any]], np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     model.eval()
     total_loss = 0.0
     total_examples = 0
     rows: list[dict[str, Any]] = []
     y_true_chunks: list[np.ndarray] = []
     y_pred_chunks: list[np.ndarray] = []
+    cost_true_chunks: list[np.ndarray] = []
+    cost_pred_chunks: list[np.ndarray] = []
     for batch in tqdm(loader, desc="Eval Qwen embedding router", disable=not accelerator.is_main_process):
-        logits = _predict_from_batch(model, batch).float()
+        logits, cost_logits = _predict_from_batch(model, batch)
+        logits = logits.float()
         targets = batch["targets"].float()
         if objective == "route_classifier":
             loss = F.cross_entropy(logits, batch["class_targets"].long(), reduction="sum")
@@ -308,9 +569,19 @@ def _evaluate(
         else:
             loss = F.mse_loss(logits, targets, reduction="sum")
             preds = logits
+            if predict_costs and cost_logits is not None:
+                loss = loss + F.mse_loss(cost_logits.float(), batch["output_token_targets_log"].float(), reduction="sum")
         gathered_loss = accelerator.gather_for_metrics(loss.detach().reshape(1)).detach().cpu()
         gathered_preds = accelerator.gather_for_metrics(preds).detach().cpu()
         gathered_targets = accelerator.gather_for_metrics(targets).detach().cpu()
+        if predict_costs:
+            if cost_logits is None:
+                raise ValueError("predict_costs=true but model did not return cost logits")
+            gathered_cost_preds = accelerator.gather_for_metrics(cost_logits.float()).detach().cpu()
+            gathered_cost_targets = accelerator.gather_for_metrics(batch["output_token_targets_log"].float()).detach().cpu()
+        else:
+            gathered_cost_preds = torch.empty((gathered_preds.shape[0], len(route_labels)))
+            gathered_cost_targets = torch.empty((gathered_preds.shape[0], len(route_labels)))
         gathered_indices = accelerator.gather_for_metrics(batch["row_indices"]).detach().cpu().tolist()
         if accelerator.is_main_process:
             total_loss += float(torch.sum(gathered_loss).item())
@@ -325,22 +596,44 @@ def _evaluate(
                     "language": source_meta["language"],
                     "true_rewards": [float(value) for value in gathered_targets[idx].tolist()],
                     "pred_rewards": [float(value) for value in gathered_preds[idx].tolist()],
+                    "true_output_tokens": [
+                        float(math.expm1(value)) for value in gathered_cost_targets[idx].tolist()
+                    ] if predict_costs else None,
+                    "pred_output_tokens": [
+                        max(0.0, float(math.expm1(value))) for value in gathered_cost_preds[idx].tolist()
+                    ] if predict_costs else None,
+                    "true_output_tokens_log": [
+                        float(value) for value in gathered_cost_targets[idx].tolist()
+                    ] if predict_costs else None,
+                    "pred_output_tokens_log": [
+                        float(value) for value in gathered_cost_preds[idx].tolist()
+                    ] if predict_costs else None,
                     "route_labels": list(route_labels),
                 }
             )
         y_true_chunks.append(gathered_targets.numpy())
         y_pred_chunks.append(gathered_preds.numpy())
+        if predict_costs:
+            cost_true_chunks.append(gathered_cost_targets.numpy())
+            cost_pred_chunks.append(gathered_cost_preds.numpy())
 
     if not accelerator.is_main_process:
-        return math.nan, [], np.empty((0, len(route_labels))), np.empty((0, len(route_labels)))
+        empty = np.empty((0, len(route_labels)))
+        return math.nan, [], empty, empty, empty, empty
     y_true = np.concatenate(y_true_chunks, axis=0) if y_true_chunks else np.empty((0, len(route_labels)))
     y_pred = np.concatenate(y_pred_chunks, axis=0) if y_pred_chunks else np.empty((0, len(route_labels)))
+    y_cost_true = (
+        np.concatenate(cost_true_chunks, axis=0) if cost_true_chunks else np.empty((0, len(route_labels)))
+    )
+    y_cost_pred = (
+        np.concatenate(cost_pred_chunks, axis=0) if cost_pred_chunks else np.empty((0, len(route_labels)))
+    )
     if objective == "route_classifier":
         eval_loss = float(total_loss / total_examples) if total_examples > 0 else math.nan
     else:
         total_values = total_examples * len(route_labels)
         eval_loss = float(total_loss / total_values) if total_values > 0 else math.nan
-    return eval_loss, rows, y_true, y_pred
+    return eval_loss, rows, y_true, y_pred, y_cost_true, y_cost_pred
 
 
 def main() -> None:
@@ -379,6 +672,9 @@ def main() -> None:
     parser.add_argument("--reward-mse-weight", type=float, default=1.0)
     parser.add_argument("--delta-aux-weight", type=float, default=1.0)
     parser.add_argument("--delta-aux-huber-delta", type=float, default=0.0)
+    parser.add_argument("--predict-costs", action="store_true")
+    parser.add_argument("--cost-mse-weight", type=float, default=1.0)
+    parser.add_argument("--cost-delta-aux-weight", type=float, default=0.0)
     parser.add_argument("--save-model", action="store_true")
     args = parser.parse_args()
 
@@ -407,8 +703,20 @@ def main() -> None:
 
     train_rows = _shuffle_rows(list(_load_split(dataset_dir, "train")), args.max_train_rows, args.seed)
     eval_rows_source = _shuffle_rows(list(_load_split(dataset_dir, "eval")), args.max_eval_rows, args.seed + 1)
-    train_dataset = RouterPairDataset(train_rows, tokenizer, route_labels, int(args.max_seq_length))
-    eval_dataset = RouterPairDataset(eval_rows_source, tokenizer, route_labels, int(args.max_seq_length))
+    train_dataset = RouterCostDataset(
+        train_rows,
+        tokenizer,
+        route_labels,
+        int(args.max_seq_length),
+        require_cost_targets=bool(args.predict_costs),
+    )
+    eval_dataset = RouterCostDataset(
+        eval_rows_source,
+        tokenizer,
+        route_labels,
+        int(args.max_seq_length),
+        require_cost_targets=bool(args.predict_costs),
+    )
     if len(train_dataset) == 0 or len(eval_dataset) == 0:
         raise ValueError(f"Prepared empty dataset train={len(train_dataset)} eval={len(eval_dataset)}")
 
@@ -442,6 +750,7 @@ def main() -> None:
         lora_dropout=float(args.lora_dropout),
         lora_target_modules=[module.strip() for module in str(args.lora_target_modules).split(",") if module.strip()],
         gradient_checkpointing=bool(args.gradient_checkpointing),
+        predict_costs=bool(args.predict_costs),
     )
     if args.precompute_embeddings:
         model.to(accelerator.device)
@@ -520,6 +829,10 @@ def main() -> None:
         "reward_mse_weight": float(args.reward_mse_weight),
         "delta_aux_weight": float(args.delta_aux_weight),
         "delta_aux_huber_delta": float(args.delta_aux_huber_delta),
+        "predict_costs": bool(args.predict_costs),
+        "cost_target": "log1p_route_output_tokens",
+        "cost_mse_weight": float(args.cost_mse_weight),
+        "cost_delta_aux_weight": float(args.cost_delta_aux_weight),
     }
     if accelerator.is_main_process:
         write_json(output_dir / "train_config.json", config)
@@ -533,15 +846,20 @@ def main() -> None:
         running_losses: list[float] = []
         for batch in tqdm(train_loader, desc=f"Train Qwen embedding router epoch {epoch}", disable=not accelerator.is_main_process):
             with accelerator.accumulate(model):
-                logits = _predict_from_batch(model, batch).float()
+                reward_logits, cost_logits = _predict_from_batch(model, batch)
                 loss = _compute_train_loss(
-                    logits=logits,
+                    reward_logits=reward_logits.float(),
+                    cost_logits=cost_logits.float() if cost_logits is not None else None,
                     targets=batch["targets"].float(),
+                    output_token_targets_log=batch["output_token_targets_log"].float(),
                     class_targets=batch["class_targets"],
                     objective=str(args.objective),
                     reward_mse_weight=float(args.reward_mse_weight),
                     delta_aux_weight=float(args.delta_aux_weight),
                     delta_aux_huber_delta=float(args.delta_aux_huber_delta),
+                    predict_costs=bool(args.predict_costs),
+                    cost_mse_weight=float(args.cost_mse_weight),
+                    cost_delta_aux_weight=float(args.cost_delta_aux_weight),
                 )
                 accelerator.backward(loss)
                 optimizer.step()
@@ -549,13 +867,14 @@ def main() -> None:
                 optimizer.zero_grad(set_to_none=True)
                 running_losses.append(float(loss.detach().item()))
         accelerator.wait_for_everyone()
-        eval_loss, pred_rows, y_true, y_pred = _evaluate(
+        eval_loss, pred_rows, y_true, y_pred, y_cost_true, y_cost_pred = _evaluate(
             accelerator,
             model,
             eval_loader,
             eval_dataset,
             route_labels,
             objective=str(args.objective),
+            predict_costs=bool(args.predict_costs),
         )
         train_loss = float(np.mean(running_losses)) if running_losses else math.nan
         if accelerator.is_main_process:
@@ -568,6 +887,8 @@ def main() -> None:
                     "prediction_rows": pred_rows,
                     "y_true": y_true,
                     "y_pred": y_pred,
+                    "y_cost_true": y_cost_true,
+                    "y_cost_pred": y_cost_pred,
                 }
         accelerator.wait_for_everyone()
 
@@ -579,15 +900,44 @@ def main() -> None:
     pred_rows = best_payload["prediction_rows"]
     y_true = best_payload["y_true"]
     y_pred = best_payload["y_pred"]
+    y_cost_true = best_payload["y_cost_true"]
+    y_cost_pred = best_payload["y_cost_pred"]
     route_metrics = compute_per_route_metrics(y_true, y_pred, route_labels)
     pairwise_metrics = compute_pairwise_metrics(y_true, y_pred, route_labels)
     classifier_metrics = _compute_classifier_metrics(y_true, y_pred, route_labels)
     utility_report = _compute_utility_report(pred_rows, eval_rows_source, route_labels, DEFAULT_UTILITY_LAMBDAS)
+    cost_metrics = _compute_output_token_metrics(y_cost_true, y_cost_pred, route_labels) if args.predict_costs else []
+    predicted_cost_utility_report = (
+        _compute_predicted_cost_utility_report(pred_rows, eval_rows_source, route_labels, DEFAULT_UTILITY_LAMBDAS)
+        if args.predict_costs
+        else None
+    )
 
     _write_jsonl(output_dir / "eval_predictions.jsonl", pred_rows)
     _write_csv(output_dir / "route_metrics.csv", route_metrics, csv_headers_for_route_metrics())
     _write_csv(output_dir / "pairwise_metrics.csv", pairwise_metrics, csv_headers_for_pairwise_metrics())
     write_json(output_dir / "classifier_metrics.json", classifier_metrics)
+    if args.predict_costs:
+        cost_headers = [
+            "route_idx",
+            "route_label",
+            "n_eval",
+            "mean_true_output_tokens",
+            "mean_pred_output_tokens",
+            "std_true_output_tokens",
+            "std_pred_output_tokens",
+            "mae_output_tokens",
+            "rmse_output_tokens",
+            "pearson_output_tokens",
+            "mean_true_log1p_output_tokens",
+            "mean_pred_log1p_output_tokens",
+            "std_true_log1p_output_tokens",
+            "std_pred_log1p_output_tokens",
+            "mae_log1p_output_tokens",
+            "rmse_log1p_output_tokens",
+            "pearson_log1p_output_tokens",
+        ]
+        _write_csv(output_dir / "cost_metrics.csv", cost_metrics, cost_headers)
     utility_headers = [
         "policy",
         "policy_type",
@@ -601,6 +951,14 @@ def main() -> None:
     ]
     _write_csv(output_dir / "utility_vs_baselines.csv", utility_report["utility_rows"], utility_headers)
     write_json(output_dir / "utility_vs_baselines.json", utility_report)
+    if predicted_cost_utility_report is not None:
+        predicted_cost_headers = utility_headers + ["choice_counts_by_route"]
+        _write_csv(
+            output_dir / "utility_with_predicted_costs.csv",
+            predicted_cost_utility_report["utility_rows"],
+            predicted_cost_headers,
+        )
+        write_json(output_dir / "utility_with_predicted_costs.json", predicted_cost_utility_report)
 
     summary = {
         "best_epoch": int(best_payload["epoch"]),
@@ -609,13 +967,17 @@ def main() -> None:
         "route_metrics": route_metrics,
         "pairwise_metrics": pairwise_metrics,
         "classifier_metrics": classifier_metrics,
+        "cost_metrics": cost_metrics,
         "utility": utility_report,
+        "utility_with_predicted_costs": predicted_cost_utility_report,
         "config": config,
     }
     write_json(output_dir / "summary.json", summary)
     if args.save_model:
         unwrapped = accelerator.unwrap_model(model)
-        torch.save(unwrapped.head.state_dict(), output_dir / "head.pt")
+        torch.save(unwrapped.reward_head.state_dict(), output_dir / "reward_head.pt")
+        if unwrapped.cost_head is not None:
+            torch.save(unwrapped.cost_head.state_dict(), output_dir / "cost_head.pt")
         if hasattr(unwrapped, "encoder") and hasattr(unwrapped.encoder, "save_pretrained"):
             unwrapped.encoder.save_pretrained(output_dir / "encoder")
         tokenizer.save_pretrained(output_dir / "tokenizer")
