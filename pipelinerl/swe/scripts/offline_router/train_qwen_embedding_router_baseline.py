@@ -55,12 +55,17 @@ def _last_token_pool(last_hidden_states: Tensor, attention_mask: Tensor) -> Tens
     return last_hidden_states[torch.arange(batch_size, device=last_hidden_states.device), sequence_lengths]
 
 
-def _collate_left_pad(batch: list[dict[str, Any]], pad_token_id: int, target_dim: int) -> dict[str, Any]:
+def _collate_left_pad(
+    batch: list[dict[str, Any]],
+    pad_token_id: int,
+    target_dim: int,
+    cost_target_dim: int,
+) -> dict[str, Any]:
     max_len = max(len(row["input_ids"]) for row in batch)
     input_ids = torch.full((len(batch), max_len), int(pad_token_id), dtype=torch.long)
     attention_mask = torch.zeros((len(batch), max_len), dtype=torch.long)
     targets = torch.zeros((len(batch), target_dim), dtype=torch.float32)
-    output_token_targets_log = torch.zeros((len(batch), target_dim), dtype=torch.float32)
+    output_token_targets_log = torch.zeros((len(batch), cost_target_dim), dtype=torch.float32)
     class_targets = torch.zeros((len(batch),), dtype=torch.long)
     row_indices = torch.zeros((len(batch),), dtype=torch.long)
     for idx, row in enumerate(batch):
@@ -94,6 +99,7 @@ class RouterCostDataset(Dataset):
         route_labels: list[str],
         max_seq_length: int,
         require_cost_targets: bool,
+        cost_route_idx: int,
     ) -> None:
         self.rows: list[dict[str, Any]] = []
         target_dim = len(route_labels)
@@ -104,12 +110,14 @@ class RouterCostDataset(Dataset):
                 continue
             if require_cost_targets and (not isinstance(output_tokens, list) or len(output_tokens) != target_dim):
                 continue
+            if require_cost_targets and not 0 <= int(cost_route_idx) < target_dim:
+                raise ValueError(f"cost_route_idx={cost_route_idx} is out of range for {target_dim} routes")
             try:
                 target_rewards = [float(value) for value in targets]
                 output_token_targets_log = (
-                    [float(math.log1p(float(value))) for value in output_tokens]
+                    [float(math.log1p(float(output_tokens[int(cost_route_idx)])))]
                     if isinstance(output_tokens, list) and len(output_tokens) == target_dim
-                    else [0.0] * target_dim
+                    else [0.0]
                 )
                 problem_id = str(row.get("problem_id") or row.get("instance_id") or row.get("id"))
             except (TypeError, ValueError):
@@ -166,11 +174,18 @@ class QwenEmbeddingRouter(torch.nn.Module):
         lora_target_modules: list[str],
         gradient_checkpointing: bool,
         predict_costs: bool,
+        cost_target_dim: int,
+        cost_gradient_mode: str,
     ) -> None:
         super().__init__()
         if bool(use_lora) and bool(encoder_frozen):
             raise ValueError("use_lora=true requires encoder_frozen=false")
+        if cost_gradient_mode not in {"joint", "detached", "separate_adapter"}:
+            raise ValueError(f"Unsupported cost_gradient_mode={cost_gradient_mode}")
         self.encoder_frozen = bool(encoder_frozen)
+        self.cost_gradient_mode = str(cost_gradient_mode)
+        self.reward_adapter_name = "reward_adapter"
+        self.cost_adapter_name = "cost_adapter"
         model_kwargs: dict[str, Any] = {"torch_dtype": torch_dtype}
         if attn_implementation:
             model_kwargs["attn_implementation"] = attn_implementation
@@ -194,7 +209,9 @@ class QwenEmbeddingRouter(torch.nn.Module):
                 bias="none",
                 task_type=TaskType.FEATURE_EXTRACTION,
             )
-            self.encoder = get_peft_model(self.encoder, lora_config)
+            self.encoder = get_peft_model(self.encoder, lora_config, adapter_name=self.reward_adapter_name)
+            if self.cost_gradient_mode == "separate_adapter" and predict_costs:
+                self.encoder.add_adapter(self.cost_adapter_name, lora_config)
         else:
             for parameter in self.encoder.parameters():
                 parameter.requires_grad_(False)
@@ -202,7 +219,9 @@ class QwenEmbeddingRouter(torch.nn.Module):
         self.predict_costs = bool(predict_costs)
         self.reward_head = self._make_head(hidden_size, target_dim, dropout, mlp_hidden_size)
         self.head = self.reward_head
-        self.cost_head = self._make_head(hidden_size, target_dim, dropout, mlp_hidden_size) if self.predict_costs else None
+        self.cost_head = (
+            self._make_head(hidden_size, cost_target_dim, dropout, mlp_hidden_size) if self.predict_costs else None
+        )
 
     @staticmethod
     def _make_head(
@@ -230,7 +249,18 @@ class QwenEmbeddingRouter(torch.nn.Module):
             self.encoder.eval()
         return self
 
-    def encode_inputs(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+    def _set_active_adapter(self, adapter_name: str) -> None:
+        if hasattr(self.encoder, "set_adapter"):
+            self.encoder.set_adapter(adapter_name)
+
+    def encode_inputs(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        adapter_name: str | None = None,
+    ) -> torch.Tensor:
+        if adapter_name is not None:
+            self._set_active_adapter(adapter_name)
         if self.encoder_frozen:
             self.encoder.eval()
             with torch.no_grad():
@@ -242,12 +272,34 @@ class QwenEmbeddingRouter(torch.nn.Module):
             pooled = _last_token_pool(outputs.last_hidden_state, attention_mask)
             return F.normalize(pooled.float(), p=2, dim=1)
 
-    def predict_from_embeddings(self, embeddings: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor | None]:
-        cost_logits = self.cost_head(embeddings) if self.cost_head is not None else None
+    def predict_from_embeddings(
+        self,
+        embeddings: torch.Tensor,
+        detach_cost_embeddings: bool = False,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        cost_embeddings = embeddings.detach() if detach_cost_embeddings else embeddings
+        cost_logits = self.cost_head(cost_embeddings) if self.cost_head is not None else None
         return self.reward_head(embeddings), cost_logits
 
     def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor | None]:
-        return self.predict_from_embeddings(self.encode_inputs(input_ids, attention_mask))
+        reward_embeddings = self.encode_inputs(
+            input_ids,
+            attention_mask,
+            adapter_name=self.reward_adapter_name if hasattr(self.encoder, "set_adapter") else None,
+        )
+        if self.cost_head is None:
+            return self.reward_head(reward_embeddings), None
+        if self.cost_gradient_mode == "separate_adapter":
+            cost_embeddings = self.encode_inputs(
+                input_ids,
+                attention_mask,
+                adapter_name=self.cost_adapter_name,
+            )
+            return self.reward_head(reward_embeddings), self.cost_head(cost_embeddings)
+        return self.predict_from_embeddings(
+            reward_embeddings,
+            detach_cost_embeddings=self.cost_gradient_mode == "detached",
+        )
 
 
 class PrecomputedEmbeddingDataset(Dataset):
@@ -261,10 +313,10 @@ class PrecomputedEmbeddingDataset(Dataset):
         return self.rows[idx]
 
 
-def _collate_embeddings(batch: list[dict[str, Any]], target_dim: int) -> dict[str, Any]:
+def _collate_embeddings(batch: list[dict[str, Any]], target_dim: int, cost_target_dim: int) -> dict[str, Any]:
     embeddings = torch.stack([row["embedding"] for row in batch], dim=0).float()
     targets = torch.zeros((len(batch), target_dim), dtype=torch.float32)
-    output_token_targets_log = torch.zeros((len(batch), target_dim), dtype=torch.float32)
+    output_token_targets_log = torch.zeros((len(batch), cost_target_dim), dtype=torch.float32)
     class_targets = torch.zeros((len(batch),), dtype=torch.long)
     row_indices = torch.zeros((len(batch),), dtype=torch.long)
     for idx, row in enumerate(batch):
@@ -389,6 +441,7 @@ def _compute_predicted_cost_utility_report(
     eval_source_rows: list[dict[str, Any]],
     route_labels: list[str],
     lambdas: list[float],
+    cost_route_idx: int,
 ) -> dict[str, Any]:
     target_dim = len(route_labels)
     eval_lookup: dict[str, dict[str, Any]] = {}
@@ -406,7 +459,7 @@ def _compute_predicted_cost_utility_report(
             not isinstance(pred_rewards, list)
             or not isinstance(pred_output_tokens, list)
             or len(pred_rewards) != target_dim
-            or len(pred_output_tokens) != target_dim
+            or len(pred_output_tokens) != 1
         ):
             skipped_invalid_stats += 1
             continue
@@ -433,7 +486,7 @@ def _compute_predicted_cost_utility_report(
                 "prompt_tokens": [float(value) for value in prompt_tokens],
                 "output_tokens": [float(value) for value in output_tokens],
                 "pred_rewards": [float(value) for value in pred_rewards],
-                "pred_output_tokens": [max(0.0, float(value)) for value in pred_output_tokens],
+                "pred_expert_output_tokens": max(0.0, float(pred_output_tokens[0])),
             }
         )
 
@@ -449,7 +502,11 @@ def _compute_predicted_cost_utility_report(
             for example in valid_examples:
                 scores = []
                 for route_idx in range(target_dim):
-                    pred_cost = example["pred_output_tokens"][route_idx]
+                    pred_cost = (
+                        example["pred_expert_output_tokens"]
+                        if route_idx == int(cost_route_idx)
+                        else example["output_tokens"][route_idx]
+                    )
                     if cost_metric == "total_tokens":
                         pred_cost += example["prompt_tokens"][route_idx]
                     scores.append(example["pred_rewards"][route_idx] - (lambda_value * pred_cost))
@@ -528,16 +585,16 @@ def _compute_train_loss(
             float(cost_mse_weight) * F.mse_loss(cost_logits, output_token_targets_log.float())
         )
         if float(cost_delta_aux_weight) != 0.0:
-            reward_loss = reward_loss + (
-                float(cost_delta_aux_weight)
-                * _delta_loss(cost_logits, output_token_targets_log.float(), float(delta_aux_huber_delta))
-            )
+            raise ValueError("cost_delta_aux_weight is not supported for expert-only cost prediction")
     return reward_loss
 
 
 def _predict_from_batch(model: QwenEmbeddingRouter, batch: dict[str, Any]) -> tuple[torch.Tensor, torch.Tensor | None]:
     if "embeddings" in batch:
-        return model.predict_from_embeddings(batch["embeddings"].float())
+        return model.predict_from_embeddings(
+            batch["embeddings"].float(),
+            detach_cost_embeddings=model.cost_gradient_mode == "detached",
+        )
     return model(input_ids=batch["input_ids"], attention_mask=batch["attention_mask"])
 
 
@@ -673,6 +730,12 @@ def main() -> None:
     parser.add_argument("--delta-aux-weight", type=float, default=1.0)
     parser.add_argument("--delta-aux-huber-delta", type=float, default=0.0)
     parser.add_argument("--predict-costs", action="store_true")
+    parser.add_argument("--cost-route-idx", type=int, default=1)
+    parser.add_argument(
+        "--cost-gradient-mode",
+        choices=["joint", "detached", "separate_adapter"],
+        default="joint",
+    )
     parser.add_argument("--cost-mse-weight", type=float, default=1.0)
     parser.add_argument("--cost-delta-aux-weight", type=float, default=0.0)
     parser.add_argument("--save-model", action="store_true")
@@ -695,6 +758,13 @@ def main() -> None:
         raise ValueError("--precompute-embeddings requires --encoder-frozen")
     if args.use_lora and args.encoder_frozen:
         raise ValueError("--use-lora requires --no-encoder-frozen")
+    cost_route_idx = int(args.cost_route_idx)
+    if bool(args.predict_costs) and not 0 <= cost_route_idx < target_dim:
+        raise ValueError(f"--cost-route-idx={cost_route_idx} is out of range for {target_dim} routes")
+    if args.cost_gradient_mode == "separate_adapter" and not args.use_lora:
+        raise ValueError("--cost-gradient-mode=separate_adapter requires --use-lora")
+    if args.precompute_embeddings and args.cost_gradient_mode == "separate_adapter":
+        raise ValueError("--precompute-embeddings is incompatible with separate cost adapters")
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_name, padding_side="left")
     pad_token_id = tokenizer.pad_token_id
@@ -709,6 +779,7 @@ def main() -> None:
         route_labels,
         int(args.max_seq_length),
         require_cost_targets=bool(args.predict_costs),
+        cost_route_idx=cost_route_idx,
     )
     eval_dataset = RouterCostDataset(
         eval_rows_source,
@@ -716,11 +787,18 @@ def main() -> None:
         route_labels,
         int(args.max_seq_length),
         require_cost_targets=bool(args.predict_costs),
+        cost_route_idx=cost_route_idx,
     )
     if len(train_dataset) == 0 or len(eval_dataset) == 0:
         raise ValueError(f"Prepared empty dataset train={len(train_dataset)} eval={len(eval_dataset)}")
 
-    token_collate_fn = lambda batch: _collate_left_pad(batch, pad_token_id=int(pad_token_id), target_dim=target_dim)
+    cost_target_dim = 1
+    token_collate_fn = lambda batch: _collate_left_pad(
+        batch,
+        pad_token_id=int(pad_token_id),
+        target_dim=target_dim,
+        cost_target_dim=cost_target_dim,
+    )
     train_loader: DataLoader = DataLoader(
         train_dataset,
         batch_size=int(args.batch_size),
@@ -751,6 +829,8 @@ def main() -> None:
         lora_target_modules=[module.strip() for module in str(args.lora_target_modules).split(",") if module.strip()],
         gradient_checkpointing=bool(args.gradient_checkpointing),
         predict_costs=bool(args.predict_costs),
+        cost_target_dim=cost_target_dim,
+        cost_gradient_mode=str(args.cost_gradient_mode),
     )
     if args.precompute_embeddings:
         model.to(accelerator.device)
@@ -769,7 +849,11 @@ def main() -> None:
         )
         del model.encoder
         torch.cuda.empty_cache()
-        embedding_collate_fn = lambda batch: _collate_embeddings(batch, target_dim=target_dim)
+        embedding_collate_fn = lambda batch: _collate_embeddings(
+            batch,
+            target_dim=target_dim,
+            cost_target_dim=cost_target_dim,
+        )
         train_loader = DataLoader(
             train_dataset,
             batch_size=int(args.batch_size),
@@ -831,6 +915,9 @@ def main() -> None:
         "delta_aux_huber_delta": float(args.delta_aux_huber_delta),
         "predict_costs": bool(args.predict_costs),
         "cost_target": "log1p_route_output_tokens",
+        "cost_route_idx": cost_route_idx,
+        "cost_route_label": route_labels[cost_route_idx] if bool(args.predict_costs) else None,
+        "cost_gradient_mode": str(args.cost_gradient_mode),
         "cost_mse_weight": float(args.cost_mse_weight),
         "cost_delta_aux_weight": float(args.cost_delta_aux_weight),
     }
@@ -906,9 +993,16 @@ def main() -> None:
     pairwise_metrics = compute_pairwise_metrics(y_true, y_pred, route_labels)
     classifier_metrics = _compute_classifier_metrics(y_true, y_pred, route_labels)
     utility_report = _compute_utility_report(pred_rows, eval_rows_source, route_labels, DEFAULT_UTILITY_LAMBDAS)
-    cost_metrics = _compute_output_token_metrics(y_cost_true, y_cost_pred, route_labels) if args.predict_costs else []
+    cost_route_labels = [route_labels[cost_route_idx]] if args.predict_costs else []
+    cost_metrics = _compute_output_token_metrics(y_cost_true, y_cost_pred, cost_route_labels) if args.predict_costs else []
     predicted_cost_utility_report = (
-        _compute_predicted_cost_utility_report(pred_rows, eval_rows_source, route_labels, DEFAULT_UTILITY_LAMBDAS)
+        _compute_predicted_cost_utility_report(
+            pred_rows,
+            eval_rows_source,
+            route_labels,
+            DEFAULT_UTILITY_LAMBDAS,
+            cost_route_idx=cost_route_idx,
+        )
         if args.predict_costs
         else None
     )

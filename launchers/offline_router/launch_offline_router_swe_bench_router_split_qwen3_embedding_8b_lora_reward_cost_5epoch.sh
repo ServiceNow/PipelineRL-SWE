@@ -35,6 +35,8 @@ DELTA_AUX_WEIGHT=${DELTA_AUX_WEIGHT:-20.0}
 DELTA_AUX_HUBER_DELTA=${DELTA_AUX_HUBER_DELTA:-0.0}
 COST_MSE_WEIGHT=${COST_MSE_WEIGHT:-1.0}
 COST_DELTA_AUX_WEIGHT=${COST_DELTA_AUX_WEIGHT:-0.0}
+COST_ROUTE_IDX=${COST_ROUTE_IDX:-1}
+COST_GRADIENT_MODE=${COST_GRADIENT_MODE:-joint}
 MLP_HIDDEN_SIZE=${MLP_HIDDEN_SIZE:-1024}
 DROPOUT=${DROPOUT:-0.1}
 TORCH_DTYPE=${TORCH_DTYPE:-bf16}
@@ -108,6 +110,8 @@ make job \
     --delta-aux-weight ${DELTA_AUX_WEIGHT} \
     --delta-aux-huber-delta ${DELTA_AUX_HUBER_DELTA} \
     --predict-costs \
+    --cost-route-idx ${COST_ROUTE_IDX} \
+    --cost-gradient-mode ${COST_GRADIENT_MODE} \
     --cost-mse-weight ${COST_MSE_WEIGHT} \
     --cost-delta-aux-weight ${COST_DELTA_AUX_WEIGHT} \
     ${SAVE_MODEL_ARG} \
