@@ -37,6 +37,7 @@ COST_MSE_WEIGHT=${COST_MSE_WEIGHT:-1.0}
 COST_DELTA_AUX_WEIGHT=${COST_DELTA_AUX_WEIGHT:-0.0}
 COST_ROUTE_IDX=${COST_ROUTE_IDX:-1}
 COST_GRADIENT_MODE=${COST_GRADIENT_MODE:-joint}
+DDP_FIND_UNUSED_PARAMETERS=${DDP_FIND_UNUSED_PARAMETERS:-false}
 MLP_HIDDEN_SIZE=${MLP_HIDDEN_SIZE:-1024}
 DROPOUT=${DROPOUT:-0.1}
 TORCH_DTYPE=${TORCH_DTYPE:-bf16}
@@ -71,6 +72,11 @@ fi
 ATTN_ARG=""
 if [[ -n "${ATTN_IMPLEMENTATION}" ]]; then
   ATTN_ARG="--attn-implementation ${ATTN_IMPLEMENTATION}"
+fi
+
+DDP_FIND_UNUSED_ARG=""
+if [[ "${DDP_FIND_UNUSED_PARAMETERS}" == "true" ]]; then
+  DDP_FIND_UNUSED_ARG="--ddp-find-unused-parameters"
 fi
 
 make job \
@@ -114,5 +120,6 @@ make job \
     --cost-gradient-mode ${COST_GRADIENT_MODE} \
     --cost-mse-weight ${COST_MSE_WEIGHT} \
     --cost-delta-aux-weight ${COST_DELTA_AUX_WEIGHT} \
+    ${DDP_FIND_UNUSED_ARG} \
     ${SAVE_MODEL_ARG} \
     2>&1 | tee -a ${TRAIN_OUTPUT_DIR}/launch.out"

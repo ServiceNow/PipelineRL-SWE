@@ -9,6 +9,7 @@ OUTPUT_ROOT=${OUTPUT_ROOT:-/mnt/llmd/results/exps/aristides/reason/${JOB_NAME}_$
 TRAIN_OUTPUT_DIR=${TRAIN_OUTPUT_DIR:-${OUTPUT_ROOT}/train_qwen3_embedding_8b_lora_reward_separate_adapter_expert_cost_5epoch}
 COST_ROUTE_IDX=${COST_ROUTE_IDX:-1}
 COST_GRADIENT_MODE=${COST_GRADIENT_MODE:-separate_adapter}
+DDP_FIND_UNUSED_PARAMETERS=${DDP_FIND_UNUSED_PARAMETERS:-true}
 
 export JOB_NAME
 export TIMESTAMP
@@ -16,5 +17,6 @@ export OUTPUT_ROOT
 export TRAIN_OUTPUT_DIR
 export COST_ROUTE_IDX
 export COST_GRADIENT_MODE
+export DDP_FIND_UNUSED_PARAMETERS
 
 bash "${SCRIPT_DIR}/launch_offline_router_swe_bench_router_split_qwen3_embedding_8b_lora_reward_cost_5epoch.sh"

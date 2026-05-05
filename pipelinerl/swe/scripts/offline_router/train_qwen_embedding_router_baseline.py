@@ -11,7 +11,7 @@ from typing import Any
 import numpy as np
 import torch
 import torch.nn.functional as F
-from accelerate import Accelerator
+from accelerate import Accelerator, DistributedDataParallelKwargs
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
@@ -738,6 +738,7 @@ def main() -> None:
     )
     parser.add_argument("--cost-mse-weight", type=float, default=1.0)
     parser.add_argument("--cost-delta-aux-weight", type=float, default=0.0)
+    parser.add_argument("--ddp-find-unused-parameters", action="store_true")
     parser.add_argument("--save-model", action="store_true")
     args = parser.parse_args()
 
@@ -745,7 +746,13 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     dataset_dir = Path(args.dataset_dir)
 
-    accelerator = Accelerator(gradient_accumulation_steps=int(args.gradient_accumulation_steps))
+    kwargs_handlers = []
+    if args.ddp_find_unused_parameters:
+        kwargs_handlers.append(DistributedDataParallelKwargs(find_unused_parameters=True))
+    accelerator = Accelerator(
+        gradient_accumulation_steps=int(args.gradient_accumulation_steps),
+        kwargs_handlers=kwargs_handlers,
+    )
     torch.manual_seed(int(args.seed))
     random.seed(int(args.seed))
     np.random.seed(int(args.seed))
@@ -920,6 +927,7 @@ def main() -> None:
         "cost_gradient_mode": str(args.cost_gradient_mode),
         "cost_mse_weight": float(args.cost_mse_weight),
         "cost_delta_aux_weight": float(args.cost_delta_aux_weight),
+        "ddp_find_unused_parameters": bool(args.ddp_find_unused_parameters),
     }
     if accelerator.is_main_process:
         write_json(output_dir / "train_config.json", config)
