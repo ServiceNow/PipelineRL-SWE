@@ -194,6 +194,7 @@ class QwenEmbeddingRouter(torch.nn.Module):
             raise ValueError(f"Unsupported cost_gradient_mode={cost_gradient_mode}")
         self.encoder_frozen = bool(encoder_frozen)
         self.cost_gradient_mode = str(cost_gradient_mode)
+        self.target_dim = int(target_dim)
         self.reward_adapter_name = "reward_adapter"
         self.cost_adapter_name = "cost_adapter"
         model_kwargs: dict[str, Any] = {"torch_dtype": torch_dtype}
@@ -297,6 +298,34 @@ class QwenEmbeddingRouter(torch.nn.Module):
         cost_logits = self.cost_head(cost_embeddings) if self.cost_head is not None else None
         zero_reward_logits = self.zero_reward_head(embeddings) if self.zero_reward_head is not None else None
         return self.reward_head(embeddings), cost_logits, zero_reward_logits
+
+    def predict_cost_only_from_embeddings(
+        self,
+        embeddings: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
+        if self.cost_head is None:
+            raise ValueError("cost-only prediction requires a cost head")
+        reward_logits = torch.zeros(
+            (embeddings.shape[0], self.target_dim),
+            dtype=embeddings.dtype,
+            device=embeddings.device,
+        )
+        return reward_logits, self.cost_head(embeddings), None
+
+    def forward_cost_only(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
+        if self.cost_head is None:
+            raise ValueError("cost-only forward requires a cost head")
+        adapter_name = (
+            self.cost_adapter_name
+            if self.cost_gradient_mode == "separate_adapter"
+            else self.reward_adapter_name if hasattr(self.encoder, "set_adapter") else None
+        )
+        embeddings = self.encode_inputs(input_ids, attention_mask, adapter_name=adapter_name)
+        return self.predict_cost_only_from_embeddings(embeddings)
 
     def forward(
         self,
@@ -642,6 +671,14 @@ def _compute_train_loss(
     predict_zero_reward_failure: bool,
     zero_reward_bce_weight: float,
 ) -> torch.Tensor:
+    if objective == "cost_mse":
+        if not predict_costs or cost_logits is None:
+            raise ValueError("objective=cost_mse requires predict_costs=true and cost logits")
+        if predict_zero_reward_failure:
+            raise ValueError("objective=cost_mse is incompatible with zero-reward failure prediction")
+        if float(cost_delta_aux_weight) != 0.0:
+            raise ValueError("cost_delta_aux_weight is not supported for expert-only cost prediction")
+        return float(cost_mse_weight) * F.mse_loss(cost_logits, output_token_targets_log.float())
     if objective == "route_classifier":
         reward_loss = F.cross_entropy(reward_logits, class_targets.long())
     else:
@@ -671,12 +708,17 @@ def _compute_train_loss(
 def _predict_from_batch(
     model: QwenEmbeddingRouter,
     batch: dict[str, Any],
+    cost_only: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
     if "embeddings" in batch:
+        if cost_only:
+            return model.predict_cost_only_from_embeddings(batch["embeddings"].float())
         return model.predict_from_embeddings(
             batch["embeddings"].float(),
             detach_cost_embeddings=model.cost_gradient_mode == "detached",
         )
+    if cost_only:
+        return model.forward_cost_only(input_ids=batch["input_ids"], attention_mask=batch["attention_mask"])
     return model(input_ids=batch["input_ids"], attention_mask=batch["attention_mask"])
 
 
@@ -701,11 +743,17 @@ def _evaluate(
     cost_pred_chunks: list[np.ndarray] = []
     zero_reward_true_chunks: list[np.ndarray] = []
     zero_reward_pred_chunks: list[np.ndarray] = []
+    cost_only = objective == "cost_mse"
     for batch in tqdm(loader, desc="Eval Qwen embedding router", disable=not accelerator.is_main_process):
-        logits, cost_logits, zero_reward_logits = _predict_from_batch(model, batch)
+        logits, cost_logits, zero_reward_logits = _predict_from_batch(model, batch, cost_only=cost_only)
         logits = logits.float()
         targets = batch["targets"].float()
-        if objective == "route_classifier":
+        if objective == "cost_mse":
+            if cost_logits is None:
+                raise ValueError("objective=cost_mse requires cost logits")
+            loss = F.mse_loss(cost_logits.float(), batch["output_token_targets_log"].float(), reduction="sum")
+            preds = logits
+        elif objective == "route_classifier":
             loss = F.cross_entropy(logits, batch["class_targets"].long(), reduction="sum")
             preds = torch.softmax(logits, dim=-1)
         else:
@@ -803,6 +851,9 @@ def _evaluate(
     )
     if objective == "route_classifier":
         eval_loss = float(total_loss / total_examples) if total_examples > 0 else math.nan
+    elif objective == "cost_mse":
+        total_values = total_examples * (int(y_cost_true.shape[1]) if y_cost_true.ndim == 2 else 1)
+        eval_loss = float(total_loss / total_values) if total_values > 0 else math.nan
     else:
         total_values = total_examples * len(route_labels)
         eval_loss = float(total_loss / total_values) if total_values > 0 else math.nan
@@ -816,7 +867,7 @@ def main() -> None:
     parser.add_argument("--model-name", default="Qwen/Qwen3-Embedding-8B")
     parser.add_argument(
         "--objective",
-        choices=["reward_mse", "reward_mse_delta_aux", "route_classifier"],
+        choices=["reward_mse", "reward_mse_delta_aux", "route_classifier", "cost_mse"],
         default="reward_mse",
     )
     parser.add_argument("--max-seq-length", type=int, default=24000)
@@ -880,6 +931,12 @@ def main() -> None:
     target_dim = len(route_labels)
     if args.objective == "reward_mse_delta_aux" and target_dim != 2:
         raise ValueError("reward_mse_delta_aux currently expects exactly two routes")
+    if args.objective == "cost_mse" and not args.predict_costs:
+        raise ValueError("objective=cost_mse requires --predict-costs")
+    if args.objective == "cost_mse" and args.predict_zero_reward_failure:
+        raise ValueError("objective=cost_mse is incompatible with --predict-zero-reward-failure")
+    if args.objective == "cost_mse" and args.cost_gradient_mode != "joint":
+        raise ValueError("objective=cost_mse expects --cost-gradient-mode=joint")
     if args.precompute_embeddings and not args.encoder_frozen:
         raise ValueError("--precompute-embeddings requires --encoder-frozen")
     if args.use_lora and args.encoder_frozen:
@@ -961,6 +1018,12 @@ def main() -> None:
         cost_gradient_mode=str(args.cost_gradient_mode),
         predict_zero_reward_failure=bool(args.predict_zero_reward_failure),
     )
+    if args.objective == "cost_mse":
+        for parameter in model.reward_head.parameters():
+            parameter.requires_grad_(False)
+        if model.zero_reward_head is not None:
+            for parameter in model.zero_reward_head.parameters():
+                parameter.requires_grad_(False)
     if args.precompute_embeddings:
         model.to(accelerator.device)
         train_embed_loader = DataLoader(
@@ -1067,7 +1130,11 @@ def main() -> None:
         running_losses: list[float] = []
         for batch in tqdm(train_loader, desc=f"Train Qwen embedding router epoch {epoch}", disable=not accelerator.is_main_process):
             with accelerator.accumulate(model):
-                reward_logits, cost_logits, zero_reward_logits = _predict_from_batch(model, batch)
+                reward_logits, cost_logits, zero_reward_logits = _predict_from_batch(
+                    model,
+                    batch,
+                    cost_only=args.objective == "cost_mse",
+                )
                 loss = _compute_train_loss(
                     reward_logits=reward_logits.float(),
                     cost_logits=cost_logits.float() if cost_logits is not None else None,
