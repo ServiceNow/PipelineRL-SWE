@@ -331,7 +331,10 @@ class QwenEmbeddingRouter(torch.nn.Module):
         self,
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor,
+        cost_only: bool = False,
     ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
+        if cost_only:
+            return self.forward_cost_only(input_ids=input_ids, attention_mask=attention_mask)
         reward_embeddings = self.encode_inputs(
             input_ids,
             attention_mask,
@@ -718,7 +721,7 @@ def _predict_from_batch(
             detach_cost_embeddings=model.cost_gradient_mode == "detached",
         )
     if cost_only:
-        return model.forward_cost_only(input_ids=batch["input_ids"], attention_mask=batch["attention_mask"])
+        return model(input_ids=batch["input_ids"], attention_mask=batch["attention_mask"], cost_only=True)
     return model(input_ids=batch["input_ids"], attention_mask=batch["attention_mask"])
 
 
