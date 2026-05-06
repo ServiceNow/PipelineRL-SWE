@@ -22,6 +22,7 @@ from pipelinerl.swe.scripts.offline_router.common import (
     compute_per_route_metrics,
     csv_headers_for_pairwise_metrics,
     csv_headers_for_route_metrics,
+    _roc_auc_binary,
     write_json,
 )
 from pipelinerl.swe.scripts.offline_router.train_modernbert_router_baseline import (
@@ -66,6 +67,7 @@ def _collate_left_pad(
     attention_mask = torch.zeros((len(batch), max_len), dtype=torch.long)
     targets = torch.zeros((len(batch), target_dim), dtype=torch.float32)
     output_token_targets_log = torch.zeros((len(batch), cost_target_dim), dtype=torch.float32)
+    zero_reward_targets = torch.zeros((len(batch), target_dim), dtype=torch.float32)
     class_targets = torch.zeros((len(batch),), dtype=torch.long)
     row_indices = torch.zeros((len(batch),), dtype=torch.long)
     for idx, row in enumerate(batch):
@@ -75,6 +77,7 @@ def _collate_left_pad(
         attention_mask[idx, start:] = torch.tensor(row["attention_mask"], dtype=torch.long)
         targets[idx] = torch.tensor(row["targets"], dtype=torch.float32)
         output_token_targets_log[idx] = torch.tensor(row["output_token_targets_log"], dtype=torch.float32)
+        zero_reward_targets[idx] = torch.tensor(row["zero_reward_targets"], dtype=torch.float32)
         class_targets[idx] = int(row["class_target"])
         row_indices[idx] = int(row["row_idx"])
     return {
@@ -86,6 +89,7 @@ def _collate_left_pad(
         "attention_mask": attention_mask,
         "targets": targets,
         "output_token_targets_log": output_token_targets_log,
+        "zero_reward_targets": zero_reward_targets,
         "class_targets": class_targets,
         "row_indices": row_indices,
     }
@@ -100,6 +104,7 @@ class RouterCostDataset(Dataset):
         max_seq_length: int,
         require_cost_targets: bool,
         cost_route_idx: int,
+        zero_reward_epsilon: float,
     ) -> None:
         self.rows: list[dict[str, Any]] = []
         target_dim = len(route_labels)
@@ -114,6 +119,9 @@ class RouterCostDataset(Dataset):
                 raise ValueError(f"cost_route_idx={cost_route_idx} is out of range for {target_dim} routes")
             try:
                 target_rewards = [float(value) for value in targets]
+                zero_reward_targets = [
+                    1.0 if float(value) <= float(zero_reward_epsilon) else 0.0 for value in target_rewards
+                ]
                 output_token_targets_log = (
                     [float(math.log1p(float(output_tokens[int(cost_route_idx)])))]
                     if isinstance(output_tokens, list) and len(output_tokens) == target_dim
@@ -146,6 +154,7 @@ class RouterCostDataset(Dataset):
                     "attention_mask": [int(value) for value in attention_mask],
                     "targets": target_rewards,
                     "output_token_targets_log": output_token_targets_log,
+                    "zero_reward_targets": zero_reward_targets,
                     "class_target": _argmax_index(target_rewards),
                 }
             )
@@ -176,6 +185,7 @@ class QwenEmbeddingRouter(torch.nn.Module):
         predict_costs: bool,
         cost_target_dim: int,
         cost_gradient_mode: str,
+        predict_zero_reward_failure: bool,
     ) -> None:
         super().__init__()
         if bool(use_lora) and bool(encoder_frozen):
@@ -217,10 +227,16 @@ class QwenEmbeddingRouter(torch.nn.Module):
                 parameter.requires_grad_(False)
         hidden_size = int(self.encoder.config.hidden_size)
         self.predict_costs = bool(predict_costs)
+        self.predict_zero_reward_failure = bool(predict_zero_reward_failure)
         self.reward_head = self._make_head(hidden_size, target_dim, dropout, mlp_hidden_size)
         self.head = self.reward_head
         self.cost_head = (
             self._make_head(hidden_size, cost_target_dim, dropout, mlp_hidden_size) if self.predict_costs else None
+        )
+        self.zero_reward_head = (
+            self._make_head(hidden_size, target_dim, dropout, mlp_hidden_size)
+            if self.predict_zero_reward_failure
+            else None
         )
 
     @staticmethod
@@ -276,26 +292,34 @@ class QwenEmbeddingRouter(torch.nn.Module):
         self,
         embeddings: torch.Tensor,
         detach_cost_embeddings: bool = False,
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
         cost_embeddings = embeddings.detach() if detach_cost_embeddings else embeddings
         cost_logits = self.cost_head(cost_embeddings) if self.cost_head is not None else None
-        return self.reward_head(embeddings), cost_logits
+        zero_reward_logits = self.zero_reward_head(embeddings) if self.zero_reward_head is not None else None
+        return self.reward_head(embeddings), cost_logits, zero_reward_logits
 
-    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor | None]:
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
         reward_embeddings = self.encode_inputs(
             input_ids,
             attention_mask,
             adapter_name=self.reward_adapter_name if hasattr(self.encoder, "set_adapter") else None,
         )
         if self.cost_head is None:
-            return self.reward_head(reward_embeddings), None
+            return self.predict_from_embeddings(reward_embeddings)
         if self.cost_gradient_mode == "separate_adapter":
             cost_embeddings = self.encode_inputs(
                 input_ids,
                 attention_mask,
                 adapter_name=self.cost_adapter_name,
             )
-            return self.reward_head(reward_embeddings), self.cost_head(cost_embeddings)
+            zero_reward_logits = (
+                self.zero_reward_head(reward_embeddings) if self.zero_reward_head is not None else None
+            )
+            return self.reward_head(reward_embeddings), self.cost_head(cost_embeddings), zero_reward_logits
         return self.predict_from_embeddings(
             reward_embeddings,
             detach_cost_embeddings=self.cost_gradient_mode == "detached",
@@ -317,11 +341,13 @@ def _collate_embeddings(batch: list[dict[str, Any]], target_dim: int, cost_targe
     embeddings = torch.stack([row["embedding"] for row in batch], dim=0).float()
     targets = torch.zeros((len(batch), target_dim), dtype=torch.float32)
     output_token_targets_log = torch.zeros((len(batch), cost_target_dim), dtype=torch.float32)
+    zero_reward_targets = torch.zeros((len(batch), target_dim), dtype=torch.float32)
     class_targets = torch.zeros((len(batch),), dtype=torch.long)
     row_indices = torch.zeros((len(batch),), dtype=torch.long)
     for idx, row in enumerate(batch):
         targets[idx] = torch.tensor(row["targets"], dtype=torch.float32)
         output_token_targets_log[idx] = torch.tensor(row["output_token_targets_log"], dtype=torch.float32)
+        zero_reward_targets[idx] = torch.tensor(row["zero_reward_targets"], dtype=torch.float32)
         class_targets[idx] = int(row["class_target"])
         row_indices[idx] = int(row["row_idx"])
     return {
@@ -332,6 +358,7 @@ def _collate_embeddings(batch: list[dict[str, Any]], target_dim: int, cost_targe
         "embeddings": embeddings,
         "targets": targets,
         "output_token_targets_log": output_token_targets_log,
+        "zero_reward_targets": zero_reward_targets,
         "class_targets": class_targets,
         "row_indices": row_indices,
     }
@@ -366,6 +393,9 @@ def _precompute_embeddings(
                     "targets": [float(value) for value in batch["targets"][idx].tolist()],
                     "output_token_targets_log": [
                         float(value) for value in batch["output_token_targets_log"][idx].tolist()
+                    ],
+                    "zero_reward_targets": [
+                        float(value) for value in batch["zero_reward_targets"][idx].tolist()
                     ],
                     "class_target": int(batch["class_targets"][idx].item()),
                 }
@@ -431,6 +461,43 @@ def _compute_output_token_metrics(
                 "mae_log1p_output_tokens": float(np.mean(np.abs(log_err))),
                 "rmse_log1p_output_tokens": float(np.sqrt(np.mean(log_err * log_err))),
                 "pearson_log1p_output_tokens": _safe_corr(true_log, pred_log),
+            }
+        )
+    return rows
+
+
+def _compute_zero_reward_failure_metrics(
+    y_true: np.ndarray,
+    y_pred_prob: np.ndarray,
+    route_labels: list[str],
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    if y_true.size == 0 or y_pred_prob.size == 0:
+        return rows
+    eps = 1.0e-7
+    clipped = np.clip(y_pred_prob, eps, 1.0 - eps)
+    for idx, route_label in enumerate(route_labels):
+        labels = y_true[:, idx].astype(np.int64)
+        probs = clipped[:, idx]
+        pred_labels = (probs >= 0.5).astype(np.int64)
+        positives = int(np.sum(labels == 1))
+        predicted_positives = int(np.sum(pred_labels == 1))
+        true_positives = int(np.sum((labels == 1) & (pred_labels == 1)))
+        rows.append(
+            {
+                "route_idx": idx,
+                "route_label": route_label,
+                "n_eval": int(labels.shape[0]),
+                "positive_rate": float(np.mean(labels)),
+                "mean_pred_prob": float(np.mean(probs)),
+                "std_pred_prob": float(np.std(probs)),
+                "bce": float(-np.mean((labels * np.log(probs)) + ((1 - labels) * np.log(1.0 - probs)))),
+                "accuracy_at_0_5": float(np.mean(labels == pred_labels)),
+                "precision_at_0_5": (
+                    float(true_positives / predicted_positives) if predicted_positives > 0 else None
+                ),
+                "recall_at_0_5": float(true_positives / positives) if positives > 0 else None,
+                "roc_auc": _roc_auc_binary(labels, probs),
             }
         )
     return rows
@@ -560,8 +627,10 @@ def _delta_loss(preds: torch.Tensor, targets: torch.Tensor, huber_delta: float) 
 def _compute_train_loss(
     reward_logits: torch.Tensor,
     cost_logits: torch.Tensor | None,
+    zero_reward_logits: torch.Tensor | None,
     targets: torch.Tensor,
     output_token_targets_log: torch.Tensor,
+    zero_reward_targets: torch.Tensor,
     class_targets: torch.Tensor,
     objective: str,
     reward_mse_weight: float,
@@ -570,10 +639,13 @@ def _compute_train_loss(
     predict_costs: bool,
     cost_mse_weight: float,
     cost_delta_aux_weight: float,
+    predict_zero_reward_failure: bool,
+    zero_reward_bce_weight: float,
 ) -> torch.Tensor:
     if objective == "route_classifier":
-        return F.cross_entropy(reward_logits, class_targets.long())
-    reward_loss = F.mse_loss(reward_logits, targets.float()) * float(reward_mse_weight)
+        reward_loss = F.cross_entropy(reward_logits, class_targets.long())
+    else:
+        reward_loss = F.mse_loss(reward_logits, targets.float()) * float(reward_mse_weight)
     if objective == "reward_mse_delta_aux":
         reward_loss = reward_loss + (
             float(delta_aux_weight) * _delta_loss(reward_logits, targets.float(), float(delta_aux_huber_delta))
@@ -586,10 +658,20 @@ def _compute_train_loss(
         )
         if float(cost_delta_aux_weight) != 0.0:
             raise ValueError("cost_delta_aux_weight is not supported for expert-only cost prediction")
+    if predict_zero_reward_failure:
+        if zero_reward_logits is None:
+            raise ValueError("predict_zero_reward_failure=true but model did not return zero-reward logits")
+        reward_loss = reward_loss + (
+            float(zero_reward_bce_weight)
+            * F.binary_cross_entropy_with_logits(zero_reward_logits, zero_reward_targets.float())
+        )
     return reward_loss
 
 
-def _predict_from_batch(model: QwenEmbeddingRouter, batch: dict[str, Any]) -> tuple[torch.Tensor, torch.Tensor | None]:
+def _predict_from_batch(
+    model: QwenEmbeddingRouter,
+    batch: dict[str, Any],
+) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
     if "embeddings" in batch:
         return model.predict_from_embeddings(
             batch["embeddings"].float(),
@@ -607,7 +689,8 @@ def _evaluate(
     route_labels: list[str],
     objective: str,
     predict_costs: bool,
-) -> tuple[float, list[dict[str, Any]], np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    predict_zero_reward_failure: bool,
+) -> tuple[float, list[dict[str, Any]], np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     model.eval()
     total_loss = 0.0
     total_examples = 0
@@ -616,8 +699,10 @@ def _evaluate(
     y_pred_chunks: list[np.ndarray] = []
     cost_true_chunks: list[np.ndarray] = []
     cost_pred_chunks: list[np.ndarray] = []
+    zero_reward_true_chunks: list[np.ndarray] = []
+    zero_reward_pred_chunks: list[np.ndarray] = []
     for batch in tqdm(loader, desc="Eval Qwen embedding router", disable=not accelerator.is_main_process):
-        logits, cost_logits = _predict_from_batch(model, batch)
+        logits, cost_logits, zero_reward_logits = _predict_from_batch(model, batch)
         logits = logits.float()
         targets = batch["targets"].float()
         if objective == "route_classifier":
@@ -639,6 +724,18 @@ def _evaluate(
         else:
             gathered_cost_preds = torch.empty((gathered_preds.shape[0], len(route_labels)))
             gathered_cost_targets = torch.empty((gathered_preds.shape[0], len(route_labels)))
+        if predict_zero_reward_failure:
+            if zero_reward_logits is None:
+                raise ValueError("predict_zero_reward_failure=true but model did not return zero-reward logits")
+            gathered_zero_reward_preds = accelerator.gather_for_metrics(
+                torch.sigmoid(zero_reward_logits.float())
+            ).detach().cpu()
+            gathered_zero_reward_targets = accelerator.gather_for_metrics(
+                batch["zero_reward_targets"].float()
+            ).detach().cpu()
+        else:
+            gathered_zero_reward_preds = torch.empty((gathered_preds.shape[0], len(route_labels)))
+            gathered_zero_reward_targets = torch.empty((gathered_preds.shape[0], len(route_labels)))
         gathered_indices = accelerator.gather_for_metrics(batch["row_indices"]).detach().cpu().tolist()
         if accelerator.is_main_process:
             total_loss += float(torch.sum(gathered_loss).item())
@@ -665,6 +762,12 @@ def _evaluate(
                     "pred_output_tokens_log": [
                         float(value) for value in gathered_cost_preds[idx].tolist()
                     ] if predict_costs else None,
+                    "true_zero_reward_failure": [
+                        float(value) for value in gathered_zero_reward_targets[idx].tolist()
+                    ] if predict_zero_reward_failure else None,
+                    "pred_zero_reward_failure_probs": [
+                        float(value) for value in gathered_zero_reward_preds[idx].tolist()
+                    ] if predict_zero_reward_failure else None,
                     "route_labels": list(route_labels),
                 }
             )
@@ -673,10 +776,13 @@ def _evaluate(
         if predict_costs:
             cost_true_chunks.append(gathered_cost_targets.numpy())
             cost_pred_chunks.append(gathered_cost_preds.numpy())
+        if predict_zero_reward_failure:
+            zero_reward_true_chunks.append(gathered_zero_reward_targets.numpy())
+            zero_reward_pred_chunks.append(gathered_zero_reward_preds.numpy())
 
     if not accelerator.is_main_process:
         empty = np.empty((0, len(route_labels)))
-        return math.nan, [], empty, empty, empty, empty
+        return math.nan, [], empty, empty, empty, empty, empty, empty
     y_true = np.concatenate(y_true_chunks, axis=0) if y_true_chunks else np.empty((0, len(route_labels)))
     y_pred = np.concatenate(y_pred_chunks, axis=0) if y_pred_chunks else np.empty((0, len(route_labels)))
     y_cost_true = (
@@ -685,12 +791,22 @@ def _evaluate(
     y_cost_pred = (
         np.concatenate(cost_pred_chunks, axis=0) if cost_pred_chunks else np.empty((0, len(route_labels)))
     )
+    y_zero_reward_true = (
+        np.concatenate(zero_reward_true_chunks, axis=0)
+        if zero_reward_true_chunks
+        else np.empty((0, len(route_labels)))
+    )
+    y_zero_reward_pred = (
+        np.concatenate(zero_reward_pred_chunks, axis=0)
+        if zero_reward_pred_chunks
+        else np.empty((0, len(route_labels)))
+    )
     if objective == "route_classifier":
         eval_loss = float(total_loss / total_examples) if total_examples > 0 else math.nan
     else:
         total_values = total_examples * len(route_labels)
         eval_loss = float(total_loss / total_values) if total_values > 0 else math.nan
-    return eval_loss, rows, y_true, y_pred, y_cost_true, y_cost_pred
+    return eval_loss, rows, y_true, y_pred, y_cost_true, y_cost_pred, y_zero_reward_true, y_zero_reward_pred
 
 
 def main() -> None:
@@ -738,6 +854,9 @@ def main() -> None:
     )
     parser.add_argument("--cost-mse-weight", type=float, default=1.0)
     parser.add_argument("--cost-delta-aux-weight", type=float, default=0.0)
+    parser.add_argument("--predict-zero-reward-failure", action="store_true")
+    parser.add_argument("--zero-reward-epsilon", type=float, default=0.0)
+    parser.add_argument("--zero-reward-bce-weight", type=float, default=1.0)
     parser.add_argument("--ddp-find-unused-parameters", action="store_true")
     parser.add_argument("--save-model", action="store_true")
     args = parser.parse_args()
@@ -787,6 +906,7 @@ def main() -> None:
         int(args.max_seq_length),
         require_cost_targets=bool(args.predict_costs),
         cost_route_idx=cost_route_idx,
+        zero_reward_epsilon=float(args.zero_reward_epsilon),
     )
     eval_dataset = RouterCostDataset(
         eval_rows_source,
@@ -795,6 +915,7 @@ def main() -> None:
         int(args.max_seq_length),
         require_cost_targets=bool(args.predict_costs),
         cost_route_idx=cost_route_idx,
+        zero_reward_epsilon=float(args.zero_reward_epsilon),
     )
     if len(train_dataset) == 0 or len(eval_dataset) == 0:
         raise ValueError(f"Prepared empty dataset train={len(train_dataset)} eval={len(eval_dataset)}")
@@ -838,6 +959,7 @@ def main() -> None:
         predict_costs=bool(args.predict_costs),
         cost_target_dim=cost_target_dim,
         cost_gradient_mode=str(args.cost_gradient_mode),
+        predict_zero_reward_failure=bool(args.predict_zero_reward_failure),
     )
     if args.precompute_embeddings:
         model.to(accelerator.device)
@@ -927,6 +1049,10 @@ def main() -> None:
         "cost_gradient_mode": str(args.cost_gradient_mode),
         "cost_mse_weight": float(args.cost_mse_weight),
         "cost_delta_aux_weight": float(args.cost_delta_aux_weight),
+        "predict_zero_reward_failure": bool(args.predict_zero_reward_failure),
+        "zero_reward_failure_target": "reward <= zero_reward_epsilon",
+        "zero_reward_epsilon": float(args.zero_reward_epsilon),
+        "zero_reward_bce_weight": float(args.zero_reward_bce_weight),
         "ddp_find_unused_parameters": bool(args.ddp_find_unused_parameters),
     }
     if accelerator.is_main_process:
@@ -941,12 +1067,14 @@ def main() -> None:
         running_losses: list[float] = []
         for batch in tqdm(train_loader, desc=f"Train Qwen embedding router epoch {epoch}", disable=not accelerator.is_main_process):
             with accelerator.accumulate(model):
-                reward_logits, cost_logits = _predict_from_batch(model, batch)
+                reward_logits, cost_logits, zero_reward_logits = _predict_from_batch(model, batch)
                 loss = _compute_train_loss(
                     reward_logits=reward_logits.float(),
                     cost_logits=cost_logits.float() if cost_logits is not None else None,
+                    zero_reward_logits=zero_reward_logits.float() if zero_reward_logits is not None else None,
                     targets=batch["targets"].float(),
                     output_token_targets_log=batch["output_token_targets_log"].float(),
+                    zero_reward_targets=batch["zero_reward_targets"].float(),
                     class_targets=batch["class_targets"],
                     objective=str(args.objective),
                     reward_mse_weight=float(args.reward_mse_weight),
@@ -955,6 +1083,8 @@ def main() -> None:
                     predict_costs=bool(args.predict_costs),
                     cost_mse_weight=float(args.cost_mse_weight),
                     cost_delta_aux_weight=float(args.cost_delta_aux_weight),
+                    predict_zero_reward_failure=bool(args.predict_zero_reward_failure),
+                    zero_reward_bce_weight=float(args.zero_reward_bce_weight),
                 )
                 accelerator.backward(loss)
                 optimizer.step()
@@ -962,7 +1092,16 @@ def main() -> None:
                 optimizer.zero_grad(set_to_none=True)
                 running_losses.append(float(loss.detach().item()))
         accelerator.wait_for_everyone()
-        eval_loss, pred_rows, y_true, y_pred, y_cost_true, y_cost_pred = _evaluate(
+        (
+            eval_loss,
+            pred_rows,
+            y_true,
+            y_pred,
+            y_cost_true,
+            y_cost_pred,
+            y_zero_reward_true,
+            y_zero_reward_pred,
+        ) = _evaluate(
             accelerator,
             model,
             eval_loader,
@@ -970,6 +1109,7 @@ def main() -> None:
             route_labels,
             objective=str(args.objective),
             predict_costs=bool(args.predict_costs),
+            predict_zero_reward_failure=bool(args.predict_zero_reward_failure),
         )
         train_loss = float(np.mean(running_losses)) if running_losses else math.nan
         if accelerator.is_main_process:
@@ -984,6 +1124,8 @@ def main() -> None:
                     "y_pred": y_pred,
                     "y_cost_true": y_cost_true,
                     "y_cost_pred": y_cost_pred,
+                    "y_zero_reward_true": y_zero_reward_true,
+                    "y_zero_reward_pred": y_zero_reward_pred,
                 }
         accelerator.wait_for_everyone()
 
@@ -997,12 +1139,19 @@ def main() -> None:
     y_pred = best_payload["y_pred"]
     y_cost_true = best_payload["y_cost_true"]
     y_cost_pred = best_payload["y_cost_pred"]
+    y_zero_reward_true = best_payload["y_zero_reward_true"]
+    y_zero_reward_pred = best_payload["y_zero_reward_pred"]
     route_metrics = compute_per_route_metrics(y_true, y_pred, route_labels)
     pairwise_metrics = compute_pairwise_metrics(y_true, y_pred, route_labels)
     classifier_metrics = _compute_classifier_metrics(y_true, y_pred, route_labels)
     utility_report = _compute_utility_report(pred_rows, eval_rows_source, route_labels, DEFAULT_UTILITY_LAMBDAS)
     cost_route_labels = [route_labels[cost_route_idx]] if args.predict_costs else []
     cost_metrics = _compute_output_token_metrics(y_cost_true, y_cost_pred, cost_route_labels) if args.predict_costs else []
+    zero_reward_failure_metrics = (
+        _compute_zero_reward_failure_metrics(y_zero_reward_true, y_zero_reward_pred, route_labels)
+        if args.predict_zero_reward_failure
+        else []
+    )
     predicted_cost_utility_report = (
         _compute_predicted_cost_utility_report(
             pred_rows,
@@ -1040,6 +1189,21 @@ def main() -> None:
             "pearson_log1p_output_tokens",
         ]
         _write_csv(output_dir / "cost_metrics.csv", cost_metrics, cost_headers)
+    if args.predict_zero_reward_failure:
+        zero_reward_headers = [
+            "route_idx",
+            "route_label",
+            "n_eval",
+            "positive_rate",
+            "mean_pred_prob",
+            "std_pred_prob",
+            "bce",
+            "accuracy_at_0_5",
+            "precision_at_0_5",
+            "recall_at_0_5",
+            "roc_auc",
+        ]
+        _write_csv(output_dir / "zero_reward_failure_metrics.csv", zero_reward_failure_metrics, zero_reward_headers)
     utility_headers = [
         "policy",
         "policy_type",
@@ -1070,6 +1234,7 @@ def main() -> None:
         "pairwise_metrics": pairwise_metrics,
         "classifier_metrics": classifier_metrics,
         "cost_metrics": cost_metrics,
+        "zero_reward_failure_metrics": zero_reward_failure_metrics,
         "utility": utility_report,
         "utility_with_predicted_costs": predicted_cost_utility_report,
         "config": config,
@@ -1080,6 +1245,8 @@ def main() -> None:
         torch.save(unwrapped.reward_head.state_dict(), output_dir / "reward_head.pt")
         if unwrapped.cost_head is not None:
             torch.save(unwrapped.cost_head.state_dict(), output_dir / "cost_head.pt")
+        if unwrapped.zero_reward_head is not None:
+            torch.save(unwrapped.zero_reward_head.state_dict(), output_dir / "zero_reward_head.pt")
         if hasattr(unwrapped, "encoder") and hasattr(unwrapped.encoder, "save_pretrained"):
             unwrapped.encoder.save_pretrained(output_dir / "encoder")
         tokenizer.save_pretrained(output_dir / "tokenizer")
