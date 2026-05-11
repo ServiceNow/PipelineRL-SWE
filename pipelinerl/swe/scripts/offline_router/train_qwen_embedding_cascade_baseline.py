@@ -497,6 +497,8 @@ def main() -> None:
     parser.add_argument("--max-threshold-candidates", type=int, default=51)
     parser.add_argument("--utility-lambdas", default=",".join(str(value) for value in DEFAULT_UTILITY_LAMBDAS))
     parser.add_argument("--ddp-find-unused-parameters", action="store_true")
+    parser.add_argument("--checkpoint-every-epoch", action="store_true")
+    parser.add_argument("--resume-from-checkpoint", default=None)
     parser.add_argument("--save-model", action="store_true")
     args = parser.parse_args()
 
@@ -616,12 +618,33 @@ def main() -> None:
         "max_threshold_candidates": int(args.max_threshold_candidates),
         "utility_lambdas": lambdas,
         "ddp_find_unused_parameters": bool(args.ddp_find_unused_parameters),
+        "checkpoint_every_epoch": bool(args.checkpoint_every_epoch),
+        "resume_from_checkpoint": str(args.resume_from_checkpoint) if args.resume_from_checkpoint else None,
     }
     if accelerator.is_main_process:
         write_json(output_dir / "train_config.json", config)
 
     history: list[dict[str, Any]] = []
-    for epoch in range(int(args.num_epochs)):
+    start_epoch = 0
+    resume_from_checkpoint = Path(args.resume_from_checkpoint) if args.resume_from_checkpoint else None
+    if resume_from_checkpoint is not None:
+        if not resume_from_checkpoint.exists():
+            raise FileNotFoundError(f"Missing checkpoint directory: {resume_from_checkpoint}")
+        accelerator.load_state(str(resume_from_checkpoint))
+        state_path = resume_from_checkpoint / "trainer_state.json"
+        if state_path.exists():
+            state = json.loads(state_path.read_text())
+            start_epoch = int(state.get("next_epoch", int(state.get("epoch", -1)) + 1))
+            history = list(state.get("history") or [])
+        else:
+            try:
+                start_epoch = int(str(resume_from_checkpoint.name).split("_")[-1]) + 1
+            except ValueError:
+                start_epoch = 0
+        if accelerator.is_main_process:
+            print(f"Resumed from {resume_from_checkpoint}; starting at epoch {start_epoch}", flush=True)
+
+    for epoch in range(start_epoch, int(args.num_epochs)):
         model.train()
         running_losses: list[float] = []
         for batch in tqdm(train_loader, desc=f"Train Qwen cascade scorer epoch {epoch}", disable=not accelerator.is_main_process):
@@ -646,6 +669,21 @@ def main() -> None:
                 }
             )
         accelerator.wait_for_everyone()
+        if bool(args.checkpoint_every_epoch):
+            checkpoint_dir = output_dir / "checkpoints" / f"epoch_{epoch:04d}"
+            accelerator.save_state(str(checkpoint_dir))
+            accelerator.wait_for_everyone()
+            if accelerator.is_main_process:
+                write_json(
+                    checkpoint_dir / "trainer_state.json",
+                    {
+                        "epoch": int(epoch),
+                        "next_epoch": int(epoch) + 1,
+                        "history": history,
+                        "num_epochs": int(args.num_epochs),
+                    },
+                )
+            accelerator.wait_for_everyone()
 
     train_pred_loader = DataLoader(
         train_dataset,

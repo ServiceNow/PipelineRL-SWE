@@ -39,6 +39,8 @@ LORA_R=${LORA_R:-16}
 LORA_ALPHA=${LORA_ALPHA:-32}
 LORA_DROPOUT=${LORA_DROPOUT:-0.05}
 LORA_TARGET_MODULES=${LORA_TARGET_MODULES:-q_proj,k_proj,v_proj,o_proj}
+CHECKPOINT_EVERY_EPOCH=${CHECKPOINT_EVERY_EPOCH:-true}
+RESUME_FROM_CHECKPOINT=${RESUME_FROM_CHECKPOINT:-}
 SAVE_MODEL=${SAVE_MODEL:-false}
 
 if [[ ! -f "${COLLECT_OUTPUT_DIR}/metadata.json" ]]; then
@@ -60,6 +62,16 @@ fi
 SAVE_MODEL_ARG=""
 if [[ "${SAVE_MODEL}" == "true" ]]; then
   SAVE_MODEL_ARG="--save-model"
+fi
+
+CHECKPOINT_ARG=""
+if [[ "${CHECKPOINT_EVERY_EPOCH}" == "true" ]]; then
+  CHECKPOINT_ARG="--checkpoint-every-epoch"
+fi
+
+RESUME_ARG=""
+if [[ -n "${RESUME_FROM_CHECKPOINT}" ]]; then
+  RESUME_ARG="--resume-from-checkpoint ${RESUME_FROM_CHECKPOINT}"
 fi
 
 ATTN_ARG=""
@@ -102,5 +114,7 @@ make job \
     --gradient-checkpointing \
     --max-threshold-candidates ${MAX_THRESHOLD_CANDIDATES} \
     --utility-lambdas ${UTILITY_LAMBDAS} \
+    ${CHECKPOINT_ARG} \
+    ${RESUME_ARG} \
     ${SAVE_MODEL_ARG} \
     2>&1 | tee -a ${TRAIN_OUTPUT_DIR}/launch.out"
