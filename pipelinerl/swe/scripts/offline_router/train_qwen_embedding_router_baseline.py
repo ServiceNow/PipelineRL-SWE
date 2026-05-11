@@ -1284,6 +1284,9 @@ def main() -> None:
         "mean_reward",
         "mean_cost",
         "mean_utility",
+        "oracle_match_rate",
+        "oracle_match_rate_margin_gt_0_05",
+        "oracle_match_n_margin_gt_0_05",
     ]
     _write_csv(output_dir / "utility_vs_baselines.csv", utility_report["utility_rows"], utility_headers)
     write_json(output_dir / "utility_vs_baselines.json", utility_report)

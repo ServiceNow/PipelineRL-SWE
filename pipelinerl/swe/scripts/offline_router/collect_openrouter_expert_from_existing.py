@@ -92,6 +92,12 @@ class FormatError(Exception):
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-collection-dir", required=True)
+    parser.add_argument("--train-source-collection-dir", default=None)
+    parser.add_argument("--eval-source-collection-dir", default=None)
+    parser.add_argument("--reuse-expert-collection-dir", default=None)
+    parser.add_argument("--reuse-train-expert-collection-dir", default=None)
+    parser.add_argument("--reuse-eval-expert-collection-dir", default=None)
+    parser.add_argument("--reuse-expert-route-idx", type=int, default=1)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--model", default="google/gemini-3-flash-preview")
     parser.add_argument("--expert-label", default=None)
@@ -359,6 +365,25 @@ def _list_value(row: dict[str, Any], key: str, index: int, default: Any) -> Any:
     return default
 
 
+def _source_collection_dir_for_split(args: argparse.Namespace, split_name: str) -> Path:
+    if split_name == "train" and args.train_source_collection_dir:
+        return Path(args.train_source_collection_dir)
+    if split_name == "eval" and args.eval_source_collection_dir:
+        return Path(args.eval_source_collection_dir)
+    return Path(args.source_collection_dir)
+
+
+def _reuse_expert_collection_dir_for_split(args: argparse.Namespace, split_name: str) -> Path | None:
+    raw: str | None
+    if split_name == "train":
+        raw = args.reuse_train_expert_collection_dir or args.reuse_expert_collection_dir
+    elif split_name == "eval":
+        raw = args.reuse_eval_expert_collection_dir or args.reuse_expert_collection_dir
+    else:
+        raw = args.reuse_expert_collection_dir
+    return Path(raw) if raw else None
+
+
 def _derive_failure_type(success: bool, reward_metadata: dict[str, Any], request_error: str | None) -> str:
     if request_error:
         return "request_error"
@@ -610,31 +635,42 @@ async def _run_openrouter_expert(
     }
 
 
-async def _collect_problem(
+def _expert_from_reuse_row(
+    row: dict[str, Any],
+    route_idx: int,
+    success_threshold: float,
+) -> dict[str, Any]:
+    reward = float(
+        _list_value(
+            row,
+            "route_rewards",
+            route_idx,
+            _list_value(row, "performance_targets", route_idx, 0.0),
+        )
+        or 0.0
+    )
+    return {
+        "output_text": str(_list_value(row, "route_outputs", route_idx, "") or ""),
+        "reward": reward,
+        "success": bool(_list_value(row, "route_successes", route_idx, reward > success_threshold)),
+        "prompt_tokens": int(_list_value(row, "route_prompt_tokens", route_idx, 0) or 0),
+        "output_tokens": int(_list_value(row, "route_output_tokens", route_idx, 0) or 0),
+        "latency_s": float(_list_value(row, "route_latencies_s", route_idx, 0.0) or 0.0),
+        "failure_type": str(_list_value(row, "route_failure_types", route_idx, "unknown") or "unknown"),
+    }
+
+
+def _build_collected_row(
     problem: dict[str, Any],
     source_row: dict[str, Any],
+    expert: dict[str, Any],
     args: argparse.Namespace,
-    api_key: str,
-    session: aiohttp.ClientSession,
     split_name: str,
 ) -> dict[str, Any]:
     problem_id = problem_id_from_item(problem)
-    file_contents = problem.get("file_contents") or {}
-    if not isinstance(file_contents, dict) or not file_contents:
-        raise ValueError(f"Problem {problem_id} missing file_contents")
     problem_statement = problem.get("problem_statement")
     if not isinstance(problem_statement, str) or not problem_statement.strip():
         raise ValueError(f"Problem {problem_id} missing problem_statement")
-
-    repair_messages, _stage_input = build_repair_messages(problem_statement, file_contents)
-    expert = await _run_openrouter_expert(
-        session=session,
-        args=args,
-        api_key=api_key,
-        repair_messages=repair_messages,
-        file_contents=file_contents,
-        oracle_patch=str(problem.get("patch") or ""),
-    )
 
     primary_output = _list_value(
         source_row,
@@ -678,11 +714,122 @@ async def _collect_problem(
     }
 
 
+async def _collect_problem(
+    problem: dict[str, Any],
+    source_row: dict[str, Any],
+    args: argparse.Namespace,
+    api_key: str,
+    session: aiohttp.ClientSession,
+    split_name: str,
+) -> dict[str, Any]:
+    problem_id = problem_id_from_item(problem)
+    file_contents = problem.get("file_contents") or {}
+    if not isinstance(file_contents, dict) or not file_contents:
+        raise ValueError(f"Problem {problem_id} missing file_contents")
+    problem_statement = problem.get("problem_statement")
+    if not isinstance(problem_statement, str) or not problem_statement.strip():
+        raise ValueError(f"Problem {problem_id} missing problem_statement")
+
+    repair_messages, _stage_input = build_repair_messages(problem_statement, file_contents)
+    expert = await _run_openrouter_expert(
+        session=session,
+        args=args,
+        api_key=api_key,
+        repair_messages=repair_messages,
+        file_contents=file_contents,
+        oracle_patch=str(problem.get("patch") or ""),
+    )
+    return _build_collected_row(problem, source_row, expert, args, split_name)
+
+
+def _preseed_reused_expert_rows(
+    args: argparse.Namespace,
+    split_name: str,
+    split_dir: Path,
+    dataset: list[dict[str, Any]],
+    source_rows: dict[str, dict[str, Any]],
+    existing_ids: set[str],
+    next_shard_index: int,
+) -> tuple[int, int, int]:
+    reuse_dir = _reuse_expert_collection_dir_for_split(args, split_name)
+    if reuse_dir is None:
+        return next_shard_index, 0, 0
+
+    reuse_rows = _load_source_rows(reuse_dir / split_name)
+    if not reuse_rows:
+        logger.warning("No reusable expert rows found for split=%s in %s", split_name, reuse_dir / split_name)
+        return next_shard_index, 0, 0
+
+    buffered_rows: list[dict[str, Any]] = []
+    reused = 0
+    failed = 0
+    success_threshold = float(args.success_threshold)
+    route_idx = int(args.reuse_expert_route_idx)
+    for problem in dataset:
+        problem_id = problem_id_from_item(problem)
+        if problem_id in existing_ids:
+            continue
+        source_row = source_rows.get(problem_id)
+        reuse_row = reuse_rows.get(problem_id)
+        if source_row is None or reuse_row is None:
+            continue
+        try:
+            expert = _expert_from_reuse_row(reuse_row, route_idx, success_threshold)
+            buffered_rows.append(_build_collected_row(problem, source_row, expert, args, split_name))
+            existing_ids.add(problem_id)
+            reused += 1
+        except Exception as exc:  # pylint: disable=broad-except
+            failed += 1
+            logger.exception("Failed to reuse %s problem %s: %s", split_name, problem_id, exc)
+
+        if len(buffered_rows) >= int(args.shard_size):
+            shard_path = _write_parquet_shard(split_dir, next_shard_index, buffered_rows)
+            logger.info(
+                "%s reused expert rows: wrote=%d shard=%s source=%s",
+                split_name,
+                len(buffered_rows),
+                shard_path.name,
+                reuse_dir,
+            )
+            next_shard_index += 1
+            buffered_rows = []
+
+    if buffered_rows:
+        shard_path = _write_parquet_shard(split_dir, next_shard_index, buffered_rows)
+        logger.info(
+            "%s reused expert rows: wrote=%d shard=%s source=%s",
+            split_name,
+            len(buffered_rows),
+            shard_path.name,
+            reuse_dir,
+        )
+        next_shard_index += 1
+
+    logger.info(
+        "%s reusable expert preseed complete: reuse_source_rows=%d reused=%d failed=%d",
+        split_name,
+        len(reuse_rows),
+        reused,
+        failed,
+    )
+    return next_shard_index, reused, failed
+
+
 async def _collect_split(args: argparse.Namespace, split_name: str, api_key: str) -> dict[str, Any]:
-    source_rows = _load_source_rows(Path(args.source_collection_dir) / split_name)
+    source_collection_dir = _source_collection_dir_for_split(args, split_name)
+    source_rows = _load_source_rows(source_collection_dir / split_name)
     dataset = _load_dataset_for_split(args, split_name)
     split_dir = Path(args.output_dir) / split_name
     existing_ids, next_shard_index = _load_existing_problem_ids(split_dir)
+    next_shard_index, reused_expert_rows, reuse_failed = _preseed_reused_expert_rows(
+        args=args,
+        split_name=split_name,
+        split_dir=split_dir,
+        dataset=dataset,
+        source_rows=source_rows,
+        existing_ids=existing_ids,
+        next_shard_index=next_shard_index,
+    )
 
     pending: list[tuple[int, dict[str, Any], dict[str, Any]]] = []
     skipped_existing = 0
@@ -700,14 +847,16 @@ async def _collect_split(args: argparse.Namespace, split_name: str, api_key: str
 
     logger.info(
         "Starting %s OpenRouter expert collection: dataset_rows=%d source_rows=%d "
-        "skipped_existing=%d skipped_missing_source=%d pending=%d shard_size=%d",
+        "reused_expert=%d skipped_existing=%d skipped_missing_source=%d pending=%d shard_size=%d source_dir=%s",
         split_name,
         len(dataset),
         len(source_rows),
+        reused_expert_rows,
         skipped_existing,
         skipped_missing_source,
         len(pending),
         int(args.shard_size),
+        source_collection_dir,
     )
 
     connector = aiohttp.TCPConnector(limit=int(args.connector_limit))
@@ -816,6 +965,8 @@ async def _collect_split(args: argparse.Namespace, split_name: str, api_key: str
         "n_pending": len(pending),
         "n_written": written,
         "n_failed": failed,
+        "n_reused_expert_rows": reused_expert_rows,
+        "n_reuse_failed": reuse_failed,
         "shard_row_counts": shard_row_counts,
     }
 

@@ -81,6 +81,7 @@ TEXT_BIN_SUPERVISION_MODES = (
 )
 UTILITY_COMPATIBLE_SUPERVISION_MODES = TEXT_REWARD_SUPERVISION_MODES | TEXT_PAIRWISE_SUPERVISION_MODES
 DEFAULT_UTILITY_LAMBDAS = [0.0, 1.0e-5, 2.0e-5, 5.0e-5, 1.0e-4, 2.0e-4]
+DEFAULT_ORACLE_MARGIN_EPSILONS = [0.0, 0.01, 0.02, 0.05, 0.1]
 
 
 def get_world_size() -> int:
@@ -525,6 +526,17 @@ def _mean_or_nan(total: float, count: int) -> float:
     return float(total / count)
 
 
+def _true_reward_margin(rewards: list[float]) -> float:
+    if len(rewards) < 2:
+        return 0.0
+    ordered = sorted((float(value) for value in rewards), reverse=True)
+    return float(ordered[0] - ordered[1])
+
+
+def _oracle_margin_key(epsilon: float) -> str:
+    return f"{float(epsilon):g}"
+
+
 def _argmax_index(values: list[float]) -> int:
     if not values:
         raise ValueError("Cannot choose argmax for an empty list")
@@ -603,6 +615,7 @@ def _compute_utility_report(
                 "output_tokens": output_tokens,
                 "router_choice_idx": _argmax_index(pred_rewards),
                 "oracle_choice_idx": _argmax_index(rewards),
+                "oracle_reward_margin": _true_reward_margin(rewards),
             }
         )
 
@@ -645,6 +658,9 @@ def _compute_utility_report(
         prompt_token_sum = 0.0
         output_token_sum = 0.0
         total_token_sum = 0.0
+        oracle_match_sum = 0
+        oracle_margin_matches = {float(epsilon): 0 for epsilon in DEFAULT_ORACLE_MARGIN_EPSILONS}
+        oracle_margin_counts = {float(epsilon): 0 for epsilon in DEFAULT_ORACLE_MARGIN_EPSILONS}
 
         for example in valid_examples:
             if policy_type == "router":
@@ -653,6 +669,14 @@ def _compute_utility_report(
                 route_idx = int(example["oracle_choice_idx"])
             else:
                 route_idx = int(fixed_route_idx)
+            if route_idx == int(example["oracle_choice_idx"]):
+                oracle_match_sum += 1
+            for epsilon in DEFAULT_ORACLE_MARGIN_EPSILONS:
+                epsilon = float(epsilon)
+                if float(example["oracle_reward_margin"]) > epsilon:
+                    oracle_margin_counts[epsilon] += 1
+                    if route_idx == int(example["oracle_choice_idx"]):
+                        oracle_margin_matches[epsilon] += 1
             route_choice_counts[route_idx] += 1
             reward_sum += float(example["rewards"][route_idx])
             prompt_token_sum += float(example["prompt_tokens"][route_idx])
@@ -663,6 +687,18 @@ def _compute_utility_report(
         mean_prompt_tokens = _mean_or_nan(prompt_token_sum, valid_count)
         mean_output_tokens = _mean_or_nan(output_token_sum, valid_count)
         mean_total_tokens = _mean_or_nan(total_token_sum, valid_count)
+        oracle_match_rate = _mean_or_nan(float(oracle_match_sum), valid_count)
+        oracle_match_by_margin = {
+            _oracle_margin_key(epsilon): {
+                "epsilon": float(epsilon),
+                "n_examples": int(oracle_margin_counts[float(epsilon)]),
+                "oracle_match_rate": _mean_or_nan(
+                    float(oracle_margin_matches[float(epsilon)]),
+                    int(oracle_margin_counts[float(epsilon)]),
+                ),
+            }
+            for epsilon in DEFAULT_ORACLE_MARGIN_EPSILONS
+        }
         choice_counts_by_route = {
             str(route_label): int(route_choice_counts[idx]) for idx, route_label in enumerate(route_labels)
         }
@@ -677,6 +713,8 @@ def _compute_utility_report(
             "mean_prompt_tokens": mean_prompt_tokens,
             "mean_output_tokens": mean_output_tokens,
             "mean_total_tokens": mean_total_tokens,
+            "oracle_match_rate": oracle_match_rate,
+            "oracle_match_by_margin": oracle_match_by_margin,
         }
         policy_summaries[policy_name] = policy_summary
 
@@ -693,6 +731,9 @@ def _compute_utility_report(
                     "mean_reward": mean_reward,
                     "mean_cost": mean_output_tokens,
                     "mean_utility": mean_reward - (lambda_value * mean_output_tokens),
+                    "oracle_match_rate": oracle_match_rate,
+                    "oracle_match_rate_margin_gt_0_05": oracle_match_by_margin["0.05"]["oracle_match_rate"],
+                    "oracle_match_n_margin_gt_0_05": oracle_match_by_margin["0.05"]["n_examples"],
                 }
             )
             utility_rows.append(
@@ -706,6 +747,9 @@ def _compute_utility_report(
                     "mean_reward": mean_reward,
                     "mean_cost": mean_total_tokens,
                     "mean_utility": mean_reward - (lambda_value * mean_total_tokens),
+                    "oracle_match_rate": oracle_match_rate,
+                    "oracle_match_rate_margin_gt_0_05": oracle_match_by_margin["0.05"]["oracle_match_rate"],
+                    "oracle_match_n_margin_gt_0_05": oracle_match_by_margin["0.05"]["n_examples"],
                 }
             )
 
@@ -6588,6 +6632,9 @@ def main(cfg: DictConfig) -> None:
                         "mean_reward",
                         "mean_cost",
                         "mean_utility",
+                        "oracle_match_rate",
+                        "oracle_match_rate_margin_gt_0_05",
+                        "oracle_match_n_margin_gt_0_05",
                     ],
                 )
                 write_json(output_dir / "utility_vs_baselines.json", utility_report)

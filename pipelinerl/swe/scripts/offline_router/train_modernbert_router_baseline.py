@@ -29,6 +29,7 @@ from pipelinerl.swe.scripts.offline_router.common import (
 
 
 DEFAULT_UTILITY_LAMBDAS = [0.0, 1.0e-5, 2.0e-5, 5.0e-5, 1.0e-4, 2.0e-4]
+DEFAULT_ORACLE_MARGIN_EPSILONS = [0.0, 0.01, 0.02, 0.05, 0.1]
 
 
 def _load_split(dataset_dir: Path, split_name: str):
@@ -181,6 +182,46 @@ def _mean(total: float, count: int) -> float:
     return math.nan if count <= 0 else float(total / count)
 
 
+def _true_reward_margin(rewards: list[float]) -> float:
+    if len(rewards) < 2:
+        return 0.0
+    ordered = sorted((float(value) for value in rewards), reverse=True)
+    return float(ordered[0] - ordered[1])
+
+
+def _compute_oracle_match_stats(
+    valid_examples: list[dict[str, Any]],
+    route_idx_key: str,
+    margin_epsilons: list[float],
+) -> dict[str, Any]:
+    rows: list[dict[str, Any]] = []
+    by_epsilon: dict[str, dict[str, Any]] = {}
+    for epsilon in margin_epsilons:
+        epsilon = float(epsilon)
+        kept = [
+            example
+            for example in valid_examples
+            if float(example.get("oracle_reward_margin", 0.0)) > epsilon
+        ]
+        matches = sum(
+            1
+            for example in kept
+            if int(example[route_idx_key]) == int(example["oracle_choice_idx"])
+        )
+        row = {
+            "epsilon": epsilon,
+            "n_examples": int(len(kept)),
+            "oracle_match_rate": _mean(float(matches), len(kept)),
+        }
+        rows.append(row)
+        by_epsilon[str(epsilon)] = row
+    return {"rows": rows, "by_epsilon": by_epsilon}
+
+
+def _oracle_margin_key(epsilon: float) -> str:
+    return f"{float(epsilon):g}"
+
+
 def _compute_utility_report(
     prediction_rows: list[dict[str, Any]],
     eval_source_rows: list[dict[str, Any]],
@@ -239,6 +280,7 @@ def _compute_utility_report(
                 "output_tokens": output_tokens,
                 "router_choice_idx": _argmax_index(pred_rewards),
                 "oracle_choice_idx": _argmax_index(rewards),
+                "oracle_reward_margin": _true_reward_margin(rewards),
             }
         )
 
@@ -266,6 +308,9 @@ def _compute_utility_report(
         prompt_token_sum = 0.0
         output_token_sum = 0.0
         total_token_sum = 0.0
+        oracle_match_sum = 0
+        oracle_margin_matches = {float(epsilon): 0 for epsilon in DEFAULT_ORACLE_MARGIN_EPSILONS}
+        oracle_margin_counts = {float(epsilon): 0 for epsilon in DEFAULT_ORACLE_MARGIN_EPSILONS}
         for example in valid_examples:
             if policy_type == "router":
                 route_idx = int(example["router_choice_idx"])
@@ -273,6 +318,14 @@ def _compute_utility_report(
                 route_idx = int(example["oracle_choice_idx"])
             else:
                 route_idx = int(fixed_route_idx)
+            if route_idx == int(example["oracle_choice_idx"]):
+                oracle_match_sum += 1
+            for epsilon in DEFAULT_ORACLE_MARGIN_EPSILONS:
+                epsilon = float(epsilon)
+                if float(example["oracle_reward_margin"]) > epsilon:
+                    oracle_margin_counts[epsilon] += 1
+                    if route_idx == int(example["oracle_choice_idx"]):
+                        oracle_margin_matches[epsilon] += 1
             route_choice_counts[route_idx] += 1
             reward_sum += float(example["rewards"][route_idx])
             prompt_token_sum += float(example["prompt_tokens"][route_idx])
@@ -292,6 +345,18 @@ def _compute_utility_report(
             "mean_prompt_tokens": _mean(prompt_token_sum, valid_count),
             "mean_output_tokens": _mean(output_token_sum, valid_count),
             "mean_total_tokens": _mean(total_token_sum, valid_count),
+            "oracle_match_rate": _mean(float(oracle_match_sum), valid_count),
+            "oracle_match_by_margin": {
+                _oracle_margin_key(epsilon): {
+                    "epsilon": float(epsilon),
+                    "n_examples": int(oracle_margin_counts[float(epsilon)]),
+                    "oracle_match_rate": _mean(
+                        float(oracle_margin_matches[float(epsilon)]),
+                        int(oracle_margin_counts[float(epsilon)]),
+                    ),
+                }
+                for epsilon in DEFAULT_ORACLE_MARGIN_EPSILONS
+            },
         }
         policy_summaries[policy_name] = policy_summary
         for lambda_value in lambdas:
@@ -311,6 +376,13 @@ def _compute_utility_report(
                         "mean_reward": policy_summary["mean_reward"],
                         "mean_cost": mean_cost,
                         "mean_utility": policy_summary["mean_reward"] - (lambda_value * mean_cost),
+                        "oracle_match_rate": policy_summary["oracle_match_rate"],
+                        "oracle_match_rate_margin_gt_0_05": policy_summary["oracle_match_by_margin"]["0.05"][
+                            "oracle_match_rate"
+                        ],
+                        "oracle_match_n_margin_gt_0_05": policy_summary["oracle_match_by_margin"]["0.05"][
+                            "n_examples"
+                        ],
                     }
                 )
 
@@ -633,6 +705,9 @@ def main() -> None:
         "mean_reward",
         "mean_cost",
         "mean_utility",
+        "oracle_match_rate",
+        "oracle_match_rate_margin_gt_0_05",
+        "oracle_match_n_margin_gt_0_05",
     ]
     _write_csv(output_dir / "utility_vs_baselines.csv", utility_report["utility_rows"], utility_headers)
     write_json(output_dir / "utility_vs_baselines.json", utility_report)
