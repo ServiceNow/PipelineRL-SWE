@@ -66,12 +66,12 @@ if [[ "${DRY_RUN}" != "1" ]]; then
     echo "Missing EVAL_DATASET_PATH=${EVAL_DATASET_PATH}" >&2
     exit 1
   fi
-  if [[ "${LOCAL}" != "1" && ! -f "${OPENROUTER_API_KEY_FILE}" ]]; then
-    echo "Missing OpenRouter key file for remote job: OPENROUTER_API_KEY_FILE=${OPENROUTER_API_KEY_FILE}" >&2
+  if [[ "${LOCAL}" != "1" && ! -s "${OPENROUTER_API_KEY_FILE}" ]]; then
+    echo "Missing or empty OpenRouter key file for remote job: OPENROUTER_API_KEY_FILE=${OPENROUTER_API_KEY_FILE}" >&2
     echo "Remote EAI jobs do not inherit your local shell's ${OPENROUTER_API_KEY_ENV}; write the key to the file or override OPENROUTER_API_KEY_FILE." >&2
     exit 1
   fi
-  if [[ "${LOCAL}" == "1" && -z "${!OPENROUTER_API_KEY_ENV:-}" && ! -f "${OPENROUTER_API_KEY_FILE}" ]]; then
+  if [[ "${LOCAL}" == "1" && -z "${!OPENROUTER_API_KEY_ENV:-}" && ! -s "${OPENROUTER_API_KEY_FILE}" ]]; then
     echo "Missing OpenRouter key. Set ${OPENROUTER_API_KEY_ENV}, or write it to OPENROUTER_API_KEY_FILE=${OPENROUTER_API_KEY_FILE}." >&2
     exit 1
   fi

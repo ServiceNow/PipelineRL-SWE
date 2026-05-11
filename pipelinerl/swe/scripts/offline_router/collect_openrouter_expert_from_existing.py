@@ -304,7 +304,10 @@ def _read_api_key(args: argparse.Namespace) -> str:
     if args.api_key_file:
         path = Path(args.api_key_file)
         if path.exists():
-            return path.read_text().strip()
+            key = path.read_text().strip()
+            if key:
+                return key
+            raise ValueError(f"OpenRouter API key file is empty: {path}")
     raise ValueError(
         f"Missing OpenRouter API key. Set {args.api_key_env} or pass --api-key-file pointing to a readable file."
     )
