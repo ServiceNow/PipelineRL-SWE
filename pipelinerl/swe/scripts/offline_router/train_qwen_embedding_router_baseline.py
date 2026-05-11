@@ -103,11 +103,14 @@ class RouterCostDataset(Dataset):
         route_labels: list[str],
         max_seq_length: int,
         require_cost_targets: bool,
-        cost_route_idx: int,
+        cost_route_idxs: list[int],
         zero_reward_epsilon: float,
     ) -> None:
         self.rows: list[dict[str, Any]] = []
         target_dim = len(route_labels)
+        invalid_cost_route_idxs = [idx for idx in cost_route_idxs if not 0 <= int(idx) < target_dim]
+        if require_cost_targets and invalid_cost_route_idxs:
+            raise ValueError(f"cost_route_idxs={invalid_cost_route_idxs} are out of range for {target_dim} routes")
         for row in rows:
             targets = row.get("performance_targets")
             output_tokens = row.get("route_output_tokens")
@@ -115,17 +118,15 @@ class RouterCostDataset(Dataset):
                 continue
             if require_cost_targets and (not isinstance(output_tokens, list) or len(output_tokens) != target_dim):
                 continue
-            if require_cost_targets and not 0 <= int(cost_route_idx) < target_dim:
-                raise ValueError(f"cost_route_idx={cost_route_idx} is out of range for {target_dim} routes")
             try:
                 target_rewards = [float(value) for value in targets]
                 zero_reward_targets = [
                     1.0 if float(value) <= float(zero_reward_epsilon) else 0.0 for value in target_rewards
                 ]
                 output_token_targets_log = (
-                    [float(math.log1p(float(output_tokens[int(cost_route_idx)])))]
+                    [float(math.log1p(float(output_tokens[int(route_idx)]))) for route_idx in cost_route_idxs]
                     if isinstance(output_tokens, list) and len(output_tokens) == target_dim
-                    else [0.0]
+                    else [0.0 for _ in cost_route_idxs]
                 )
                 problem_id = str(row.get("problem_id") or row.get("instance_id") or row.get("id"))
             except (TypeError, ValueError):
@@ -540,9 +541,10 @@ def _compute_predicted_cost_utility_report(
     eval_source_rows: list[dict[str, Any]],
     route_labels: list[str],
     lambdas: list[float],
-    cost_route_idx: int,
+    cost_route_idxs: list[int],
 ) -> dict[str, Any]:
     target_dim = len(route_labels)
+    cost_route_pos = {int(route_idx): idx for idx, route_idx in enumerate(cost_route_idxs)}
     eval_lookup: dict[str, dict[str, Any]] = {}
     for row in eval_source_rows:
         problem_id = str(row.get("problem_id") or row.get("instance_id") or row.get("id"))
@@ -558,7 +560,7 @@ def _compute_predicted_cost_utility_report(
             not isinstance(pred_rewards, list)
             or not isinstance(pred_output_tokens, list)
             or len(pred_rewards) != target_dim
-            or len(pred_output_tokens) != 1
+            or len(pred_output_tokens) != len(cost_route_idxs)
         ):
             skipped_invalid_stats += 1
             continue
@@ -585,7 +587,7 @@ def _compute_predicted_cost_utility_report(
                 "prompt_tokens": [float(value) for value in prompt_tokens],
                 "output_tokens": [float(value) for value in output_tokens],
                 "pred_rewards": [float(value) for value in pred_rewards],
-                "pred_expert_output_tokens": max(0.0, float(pred_output_tokens[0])),
+                "pred_output_tokens_by_cost_route": [max(0.0, float(value)) for value in pred_output_tokens],
             }
         )
 
@@ -601,11 +603,10 @@ def _compute_predicted_cost_utility_report(
             for example in valid_examples:
                 scores = []
                 for route_idx in range(target_dim):
-                    pred_cost = (
-                        example["pred_expert_output_tokens"]
-                        if route_idx == int(cost_route_idx)
-                        else example["output_tokens"][route_idx]
-                    )
+                    if route_idx in cost_route_pos:
+                        pred_cost = example["pred_output_tokens_by_cost_route"][cost_route_pos[route_idx]]
+                    else:
+                        pred_cost = example["output_tokens"][route_idx]
                     if cost_metric == "total_tokens":
                         pred_cost += example["prompt_tokens"][route_idx]
                     scores.append(example["pred_rewards"][route_idx] - (lambda_value * pred_cost))
@@ -642,15 +643,23 @@ def _compute_predicted_cost_utility_report(
         "skipped_invalid_stats": skipped_invalid_stats,
         "lambdas": [float(value) for value in lambdas],
         "route_labels": list(route_labels),
+        "predicted_cost_route_idxs": [int(idx) for idx in cost_route_idxs],
+        "predicted_cost_route_labels": [route_labels[int(idx)] for idx in cost_route_idxs],
         "utility_rows": utility_rows,
     }
 
 
 def _delta_loss(preds: torch.Tensor, targets: torch.Tensor, huber_delta: float) -> torch.Tensor:
-    if preds.shape[1] != 2:
-        raise ValueError("Delta auxiliary loss currently expects exactly two routes")
-    pred_delta = preds[:, 1] - preds[:, 0]
-    true_delta = targets[:, 1] - targets[:, 0]
+    if preds.shape[1] < 2:
+        raise ValueError("Delta auxiliary loss expects at least two routes")
+    pred_deltas = []
+    true_deltas = []
+    for left_idx in range(int(preds.shape[1])):
+        for right_idx in range(left_idx + 1, int(preds.shape[1])):
+            pred_deltas.append(preds[:, right_idx] - preds[:, left_idx])
+            true_deltas.append(targets[:, right_idx] - targets[:, left_idx])
+    pred_delta = torch.stack(pred_deltas, dim=1)
+    true_delta = torch.stack(true_deltas, dim=1)
     if float(huber_delta) > 0.0:
         return F.huber_loss(pred_delta, true_delta, delta=float(huber_delta))
     return F.mse_loss(pred_delta, true_delta)
@@ -902,6 +911,11 @@ def main() -> None:
     parser.add_argument("--predict-costs", action="store_true")
     parser.add_argument("--cost-route-idx", type=int, default=1)
     parser.add_argument(
+        "--cost-route-idxs",
+        default=None,
+        help="Comma-separated route indices to predict costs for. Defaults to --cost-route-idx.",
+    )
+    parser.add_argument(
         "--cost-gradient-mode",
         choices=["joint", "detached", "separate_adapter"],
         default="joint",
@@ -932,8 +946,8 @@ def main() -> None:
 
     route_labels = _load_route_labels(dataset_dir)
     target_dim = len(route_labels)
-    if args.objective == "reward_mse_delta_aux" and target_dim != 2:
-        raise ValueError("reward_mse_delta_aux currently expects exactly two routes")
+    if args.objective == "reward_mse_delta_aux" and target_dim < 2:
+        raise ValueError("reward_mse_delta_aux expects at least two routes")
     if args.objective == "cost_mse" and not args.predict_costs:
         raise ValueError("objective=cost_mse requires --predict-costs")
     if args.objective == "cost_mse" and args.predict_zero_reward_failure:
@@ -944,9 +958,16 @@ def main() -> None:
         raise ValueError("--precompute-embeddings requires --encoder-frozen")
     if args.use_lora and args.encoder_frozen:
         raise ValueError("--use-lora requires --no-encoder-frozen")
-    cost_route_idx = int(args.cost_route_idx)
-    if bool(args.predict_costs) and not 0 <= cost_route_idx < target_dim:
-        raise ValueError(f"--cost-route-idx={cost_route_idx} is out of range for {target_dim} routes")
+    if args.cost_route_idxs:
+        cost_route_idxs = [int(part.strip()) for part in str(args.cost_route_idxs).split(",") if part.strip()]
+    else:
+        cost_route_idxs = [int(args.cost_route_idx)]
+    if not cost_route_idxs:
+        raise ValueError("--cost-route-idxs resolved to an empty list")
+    cost_route_idx = int(cost_route_idxs[0])
+    invalid_cost_route_idxs = [idx for idx in cost_route_idxs if not 0 <= int(idx) < target_dim]
+    if bool(args.predict_costs) and invalid_cost_route_idxs:
+        raise ValueError(f"--cost-route-idxs contains out-of-range values for {target_dim} routes: {invalid_cost_route_idxs}")
     if args.cost_gradient_mode == "separate_adapter" and not args.use_lora:
         raise ValueError("--cost-gradient-mode=separate_adapter requires --use-lora")
     if args.precompute_embeddings and args.cost_gradient_mode == "separate_adapter":
@@ -965,7 +986,7 @@ def main() -> None:
         route_labels,
         int(args.max_seq_length),
         require_cost_targets=bool(args.predict_costs),
-        cost_route_idx=cost_route_idx,
+        cost_route_idxs=cost_route_idxs,
         zero_reward_epsilon=float(args.zero_reward_epsilon),
     )
     eval_dataset = RouterCostDataset(
@@ -974,13 +995,13 @@ def main() -> None:
         route_labels,
         int(args.max_seq_length),
         require_cost_targets=bool(args.predict_costs),
-        cost_route_idx=cost_route_idx,
+        cost_route_idxs=cost_route_idxs,
         zero_reward_epsilon=float(args.zero_reward_epsilon),
     )
     if len(train_dataset) == 0 or len(eval_dataset) == 0:
         raise ValueError(f"Prepared empty dataset train={len(train_dataset)} eval={len(eval_dataset)}")
 
-    cost_target_dim = 1
+    cost_target_dim = len(cost_route_idxs)
     token_collate_fn = lambda batch: _collate_left_pad(
         batch,
         pad_token_id=int(pad_token_id),
@@ -1111,7 +1132,9 @@ def main() -> None:
         "predict_costs": bool(args.predict_costs),
         "cost_target": "log1p_route_output_tokens",
         "cost_route_idx": cost_route_idx,
+        "cost_route_idxs": [int(idx) for idx in cost_route_idxs],
         "cost_route_label": route_labels[cost_route_idx] if bool(args.predict_costs) else None,
+        "cost_route_labels": [route_labels[int(idx)] for idx in cost_route_idxs] if bool(args.predict_costs) else [],
         "cost_gradient_mode": str(args.cost_gradient_mode),
         "cost_mse_weight": float(args.cost_mse_weight),
         "cost_delta_aux_weight": float(args.cost_delta_aux_weight),
@@ -1215,7 +1238,7 @@ def main() -> None:
     pairwise_metrics = compute_pairwise_metrics(y_true, y_pred, route_labels)
     classifier_metrics = _compute_classifier_metrics(y_true, y_pred, route_labels)
     utility_report = _compute_utility_report(pred_rows, eval_rows_source, route_labels, DEFAULT_UTILITY_LAMBDAS)
-    cost_route_labels = [route_labels[cost_route_idx]] if args.predict_costs else []
+    cost_route_labels = [route_labels[int(route_idx)] for route_idx in cost_route_idxs] if args.predict_costs else []
     cost_metrics = _compute_output_token_metrics(y_cost_true, y_cost_pred, cost_route_labels) if args.predict_costs else []
     zero_reward_failure_metrics = (
         _compute_zero_reward_failure_metrics(y_zero_reward_true, y_zero_reward_pred, route_labels)
@@ -1228,7 +1251,7 @@ def main() -> None:
             eval_rows_source,
             route_labels,
             DEFAULT_UTILITY_LAMBDAS,
-            cost_route_idx=cost_route_idx,
+            cost_route_idxs=cost_route_idxs,
         )
         if args.predict_costs
         else None
