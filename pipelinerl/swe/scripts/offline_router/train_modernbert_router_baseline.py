@@ -50,6 +50,7 @@ def _build_input_text(
     row: dict[str, Any],
     route_labels: list[str],
     input_mode: str = "post_primary",
+    primary_output_token_count: int | None = None,
 ) -> str | None:
     prompt_text = row.get("prompt_text")
     if not isinstance(prompt_text, str):
@@ -70,6 +71,13 @@ def _build_input_text(
     primary_output_text = _get_primary_output_text(row)
     if not isinstance(primary_output_text, str):
         return None
+    primary_token_count_block = ""
+    if primary_output_token_count is not None:
+        primary_token_count_block = (
+            "\n\n"
+            "[Primary Model Attempt Output Tokens]\n"
+            f"{int(primary_output_token_count)}"
+        )
     return (
         "Predict the realized proxy rewards for each model route.\n"
         "The proxy reward is computed after the repair run by comparing the route's patch against the gold patch.\n"
@@ -77,7 +85,8 @@ def _build_input_text(
         "[Route Order]\n"
         f"{route_legend}\n\n"
         "[Original Repair Prompt]\n"
-        f"{prompt_text}\n\n"
+        f"{prompt_text}"
+        f"{primary_token_count_block}\n\n"
         "[Primary Model Attempt]\n"
         f"{primary_output_text}"
     )

@@ -19,6 +19,7 @@ MIXED_PRECISION=${MIXED_PRECISION:-bf16}
 ACCELERATE_CONFIG=${ACCELERATE_CONFIG:-base_mp}
 MAX_SEQ_LENGTH=${MAX_SEQ_LENGTH:-24000}
 INPUT_MODE=${INPUT_MODE:-post_primary}
+INCLUDE_PRIMARY_OUTPUT_TOKEN_COUNT=${INCLUDE_PRIMARY_OUTPUT_TOKEN_COUNT:-false}
 NUM_EPOCHS=${NUM_EPOCHS:-5}
 BATCH_SIZE=${BATCH_SIZE:-1}
 EVAL_BATCH_SIZE=${EVAL_BATCH_SIZE:-1}
@@ -81,6 +82,11 @@ if [[ -n "${ATTN_IMPLEMENTATION}" ]]; then
   ATTN_ARG="--attn-implementation ${ATTN_IMPLEMENTATION}"
 fi
 
+PRIMARY_OUTPUT_TOKEN_COUNT_ARG=""
+if [[ "${INCLUDE_PRIMARY_OUTPUT_TOKEN_COUNT}" == "true" ]]; then
+  PRIMARY_OUTPUT_TOKEN_COUNT_ARG="--include-primary-output-token-count"
+fi
+
 make job \
   JOB_NAME=${JOB_NAME}_${TIMESTAMP} \
   ENV=pipeline-rl \
@@ -94,6 +100,7 @@ make job \
     --objective ${OBJECTIVE} \
     --max-seq-length ${MAX_SEQ_LENGTH} \
     --input-mode ${INPUT_MODE} \
+    ${PRIMARY_OUTPUT_TOKEN_COUNT_ARG} \
     --num-epochs ${NUM_EPOCHS} \
     --batch-size ${BATCH_SIZE} \
     --eval-batch-size ${EVAL_BATCH_SIZE} \

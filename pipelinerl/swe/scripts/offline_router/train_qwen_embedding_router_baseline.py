@@ -31,6 +31,7 @@ from pipelinerl.swe.scripts.offline_router.train_modernbert_router_baseline impo
     _build_input_text,
     _compute_classifier_metrics,
     _compute_utility_report,
+    _get_primary_output_text,
     _load_route_labels,
     _load_split,
     _shuffle_rows,
@@ -106,6 +107,7 @@ class RouterCostDataset(Dataset):
         cost_route_idxs: list[int],
         zero_reward_epsilon: float,
         input_mode: str,
+        include_primary_output_token_count: bool,
     ) -> None:
         self.rows: list[dict[str, Any]] = []
         target_dim = len(route_labels)
@@ -132,7 +134,22 @@ class RouterCostDataset(Dataset):
                 problem_id = str(row.get("problem_id") or row.get("instance_id") or row.get("id"))
             except (TypeError, ValueError):
                 continue
-            input_text = _build_input_text(row, route_labels, input_mode=input_mode)
+            primary_output_token_count: int | None = None
+            if include_primary_output_token_count and input_mode == "post_primary":
+                if isinstance(output_tokens, list) and len(output_tokens) > 0:
+                    primary_output_token_count = int(float(output_tokens[0]))
+                else:
+                    primary_output_text = _get_primary_output_text(row)
+                    if isinstance(primary_output_text, str):
+                        primary_output_token_count = len(
+                            tokenizer(primary_output_text, add_special_tokens=False).get("input_ids") or []
+                        )
+            input_text = _build_input_text(
+                row,
+                route_labels,
+                input_mode=input_mode,
+                primary_output_token_count=primary_output_token_count,
+            )
             if not input_text:
                 continue
             encoded = tokenizer(
@@ -885,6 +902,7 @@ def main() -> None:
     )
     parser.add_argument("--max-seq-length", type=int, default=24000)
     parser.add_argument("--input-mode", choices=["post_primary", "input_only"], default="post_primary")
+    parser.add_argument("--include-primary-output-token-count", action="store_true")
     parser.add_argument("--num-epochs", type=int, default=5)
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--eval-batch-size", type=int, default=1)
@@ -993,6 +1011,7 @@ def main() -> None:
         cost_route_idxs=cost_route_idxs,
         zero_reward_epsilon=float(args.zero_reward_epsilon),
         input_mode=str(args.input_mode),
+        include_primary_output_token_count=bool(args.include_primary_output_token_count),
     )
     eval_dataset = RouterCostDataset(
         eval_rows_source,
@@ -1003,6 +1022,7 @@ def main() -> None:
         cost_route_idxs=cost_route_idxs,
         zero_reward_epsilon=float(args.zero_reward_epsilon),
         input_mode=str(args.input_mode),
+        include_primary_output_token_count=bool(args.include_primary_output_token_count),
     )
     if len(train_dataset) == 0 or len(eval_dataset) == 0:
         raise ValueError(f"Prepared empty dataset train={len(train_dataset)} eval={len(eval_dataset)}")
@@ -1109,6 +1129,7 @@ def main() -> None:
         "route_labels": route_labels,
         "max_seq_length": int(args.max_seq_length),
         "input_mode": str(args.input_mode),
+        "include_primary_output_token_count": bool(args.include_primary_output_token_count),
         "num_epochs": int(args.num_epochs),
         "batch_size": int(args.batch_size),
         "eval_batch_size": int(args.eval_batch_size),
