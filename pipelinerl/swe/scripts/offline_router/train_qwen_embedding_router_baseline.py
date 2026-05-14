@@ -144,12 +144,15 @@ class RouterCostDataset(Dataset):
                         primary_output_token_count = len(
                             tokenizer(primary_output_text, add_special_tokens=False).get("input_ids") or []
                         )
-            input_text = _build_input_text(
-                row,
-                route_labels,
-                input_mode=input_mode,
-                primary_output_token_count=primary_output_token_count,
-            )
+            if primary_output_token_count is None:
+                input_text = _build_input_text(row, route_labels, input_mode=input_mode)
+            else:
+                input_text = _build_input_text(
+                    row,
+                    route_labels,
+                    input_mode=input_mode,
+                    primary_output_token_count=primary_output_token_count,
+                )
             if not input_text:
                 continue
             encoded = tokenizer(
