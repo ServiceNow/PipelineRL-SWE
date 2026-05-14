@@ -46,12 +46,30 @@ def _get_primary_output_text(row: dict[str, Any]) -> str | None:
     return primary_output_text if isinstance(primary_output_text, str) else None
 
 
-def _build_input_text(row: dict[str, Any], route_labels: list[str]) -> str | None:
+def _build_input_text(
+    row: dict[str, Any],
+    route_labels: list[str],
+    input_mode: str = "post_primary",
+) -> str | None:
     prompt_text = row.get("prompt_text")
-    primary_output_text = _get_primary_output_text(row)
-    if not isinstance(prompt_text, str) or not isinstance(primary_output_text, str):
+    if not isinstance(prompt_text, str):
         return None
     route_legend = "\n".join(f"{idx}: {label}" for idx, label in enumerate(route_labels))
+    if input_mode == "input_only":
+        return (
+            "Predict the realized proxy rewards for each model route.\n"
+            "The proxy reward is computed after the repair run by comparing the route's patch against the gold patch.\n"
+            "Only the original repair prompt is shown. Predict each route from the task context alone.\n\n"
+            "[Route Order]\n"
+            f"{route_legend}\n\n"
+            "[Original Repair Prompt]\n"
+            f"{prompt_text}"
+        )
+    if input_mode != "post_primary":
+        raise ValueError(f"Unsupported input_mode={input_mode!r}")
+    primary_output_text = _get_primary_output_text(row)
+    if not isinstance(primary_output_text, str):
+        return None
     return (
         "Predict the realized proxy rewards for each model route.\n"
         "The proxy reward is computed after the repair run by comparing the route's patch against the gold patch.\n"
@@ -72,6 +90,7 @@ class RouterPairDataset(Dataset):
         tokenizer: Any,
         route_labels: list[str],
         max_seq_length: int,
+        input_mode: str = "post_primary",
     ) -> None:
         self.rows: list[dict[str, Any]] = []
         target_dim = len(route_labels)
@@ -84,7 +103,7 @@ class RouterPairDataset(Dataset):
                 problem_id = problem_id_from_item(row)
             except (TypeError, ValueError):
                 continue
-            input_text = _build_input_text(row, route_labels)
+            input_text = _build_input_text(row, route_labels, input_mode=input_mode)
             if not input_text:
                 continue
             encoded = tokenizer(
@@ -547,6 +566,7 @@ def main() -> None:
     parser.add_argument("--model-name", default="answerdotai/ModernBERT-large")
     parser.add_argument("--objective", choices=["reward_mse", "route_classifier"], default="reward_mse")
     parser.add_argument("--max-seq-length", type=int, default=8192)
+    parser.add_argument("--input-mode", choices=["post_primary", "input_only"], default="post_primary")
     parser.add_argument("--num-epochs", type=int, default=5)
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--eval-batch-size", type=int, default=1)
@@ -580,8 +600,20 @@ def main() -> None:
 
     train_rows = _shuffle_rows(list(_load_split(dataset_dir, "train")), args.max_train_rows, args.seed)
     eval_rows_source = _shuffle_rows(list(_load_split(dataset_dir, "eval")), args.max_eval_rows, args.seed + 1)
-    train_dataset = RouterPairDataset(train_rows, tokenizer, route_labels, int(args.max_seq_length))
-    eval_dataset = RouterPairDataset(eval_rows_source, tokenizer, route_labels, int(args.max_seq_length))
+    train_dataset = RouterPairDataset(
+        train_rows,
+        tokenizer,
+        route_labels,
+        int(args.max_seq_length),
+        input_mode=str(args.input_mode),
+    )
+    eval_dataset = RouterPairDataset(
+        eval_rows_source,
+        tokenizer,
+        route_labels,
+        int(args.max_seq_length),
+        input_mode=str(args.input_mode),
+    )
     if len(train_dataset) == 0 or len(eval_dataset) == 0:
         raise ValueError(f"Prepared empty dataset train={len(train_dataset)} eval={len(eval_dataset)}")
 
@@ -620,6 +652,7 @@ def main() -> None:
         "dataset_dir": str(dataset_dir),
         "route_labels": route_labels,
         "max_seq_length": int(args.max_seq_length),
+        "input_mode": str(args.input_mode),
         "num_epochs": int(args.num_epochs),
         "batch_size": int(args.batch_size),
         "eval_batch_size": int(args.eval_batch_size),

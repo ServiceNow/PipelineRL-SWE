@@ -105,6 +105,7 @@ class RouterCostDataset(Dataset):
         require_cost_targets: bool,
         cost_route_idxs: list[int],
         zero_reward_epsilon: float,
+        input_mode: str,
     ) -> None:
         self.rows: list[dict[str, Any]] = []
         target_dim = len(route_labels)
@@ -131,7 +132,7 @@ class RouterCostDataset(Dataset):
                 problem_id = str(row.get("problem_id") or row.get("instance_id") or row.get("id"))
             except (TypeError, ValueError):
                 continue
-            input_text = _build_input_text(row, route_labels)
+            input_text = _build_input_text(row, route_labels, input_mode=input_mode)
             if not input_text:
                 continue
             encoded = tokenizer(
@@ -883,6 +884,7 @@ def main() -> None:
         default="reward_mse",
     )
     parser.add_argument("--max-seq-length", type=int, default=24000)
+    parser.add_argument("--input-mode", choices=["post_primary", "input_only"], default="post_primary")
     parser.add_argument("--num-epochs", type=int, default=5)
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--eval-batch-size", type=int, default=1)
@@ -990,6 +992,7 @@ def main() -> None:
         require_cost_targets=bool(args.predict_costs),
         cost_route_idxs=cost_route_idxs,
         zero_reward_epsilon=float(args.zero_reward_epsilon),
+        input_mode=str(args.input_mode),
     )
     eval_dataset = RouterCostDataset(
         eval_rows_source,
@@ -999,6 +1002,7 @@ def main() -> None:
         require_cost_targets=bool(args.predict_costs),
         cost_route_idxs=cost_route_idxs,
         zero_reward_epsilon=float(args.zero_reward_epsilon),
+        input_mode=str(args.input_mode),
     )
     if len(train_dataset) == 0 or len(eval_dataset) == 0:
         raise ValueError(f"Prepared empty dataset train={len(train_dataset)} eval={len(eval_dataset)}")
@@ -1104,6 +1108,7 @@ def main() -> None:
         "dataset_dir": str(dataset_dir),
         "route_labels": route_labels,
         "max_seq_length": int(args.max_seq_length),
+        "input_mode": str(args.input_mode),
         "num_epochs": int(args.num_epochs),
         "batch_size": int(args.batch_size),
         "eval_batch_size": int(args.eval_batch_size),

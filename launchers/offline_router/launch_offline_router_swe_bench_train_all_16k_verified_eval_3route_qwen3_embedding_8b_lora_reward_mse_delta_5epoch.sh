@@ -18,6 +18,7 @@ TRAIN_NPROC=${TRAIN_NPROC:-4}
 MIXED_PRECISION=${MIXED_PRECISION:-bf16}
 ACCELERATE_CONFIG=${ACCELERATE_CONFIG:-base_mp}
 MAX_SEQ_LENGTH=${MAX_SEQ_LENGTH:-24000}
+INPUT_MODE=${INPUT_MODE:-post_primary}
 NUM_EPOCHS=${NUM_EPOCHS:-5}
 BATCH_SIZE=${BATCH_SIZE:-1}
 EVAL_BATCH_SIZE=${EVAL_BATCH_SIZE:-1}
@@ -92,6 +93,7 @@ make job \
     --model-name ${MODEL_NAME} \
     --objective ${OBJECTIVE} \
     --max-seq-length ${MAX_SEQ_LENGTH} \
+    --input-mode ${INPUT_MODE} \
     --num-epochs ${NUM_EPOCHS} \
     --batch-size ${BATCH_SIZE} \
     --eval-batch-size ${EVAL_BATCH_SIZE} \
