@@ -294,6 +294,32 @@ def _derive_failure_type(reward_metadata: dict[str, Any], request_error: str | N
     return "none"
 
 
+def _parse_positive_ints(raw: str) -> list[int]:
+    values: list[int] = []
+    for piece in re.split(r"[\s,]+", str(raw or "")):
+        piece = piece.strip()
+        if not piece:
+            continue
+        try:
+            value = int(piece)
+        except ValueError:
+            logger.warning("Ignoring invalid max-token fallback value: %s", piece)
+            continue
+        if value > 0 and value not in values:
+            values.append(value)
+    return values
+
+
+def _generation_budgets(args: argparse.Namespace) -> list[int | None]:
+    if not args.max_tokens or args.max_tokens <= 0:
+        return [None]
+    budgets = [int(args.max_tokens)]
+    for value in _parse_positive_ints(args.max_token_fallbacks):
+        if value < int(args.max_tokens) and value not in budgets:
+            budgets.append(value)
+    return budgets
+
+
 async def _collect_one(
     *,
     session: aiohttp.ClientSession,
@@ -316,31 +342,51 @@ async def _collect_one(
     repair_text = ""
     usage: dict[str, Any] = {}
     latency_s = 0.0
-    start = time.time()
-    try:
+    used_max_tokens: int | None = None
+    attempt_errors: list[dict[str, Any]] = []
+
+    for budget in _generation_budgets(args):
+        start = time.time()
         generation_parameters = {
             "temperature": args.temperature,
             "top_p": args.top_p,
         }
-        if args.max_tokens and args.max_tokens > 0:
-            generation_parameters["max_tokens"] = args.max_tokens
-        repair_text, usage, latency_s = await chat_completion(
-            session=session,
-            base_url=base_url,
-            model_name=served_model_name,
-            messages=repair_messages,
-            parameters=generation_parameters,
-        )
-        if repair_text is None:
-            repair_text = ""
-    except Exception as exc:  # pylint: disable=broad-except
-        latency_s = time.time() - start
-        request_error = repr(exc)
+        if budget is not None:
+            generation_parameters["max_tokens"] = budget
+        try:
+            repair_text, usage, attempt_latency = await chat_completion(
+                session=session,
+                base_url=base_url,
+                model_name=served_model_name,
+                messages=repair_messages,
+                parameters=generation_parameters,
+            )
+            latency_s += float(attempt_latency)
+            used_max_tokens = budget
+            request_error = None
+            if repair_text is None:
+                repair_text = ""
+            break
+        except Exception as exc:  # pylint: disable=broad-except
+            attempt_latency = time.time() - start
+            latency_s += float(attempt_latency)
+            request_error = repr(exc)
+            attempt_errors.append(
+                {
+                    "max_tokens": budget,
+                    "latency_s": float(attempt_latency),
+                    "error": request_error,
+                }
+            )
 
     reward_metadata: dict[str, Any]
     if request_error:
         reward = 0.0
-        reward_metadata = {"request_error": True, "error": request_error}
+        reward_metadata = {
+            "request_error": True,
+            "error": request_error,
+            "generation_attempt_errors": attempt_errors,
+        }
     else:
         edits = extract_search_replace_edits(repair_text)
         reward, reward_metadata = calculate_precise_reward(
@@ -372,6 +418,9 @@ async def _collect_one(
         "prompt_tokens": int(usage.get("prompt_tokens", 0) or 0),
         "output_tokens": int(usage.get("completion_tokens", 0) or 0),
         "total_tokens": int(usage.get("total_tokens", 0) or 0),
+        "requested_max_tokens": int(args.max_tokens or 0),
+        "used_max_tokens": used_max_tokens,
+        "generation_attempt_errors": sanitize_for_json(attempt_errors),
         "latency_s": float(latency_s),
         "request_error": request_error,
         "failure_type": _derive_failure_type(reward_metadata, request_error, patch_status),
@@ -381,7 +430,6 @@ async def _collect_one(
         "patch_status": patch_status,
         "collected_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
-
 
 def _read_existing_rows(path: Path) -> OrderedDict[str, dict[str, Any]]:
     rows: OrderedDict[str, dict[str, Any]] = OrderedDict()
@@ -492,6 +540,7 @@ def _write_root_manifest(
         "model_summaries": model_summaries,
         "collection": {
             "max_tokens": args.max_tokens,
+            "max_token_fallbacks": args.max_token_fallbacks,
             "temperature": args.temperature,
             "top_p": args.top_p,
             "success_threshold": args.success_threshold,
@@ -698,7 +747,8 @@ def main() -> None:
     parser.add_argument("--max-concurrent-problems", type=int, default=8)
     parser.add_argument("--connector-limit", type=int, default=32)
     parser.add_argument("--request-timeout", type=float, default=1800)
-    parser.add_argument("--max-tokens", type=int, default=0)
+    parser.add_argument("--max-tokens", type=int, default=32000)
+    parser.add_argument("--max-token-fallbacks", default="15000,8192,4096,2048")
     parser.add_argument("--temperature", type=float, default=0.7)
     parser.add_argument("--top-p", type=float, default=1.0)
     parser.add_argument("--success-threshold", type=float, default=0.8)
