@@ -34,6 +34,7 @@ SUCCESS_THRESHOLD=${SUCCESS_THRESHOLD:-0.8}
 SLEEP_AFTER_MODEL=${SLEEP_AFTER_MODEL:-30}
 SEED=${SEED:-42}
 VLLM_EXTRA_ARGS=${VLLM_EXTRA_ARGS:-}
+VLLM_PYTHON=${VLLM_PYTHON:-/home/toolkit/.conda/envs/vllm-env/bin/python}
 EXTRA_ARGS=${EXTRA_ARGS:-}
 
 CONDA_EXE=${CONDA_EXE:-/opt/conda/bin/conda}
@@ -91,6 +92,7 @@ make job \
     ${limit_arg} \
     --models '${DISCOVERY_MODELS}' \
     --port ${PORT} \
+    --vllm-python '${VLLM_PYTHON}' \
     --tensor-parallel-size ${TENSOR_PARALLEL_SIZE} \
     --max-model-len ${MAX_MODEL_LEN} \
     --gpu-memory-utilization ${GPU_MEMORY_UTILIZATION} \

@@ -177,8 +177,9 @@ def _launch_vllm_server(
     log_path = model_dir / "vllm_server.log"
     log_handle = log_path.open("a")
     base_url = f"http://127.0.0.1:{args.port}"
+    vllm_python = args.vllm_python or sys.executable
     cmd = [
-        sys.executable,
+        vllm_python,
         "-m",
         "vllm.entrypoints.openai.api_server",
         "--model",
@@ -199,6 +200,7 @@ def _launch_vllm_server(
     env.setdefault("TOKENIZERS_PARALLELISM", "false")
     logger.info("Launching vLLM for %s at %s", model_name, base_url)
     logger.info("vLLM log: %s", log_path)
+    logger.info("vLLM python: %s", vllm_python)
     logger.info("vLLM command: %s", " ".join(cmd))
     proc = subprocess.Popen(cmd, stdout=log_handle, stderr=log_handle, env=env)
     setattr(proc, "_log_handle", log_handle)
@@ -736,6 +738,7 @@ def main() -> None:
     parser.add_argument("--models", nargs="*", default=None, help="Whitespace/comma separated model ids. Defaults to the discovery set.")
     parser.add_argument("--served-model-prefix", default="candidate_")
     parser.add_argument("--port", type=int, default=8390)
+    parser.add_argument("--vllm-python", default=None, help="Python interpreter used to launch the vLLM server. Defaults to current interpreter.")
     parser.add_argument("--tensor-parallel-size", type=int, default=8)
     parser.add_argument("--max-model-len", type=int, default=32000)
     parser.add_argument("--gpu-memory-utilization", type=float, default=0.9)
