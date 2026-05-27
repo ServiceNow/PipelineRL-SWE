@@ -698,7 +698,7 @@ def main() -> None:
     parser.add_argument("--max-concurrent-problems", type=int, default=8)
     parser.add_argument("--connector-limit", type=int, default=32)
     parser.add_argument("--request-timeout", type=float, default=1800)
-    parser.add_argument("--max-tokens", type=int, default=15000)
+    parser.add_argument("--max-tokens", type=int, default=0)
     parser.add_argument("--temperature", type=float, default=0.7)
     parser.add_argument("--top-p", type=float, default=1.0)
     parser.add_argument("--success-threshold", type=float, default=0.8)
