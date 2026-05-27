@@ -11,7 +11,7 @@ import pyarrow.parquet as pq
 DEFAULT_LAMBDAS = [0.0, 1.0e-5, 2.0e-5, 5.0e-5, 1.0e-4, 2.0e-4]
 DEFAULT_ROUTE_COST_WEIGHTS = {
     "primary_model": 1.0,
-    "expert_0:openai/gpt-oss-120b": 10.0,
+    "expert_0:openai/gpt-oss-120b": 3.0,
     "expert_0:google/gemini-3-flash-preview": 20.0,
 }
 

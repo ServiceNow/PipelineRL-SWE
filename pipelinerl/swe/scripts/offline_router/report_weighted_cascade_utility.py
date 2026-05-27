@@ -21,7 +21,7 @@ DEFAULT_ROUTE_LABELS = [
     "expert_0:openai/gpt-oss-120b",
     "expert_0:google/gemini-3-flash-preview",
 ]
-DEFAULT_ROUTE_COST_WEIGHTS = [1.0, 10.0, 20.0]
+DEFAULT_ROUTE_COST_WEIGHTS = [1.0, 3.0, 20.0]
 
 
 def _key(row: dict[str, Any]) -> str:
@@ -319,6 +319,7 @@ def _write_combined_plot(combined_rows: list[dict[str, Any]], output_dir: Path) 
         "direct_router_after_primary_pred_reward_pred_cost_weighted": "Direct router",
         "cascade_train_tau_weighted": "Cascade",
         "always_direct::primary_model": "Always primary",
+        "always_direct::expert_0:openai/gpt-oss-120b": "Always OSS",
         "always_direct::expert_0:google/gemini-3-flash-preview": "Always Gemini",
         "oracle_after_primary_utility_weighted": "Oracle after primary",
         "oracle_direct_utility_weighted": "Oracle direct",
@@ -327,6 +328,7 @@ def _write_combined_plot(combined_rows: list[dict[str, Any]], output_dir: Path) 
         "Direct router": "#1f77b4",
         "Cascade": "#e377c2",
         "Always primary": "#2ca02c",
+        "Always OSS": "#ff7f0e",
         "Always Gemini": "#d62728",
         "Oracle after primary": "#9467bd",
         "Oracle direct": "#7f7f7f",
@@ -386,7 +388,7 @@ def _write_combined_plot(combined_rows: list[dict[str, Any]], output_dir: Path) 
     ax.set_ylabel("mean true reward")
     ax.grid(True, alpha=0.25)
     fig.suptitle(
-        "3-way direct router vs sequential cascade, weights primary=1x OSS=10x Gemini=20x",
+        "3-way direct router vs sequential cascade, weighted output-token costs",
         fontsize=12,
     )
     fig.savefig(output_dir / "direct_vs_cascade_weighted_output_utility.png", dpi=180)
