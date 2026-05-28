@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -106,47 +107,113 @@ def build_self_eval_messages(problem_statement: str, stage_input: str, stage_out
 def extract_search_replace_edits(solution_text: str) -> List[Dict[str, str]]:
     edits: List[Dict[str, str]] = []
 
-    def _extract_from_block(block: str) -> None:
-        try:
-            lines = block.split("\n")
-            file_path = None
-            start_index = 0
-            for i, line in enumerate(lines):
-                if line.strip().startswith("###"):
-                    file_path = line.strip()[3:].strip()
-                    start_index = i + 1
-                    break
-            if not file_path:
-                return
+    def _clean_path(raw: str) -> str:
+        value = raw.strip().strip("` ").strip()
+        if value.startswith("###"):
+            value = value[3:].strip()
+        if value.startswith("[") and "]" in value:
+            value = value[1:value.index("]")].strip()
+        if value.lower().startswith(("file:", "filename:")):
+            value = value.split(":", 1)[1].strip()
+        return value.strip().strip("` ")
 
-            search_start = search_end = replace_start = replace_end = None
-            for i, line in enumerate(lines[start_index:], start=start_index):
-                if "<<<<<<< SEARCH" in line:
-                    search_start = i + 1
-                elif "=======" in line and search_start is not None:
-                    search_end = i
-                    replace_start = i + 1
-                elif ">>>>>>> REPLACE" in line and replace_start is not None:
-                    replace_end = i
-                    break
+    def _looks_like_file_path(raw: str) -> bool:
+        path = _clean_path(raw)
+        if not path or path in {"filename.py", "file.py", "path/to/file.py"}:
+            return False
+        if path.startswith("<") or path.endswith(">"):
+            return False
+        if "`" in path or "\t" in path:
+            return False
+        if any(ch in path for ch in ("*", "|", "{", "}")):
+            return False
+        lowered = path.lower()
+        bad_headings = {
+            "analysis", "analysis:", "analysis of the issue", "root cause", "solution",
+            "fix", "the fix", "implementation", "patch", "proposed solution",
+        }
+        if lowered in bad_headings or lowered.startswith(("analysis ", "root cause", "solution ")):
+            return False
+        if " " in path:
+            return False
+        if path.endswith(":"):
+            path = path[:-1]
+        # SWE file paths nearly always have either a directory separator or a source-file suffix.
+        suffixes = (
+            ".py", ".pyx", ".pxd", ".c", ".cc", ".cpp", ".h", ".hpp", ".java", ".js",
+            ".ts", ".tsx", ".jsx", ".go", ".rs", ".rb", ".php", ".scala", ".sh",
+            ".yaml", ".yml", ".toml", ".ini", ".cfg", ".json", ".rst", ".md", ".txt",
+        )
+        return "/" in path or "\\" in path or path.endswith(suffixes)
 
-            if None in (search_start, search_end, replace_start, replace_end):
-                return
+    def _path_from_preceding_lines(lines: List[str], marker_index: int) -> str | None:
+        # Prefer the nearest plausible path header. This avoids grabbing headings such as
+        # "### Analysis" when a later "### pkg/module.py" header precedes the edit.
+        for j in range(marker_index - 1, max(-1, marker_index - 25), -1):
+            stripped = lines[j].strip()
+            if not stripped:
+                continue
+            candidates: list[str] = []
+            if stripped.startswith("###"):
+                candidates.append(stripped)
+            if stripped.startswith("[") and "]" in stripped:
+                candidates.append(stripped)
+            if stripped.lower().startswith(("file:", "filename:")):
+                candidates.append(stripped)
+            # Some models emit a bare path on its own line immediately before the marker.
+            bare = stripped.rstrip(":")
+            if re.fullmatch(r"[A-Za-z0-9_./\\-]+", bare):
+                candidates.append(bare)
+            for candidate in candidates:
+                if _looks_like_file_path(candidate):
+                    return _clean_path(candidate).rstrip(":")
+        return None
 
-            search_text = "\n".join(lines[search_start:search_end])
-            replace_text = "\n".join(lines[replace_start:replace_end])
-            edits.append({
-                "file_path": file_path,
-                "search": search_text,
-                "replace": replace_text,
-            })
-        except Exception:
+    def _append_edit(file_path: str | None, search_lines: List[str], replace_lines: List[str]) -> None:
+        if not file_path:
             return
+        search_text = "\n".join(search_lines).strip("\n")
+        replace_text = "\n".join(replace_lines).strip("\n")
+        if not search_text and not replace_text:
+            return
+        edits.append({
+            "file_path": file_path,
+            "search": search_text,
+            "replace": replace_text,
+        })
 
+    def _extract_from_lines(lines: List[str]) -> None:
+        i = 0
+        while i < len(lines):
+            if "<<<<<<< SEARCH" not in lines[i]:
+                i += 1
+                continue
+            file_path = _path_from_preceding_lines(lines, i)
+            search_start = i + 1
+            sep = end = None
+            j = search_start
+            while j < len(lines):
+                stripped = lines[j].strip()
+                if sep is None and stripped == "=======":
+                    sep = j
+                elif sep is not None and ">>>>>>> REPLACE" in stripped:
+                    end = j
+                    break
+                elif sep is None and "<<<<<<< SEARCH" in lines[j]:
+                    # Malformed nested block; restart from the newer marker.
+                    break
+                j += 1
+            if sep is not None and end is not None:
+                _append_edit(file_path, lines[search_start:sep], lines[sep + 1:end])
+                i = end + 1
+            else:
+                i += 1
+
+    # Parse both fenced code blocks and the whole response. Headers are often outside
+    # fences, while some models emit unfenced SEARCH/REPLACE blocks.
     code_blocks: List[str] = []
     in_block = False
     current: List[str] = []
-
     for line in solution_text.split("\n"):
         if line.strip().startswith("```"):
             if in_block:
@@ -156,11 +223,18 @@ def extract_search_replace_edits(solution_text: str) -> List[Dict[str, str]]:
         elif in_block:
             current.append(line)
 
-    for block in code_blocks:
-        _extract_from_block(block)
-    if not edits and "<<<<<<< SEARCH" in solution_text and ">>>>>>> REPLACE" in solution_text:
-        _extract_from_block(solution_text)
-    return edits
+    for block in [solution_text, *code_blocks]:
+        _extract_from_lines(block.split("\n"))
+
+    seen: set[tuple[str, str, str]] = set()
+    deduped: List[Dict[str, str]] = []
+    for edit in edits:
+        key = (edit["file_path"], edit["search"], edit["replace"])
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(edit)
+    return deduped
 
 
 def parse_self_eval_response(response_text: str) -> Tuple[str, float, bool]:

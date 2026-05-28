@@ -25,6 +25,63 @@ class ChangeSimilarity(TypedDict):
     oracle_change: str
     similarity: float
 
+def _leading_ws(line: str) -> str:
+    return line[:len(line) - len(line.lstrip())]
+
+
+def _strip_trailing_blank_lines(lines: List[str]) -> List[str]:
+    result = list(lines)
+    while result and not result[-1].strip():
+        result.pop()
+    while result and not result[0].strip():
+        result.pop(0)
+    return result
+
+
+def _find_unique_normalized_block(content: str, search_text: str) -> Tuple[int, int, str] | None:
+    """Find a unique linewise match while ignoring indentation/trailing spaces.
+
+    This is deliberately conservative. It only returns a match if the stripped
+    SEARCH lines match exactly once in the target file.
+    """
+    search_lines = _strip_trailing_blank_lines(search_text.splitlines())
+    if not search_lines:
+        return None
+    stripped_search = [line.strip() for line in search_lines]
+    content_lines = content.splitlines(keepends=True)
+    logical_lines = [line.rstrip("\r\n") for line in content_lines]
+    candidates: List[Tuple[int, int, str]] = []
+    n = len(stripped_search)
+    for start in range(0, len(logical_lines) - n + 1):
+        window = logical_lines[start:start + n]
+        if [line.strip() for line in window] != stripped_search:
+            continue
+        start_char = sum(len(line) for line in content_lines[:start])
+        end_char = sum(len(line) for line in content_lines[:start + n])
+        candidates.append((start_char, end_char, _leading_ws(logical_lines[start])))
+        if len(candidates) > 1:
+            return None
+    return candidates[0] if len(candidates) == 1 else None
+
+
+def _reindent_replacement(replace_text: str, target_indent: str) -> str:
+    replace_lines = replace_text.splitlines()
+    if not replace_lines:
+        return replace_text
+    nonempty = [line for line in replace_lines if line.strip()]
+    if not nonempty:
+        return replace_text
+    # If the model emitted an unindented block for an indented target, shift the
+    # whole replacement under the target indentation. Preserve relative spacing.
+    min_indent = min(len(_leading_ws(line)) for line in nonempty)
+    adjusted = []
+    for line in replace_lines:
+        if line.strip():
+            adjusted.append(target_indent + line[min_indent:])
+        else:
+            adjusted.append("")
+    return "\n".join(adjusted)
+
 def generate_unified_diff(
     old_code: str,
     new_code: str,
@@ -93,14 +150,27 @@ def apply_edits_to_files(
                 continue
         
         current_content = new_content_dict[file_path]
-        if search_text not in current_content:
-            if not silent:
-                raise FormatError(f"Search text not found in {file_path}: {search_text}")
-            else:
-                logger.warning(f"Search text not found in {file_path}")
-                continue
-        
-        new_content_dict[file_path] = current_content.replace(search_text, replace_text, 1)
+        if search_text in current_content:
+            new_content_dict[file_path] = current_content.replace(search_text, replace_text, 1)
+            continue
+
+        normalized_match = _find_unique_normalized_block(current_content, search_text)
+        if normalized_match is not None:
+            start_char, end_char, target_indent = normalized_match
+            adjusted_replace = _reindent_replacement(replace_text, target_indent)
+            # Preserve the line ending after the matched block when replacing a
+            # linewise span produced by splitlines(keepends=True).
+            matched_text = current_content[start_char:end_char]
+            if matched_text.endswith(("\n", "\r")) and adjusted_replace and not adjusted_replace.endswith("\n"):
+                adjusted_replace += "\n"
+            new_content_dict[file_path] = current_content[:start_char] + adjusted_replace + current_content[end_char:]
+            continue
+
+        if not silent:
+            raise FormatError(f"Search text not found in {file_path}: {search_text}")
+        else:
+            logger.warning(f"Search text not found in {file_path}")
+            continue
     
     return new_content_dict
 

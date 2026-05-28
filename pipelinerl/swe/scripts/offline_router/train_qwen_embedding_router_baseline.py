@@ -102,6 +102,7 @@ class RouterCostDataset(Dataset):
         rows: list[dict[str, Any]],
         tokenizer: Any,
         route_labels: list[str],
+        route_indices: list[int],
         max_seq_length: int,
         require_cost_targets: bool,
         cost_route_idxs: list[int],
@@ -111,24 +112,34 @@ class RouterCostDataset(Dataset):
     ) -> None:
         self.rows: list[dict[str, Any]] = []
         target_dim = len(route_labels)
+        if len(route_indices) != target_dim:
+            raise ValueError(f"route_indices length {len(route_indices)} does not match target_dim {target_dim}")
+        if target_dim == 0:
+            raise ValueError("At least one target route is required")
+        max_source_route_idx = max(int(idx) for idx in route_indices)
         invalid_cost_route_idxs = [idx for idx in cost_route_idxs if not 0 <= int(idx) < target_dim]
         if require_cost_targets and invalid_cost_route_idxs:
             raise ValueError(f"cost_route_idxs={invalid_cost_route_idxs} are out of range for {target_dim} routes")
         for row in rows:
             targets = row.get("performance_targets")
             output_tokens = row.get("route_output_tokens")
-            if not isinstance(targets, list) or len(targets) != target_dim:
+            if not isinstance(targets, list) or len(targets) <= max_source_route_idx:
                 continue
-            if require_cost_targets and (not isinstance(output_tokens, list) or len(output_tokens) != target_dim):
+            if require_cost_targets and (
+                not isinstance(output_tokens, list) or len(output_tokens) <= max_source_route_idx
+            ):
                 continue
             try:
-                target_rewards = [float(value) for value in targets]
+                target_rewards = [float(targets[int(source_idx)]) for source_idx in route_indices]
                 zero_reward_targets = [
                     1.0 if float(value) <= float(zero_reward_epsilon) else 0.0 for value in target_rewards
                 ]
                 output_token_targets_log = (
-                    [float(math.log1p(float(output_tokens[int(route_idx)]))) for route_idx in cost_route_idxs]
-                    if isinstance(output_tokens, list) and len(output_tokens) == target_dim
+                    [
+                        float(math.log1p(float(output_tokens[int(route_indices[int(route_idx)])])))
+                        for route_idx in cost_route_idxs
+                    ]
+                    if isinstance(output_tokens, list) and len(output_tokens) > max_source_route_idx
                     else [0.0 for _ in cost_route_idxs]
                 )
                 problem_id = str(row.get("problem_id") or row.get("instance_id") or row.get("id"))
@@ -738,6 +749,48 @@ def _compute_train_loss(
     return reward_loss
 
 
+def _parse_route_indices(text: str | None, full_dim: int) -> list[int]:
+    if text is None or str(text).strip() == "":
+        return list(range(full_dim))
+    indices: list[int] = []
+    for part in str(text).split(","):
+        part = part.strip()
+        if not part:
+            continue
+        idx = int(part)
+        if idx < 0 or idx >= full_dim:
+            raise ValueError(f"target route index {idx} is out of range for {full_dim} routes")
+        indices.append(idx)
+    if not indices:
+        raise ValueError("--target-route-idxs resolved to an empty route set")
+    if len(set(indices)) != len(indices):
+        raise ValueError(f"--target-route-idxs contains duplicates: {indices}")
+    return indices
+
+
+def _subset_route_stats_for_utility(
+    rows: list[dict[str, Any]],
+    route_indices: list[int],
+) -> list[dict[str, Any]]:
+    if route_indices == list(range(len(route_indices))):
+        return rows
+    subset_rows: list[dict[str, Any]] = []
+    route_stat_keys = ("performance_targets", "route_prompt_tokens", "route_output_tokens")
+    max_idx = max(int(idx) for idx in route_indices)
+    for row in rows:
+        new_row = dict(row)
+        valid = True
+        for key in route_stat_keys:
+            values = row.get(key)
+            if not isinstance(values, list) or len(values) <= max_idx:
+                valid = False
+                break
+            new_row[key] = [values[int(idx)] for idx in route_indices]
+        if valid:
+            subset_rows.append(new_row)
+    return subset_rows
+
+
 def _predict_from_batch(
     model: QwenEmbeddingRouter,
     batch: dict[str, Any],
@@ -906,6 +959,14 @@ def main() -> None:
     parser.add_argument("--max-seq-length", type=int, default=24000)
     parser.add_argument("--input-mode", choices=["post_primary", "input_only"], default="post_primary")
     parser.add_argument("--include-primary-output-token-count", action="store_true")
+    parser.add_argument(
+        "--target-route-idxs",
+        default=None,
+        help=(
+            "Comma-separated original route indices to train/evaluate as final choices. "
+            "The scout/primary attempt can still be used as context when excluded here."
+        ),
+    )
     parser.add_argument("--num-epochs", type=int, default=5)
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--eval-batch-size", type=int, default=1)
@@ -969,7 +1030,9 @@ def main() -> None:
     random.seed(int(args.seed))
     np.random.seed(int(args.seed))
 
-    route_labels = _load_route_labels(dataset_dir)
+    all_route_labels = _load_route_labels(dataset_dir)
+    target_route_idxs = _parse_route_indices(args.target_route_idxs, len(all_route_labels))
+    route_labels = [all_route_labels[int(idx)] for idx in target_route_idxs]
     target_dim = len(route_labels)
     if args.objective == "reward_mse_delta_aux" and target_dim < 2:
         raise ValueError("reward_mse_delta_aux expects at least two routes")
@@ -1009,6 +1072,7 @@ def main() -> None:
         train_rows,
         tokenizer,
         route_labels,
+        target_route_idxs,
         int(args.max_seq_length),
         require_cost_targets=bool(args.predict_costs),
         cost_route_idxs=cost_route_idxs,
@@ -1020,6 +1084,7 @@ def main() -> None:
         eval_rows_source,
         tokenizer,
         route_labels,
+        target_route_idxs,
         int(args.max_seq_length),
         require_cost_targets=bool(args.predict_costs),
         cost_route_idxs=cost_route_idxs,
@@ -1129,6 +1194,8 @@ def main() -> None:
         "model_name": args.model_name,
         "objective": args.objective,
         "dataset_dir": str(dataset_dir),
+        "all_route_labels": all_route_labels,
+        "target_route_idxs": [int(idx) for idx in target_route_idxs],
         "route_labels": route_labels,
         "max_seq_length": int(args.max_seq_length),
         "input_mode": str(args.input_mode),
@@ -1305,7 +1372,8 @@ def main() -> None:
     route_metrics = compute_per_route_metrics(y_true, y_pred, route_labels)
     pairwise_metrics = compute_pairwise_metrics(y_true, y_pred, route_labels)
     classifier_metrics = _compute_classifier_metrics(y_true, y_pred, route_labels)
-    utility_report = _compute_utility_report(pred_rows, eval_rows_source, route_labels, DEFAULT_UTILITY_LAMBDAS)
+    eval_rows_for_utility = _subset_route_stats_for_utility(eval_rows_source, target_route_idxs)
+    utility_report = _compute_utility_report(pred_rows, eval_rows_for_utility, route_labels, DEFAULT_UTILITY_LAMBDAS)
     cost_route_labels = [route_labels[int(route_idx)] for route_idx in cost_route_idxs] if args.predict_costs else []
     cost_metrics = _compute_output_token_metrics(y_cost_true, y_cost_pred, cost_route_labels) if args.predict_costs else []
     zero_reward_failure_metrics = (
@@ -1316,7 +1384,7 @@ def main() -> None:
     predicted_cost_utility_report = (
         _compute_predicted_cost_utility_report(
             pred_rows,
-            eval_rows_source,
+            eval_rows_for_utility,
             route_labels,
             DEFAULT_UTILITY_LAMBDAS,
             cost_route_idxs=cost_route_idxs,
