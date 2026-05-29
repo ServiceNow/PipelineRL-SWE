@@ -29,6 +29,7 @@ MAX_TRAIN_ROWS=${MAX_TRAIN_ROWS:-0}
 MAX_EVAL_ROWS=${MAX_EVAL_ROWS:-0}
 SEED=${SEED:-17}
 CASCADE_ORDER=${CASCADE_ORDER:-0,1,2}
+TARGET_ROUTE_IDXS=${TARGET_ROUTE_IDXS:-}
 MAX_THRESHOLD_CANDIDATES=${MAX_THRESHOLD_CANDIDATES:-51}
 UTILITY_LAMBDAS=${UTILITY_LAMBDAS:-0.0,1.0e-5,2.0e-5,5.0e-5,1.0e-4,2.0e-4}
 MLP_HIDDEN_SIZE=${MLP_HIDDEN_SIZE:-1024}
@@ -40,6 +41,7 @@ LORA_ALPHA=${LORA_ALPHA:-32}
 LORA_DROPOUT=${LORA_DROPOUT:-0.05}
 LORA_TARGET_MODULES=${LORA_TARGET_MODULES:-q_proj,k_proj,v_proj,o_proj}
 CHECKPOINT_EVERY_EPOCH=${CHECKPOINT_EVERY_EPOCH:-true}
+EPOCH_REPORT_EVERY=${EPOCH_REPORT_EVERY:-1}
 RESUME_FROM_CHECKPOINT=${RESUME_FROM_CHECKPOINT:-}
 SAVE_MODEL=${SAVE_MODEL:-false}
 
@@ -79,6 +81,11 @@ if [[ -n "${ATTN_IMPLEMENTATION}" ]]; then
   ATTN_ARG="--attn-implementation ${ATTN_IMPLEMENTATION}"
 fi
 
+TARGET_ROUTE_ARG=""
+if [[ -n "${TARGET_ROUTE_IDXS}" ]]; then
+  TARGET_ROUTE_ARG="--target-route-idxs ${TARGET_ROUTE_IDXS}"
+fi
+
 make job \
   JOB_NAME=${JOB_NAME}_${TIMESTAMP} \
   ENV=pipeline-rl \
@@ -90,6 +97,7 @@ make job \
     --output-dir ${TRAIN_OUTPUT_DIR} \
     --model-name ${MODEL_NAME} \
     --cascade-order ${CASCADE_ORDER} \
+    ${TARGET_ROUTE_ARG} \
     --max-seq-length ${MAX_SEQ_LENGTH} \
     --num-epochs ${NUM_EPOCHS} \
     --batch-size ${BATCH_SIZE} \
@@ -114,6 +122,7 @@ make job \
     --gradient-checkpointing \
     --max-threshold-candidates ${MAX_THRESHOLD_CANDIDATES} \
     --utility-lambdas ${UTILITY_LAMBDAS} \
+    --epoch-report-every ${EPOCH_REPORT_EVERY} \
     ${CHECKPOINT_ARG} \
     ${RESUME_ARG} \
     ${SAVE_MODEL_ARG} \
