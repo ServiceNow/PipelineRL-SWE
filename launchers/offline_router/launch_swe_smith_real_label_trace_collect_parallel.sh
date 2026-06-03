@@ -10,6 +10,11 @@ RUN_TRAIN_TRACES=${RUN_TRAIN_TRACES:-1}
 RUN_EVAL_TRACES=${RUN_EVAL_TRACES:-1}
 ID_ROOT=${ID_ROOT:-/mnt/llmd/results/exps/aristides/reason/swe_smith_real_label_trace_ids_${TIMESTAMP}}
 OUTPUT_BASE=${OUTPUT_BASE:-/mnt/llmd/results/exps/aristides/reason}
+SWE_SMITH_DATA_ROOT=${SWE_SMITH_DATA_ROOT:-/mnt/llmd/data/swe_smith_bugged_context}
+TRAIN_DATASET_PATH=${TRAIN_DATASET_PATH:-${SWE_SMITH_DATA_ROOT}/ds_train}
+EVAL_DATASET_PATH=${EVAL_DATASET_PATH:-${SWE_SMITH_DATA_ROOT}/ds_test}
+TRAIN_DATASET_NAME=${TRAIN_DATASET_NAME:-swe_smith_train_bugged_context}
+EVAL_DATASET_NAME=${EVAL_DATASET_NAME:-swe_smith_test_bugged_context}
 SUBMIT_SLEEP_SECS=${SUBMIT_SLEEP_SECS:-5}
 
 TRAIN_IDS=${TRAIN_IDS:-${ID_ROOT}/swe_smith_train_${TRAIN_N}_ids.txt}
@@ -17,6 +22,8 @@ EVAL_IDS=${EVAL_IDS:-${ID_ROOT}/swe_smith_eval_${EVAL_N}_ids.txt}
 
 if [[ ! -s "${TRAIN_IDS}" || ! -s "${EVAL_IDS}" ]]; then
   TIMESTAMP="${TIMESTAMP}" SEED="${SEED}" TRAIN_N="${TRAIN_N}" EVAL_N="${EVAL_N}" ID_ROOT="${ID_ROOT}" \
+  SWE_SMITH_DATA_ROOT="${SWE_SMITH_DATA_ROOT}" TRAIN_DATASET_PATH="${TRAIN_DATASET_PATH}" EVAL_DATASET_PATH="${EVAL_DATASET_PATH}" \
+  TRAIN_DATASET_NAME="${TRAIN_DATASET_NAME}" EVAL_DATASET_NAME="${EVAL_DATASET_NAME}" \
     bash "${SCRIPT_DIR}/prepare_swe_smith_real_label_trace_ids.sh"
 fi
 
@@ -72,11 +79,11 @@ submit_split() {
 }
 
 if [[ "${RUN_TRAIN_TRACES}" == "1" ]]; then
-  submit_split "train1500" "/mnt/llmd/data/swe_smith/ds_train" "swe_smith_train" "${TRAIN_IDS}"
+  submit_split "train1500" "${TRAIN_DATASET_PATH}" "${TRAIN_DATASET_NAME}" "${TRAIN_IDS}"
 fi
 
 if [[ "${RUN_EVAL_TRACES}" == "1" ]]; then
-  submit_split "eval500" "/mnt/llmd/data/swe_smith/ds_test" "swe_smith_test" "${EVAL_IDS}"
+  submit_split "eval500" "${EVAL_DATASET_PATH}" "${EVAL_DATASET_NAME}" "${EVAL_IDS}"
 fi
 
 echo "Submitted SWE-Smith real-label trace jobs."

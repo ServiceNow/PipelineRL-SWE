@@ -65,8 +65,12 @@ def load_local_swe_dataset(
         samples = []
         for item in dataset:
             try:
-                # Parse file contents with error handling
-                file_contents = _parse_file_contents(item.get("gold_file_contents", "{}"))
+                # Parse file contents with error handling. Prefer the explicit
+                # repair_file_contents field; gold_file_contents remains a
+                # compatibility alias for older preprocessed datasets.
+                file_contents = _parse_file_contents(
+                    item.get("repair_file_contents", item.get("gold_file_contents", "{}"))
+                )
                     
                 # Skip items with no file contents
                 if not file_contents:
@@ -81,7 +85,7 @@ def load_local_swe_dataset(
                     all_file_stats = "{}"
                 
                 # Format compatible with convert_swe_problems_to_tapes
-                samples.append({
+                sample = {
                     "id": item_id,
                     "dataset": resolved_dataset,
                     "repo": item.get("repo", ""),
@@ -90,7 +94,21 @@ def load_local_swe_dataset(
                     "patch": item.get("patch"),
                     "file_contents": file_contents,
                     "all_file_stats": all_file_stats,
-                })
+                }
+                for optional_key in (
+                    "repair_file_contents",
+                    "reference_file_contents",
+                    "repair_target_patch",
+                    "bug_introducing_patch",
+                    # Legacy aliases kept for compatibility with older scripts.
+                    "clean_file_contents",
+                    "bug_patch",
+                    "fix_patch",
+                    "swesmith_bugged_context",
+                ):
+                    if optional_key in item:
+                        sample[optional_key] = item.get(optional_key)
+                samples.append(sample)
                 
             except Exception as e:
                 logger.warning(f"Error processing item: {e}")

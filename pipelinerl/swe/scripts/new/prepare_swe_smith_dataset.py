@@ -1,10 +1,13 @@
 #!/usr/bin/env python
 import argparse
+import difflib
+import hashlib
 import json
 import logging
 import random
 import re
 import subprocess
+import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -18,6 +21,11 @@ from tqdm import tqdm
 from transformers import AutoTokenizer
 
 logger = logging.getLogger(__name__)
+
+
+def _git_blob_hash(text: str) -> str:
+    data = text.encode("utf-8", errors="surrogateescape")
+    return hashlib.sha1(f"blob {len(data)}\0".encode("ascii") + data).hexdigest()[:7]
 
 
 def _first_non_empty(item: dict[str, Any], keys: list[str], default: Any = None) -> Any:
@@ -249,6 +257,150 @@ def _fetch_gold_file_contents_from_raw_url(
     return contents
 
 
+
+def _strip_patch_index_lines(patch: str) -> str:
+    lines = []
+    for line in patch.splitlines():
+        if re.fullmatch(r"index [0-9a-fA-F]{6,40}\.\.[0-9a-fA-F]{6,40}(?: \d+)?", line.strip()):
+            continue
+        lines.append(line)
+    text = "\n".join(lines)
+    if text and patch.endswith("\n"):
+        text += "\n"
+    return text
+
+
+def _apply_unified_patch_to_contents(file_contents: dict[str, str], patch: str) -> dict[str, str] | None:
+    touched = _parse_patch_files(patch)
+    if not touched:
+        return None
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        for file_path in touched:
+            if file_path not in file_contents:
+                return None
+            target = root / file_path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(file_contents[file_path], encoding="utf-8", errors="surrogateescape")
+        patch_path = root / "bug.patch"
+        patch_path.write_text(_strip_patch_index_lines(patch), encoding="utf-8", errors="surrogateescape")
+        result = subprocess.run(
+            ["patch", "-p1", "--batch", "--forward", "--reject-file=-", "-i", str(patch_path)],
+            cwd=root,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        if result.returncode != 0:
+            return None
+        out: dict[str, str] = {}
+        for file_path in touched:
+            target = root / file_path
+            if not target.exists():
+                return None
+            out[file_path] = target.read_text(encoding="utf-8", errors="surrogateescape")
+        return out
+
+
+def _unified_diff_body(old: str, new: str) -> str:
+    lines = list(
+        difflib.unified_diff(
+            old.splitlines(),
+            new.splitlines(),
+            fromfile="old",
+            tofile="new",
+            lineterm="",
+            n=3,
+        )
+    )
+    if len(lines) <= 2:
+        return ""
+    return "\n".join(lines[2:])
+
+
+def _build_fix_patch_from_bugged_to_clean(
+    clean_contents: dict[str, str],
+    bugged_contents: dict[str, str],
+) -> str:
+    parts: list[str] = []
+    for file_path in sorted(set(clean_contents) | set(bugged_contents)):
+        clean = clean_contents.get(file_path)
+        bugged = bugged_contents.get(file_path)
+        if clean is None or bugged is None or clean == bugged:
+            continue
+        body = _unified_diff_body(bugged, clean)
+        if not body:
+            continue
+        parts.extend(
+            [
+                f"diff --git a/{file_path} b/{file_path}",
+                f"index {_git_blob_hash(bugged)}..{_git_blob_hash(clean)} 100644",
+                f"--- a/{file_path}",
+                f"+++ b/{file_path}",
+                body,
+            ]
+        )
+    text = "\n".join(parts)
+    if text and not text.endswith("\n"):
+        text += "\n"
+    return text
+
+
+def _convert_swesmith_rows_to_bugged_context(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """Convert SWE-Smith rows from clean/base context to bugged repair context.
+
+    Canonical output fields:
+    - repair_file_contents: the bugged code shown to the solver.
+    - reference_file_contents: the clean target code.
+    - bug_introducing_patch: SWE-Smith's original clean -> bug patch.
+    - repair_target_patch: the bugged -> clean patch used for proxy reward.
+
+    Backward-compatible aliases are also written: gold_file_contents points to
+    repair_file_contents and patch points to repair_target_patch.
+    """
+    kept: list[dict[str, Any]] = []
+    stats = {
+        "input_rows": len(rows),
+        "converted": 0,
+        "missing_clean_contents": 0,
+        "bug_patch_apply_failed": 0,
+        "empty_fix_patch": 0,
+    }
+    for row in rows:
+        clean_contents = _as_dict_maybe_json(row.get("gold_file_contents", "{}"))
+        if not clean_contents:
+            stats["missing_clean_contents"] += 1
+            continue
+        bug_patch = str(row.get("patch") or "")
+        bugged_contents = _apply_unified_patch_to_contents(clean_contents, bug_patch)
+        if bugged_contents is None:
+            stats["bug_patch_apply_failed"] += 1
+            continue
+        full_bugged = dict(clean_contents)
+        full_bugged.update(bugged_contents)
+        fix_patch = _build_fix_patch_from_bugged_to_clean(clean_contents, full_bugged)
+        if not fix_patch:
+            stats["empty_fix_patch"] += 1
+            continue
+        new_row = dict(row)
+        reference_json = json.dumps(clean_contents)
+        repair_json = json.dumps(full_bugged)
+        new_row["reference_file_contents"] = reference_json
+        new_row["repair_file_contents"] = repair_json
+        new_row["bug_introducing_patch"] = bug_patch
+        new_row["repair_target_patch"] = fix_patch
+        # Backward-compatible aliases for existing loader/proxy code.
+        new_row["clean_file_contents"] = reference_json
+        new_row["bug_patch"] = bug_patch
+        new_row["fix_patch"] = fix_patch
+        new_row["gold_file_contents"] = repair_json
+        new_row["patch"] = fix_patch
+        new_row["swesmith_bugged_context"] = True
+        kept.append(new_row)
+        stats["converted"] += 1
+    return kept, stats
+
+
 def _normalize_item(
     item: dict[str, Any],
     source_name: str,
@@ -462,6 +614,15 @@ def main() -> None:
         action="store_true",
         help="Run git fetch on repo caches that already exist. Disabled by default to avoid long resumes.",
     )
+    parser.add_argument(
+        "--swesmith-bugged-context",
+        action="store_true",
+        help=(
+            "For SWE-Smith rows, apply the bug-introducing patch to reconstructed file contents, "
+            "use those bugged contents as repair context, and replace patch with the inverse fix patch. "
+            "Do not use this for SWE-Bench datasets, whose patch is already the fix direction."
+        ),
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -592,6 +753,14 @@ def main() -> None:
         if not normalized_rows:
             raise ValueError("No rows left after reconstruction; check repo/commit parsing.")
 
+    swesmith_bugged_context_stats: dict[str, int] | None = None
+    if args.swesmith_bugged_context:
+        logger.info("Converting SWE-Smith rows to bugged repair context")
+        normalized_rows, swesmith_bugged_context_stats = _convert_swesmith_rows_to_bugged_context(normalized_rows)
+        logger.info("SWE-Smith bugged-context conversion stats: %s", swesmith_bugged_context_stats)
+        if not normalized_rows:
+            raise ValueError("No rows left after SWE-Smith bugged-context conversion")
+
     token_filtered_out = 0
     token_counts: list[int] = []
     if args.max_total_tokens > 0:
@@ -643,6 +812,8 @@ def main() -> None:
             "git_timeout_seconds": int(args.git_timeout_seconds),
             "partial_clone": not bool(args.no_partial_clone),
             "fetch_existing_repos": bool(args.fetch_existing_repos),
+            "swesmith_bugged_context": bool(args.swesmith_bugged_context),
+            "swesmith_bugged_context_stats": swesmith_bugged_context_stats,
             "n_filtered_by_token_limit": token_filtered_out,
             "n_repos": len(repos),
             "dataset_distribution": dict(Counter(row["dataset_source"] for row in normalized_rows)),
@@ -718,6 +889,8 @@ def main() -> None:
         "git_timeout_seconds": int(args.git_timeout_seconds),
         "partial_clone": not bool(args.no_partial_clone),
         "fetch_existing_repos": bool(args.fetch_existing_repos),
+        "swesmith_bugged_context": bool(args.swesmith_bugged_context),
+        "swesmith_bugged_context_stats": swesmith_bugged_context_stats,
         "n_filtered_by_token_limit": token_filtered_out,
         "n_train": len(train_rows),
         "n_test": len(test_rows),
