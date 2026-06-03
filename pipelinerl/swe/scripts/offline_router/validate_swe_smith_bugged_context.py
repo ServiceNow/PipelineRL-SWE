@@ -95,10 +95,14 @@ def main() -> None:
         if apply_patch(bugged, bug_patch):
             stats["bug_applies_to_bugged_context"] += 1
     print(json.dumps(stats, indent=2, sort_keys=True))
-    if stats["checked"] and stats["fix_applies_to_bugged_context"] != stats["checked"] - stats["missing_fields"]:
-        raise SystemExit("Some fix patches did not apply to bugged context")
+    expected_fix = stats["checked"] - stats["missing_fields"]
+    if expected_fix and stats["fix_applies_to_bugged_context"] != expected_fix:
+        raise SystemExit("Some repair_target_patch/fix patches did not apply to bugged context")
     if stats["bug_applies_to_bugged_context"]:
-        raise SystemExit("Bug patch still applies to bugged context; context may be clean")
+        raise SystemExit(
+            "Some bug_introducing_patch values still apply to bugged context; "
+            "regenerate with ambiguous repair contexts filtered out"
+        )
 
 
 if __name__ == "__main__":

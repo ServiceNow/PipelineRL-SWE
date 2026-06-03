@@ -302,6 +302,11 @@ def _apply_unified_patch_to_contents(file_contents: dict[str, str], patch: str) 
         return out
 
 
+
+def _patch_applies_to_contents(file_contents: dict[str, str], patch: str) -> bool:
+    return _apply_unified_patch_to_contents(file_contents, patch) is not None
+
+
 def _unified_diff_body(old: str, new: str) -> str:
     lines = list(
         difflib.unified_diff(
@@ -365,6 +370,8 @@ def _convert_swesmith_rows_to_bugged_context(rows: list[dict[str, Any]]) -> tupl
         "missing_clean_contents": 0,
         "bug_patch_apply_failed": 0,
         "empty_fix_patch": 0,
+        "repair_target_patch_apply_failed": 0,
+        "bug_patch_applies_to_repair_context": 0,
     }
     for row in rows:
         clean_contents = _as_dict_maybe_json(row.get("gold_file_contents", "{}"))
@@ -381,6 +388,12 @@ def _convert_swesmith_rows_to_bugged_context(rows: list[dict[str, Any]]) -> tupl
         fix_patch = _build_fix_patch_from_bugged_to_clean(clean_contents, full_bugged)
         if not fix_patch:
             stats["empty_fix_patch"] += 1
+            continue
+        if not _patch_applies_to_contents(full_bugged, fix_patch):
+            stats["repair_target_patch_apply_failed"] += 1
+            continue
+        if _patch_applies_to_contents(full_bugged, bug_patch):
+            stats["bug_patch_applies_to_repair_context"] += 1
             continue
         new_row = dict(row)
         reference_json = json.dumps(clean_contents)
