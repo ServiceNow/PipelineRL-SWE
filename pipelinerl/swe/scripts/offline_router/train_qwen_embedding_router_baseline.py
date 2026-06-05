@@ -707,6 +707,7 @@ def _compute_train_loss(
     class_targets: torch.Tensor,
     objective: str,
     reward_mse_weight: float,
+    reward_bce_weight: float,
     delta_aux_weight: float,
     delta_aux_huber_delta: float,
     predict_costs: bool,
@@ -725,11 +726,21 @@ def _compute_train_loss(
         return float(cost_mse_weight) * F.mse_loss(cost_logits, output_token_targets_log.float())
     if objective == "route_classifier":
         reward_loss = F.cross_entropy(reward_logits, class_targets.long())
+    elif objective in {"reward_bce", "reward_bce_delta_aux"}:
+        reward_loss = (
+            F.binary_cross_entropy_with_logits(reward_logits, targets.float())
+            * float(reward_bce_weight)
+        )
     else:
         reward_loss = F.mse_loss(reward_logits, targets.float()) * float(reward_mse_weight)
     if objective == "reward_mse_delta_aux":
         reward_loss = reward_loss + (
             float(delta_aux_weight) * _delta_loss(reward_logits, targets.float(), float(delta_aux_huber_delta))
+        )
+    if objective == "reward_bce_delta_aux":
+        reward_probs = torch.sigmoid(reward_logits)
+        reward_loss = reward_loss + (
+            float(delta_aux_weight) * _delta_loss(reward_probs, targets.float(), float(delta_aux_huber_delta))
         )
     if predict_costs:
         if cost_logits is None:
@@ -842,6 +853,11 @@ def _evaluate(
         elif objective == "route_classifier":
             loss = F.cross_entropy(logits, batch["class_targets"].long(), reduction="sum")
             preds = torch.softmax(logits, dim=-1)
+        elif objective in {"reward_bce", "reward_bce_delta_aux"}:
+            loss = F.binary_cross_entropy_with_logits(logits, targets, reduction="sum")
+            preds = torch.sigmoid(logits)
+            if predict_costs and cost_logits is not None:
+                loss = loss + F.mse_loss(cost_logits.float(), batch["output_token_targets_log"].float(), reduction="sum")
         else:
             loss = F.mse_loss(logits, targets, reduction="sum")
             preds = logits
@@ -953,7 +969,14 @@ def main() -> None:
     parser.add_argument("--model-name", default="Qwen/Qwen3-Embedding-8B")
     parser.add_argument(
         "--objective",
-        choices=["reward_mse", "reward_mse_delta_aux", "route_classifier", "cost_mse"],
+        choices=[
+            "reward_mse",
+            "reward_mse_delta_aux",
+            "reward_bce",
+            "reward_bce_delta_aux",
+            "route_classifier",
+            "cost_mse",
+        ],
         default="reward_mse",
     )
     parser.add_argument("--max-seq-length", type=int, default=24000)
@@ -990,6 +1013,7 @@ def main() -> None:
     parser.add_argument("--lora-target-modules", default="q_proj,k_proj,v_proj,o_proj")
     parser.add_argument("--gradient-checkpointing", action="store_true")
     parser.add_argument("--reward-mse-weight", type=float, default=1.0)
+    parser.add_argument("--reward-bce-weight", type=float, default=1.0)
     parser.add_argument("--delta-aux-weight", type=float, default=1.0)
     parser.add_argument("--delta-aux-huber-delta", type=float, default=0.0)
     parser.add_argument("--predict-costs", action="store_true")
@@ -1034,8 +1058,8 @@ def main() -> None:
     target_route_idxs = _parse_route_indices(args.target_route_idxs, len(all_route_labels))
     route_labels = [all_route_labels[int(idx)] for idx in target_route_idxs]
     target_dim = len(route_labels)
-    if args.objective == "reward_mse_delta_aux" and target_dim < 2:
-        raise ValueError("reward_mse_delta_aux expects at least two routes")
+    if args.objective in {"reward_mse_delta_aux", "reward_bce_delta_aux"} and target_dim < 2:
+        raise ValueError(f"{args.objective} expects at least two routes")
     if args.objective == "cost_mse" and not args.predict_costs:
         raise ValueError("objective=cost_mse requires --predict-costs")
     if args.objective == "cost_mse" and args.predict_zero_reward_failure:
@@ -1225,6 +1249,7 @@ def main() -> None:
         "lora_target_modules": [module.strip() for module in str(args.lora_target_modules).split(",") if module.strip()],
         "gradient_checkpointing": bool(args.gradient_checkpointing),
         "reward_mse_weight": float(args.reward_mse_weight),
+        "reward_bce_weight": float(args.reward_bce_weight),
         "delta_aux_weight": float(args.delta_aux_weight),
         "delta_aux_huber_delta": float(args.delta_aux_huber_delta),
         "predict_costs": bool(args.predict_costs),
@@ -1290,6 +1315,7 @@ def main() -> None:
                     class_targets=batch["class_targets"],
                     objective=str(args.objective),
                     reward_mse_weight=float(args.reward_mse_weight),
+                    reward_bce_weight=float(args.reward_bce_weight),
                     delta_aux_weight=float(args.delta_aux_weight),
                     delta_aux_huber_delta=float(args.delta_aux_huber_delta),
                     predict_costs=bool(args.predict_costs),
