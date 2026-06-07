@@ -383,22 +383,31 @@ def _router_choices(
     lambda_value: float,
     cost_metric: str,
     include_predicted_cost: bool,
+    accounting: str,
 ) -> list[int]:
     choices: list[int] = []
     for example in examples:
         scores: list[float] = []
         for route_idx, pred_reward in enumerate(example["pred_rewards"]):
             if include_predicted_cost:
-                # The router is evaluated after the primary attempt exists, so primary cost
-                # is already paid and cancels in the decision. Keeping it here makes the
-                # decision score match the reported after-primary cost accounting.
-                pred_cost = _after_primary_cost(
-                    prompt_tokens=example["prompt_tokens"],
-                    output_tokens=example["pred_output_tokens"],
-                    route_idx=route_idx,
-                    cost_metric=cost_metric,
-                    route_cost_weights=route_cost_weights,
-                )
+                if accounting == "direct":
+                    pred_cost = _cost_for_route(
+                        prompt_tokens=example["prompt_tokens"],
+                        output_tokens=example["pred_output_tokens"],
+                        route_idx=route_idx,
+                        cost_metric=cost_metric,
+                        route_cost_weights=route_cost_weights,
+                    )
+                elif accounting == "after_primary":
+                    pred_cost = _after_primary_cost(
+                        prompt_tokens=example["prompt_tokens"],
+                        output_tokens=example["pred_output_tokens"],
+                        route_idx=route_idx,
+                        cost_metric=cost_metric,
+                        route_cost_weights=route_cost_weights,
+                    )
+                else:
+                    raise ValueError(f"Unsupported router accounting mode: {accounting}")
             else:
                 pred_cost = 0.0
             scores.append(float(pred_reward) - (float(lambda_value) * float(pred_cost)))
@@ -413,6 +422,7 @@ def _compute_rows(
     route_cost_weights: list[float],
     lambdas: list[float],
     cost_metrics: list[str],
+    router_accounting: str,
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     target_dim = len(route_labels)
@@ -441,20 +451,21 @@ def _compute_rows(
                 lambda_value=float(lambda_value),
                 cost_metric=cost_metric,
                 include_predicted_cost=True,
+                accounting=router_accounting,
             )
 
             policy_specs: list[tuple[str, str, list[int], str]] = [
                 (
-                    "direct_router_after_primary_pred_reward_pred_cost_weighted",
-                    "router_after_primary",
+                    f"direct_router_{router_accounting}_pred_reward_pred_cost_weighted",
+                    f"router_{router_accounting}",
                     router_cost_choices,
-                    "after_primary",
+                    router_accounting,
                 ),
                 (
-                    "reward_only_router_after_primary_weighted",
-                    "router_after_primary",
+                    f"reward_only_router_{router_accounting}_weighted",
+                    f"router_{router_accounting}",
                     reward_router_choices,
-                    "after_primary",
+                    router_accounting,
                 ),
                 (
                     "oracle_after_primary_utility_weighted",
@@ -529,6 +540,12 @@ def main() -> None:
     parser.add_argument("--route-cost-weights", default=None)
     parser.add_argument("--lambdas", default=",".join(str(value) for value in DEFAULT_LAMBDAS))
     parser.add_argument("--cost-metrics", default="output_tokens,total_tokens")
+    parser.add_argument(
+        "--router-accounting",
+        choices=["direct", "after_primary"],
+        default="after_primary",
+        help="Cost accounting for the learned router policy. Use after_primary for scout-conditioned routers and direct for input-only routers.",
+    )
     args = parser.parse_args()
 
     examples, route_labels, skipped = _build_examples(
@@ -546,6 +563,7 @@ def main() -> None:
         route_cost_weights=route_cost_weights,
         lambdas=lambdas,
         cost_metrics=cost_metrics,
+        router_accounting=str(args.router_accounting),
     )
 
     headers = [
@@ -581,6 +599,7 @@ def main() -> None:
             "cost_route_idxs": _parse_int_list(str(args.cost_route_idxs)),
             "lambdas": lambdas,
             "cost_metrics": cost_metrics,
+            "router_accounting": str(args.router_accounting),
             "rows": rows,
         },
     )

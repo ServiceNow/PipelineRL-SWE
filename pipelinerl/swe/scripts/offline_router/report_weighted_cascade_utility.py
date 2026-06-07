@@ -165,17 +165,19 @@ def _evaluate_thresholds(
     thresholds: list[float],
     order: list[int],
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    if len(order) != 3:
-        raise ValueError("This report currently expects three-route cascades")
-    threshold_0, threshold_1 = thresholds
-    first_idx, second_idx, third_idx = [int(idx) for idx in order]
-    stop_at_first = pred_scores[:, first_idx] >= float(threshold_0)
-    stop_at_second = (~stop_at_first) & (pred_scores[:, second_idx] >= float(threshold_1))
-    choices = np.where(stop_at_first, first_idx, np.where(stop_at_second, second_idx, third_idx))
+    if len(thresholds) != len(order) - 1:
+        raise ValueError(f"Expected {len(order) - 1} thresholds for order length {len(order)}")
+
+    choices = np.full(pred_scores.shape[0], int(order[-1]), dtype=np.int64)
     called = np.zeros((pred_scores.shape[0], pred_scores.shape[1]), dtype=bool)
-    called[:, first_idx] = True
-    called[:, second_idx] = ~stop_at_first
-    called[:, third_idx] = (~stop_at_first) & (~stop_at_second)
+    still_running = np.ones(pred_scores.shape[0], dtype=bool)
+    for route_idx, threshold in zip(order[:-1], thresholds, strict=True):
+        route_idx = int(route_idx)
+        called[still_running, route_idx] = True
+        should_stop = still_running & (pred_scores[:, route_idx] >= float(threshold))
+        choices[should_stop] = route_idx
+        still_running = still_running & (~should_stop)
+    called[still_running, int(order[-1])] = True
     chosen_rewards = rewards[np.arange(rewards.shape[0]), choices]
     total_costs = np.sum(called.astype(np.float64) * route_costs, axis=1)
     return choices, called, chosen_rewards, total_costs
@@ -190,8 +192,24 @@ def _optimize_thresholds(
     max_threshold_candidates: int,
     order: list[int],
 ) -> tuple[list[float], float]:
+    if len(order) == 4:
+        return _optimize_thresholds_four_route(
+            pred_scores=pred_scores,
+            rewards=rewards,
+            route_costs=route_costs,
+            lambda_value=lambda_value,
+            max_threshold_candidates=max_threshold_candidates,
+            order=order,
+        )
     if len(order) != 3:
-        raise ValueError("This report currently expects three-route cascades")
+        return _optimize_thresholds_bruteforce(
+            pred_scores=pred_scores,
+            rewards=rewards,
+            route_costs=route_costs,
+            lambda_value=lambda_value,
+            max_threshold_candidates=max_threshold_candidates,
+            order=order,
+        )
     first_idx, second_idx, third_idx = [int(idx) for idx in order]
     candidates_0 = _candidate_thresholds(pred_scores[:, first_idx], max_threshold_candidates)
     candidates_1 = _candidate_thresholds(pred_scores[:, second_idx], max_threshold_candidates)
@@ -219,6 +237,89 @@ def _optimize_thresholds(
         if float(utilities[best_idx]) > best_utility:
             best_utility = float(utilities[best_idx])
             best_thresholds = [float(threshold_0), float(candidates_1[best_idx])]
+    return best_thresholds, best_utility
+
+
+def _optimize_thresholds_four_route(
+    *,
+    pred_scores: np.ndarray,
+    rewards: np.ndarray,
+    route_costs: np.ndarray,
+    lambda_value: float,
+    max_threshold_candidates: int,
+    order: list[int],
+) -> tuple[list[float], float]:
+    first_idx, second_idx, third_idx, fourth_idx = [int(idx) for idx in order]
+    candidates_0 = _candidate_thresholds(pred_scores[:, first_idx], max_threshold_candidates)
+    candidates_1 = _candidate_thresholds(pred_scores[:, second_idx], max_threshold_candidates)
+    candidates_2 = _candidate_thresholds(pred_scores[:, third_idx], max_threshold_candidates)
+    best_thresholds = [float(candidates_0[0]), float(candidates_1[0]), float(candidates_2[0])]
+    best_utility = -float("inf")
+
+    reward_first = rewards[:, first_idx]
+    reward_second = rewards[:, second_idx]
+    reward_third = rewards[:, third_idx]
+    reward_fourth = rewards[:, fourth_idx]
+    cost_first = route_costs[:, first_idx]
+    cost_second = route_costs[:, second_idx]
+    cost_third = route_costs[:, third_idx]
+    cost_fourth = route_costs[:, fourth_idx]
+    pred_first = pred_scores[:, first_idx]
+    pred_second = pred_scores[:, second_idx]
+    pred_third = pred_scores[:, third_idx]
+
+    for threshold_0 in candidates_0:
+        stop_at_first = pred_first >= float(threshold_0)
+        reached_second = ~stop_at_first
+        for threshold_1 in candidates_1:
+            stop_at_second = reached_second & (pred_second >= float(threshold_1))
+            reached_third = reached_second & (~stop_at_second)
+            base_rewards = np.where(stop_at_first, reward_first, np.where(stop_at_second, reward_second, reward_fourth))[:, None]
+            base_costs = np.where(
+                stop_at_first,
+                cost_first,
+                np.where(stop_at_second, cost_first + cost_second, cost_first + cost_second + cost_third + cost_fourth),
+            )[:, None]
+            stop_at_third = reached_third[:, None] & (pred_third[:, None] >= candidates_2[None, :])
+            chosen_rewards = np.where(stop_at_third, reward_third[:, None], base_rewards)
+            chosen_costs = np.where(stop_at_third, (cost_first + cost_second + cost_third)[:, None], base_costs)
+            utilities = np.mean(chosen_rewards - (float(lambda_value) * chosen_costs), axis=0)
+            best_idx = int(np.argmax(utilities))
+            if float(utilities[best_idx]) > best_utility:
+                best_utility = float(utilities[best_idx])
+                best_thresholds = [float(threshold_0), float(threshold_1), float(candidates_2[best_idx])]
+    return best_thresholds, best_utility
+
+
+def _optimize_thresholds_bruteforce(
+    *,
+    pred_scores: np.ndarray,
+    rewards: np.ndarray,
+    route_costs: np.ndarray,
+    lambda_value: float,
+    max_threshold_candidates: int,
+    order: list[int],
+) -> tuple[list[float], float]:
+    if len(order) < 2:
+        raise ValueError("Cascade order must contain at least two routes")
+    candidate_lists = [
+        _candidate_thresholds(pred_scores[:, int(route_idx)], max_threshold_candidates)
+        for route_idx in order[:-1]
+    ]
+    best_thresholds = [float(candidates[0]) for candidates in candidate_lists]
+    best_utility = -float("inf")
+    for thresholds in itertools.product(*candidate_lists):
+        _, _, chosen_rewards, total_costs = _evaluate_thresholds(
+            pred_scores,
+            rewards,
+            route_costs,
+            [float(value) for value in thresholds],
+            order,
+        )
+        utility = float(np.mean(chosen_rewards - (float(lambda_value) * total_costs)))
+        if utility > best_utility:
+            best_utility = utility
+            best_thresholds = [float(value) for value in thresholds]
     return best_thresholds, best_utility
 
 
@@ -268,10 +369,8 @@ def _summarize_cascade(
 
 
 def _candidate_orders(target_dim: int, search_orders: bool) -> list[list[int]]:
-    if target_dim != 3:
-        raise ValueError("This report currently expects three-route cascades")
     if not search_orders:
-        return [[0, 1, 2]]
+        return [list(range(target_dim))]
     return [list(order) for order in itertools.permutations(range(target_dim))]
 
 
@@ -284,18 +383,18 @@ def _write_csv(path: Path, rows: list[dict[str, Any]], headers: list[str]) -> No
 
 
 def _load_direct_rows(path: Path) -> list[dict[str, Any]]:
-    keep = {
-        "direct_router_after_primary_pred_reward_pred_cost_weighted",
-        "always_direct::primary_model",
-        "always_direct::expert_0:openai/gpt-oss-120b",
-        "always_direct::expert_0:google/gemini-3-flash-preview",
-        "oracle_after_primary_utility_weighted",
-        "oracle_direct_utility_weighted",
-    }
     rows: list[dict[str, Any]] = []
     with path.open() as handle:
         for row in csv.DictReader(handle):
-            if row["cost_metric"] != "output_tokens" or row["policy"] not in keep:
+            policy = str(row["policy"])
+            if row["cost_metric"] != "output_tokens":
+                continue
+            if not (
+                policy.startswith("direct_router")
+                or policy.startswith("reward_only_router")
+                or policy.startswith("always_direct::")
+                or policy.startswith("oracle_")
+            ):
                 continue
             rows.append(
                 {
