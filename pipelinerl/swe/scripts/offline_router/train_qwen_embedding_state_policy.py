@@ -155,6 +155,15 @@ class StatePolicyDataset(Dataset):
         attempted_state_mode: str,
         include_bare_state: bool,
         route_costs: list[float] | None,
+        sample_weighting: str = "uniform",
+        regret_lambdas: list[float] | None = None,
+        regret_route_costs: list[float] | None = None,
+        regret_default_route_idx: int = 0,
+        regret_weight_scale: float = 4.0,
+        regret_weight_power: float = 1.0,
+        regret_weight_min: float = 1.0,
+        regret_weight_max: float = 8.0,
+        normalize_sample_weights: bool = True,
     ) -> None:
         self.rows: list[dict[str, Any]] = []
         route_count = len(route_labels)
@@ -169,6 +178,12 @@ class StatePolicyDataset(Dataset):
         state_specs.extend(
             ("after_attempt", mask, latest_idx)
             for mask, latest_idx in _iter_attempt_states(route_count, attempted_state_mode)
+        )
+        regret_lambdas = [0.0] if regret_lambdas is None else [float(value) for value in regret_lambdas]
+        regret_route_costs = (
+            [0.0 for _ in range(route_count)]
+            if regret_route_costs is None
+            else [float(value) for value in regret_route_costs]
         )
         for source_idx, row in enumerate(rows):
             targets = row.get("performance_targets")
@@ -205,6 +220,19 @@ class StatePolicyDataset(Dataset):
                 attention_mask = encoded.get("attention_mask")
                 if not input_ids or not attention_mask:
                     continue
+                sample_weight, routing_regret = _state_sample_weight(
+                    target_rewards=target_rewards,
+                    attempted_mask=list(attempted_mask),
+                    latest_route_idx=latest_route_idx,
+                    sample_weighting=str(sample_weighting),
+                    regret_lambdas=regret_lambdas,
+                    regret_route_costs=regret_route_costs,
+                    regret_default_route_idx=int(regret_default_route_idx),
+                    regret_weight_scale=float(regret_weight_scale),
+                    regret_weight_power=float(regret_weight_power),
+                    regret_weight_min=float(regret_weight_min),
+                    regret_weight_max=float(regret_weight_max),
+                )
                 self.rows.append(
                     {
                         "row_idx": len(self.rows),
@@ -221,8 +249,15 @@ class StatePolicyDataset(Dataset):
                         "attention_mask": [int(value) for value in attention_mask],
                         "targets": target_rewards,
                         "route_output_tokens": selected_output_tokens,
+                        "sample_weight": float(sample_weight),
+                        "routing_regret": float(routing_regret),
                     }
                 )
+        if normalize_sample_weights and self.rows:
+            mean_weight = sum(float(row.get("sample_weight", 1.0)) for row in self.rows) / len(self.rows)
+            if mean_weight > 0.0:
+                for row in self.rows:
+                    row["sample_weight"] = float(row.get("sample_weight", 1.0)) / mean_weight
 
     def __len__(self) -> int:
         return len(self.rows)
@@ -236,6 +271,8 @@ def _collate(batch: list[dict[str, Any]], pad_token_id: int, target_dim: int) ->
     input_ids = torch.full((len(batch), max_len), int(pad_token_id), dtype=torch.long)
     attention_mask = torch.zeros((len(batch), max_len), dtype=torch.long)
     targets = torch.zeros((len(batch), target_dim), dtype=torch.float32)
+    sample_weights = torch.ones((len(batch),), dtype=torch.float32)
+    routing_regrets = torch.zeros((len(batch),), dtype=torch.float32)
     row_indices = torch.zeros((len(batch),), dtype=torch.long)
     for idx, row in enumerate(batch):
         seq_len = len(row["input_ids"])
@@ -243,11 +280,15 @@ def _collate(batch: list[dict[str, Any]], pad_token_id: int, target_dim: int) ->
         input_ids[idx, start:] = torch.tensor(row["input_ids"], dtype=torch.long)
         attention_mask[idx, start:] = torch.tensor(row["attention_mask"], dtype=torch.long)
         targets[idx] = torch.tensor(row["targets"], dtype=torch.float32)
+        sample_weights[idx] = float(row.get("sample_weight", 1.0))
+        routing_regrets[idx] = float(row.get("routing_regret", 0.0))
         row_indices[idx] = int(row["row_idx"])
     return {
         "input_ids": input_ids,
         "attention_mask": attention_mask,
         "targets": targets,
+        "sample_weights": sample_weights,
+        "routing_regrets": routing_regrets,
         "row_indices": row_indices,
     }
 
@@ -266,6 +307,85 @@ def _argmax(values: list[float]) -> int:
             best_idx = idx
             best_value = numeric
     return best_idx
+
+
+def _state_sample_weight(
+    *,
+    target_rewards: list[float],
+    attempted_mask: list[bool],
+    latest_route_idx: int | None,
+    sample_weighting: str,
+    regret_lambdas: list[float],
+    regret_route_costs: list[float],
+    regret_default_route_idx: int,
+    regret_weight_scale: float,
+    regret_weight_power: float,
+    regret_weight_min: float,
+    regret_weight_max: float,
+) -> tuple[float, float]:
+    if sample_weighting == "uniform":
+        return 1.0, 0.0
+    if sample_weighting not in {"regret_default", "oracle_margin"}:
+        raise ValueError(f"Unsupported sample_weighting={sample_weighting}")
+    if len(regret_route_costs) != len(target_rewards):
+        raise ValueError("regret_route_costs length must match target rewards length")
+    route_count = len(target_rewards)
+    regrets: list[float] = []
+    for lambda_value in regret_lambdas:
+        action_values: list[float] = []
+        default_value: float
+        if latest_route_idx is None:
+            default_idx = min(max(int(regret_default_route_idx), 0), route_count - 1)
+            default_value = float(target_rewards[default_idx]) - float(lambda_value) * float(regret_route_costs[default_idx])
+            for route_idx, attempted in enumerate(attempted_mask):
+                if attempted:
+                    continue
+                action_values.append(
+                    float(target_rewards[route_idx]) - float(lambda_value) * float(regret_route_costs[route_idx])
+                )
+        else:
+            default_value = float(target_rewards[int(latest_route_idx)])
+            action_values.append(default_value)
+            for route_idx, attempted in enumerate(attempted_mask):
+                if attempted:
+                    continue
+                action_values.append(
+                    float(target_rewards[route_idx]) - float(lambda_value) * float(regret_route_costs[route_idx])
+                )
+        if not action_values:
+            regrets.append(0.0)
+            continue
+        ordered = sorted(action_values, reverse=True)
+        best_value = float(ordered[0])
+        if sample_weighting == "regret_default":
+            regrets.append(max(0.0, best_value - default_value))
+        else:
+            second_value = float(ordered[1]) if len(ordered) > 1 else best_value
+            regrets.append(max(0.0, best_value - second_value))
+    routing_regret = float(sum(regrets) / len(regrets)) if regrets else 0.0
+    powered = routing_regret ** float(regret_weight_power) if routing_regret > 0.0 else 0.0
+    sample_weight = float(regret_weight_min) + float(regret_weight_scale) * powered
+    sample_weight = min(float(regret_weight_max), max(float(regret_weight_min), sample_weight))
+    return sample_weight, routing_regret
+
+
+def _sample_weight_stats(rows: list[dict[str, Any]]) -> dict[str, float]:
+    weights = np.asarray([float(row.get("sample_weight", 1.0)) for row in rows], dtype=np.float64)
+    regrets = np.asarray([float(row.get("routing_regret", 0.0)) for row in rows], dtype=np.float64)
+    if weights.size == 0:
+        return {"n": 0}
+    return {
+        "n": int(weights.size),
+        "weight_mean": float(np.mean(weights)),
+        "weight_std": float(np.std(weights)),
+        "weight_min": float(np.min(weights)),
+        "weight_max": float(np.max(weights)),
+        "regret_mean": float(np.mean(regrets)),
+        "regret_std": float(np.std(regrets)),
+        "regret_min": float(np.min(regrets)),
+        "regret_max": float(np.max(regrets)),
+        "regret_positive_fraction": float(np.mean(regrets > 0.0)),
+    }
 
 
 def _selected_examples(
@@ -380,6 +500,8 @@ def _evaluate(
                         ),
                         "true_rewards": [float(value) for value in gathered_targets[idx].tolist()],
                         "pred_success_probs": [float(value) for value in gathered_probs[idx].tolist()],
+                        "sample_weight": float(source_meta.get("sample_weight", 1.0)),
+                        "routing_regret": float(source_meta.get("routing_regret", 0.0)),
                         "route_labels": list(route_labels),
                     }
                 )
@@ -837,6 +959,14 @@ def main() -> None:
     parser.add_argument("--gradient-checkpointing", action="store_true")
     parser.add_argument("--delta-aux-weight", type=float, default=0.0)
     parser.add_argument("--delta-aux-huber-delta", type=float, default=0.0)
+    parser.add_argument("--sample-weighting", choices=["uniform", "regret_default", "oracle_margin"], default="uniform")
+    parser.add_argument("--regret-lambdas", default=None)
+    parser.add_argument("--regret-default-route-idx", type=int, default=0)
+    parser.add_argument("--regret-weight-scale", type=float, default=4.0)
+    parser.add_argument("--regret-weight-power", type=float, default=1.0)
+    parser.add_argument("--regret-weight-min", type=float, default=1.0)
+    parser.add_argument("--regret-weight-max", type=float, default=8.0)
+    parser.add_argument("--normalize-sample-weights", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--ddp-find-unused-parameters", action="store_true")
     parser.add_argument("--checkpoint-every-epoch", action="store_true")
     parser.add_argument("--epoch-report-every", type=int, default=0)
@@ -848,6 +978,7 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     dataset_dir = Path(args.dataset_dir)
     lambdas = _parse_float_list(args.utility_lambdas)
+    regret_lambdas = _parse_float_list(args.regret_lambdas) if args.regret_lambdas else list(lambdas)
     route_cost_weights = _parse_float_list(args.route_output_cost_weights)
 
     kwargs_handlers = []
@@ -894,6 +1025,15 @@ def main() -> None:
         attempted_state_mode=str(args.attempted_state_mode),
         include_bare_state=bool(args.include_bare_state),
         route_costs=prompt_costs,
+        sample_weighting=str(args.sample_weighting),
+        regret_lambdas=regret_lambdas,
+        regret_route_costs=fixed_train_costs,
+        regret_default_route_idx=int(args.regret_default_route_idx),
+        regret_weight_scale=float(args.regret_weight_scale),
+        regret_weight_power=float(args.regret_weight_power),
+        regret_weight_min=float(args.regret_weight_min),
+        regret_weight_max=float(args.regret_weight_max),
+        normalize_sample_weights=bool(args.normalize_sample_weights),
     )
     eval_dataset = StatePolicyDataset(
         eval_rows_source,
@@ -904,6 +1044,15 @@ def main() -> None:
         attempted_state_mode=str(args.attempted_state_mode),
         include_bare_state=bool(args.include_bare_state),
         route_costs=prompt_costs,
+        sample_weighting=str(args.sample_weighting),
+        regret_lambdas=regret_lambdas,
+        regret_route_costs=fixed_train_costs,
+        regret_default_route_idx=int(args.regret_default_route_idx),
+        regret_weight_scale=float(args.regret_weight_scale),
+        regret_weight_power=float(args.regret_weight_power),
+        regret_weight_min=float(args.regret_weight_min),
+        regret_weight_max=float(args.regret_weight_max),
+        normalize_sample_weights=bool(args.normalize_sample_weights),
     )
     if len(train_dataset) == 0 or len(eval_dataset) == 0:
         raise ValueError(f"Prepared empty dataset train={len(train_dataset)} eval={len(eval_dataset)}")
@@ -972,6 +1121,16 @@ def main() -> None:
         "route_output_cost_weights": route_cost_weights,
         "fixed_train_route_costs": fixed_train_costs,
         "utility_lambdas": lambdas,
+        "regret_lambdas": regret_lambdas,
+        "sample_weighting": str(args.sample_weighting),
+        "regret_default_route_idx": int(args.regret_default_route_idx),
+        "regret_weight_scale": float(args.regret_weight_scale),
+        "regret_weight_power": float(args.regret_weight_power),
+        "regret_weight_min": float(args.regret_weight_min),
+        "regret_weight_max": float(args.regret_weight_max),
+        "normalize_sample_weights": bool(args.normalize_sample_weights),
+        "train_sample_weight_stats": _sample_weight_stats(train_dataset.rows),
+        "eval_sample_weight_stats": _sample_weight_stats(eval_dataset.rows),
         "scout_route_idx": int(args.scout_route_idx),
         "max_policy_steps": int(args.max_policy_steps),
         "max_seq_length": int(args.max_seq_length),
@@ -1037,14 +1196,28 @@ def main() -> None:
             with accelerator.accumulate(model):
                 logits, _, _ = model(input_ids=batch["input_ids"], attention_mask=batch["attention_mask"])
                 probs = torch.sigmoid(logits.float())
-                loss = F.binary_cross_entropy_with_logits(logits.float(), batch["targets"].float())
+                sample_weights = batch["sample_weights"].float()
+                per_value_loss = F.binary_cross_entropy_with_logits(
+                    logits.float(),
+                    batch["targets"].float(),
+                    reduction="none",
+                )
+                loss = (per_value_loss * sample_weights.view(-1, 1)).sum() / (
+                    sample_weights.sum().clamp_min(1.0) * per_value_loss.shape[1]
+                )
                 if float(args.delta_aux_weight) != 0.0:
                     deltas_pred = probs.unsqueeze(2) - probs.unsqueeze(1)
                     deltas_true = batch["targets"].float().unsqueeze(2) - batch["targets"].float().unsqueeze(1)
                     if float(args.delta_aux_huber_delta) > 0.0:
-                        delta_loss = F.huber_loss(deltas_pred, deltas_true, delta=float(args.delta_aux_huber_delta))
+                        delta_loss_per = F.huber_loss(
+                            deltas_pred,
+                            deltas_true,
+                            delta=float(args.delta_aux_huber_delta),
+                            reduction="none",
+                        ).mean(dim=(1, 2))
                     else:
-                        delta_loss = F.mse_loss(deltas_pred, deltas_true)
+                        delta_loss_per = ((deltas_pred - deltas_true) ** 2).mean(dim=(1, 2))
+                    delta_loss = (delta_loss_per * sample_weights).sum() / sample_weights.sum().clamp_min(1.0)
                     loss = loss + float(args.delta_aux_weight) * delta_loss
                 accelerator.backward(loss)
                 optimizer.step()
