@@ -155,6 +155,7 @@ class StatePolicyDataset(Dataset):
         attempted_state_mode: str,
         include_bare_state: bool,
         route_costs: list[float] | None,
+        route_output_cost_weights: list[float],
         sample_weighting: str = "uniform",
         regret_lambdas: list[float] | None = None,
         regret_route_costs: list[float] | None = None,
@@ -169,6 +170,8 @@ class StatePolicyDataset(Dataset):
         route_count = len(route_labels)
         if len(route_indices) != route_count:
             raise ValueError("route_indices length must match route_labels length")
+        if len(route_output_cost_weights) != route_count:
+            raise ValueError("route_output_cost_weights length must match route_labels length")
         if route_count == 0:
             raise ValueError("At least one route is required")
         max_source_idx = max(int(idx) for idx in route_indices)
@@ -196,6 +199,10 @@ class StatePolicyDataset(Dataset):
                 problem_id = problem_id_from_item(row)
                 target_rewards = [float(targets[int(source_idx)]) for source_idx in route_indices]
                 selected_output_tokens = [float(output_tokens[int(source_idx)]) for source_idx in route_indices]
+                selected_route_costs = [
+                    float(selected_output_tokens[local_idx]) * float(route_output_cost_weights[local_idx])
+                    for local_idx in range(route_count)
+                ]
             except (TypeError, ValueError):
                 continue
             for state_kind, attempted_mask, latest_route_idx in state_specs:
@@ -249,6 +256,7 @@ class StatePolicyDataset(Dataset):
                         "attention_mask": [int(value) for value in attention_mask],
                         "targets": target_rewards,
                         "route_output_tokens": selected_output_tokens,
+                        "route_costs": selected_route_costs,
                         "sample_weight": float(sample_weight),
                         "routing_regret": float(routing_regret),
                     }
@@ -274,6 +282,9 @@ def _collate(batch: list[dict[str, Any]], pad_token_id: int, target_dim: int) ->
     sample_weights = torch.ones((len(batch),), dtype=torch.float32)
     routing_regrets = torch.zeros((len(batch),), dtype=torch.float32)
     row_indices = torch.zeros((len(batch),), dtype=torch.long)
+    attempted_masks = torch.zeros((len(batch), target_dim), dtype=torch.bool)
+    latest_route_idxs = torch.full((len(batch),), -1, dtype=torch.long)
+    route_costs = torch.zeros((len(batch), target_dim), dtype=torch.float32)
     for idx, row in enumerate(batch):
         seq_len = len(row["input_ids"])
         start = max_len - seq_len
@@ -283,6 +294,10 @@ def _collate(batch: list[dict[str, Any]], pad_token_id: int, target_dim: int) ->
         sample_weights[idx] = float(row.get("sample_weight", 1.0))
         routing_regrets[idx] = float(row.get("routing_regret", 0.0))
         row_indices[idx] = int(row["row_idx"])
+        attempted_masks[idx] = torch.tensor(row["attempted_mask"], dtype=torch.bool)
+        latest_route_idx = row.get("latest_route_idx")
+        latest_route_idxs[idx] = -1 if latest_route_idx is None else int(latest_route_idx)
+        route_costs[idx] = torch.tensor(row["route_costs"], dtype=torch.float32)
     return {
         "input_ids": input_ids,
         "attention_mask": attention_mask,
@@ -290,6 +305,9 @@ def _collate(batch: list[dict[str, Any]], pad_token_id: int, target_dim: int) ->
         "sample_weights": sample_weights,
         "routing_regrets": routing_regrets,
         "row_indices": row_indices,
+        "attempted_masks": attempted_masks,
+        "latest_route_idxs": latest_route_idxs,
+        "route_costs": route_costs,
     }
 
 
@@ -386,6 +404,50 @@ def _sample_weight_stats(rows: list[dict[str, Any]]) -> dict[str, float]:
         "regret_max": float(np.max(regrets)),
         "regret_positive_fraction": float(np.mean(regrets > 0.0)),
     }
+
+
+def _utility_decision_aux_loss(
+    *,
+    probs: torch.Tensor,
+    targets: torch.Tensor,
+    attempted_masks: torch.Tensor,
+    latest_route_idxs: torch.Tensor,
+    route_costs: torch.Tensor,
+    lambdas: list[float],
+    temperature: float,
+    sample_weights: torch.Tensor,
+    stop_tie_bonus: float,
+) -> torch.Tensor:
+    if not lambdas:
+        return probs.new_tensor(0.0)
+    if temperature <= 0.0:
+        raise ValueError("decision auxiliary temperature must be positive")
+    targets = targets.float()
+    route_costs = route_costs.float()
+    attempted_masks = attempted_masks.bool()
+    latest_route_idxs = latest_route_idxs.long()
+    unattempted_masks = ~attempted_masks
+    has_stop = latest_route_idxs >= 0
+    batch_size, route_count = targets.shape
+    route_positions = torch.arange(batch_size, device=targets.device)
+    losses: list[torch.Tensor] = []
+    for lambda_value in lambdas:
+        lambda_float = float(lambda_value)
+        pred_scores = probs.float() - lambda_float * route_costs
+        true_scores = targets - lambda_float * route_costs
+        valid_actions = unattempted_masks.clone()
+        if bool(has_stop.any().item()):
+            stop_rows = route_positions[has_stop]
+            stop_cols = latest_route_idxs[has_stop]
+            valid_actions[stop_rows, stop_cols] = True
+            pred_scores[stop_rows, stop_cols] = probs.float()[stop_rows, stop_cols]
+            true_scores[stop_rows, stop_cols] = targets[stop_rows, stop_cols] + float(stop_tie_bonus)
+        masked_pred_scores = pred_scores.masked_fill(~valid_actions, -1.0e9) / float(temperature)
+        masked_true_scores = true_scores.masked_fill(~valid_actions, -1.0e9)
+        target_actions = torch.argmax(masked_true_scores, dim=1)
+        losses.append(F.cross_entropy(masked_pred_scores, target_actions, reduction="none"))
+    per_sample_loss = torch.stack(losses, dim=0).mean(dim=0)
+    return (per_sample_loss * sample_weights).sum() / sample_weights.sum().clamp_min(1.0)
 
 
 def _selected_examples(
@@ -959,6 +1021,11 @@ def main() -> None:
     parser.add_argument("--gradient-checkpointing", action="store_true")
     parser.add_argument("--delta-aux-weight", type=float, default=0.0)
     parser.add_argument("--delta-aux-huber-delta", type=float, default=0.0)
+    parser.add_argument("--decision-aux-weight", type=float, default=0.0)
+    parser.add_argument("--decision-aux-lambdas", default=None)
+    parser.add_argument("--decision-aux-temperature", type=float, default=0.1)
+    parser.add_argument("--decision-aux-cost-mode", choices=["actual", "fixed_train_mean"], default="actual")
+    parser.add_argument("--decision-aux-stop-tie-bonus", type=float, default=1.0e-4)
     parser.add_argument("--sample-weighting", choices=["uniform", "regret_default", "oracle_margin"], default="uniform")
     parser.add_argument("--regret-lambdas", default=None)
     parser.add_argument("--regret-default-route-idx", type=int, default=0)
@@ -979,6 +1046,7 @@ def main() -> None:
     dataset_dir = Path(args.dataset_dir)
     lambdas = _parse_float_list(args.utility_lambdas)
     regret_lambdas = _parse_float_list(args.regret_lambdas) if args.regret_lambdas else list(lambdas)
+    decision_aux_lambdas = _parse_float_list(args.decision_aux_lambdas) if args.decision_aux_lambdas else list(lambdas)
     route_cost_weights = _parse_float_list(args.route_output_cost_weights)
 
     kwargs_handlers = []
@@ -1025,6 +1093,7 @@ def main() -> None:
         attempted_state_mode=str(args.attempted_state_mode),
         include_bare_state=bool(args.include_bare_state),
         route_costs=prompt_costs,
+        route_output_cost_weights=route_cost_weights,
         sample_weighting=str(args.sample_weighting),
         regret_lambdas=regret_lambdas,
         regret_route_costs=fixed_train_costs,
@@ -1044,6 +1113,7 @@ def main() -> None:
         attempted_state_mode=str(args.attempted_state_mode),
         include_bare_state=bool(args.include_bare_state),
         route_costs=prompt_costs,
+        route_output_cost_weights=route_cost_weights,
         sample_weighting=str(args.sample_weighting),
         regret_lambdas=regret_lambdas,
         regret_route_costs=fixed_train_costs,
@@ -1108,6 +1178,7 @@ def main() -> None:
     model, optimizer, train_loader, eval_loader, train_report_loader, scheduler = accelerator.prepare(
         model, optimizer, train_loader, eval_loader, train_report_loader, scheduler
     )
+    fixed_train_cost_tensor = torch.tensor(fixed_train_costs, dtype=torch.float32, device=accelerator.device).view(1, -1)
 
     config = {
         "model_name": args.model_name,
@@ -1122,6 +1193,11 @@ def main() -> None:
         "fixed_train_route_costs": fixed_train_costs,
         "utility_lambdas": lambdas,
         "regret_lambdas": regret_lambdas,
+        "decision_aux_lambdas": decision_aux_lambdas,
+        "decision_aux_weight": float(args.decision_aux_weight),
+        "decision_aux_temperature": float(args.decision_aux_temperature),
+        "decision_aux_cost_mode": str(args.decision_aux_cost_mode),
+        "decision_aux_stop_tie_bonus": float(args.decision_aux_stop_tie_bonus),
         "sample_weighting": str(args.sample_weighting),
         "regret_default_route_idx": int(args.regret_default_route_idx),
         "regret_weight_scale": float(args.regret_weight_scale),
@@ -1219,6 +1295,23 @@ def main() -> None:
                         delta_loss_per = ((deltas_pred - deltas_true) ** 2).mean(dim=(1, 2))
                     delta_loss = (delta_loss_per * sample_weights).sum() / sample_weights.sum().clamp_min(1.0)
                     loss = loss + float(args.delta_aux_weight) * delta_loss
+                if float(args.decision_aux_weight) != 0.0:
+                    if str(args.decision_aux_cost_mode) == "fixed_train_mean":
+                        decision_route_costs = fixed_train_cost_tensor.expand(batch["targets"].shape[0], -1)
+                    else:
+                        decision_route_costs = batch["route_costs"].float()
+                    decision_loss = _utility_decision_aux_loss(
+                        probs=probs,
+                        targets=batch["targets"].float(),
+                        attempted_masks=batch["attempted_masks"],
+                        latest_route_idxs=batch["latest_route_idxs"],
+                        route_costs=decision_route_costs,
+                        lambdas=decision_aux_lambdas,
+                        temperature=float(args.decision_aux_temperature),
+                        sample_weights=sample_weights,
+                        stop_tie_bonus=float(args.decision_aux_stop_tie_bonus),
+                    )
+                    loss = loss + float(args.decision_aux_weight) * decision_loss
                 accelerator.backward(loss)
                 optimizer.step()
                 scheduler.step()

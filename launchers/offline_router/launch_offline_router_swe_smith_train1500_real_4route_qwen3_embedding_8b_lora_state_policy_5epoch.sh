@@ -37,6 +37,11 @@ MAX_EVAL_ROWS=${MAX_EVAL_ROWS:-0}
 SEED=${SEED:-17}
 DELTA_AUX_WEIGHT=${DELTA_AUX_WEIGHT:-0.0}
 DELTA_AUX_HUBER_DELTA=${DELTA_AUX_HUBER_DELTA:-0.0}
+DECISION_AUX_WEIGHT=${DECISION_AUX_WEIGHT:-0.0}
+DECISION_AUX_LAMBDAS=${DECISION_AUX_LAMBDAS:-${UTILITY_LAMBDAS}}
+DECISION_AUX_TEMPERATURE=${DECISION_AUX_TEMPERATURE:-0.1}
+DECISION_AUX_COST_MODE=${DECISION_AUX_COST_MODE:-actual}
+DECISION_AUX_STOP_TIE_BONUS=${DECISION_AUX_STOP_TIE_BONUS:-1.0e-4}
 MLP_HIDDEN_SIZE=${MLP_HIDDEN_SIZE:-1024}
 DROPOUT=${DROPOUT:-0.1}
 TORCH_DTYPE=${TORCH_DTYPE:-bf16}
@@ -144,6 +149,11 @@ make job \
       --gradient-checkpointing \
       --delta-aux-weight ${DELTA_AUX_WEIGHT} \
       --delta-aux-huber-delta ${DELTA_AUX_HUBER_DELTA} \
+      --decision-aux-weight ${DECISION_AUX_WEIGHT} \
+      --decision-aux-lambdas ${DECISION_AUX_LAMBDAS} \
+      --decision-aux-temperature ${DECISION_AUX_TEMPERATURE} \
+      --decision-aux-cost-mode ${DECISION_AUX_COST_MODE} \
+      --decision-aux-stop-tie-bonus ${DECISION_AUX_STOP_TIE_BONUS} \
       --epoch-report-every ${EPOCH_REPORT_EVERY} \
       ${CHECKPOINT_ARG} \
       ${RESUME_ARG} \
