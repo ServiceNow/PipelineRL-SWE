@@ -968,6 +968,51 @@ def _delta_loss(preds: torch.Tensor, targets: torch.Tensor, huber_delta: float) 
     return F.mse_loss(pred_delta, true_delta)
 
 
+def _hierarchical_route_classifier_loss(
+    logits: torch.Tensor,
+    class_targets: torch.Tensor,
+    class_weights: torch.Tensor | None,
+    any_success_weight: float,
+    route_weight: float,
+    reduction: str,
+) -> torch.Tensor:
+    if logits.shape[-1] < 2:
+        raise ValueError("Hierarchical route classifier requires at least one route plus ABSTAIN")
+    if reduction not in {"mean", "sum", "none"}:
+        raise ValueError(f"Unsupported reduction={reduction!r}")
+    abstain_idx = int(logits.shape[-1]) - 1
+    targets = class_targets.long()
+    is_success = targets != abstain_idx
+
+    # Binary stop/go decision: compare aggregate non-abstain mass against abstain.
+    any_success_logits = torch.logsumexp(logits[:, :abstain_idx], dim=-1) - logits[:, abstain_idx]
+    any_success_losses = F.binary_cross_entropy_with_logits(
+        any_success_logits,
+        is_success.float(),
+        reduction="none",
+    )
+
+    # Conditional route decision, only defined when at least one route succeeds.
+    route_losses = torch.zeros_like(any_success_losses)
+    if torch.any(is_success):
+        route_class_weights = None
+        if class_weights is not None:
+            route_class_weights = class_weights[:abstain_idx].to(logits.device, dtype=logits.dtype)
+        route_losses[is_success] = F.cross_entropy(
+            logits[is_success, :abstain_idx],
+            targets[is_success],
+            weight=route_class_weights,
+            reduction="none",
+        )
+
+    losses = (float(any_success_weight) * any_success_losses) + (float(route_weight) * route_losses)
+    if reduction == "sum":
+        return torch.sum(losses)
+    if reduction == "mean":
+        return torch.mean(losses)
+    return losses
+
+
 def _compute_train_loss(
     reward_logits: torch.Tensor,
     cost_logits: torch.Tensor | None,
@@ -978,6 +1023,8 @@ def _compute_train_loss(
     class_targets: torch.Tensor,
     class_weights: torch.Tensor | None,
     objective: str,
+    hierarchical_any_success_weight: float,
+    hierarchical_route_weight: float,
     reward_mse_weight: float,
     reward_bce_weight: float,
     delta_aux_weight: float,
@@ -1003,6 +1050,15 @@ def _compute_train_loss(
             weight=class_weights.to(reward_logits.device, dtype=reward_logits.dtype)
             if class_weights is not None
             else None,
+        )
+    elif objective == "route_classifier_hierarchical":
+        reward_loss = _hierarchical_route_classifier_loss(
+            reward_logits,
+            class_targets.long(),
+            class_weights=class_weights,
+            any_success_weight=float(hierarchical_any_success_weight),
+            route_weight=float(hierarchical_route_weight),
+            reduction="mean",
         )
     elif objective in {"reward_bce", "reward_bce_delta_aux"}:
         reward_loss = (
@@ -1141,6 +1197,8 @@ def _evaluate(
     predict_costs: bool,
     predict_zero_reward_failure: bool,
     class_weights: torch.Tensor | None,
+    hierarchical_any_success_weight: float,
+    hierarchical_route_weight: float,
     cost_target_normalization: str,
     cost_target_mean: torch.Tensor | None,
     cost_target_std: torch.Tensor | None,
@@ -1181,6 +1239,16 @@ def _evaluate(
                 reduction="none",
             )
             loss = per_example_loss.sum()
+            preds = torch.softmax(logits, dim=-1)
+        elif objective == "route_classifier_hierarchical":
+            loss = _hierarchical_route_classifier_loss(
+                logits,
+                batch["class_targets"].long(),
+                class_weights=class_weights,
+                any_success_weight=float(hierarchical_any_success_weight),
+                route_weight=float(hierarchical_route_weight),
+                reduction="sum",
+            )
             preds = torch.softmax(logits, dim=-1)
         elif objective in {"reward_bce", "reward_bce_delta_aux"}:
             loss = F.binary_cross_entropy_with_logits(logits, targets, reduction="sum")
@@ -1289,7 +1357,7 @@ def _evaluate(
         if zero_reward_pred_chunks
         else np.empty((0, len(route_labels)))
     )
-    if objective == "route_classifier":
+    if objective in {"route_classifier", "route_classifier_hierarchical"}:
         eval_loss = float(total_loss / total_examples) if total_examples > 0 else math.nan
     elif objective == "cost_mse":
         total_values = total_examples * (int(y_cost_true.shape[1]) if y_cost_true.ndim == 2 else 1)
@@ -1313,6 +1381,7 @@ def main() -> None:
             "reward_bce",
             "reward_bce_delta_aux",
             "route_classifier",
+            "route_classifier_hierarchical",
             "cost_mse",
         ],
         default="reward_mse",
@@ -1342,7 +1411,19 @@ def main() -> None:
     parser.add_argument(
         "--append-abstain-class",
         action="store_true",
-        help="Append an explicit ABSTAIN class for objective=route_classifier.",
+        help="Append an explicit ABSTAIN class for route-classifier objectives.",
+    )
+    parser.add_argument(
+        "--hierarchical-any-success-weight",
+        type=float,
+        default=1.0,
+        help="Loss weight for the abstain-vs-any-success term in objective=route_classifier_hierarchical.",
+    )
+    parser.add_argument(
+        "--hierarchical-route-weight",
+        type=float,
+        default=1.0,
+        help="Loss weight for the conditional route CE term in objective=route_classifier_hierarchical.",
     )
     parser.add_argument("--max-seq-length", type=int, default=24000)
     parser.add_argument("--input-mode", choices=["post_primary", "input_only"], default="post_primary")
@@ -1435,8 +1516,14 @@ def main() -> None:
     target_route_idxs = _parse_route_indices(args.target_route_idxs, len(all_route_labels))
     source_route_labels = [all_route_labels[int(idx)] for idx in target_route_idxs]
     append_abstain_class = bool(args.append_abstain_class)
-    if append_abstain_class and str(args.objective) != "route_classifier":
-        raise ValueError("--append-abstain-class is only supported for objective=route_classifier")
+    route_classifier_objectives = {"route_classifier", "route_classifier_hierarchical"}
+    if append_abstain_class and str(args.objective) not in route_classifier_objectives:
+        raise ValueError("--append-abstain-class is only supported for route-classifier objectives")
+    if str(args.objective) == "route_classifier_hierarchical":
+        if not append_abstain_class:
+            raise ValueError("objective=route_classifier_hierarchical requires --append-abstain-class")
+        if str(args.class_target_mode) != "cheapest_success_or_abstain":
+            raise ValueError("objective=route_classifier_hierarchical requires --class-target-mode=cheapest_success_or_abstain")
     route_labels = list(source_route_labels) + (["ABSTAIN"] if append_abstain_class else [])
     target_dim = len(route_labels)
     if args.objective in {"reward_mse_delta_aux", "reward_bce_delta_aux"} and target_dim < 2:
@@ -1475,7 +1562,7 @@ def main() -> None:
     eval_rows_source = _shuffle_rows(list(_load_split(dataset_dir, "eval")), args.max_eval_rows, args.seed + 1)
     if str(args.objective) == "cost_mse":
         input_task = "cost"
-    elif str(args.objective) == "route_classifier":
+    elif str(args.objective) in route_classifier_objectives:
         input_task = "policy"
     else:
         input_task = "reward"
@@ -1535,12 +1622,12 @@ def main() -> None:
     )
     class_weight_values = (
         _compute_class_weights(train_dataset, target_dim, str(args.class_weight_mode))
-        if str(args.objective) == "route_classifier"
+        if str(args.objective) in route_classifier_objectives
         else [1.0 for _ in range(target_dim)]
     )
     class_weights_tensor = (
         torch.tensor(class_weight_values, dtype=torch.float32)
-        if str(args.objective) == "route_classifier" and str(args.class_weight_mode) != "none"
+        if str(args.objective) in route_classifier_objectives and str(args.class_weight_mode) != "none"
         else None
     )
     token_collate_fn = lambda batch: _collate_left_pad(
@@ -1648,6 +1735,8 @@ def main() -> None:
         "class_success_threshold": float(args.class_success_threshold),
         "class_weight_mode": str(args.class_weight_mode),
         "class_weights": [float(value) for value in class_weight_values],
+        "hierarchical_any_success_weight": float(args.hierarchical_any_success_weight),
+        "hierarchical_route_weight": float(args.hierarchical_route_weight),
         "dataset_dir": str(dataset_dir),
         "all_route_labels": all_route_labels,
         "target_route_idxs": [int(idx) for idx in target_route_idxs],
@@ -1758,6 +1847,8 @@ def main() -> None:
                     class_targets=batch["class_targets"],
                     class_weights=class_weights_tensor,
                     objective=str(args.objective),
+                    hierarchical_any_success_weight=float(args.hierarchical_any_success_weight),
+                    hierarchical_route_weight=float(args.hierarchical_route_weight),
                     reward_mse_weight=float(args.reward_mse_weight),
                     reward_bce_weight=float(args.reward_bce_weight),
                     delta_aux_weight=float(args.delta_aux_weight),
@@ -1793,6 +1884,8 @@ def main() -> None:
             predict_costs=bool(args.predict_costs),
             predict_zero_reward_failure=bool(args.predict_zero_reward_failure),
             class_weights=class_weights_tensor,
+            hierarchical_any_success_weight=float(args.hierarchical_any_success_weight),
+            hierarchical_route_weight=float(args.hierarchical_route_weight),
             cost_target_normalization=str(args.cost_target_normalization),
             cost_target_mean=cost_target_mean_tensor,
             cost_target_std=cost_target_std_tensor,
