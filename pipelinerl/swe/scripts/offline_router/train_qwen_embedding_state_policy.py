@@ -628,6 +628,7 @@ def _simulate_direct_policy(
     pred_lookup: dict[str, list[float]],
     lambda_value: float,
     route_count: int,
+    selection_route_costs: list[float],
 ) -> list[dict[str, Any]]:
     decisions: list[dict[str, Any]] = []
     bare_mask = [False] * route_count
@@ -636,7 +637,7 @@ def _simulate_direct_policy(
         if probs is None:
             choice = 0
         else:
-            choice = _choose_run_from_probs(probs, example["route_costs"], lambda_value, bare_mask)
+            choice = _choose_run_from_probs(probs, selection_route_costs, lambda_value, bare_mask)
             choice = 0 if choice is None else int(choice)
         decisions.append(
             {
@@ -657,6 +658,7 @@ def _simulate_chain_policy(
     route_count: int,
     max_steps: int,
     forced_first_route: int | None,
+    selection_route_costs: list[float],
 ) -> list[dict[str, Any]]:
     decisions: list[dict[str, Any]] = []
     for example in examples:
@@ -676,7 +678,7 @@ def _simulate_chain_policy(
                 if probs is None:
                     next_route = 0
                 else:
-                    next_route = _choose_run_from_probs(probs, example["route_costs"], lambda_value, attempted_mask)
+                    next_route = _choose_run_from_probs(probs, selection_route_costs, lambda_value, attempted_mask)
                     next_route = 0 if next_route is None else int(next_route)
                 attempted_mask[next_route] = True
                 latest_route_idx = next_route
@@ -689,10 +691,10 @@ def _simulate_chain_policy(
             if probs is None:
                 break
             stop_score = float(probs[int(latest_route_idx)])
-            next_route = _choose_run_from_probs(probs, example["route_costs"], lambda_value, attempted_mask)
+            next_route = _choose_run_from_probs(probs, selection_route_costs, lambda_value, attempted_mask)
             if next_route is None:
                 break
-            run_score = float(probs[next_route]) - float(lambda_value) * float(example["route_costs"][next_route])
+            run_score = float(probs[next_route]) - float(lambda_value) * float(selection_route_costs[next_route])
             if stop_score >= run_score:
                 break
             attempted_mask[next_route] = True
@@ -724,6 +726,7 @@ def _summarize_decisions(
     examples: list[dict[str, Any]],
     decisions: list[dict[str, Any]],
     route_labels: list[str],
+    selection_cost_mode: str,
 ) -> dict[str, Any]:
     route_count = len(route_labels)
     n = len(decisions)
@@ -752,6 +755,7 @@ def _summarize_decisions(
     return {
         "policy": policy,
         "policy_type": policy_type,
+        "selection_cost_mode": str(selection_cost_mode),
         "lambda": float(lambda_value),
         "mean_reward": mean_reward,
         "mean_cost": mean_cost,
@@ -772,6 +776,8 @@ def _simulate_policies(
     lambdas: list[float],
     scout_route_idx: int,
     max_policy_steps: int,
+    selection_route_costs: list[float],
+    selection_cost_mode: str,
 ) -> list[dict[str, Any]]:
     route_count = len(route_labels)
     pred_lookup = _prediction_lookup(pred_rows)
@@ -795,6 +801,7 @@ def _simulate_policies(
                     examples=examples,
                     decisions=decisions,
                     route_labels=route_labels,
+                    selection_cost_mode="none",
                 )
             )
         oracle_decisions = []
@@ -820,6 +827,33 @@ def _simulate_policies(
                 examples=examples,
                 decisions=oracle_decisions,
                 route_labels=route_labels,
+                selection_cost_mode="actual_realized",
+            )
+        )
+        oracle_fixed_decisions = []
+        for example in examples:
+            fixed_scores = [
+                float(example["rewards"][idx]) - float(lambda_value) * float(selection_route_costs[idx])
+                for idx in range(route_count)
+            ]
+            fixed_choice = _argmax(fixed_scores)
+            oracle_fixed_decisions.append(
+                {
+                    "choice": int(fixed_choice),
+                    "called_routes": [int(fixed_choice)],
+                    "reward": float(example["rewards"][fixed_choice]),
+                    "cost": float(example["route_costs"][fixed_choice]),
+                }
+            )
+        rows.append(
+            _summarize_decisions(
+                policy="oracle_direct_fixed_cost_selection",
+                policy_type="oracle_direct_fixed_cost_selection",
+                lambda_value=float(lambda_value),
+                examples=examples,
+                decisions=oracle_fixed_decisions,
+                route_labels=route_labels,
+                selection_cost_mode=str(selection_cost_mode),
             )
         )
         rows.append(
@@ -833,8 +867,10 @@ def _simulate_policies(
                     pred_lookup=pred_lookup,
                     lambda_value=float(lambda_value),
                     route_count=route_count,
+                    selection_route_costs=selection_route_costs,
                 ),
                 route_labels=route_labels,
+                selection_cost_mode=str(selection_cost_mode),
             )
         )
         rows.append(
@@ -850,8 +886,10 @@ def _simulate_policies(
                     route_count=route_count,
                     max_steps=int(max_policy_steps),
                     forced_first_route=None,
+                    selection_route_costs=selection_route_costs,
                 ),
                 route_labels=route_labels,
+                selection_cost_mode=str(selection_cost_mode),
             )
         )
         rows.append(
@@ -867,8 +905,10 @@ def _simulate_policies(
                     route_count=route_count,
                     max_steps=int(max_policy_steps),
                     forced_first_route=int(scout_route_idx),
+                    selection_route_costs=selection_route_costs,
                 ),
                 route_labels=route_labels,
+                selection_cost_mode=str(selection_cost_mode),
             )
         )
     return rows
@@ -912,6 +952,8 @@ def _write_reports(
     config: dict[str, Any],
     train_loss: float,
     eval_loss: float,
+    selection_route_costs: list[float],
+    selection_cost_mode: str,
 ) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
     _write_jsonl(output_dir / "train_state_predictions.jsonl", train_pred_rows)
@@ -929,10 +971,13 @@ def _write_reports(
         lambdas=lambdas,
         scout_route_idx=int(scout_route_idx),
         max_policy_steps=int(max_policy_steps),
+        selection_route_costs=selection_route_costs,
+        selection_cost_mode=str(selection_cost_mode),
     )
     utility_headers = [
         "policy",
         "policy_type",
+        "selection_cost_mode",
         "lambda",
         "mean_reward",
         "mean_cost",
@@ -973,6 +1018,8 @@ def _write_reports(
             "lambdas": lambdas,
             "scout_route_idx": int(scout_route_idx),
             "max_policy_steps": int(max_policy_steps),
+            "selection_cost_mode": str(selection_cost_mode),
+            "selection_route_costs": [float(value) for value in selection_route_costs],
             "n_train_examples": len(train_examples),
             "n_eval_examples": len(eval_examples),
             "rows": utility_rows,
@@ -1024,7 +1071,7 @@ def main() -> None:
     parser.add_argument("--decision-aux-weight", type=float, default=0.0)
     parser.add_argument("--decision-aux-lambdas", default=None)
     parser.add_argument("--decision-aux-temperature", type=float, default=0.1)
-    parser.add_argument("--decision-aux-cost-mode", choices=["actual", "fixed_train_mean"], default="actual")
+    parser.add_argument("--decision-aux-cost-mode", choices=["actual", "fixed_train_mean"], default="fixed_train_mean")
     parser.add_argument("--decision-aux-stop-tie-bonus", type=float, default=1.0e-4)
     parser.add_argument("--sample-weighting", choices=["uniform", "regret_default", "oracle_margin"], default="uniform")
     parser.add_argument("--regret-lambdas", default=None)
@@ -1191,6 +1238,8 @@ def main() -> None:
         "include_costs_in_prompt": bool(args.include_costs_in_prompt),
         "route_output_cost_weights": route_cost_weights,
         "fixed_train_route_costs": fixed_train_costs,
+        "policy_selection_cost_mode": "fixed_train_mean",
+        "policy_selection_route_costs": fixed_train_costs,
         "utility_lambdas": lambdas,
         "regret_lambdas": regret_lambdas,
         "decision_aux_lambdas": decision_aux_lambdas,
@@ -1362,6 +1411,8 @@ def main() -> None:
                     config=config,
                     train_loss=float(train_report_loss),
                     eval_loss=float(eval_loss),
+                    selection_route_costs=fixed_train_costs,
+                    selection_cost_mode="fixed_train_mean",
                 )
             accelerator.wait_for_everyone()
         if bool(args.checkpoint_every_epoch):
@@ -1403,6 +1454,8 @@ def main() -> None:
         config=config,
         train_loss=float(train_loss),
         eval_loss=float(eval_loss),
+        selection_route_costs=fixed_train_costs,
+        selection_cost_mode="fixed_train_mean",
     )
     if args.save_model:
         unwrapped = accelerator.unwrap_model(model)

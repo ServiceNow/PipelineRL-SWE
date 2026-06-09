@@ -96,6 +96,64 @@ def _collate_left_pad(
     }
 
 
+def _build_embedding_input_text(
+    row: dict[str, Any],
+    route_labels: list[str],
+    input_mode: str,
+    primary_output_token_count: int | None,
+    input_task: str,
+) -> str | None:
+    if input_task == "reward":
+        if primary_output_token_count is None:
+            return _build_input_text(row, route_labels, input_mode=input_mode)
+        return _build_input_text(
+            row,
+            route_labels,
+            input_mode=input_mode,
+            primary_output_token_count=primary_output_token_count,
+        )
+    if input_task != "cost":
+        raise ValueError(f"Unsupported input_task={input_task!r}")
+    prompt_text = row.get("prompt_text")
+    if not isinstance(prompt_text, str):
+        return None
+    route_legend = "\n".join(f"{idx}: {label}" for idx, label in enumerate(route_labels))
+    if input_mode == "input_only":
+        return (
+            "Predict the output-token cost for each requested model route.\n"
+            "The target is the number of completion tokens emitted by each route's repair attempt.\n"
+            "Only the original repair prompt is shown. Predict each route from the task context alone.\n\n"
+            "[Route Order]\n"
+            f"{route_legend}\n\n"
+            "[Original Repair Prompt]\n"
+            f"{prompt_text}"
+        )
+    if input_mode != "post_primary":
+        raise ValueError(f"Unsupported input_mode={input_mode!r}")
+    primary_output_text = _get_primary_output_text(row)
+    if not isinstance(primary_output_text, str):
+        return None
+    primary_token_count_block = ""
+    if primary_output_token_count is not None:
+        primary_token_count_block = (
+            "\n\n"
+            "[Scout Attempt Output Tokens]\n"
+            f"{int(primary_output_token_count)}"
+        )
+    return (
+        "Predict the output-token cost for each requested model route.\n"
+        "The target is the number of completion tokens emitted by each route's repair attempt.\n"
+        "The scout attempt has already been run and is shown as context for the remaining route predictions.\n\n"
+        "[Route Order]\n"
+        f"{route_legend}\n\n"
+        "[Original Repair Prompt]\n"
+        f"{prompt_text}"
+        f"{primary_token_count_block}\n\n"
+        "[Scout Attempt]\n"
+        f"{primary_output_text}"
+    )
+
+
 class RouterCostDataset(Dataset):
     def __init__(
         self,
@@ -109,6 +167,7 @@ class RouterCostDataset(Dataset):
         zero_reward_epsilon: float,
         input_mode: str,
         include_primary_output_token_count: bool,
+        input_task: str = "reward",
     ) -> None:
         self.rows: list[dict[str, Any]] = []
         target_dim = len(route_labels)
@@ -155,15 +214,13 @@ class RouterCostDataset(Dataset):
                         primary_output_token_count = len(
                             tokenizer(primary_output_text, add_special_tokens=False).get("input_ids") or []
                         )
-            if primary_output_token_count is None:
-                input_text = _build_input_text(row, route_labels, input_mode=input_mode)
-            else:
-                input_text = _build_input_text(
-                    row,
-                    route_labels,
-                    input_mode=input_mode,
-                    primary_output_token_count=primary_output_token_count,
-                )
+            input_text = _build_embedding_input_text(
+                row,
+                route_labels,
+                input_mode=input_mode,
+                primary_output_token_count=primary_output_token_count,
+                input_task=str(input_task),
+            )
             if not input_text:
                 continue
             encoded = tokenizer(
@@ -531,6 +588,53 @@ def _compute_output_token_metrics(
     return rows
 
 
+def _compute_cost_target_stats(dataset: Dataset, cost_target_dim: int) -> tuple[list[float], list[float]]:
+    values: list[list[float]] = []
+    for row in dataset:
+        row_values = row.get("output_token_targets_log") if isinstance(row, dict) else None
+        if isinstance(row_values, list) and len(row_values) == int(cost_target_dim):
+            values.append([float(value) for value in row_values])
+    if not values:
+        return [0.0 for _ in range(int(cost_target_dim))], [1.0 for _ in range(int(cost_target_dim))]
+    arr = np.asarray(values, dtype=np.float64)
+    mean = np.mean(arr, axis=0)
+    std = np.std(arr, axis=0)
+    std = np.where(std < 1.0e-6, 1.0, std)
+    return [float(value) for value in mean.tolist()], [float(value) for value in std.tolist()]
+
+
+def _normalize_cost_targets(
+    targets: torch.Tensor,
+    mean: torch.Tensor | None,
+    std: torch.Tensor | None,
+    normalization: str,
+) -> torch.Tensor:
+    if normalization == "none" or mean is None or std is None:
+        return targets.float()
+    if normalization != "per_route_standard":
+        raise ValueError(f"Unsupported cost target normalization: {normalization}")
+    return (targets.float() - mean.to(targets.device, dtype=targets.dtype)) / std.to(
+        targets.device,
+        dtype=targets.dtype,
+    )
+
+
+def _denormalize_cost_predictions(
+    preds: torch.Tensor,
+    mean: torch.Tensor | None,
+    std: torch.Tensor | None,
+    normalization: str,
+) -> torch.Tensor:
+    if normalization == "none" or mean is None or std is None:
+        return preds.float()
+    if normalization != "per_route_standard":
+        raise ValueError(f"Unsupported cost target normalization: {normalization}")
+    return (preds.float() * std.to(preds.device, dtype=preds.dtype)) + mean.to(
+        preds.device,
+        dtype=preds.dtype,
+    )
+
+
 def _compute_zero_reward_failure_metrics(
     y_true: np.ndarray,
     y_pred_prob: np.ndarray,
@@ -760,6 +864,39 @@ def _compute_train_loss(
     return reward_loss
 
 
+def _make_optimizer(
+    model: torch.nn.Module,
+    lr: float,
+    weight_decay: float,
+    cost_head_lr: float,
+) -> torch.optim.Optimizer:
+    if float(cost_head_lr) <= 0.0 or not hasattr(model, "cost_head") or model.cost_head is None:
+        trainable_parameters = [parameter for parameter in model.parameters() if parameter.requires_grad]
+        return torch.optim.AdamW(trainable_parameters, lr=float(lr), weight_decay=float(weight_decay))
+
+    cost_head_params = [parameter for parameter in model.cost_head.parameters() if parameter.requires_grad]
+    cost_head_param_ids = {id(parameter) for parameter in cost_head_params}
+    other_params = [
+        parameter
+        for parameter in model.parameters()
+        if parameter.requires_grad and id(parameter) not in cost_head_param_ids
+    ]
+    param_groups: list[dict[str, Any]] = []
+    if other_params:
+        param_groups.append({"params": other_params, "lr": float(lr), "weight_decay": float(weight_decay)})
+    if cost_head_params:
+        param_groups.append(
+            {
+                "params": cost_head_params,
+                "lr": float(cost_head_lr),
+                "weight_decay": float(weight_decay),
+            }
+        )
+    if not param_groups:
+        raise ValueError("No trainable parameters found")
+    return torch.optim.AdamW(param_groups)
+
+
 def _parse_route_indices(text: str | None, full_dim: int) -> list[int]:
     if text is None or str(text).strip() == "":
         return list(range(full_dim))
@@ -829,6 +966,9 @@ def _evaluate(
     objective: str,
     predict_costs: bool,
     predict_zero_reward_failure: bool,
+    cost_target_normalization: str,
+    cost_target_mean: torch.Tensor | None,
+    cost_target_std: torch.Tensor | None,
 ) -> tuple[float, list[dict[str, Any]], np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     model.eval()
     total_loss = 0.0
@@ -845,10 +985,16 @@ def _evaluate(
         logits, cost_logits, zero_reward_logits = _predict_from_batch(model, batch, cost_only=cost_only)
         logits = logits.float()
         targets = batch["targets"].float()
+        cost_targets_for_loss = _normalize_cost_targets(
+            batch["output_token_targets_log"].float(),
+            cost_target_mean,
+            cost_target_std,
+            str(cost_target_normalization),
+        )
         if objective == "cost_mse":
             if cost_logits is None:
                 raise ValueError("objective=cost_mse requires cost logits")
-            loss = F.mse_loss(cost_logits.float(), batch["output_token_targets_log"].float(), reduction="sum")
+            loss = F.mse_loss(cost_logits.float(), cost_targets_for_loss, reduction="sum")
             preds = logits
         elif objective == "route_classifier":
             loss = F.cross_entropy(logits, batch["class_targets"].long(), reduction="sum")
@@ -857,19 +1003,25 @@ def _evaluate(
             loss = F.binary_cross_entropy_with_logits(logits, targets, reduction="sum")
             preds = torch.sigmoid(logits)
             if predict_costs and cost_logits is not None:
-                loss = loss + F.mse_loss(cost_logits.float(), batch["output_token_targets_log"].float(), reduction="sum")
+                loss = loss + F.mse_loss(cost_logits.float(), cost_targets_for_loss, reduction="sum")
         else:
             loss = F.mse_loss(logits, targets, reduction="sum")
             preds = logits
             if predict_costs and cost_logits is not None:
-                loss = loss + F.mse_loss(cost_logits.float(), batch["output_token_targets_log"].float(), reduction="sum")
+                loss = loss + F.mse_loss(cost_logits.float(), cost_targets_for_loss, reduction="sum")
         gathered_loss = accelerator.gather_for_metrics(loss.detach().reshape(1)).detach().cpu()
         gathered_preds = accelerator.gather_for_metrics(preds).detach().cpu()
         gathered_targets = accelerator.gather_for_metrics(targets).detach().cpu()
         if predict_costs:
             if cost_logits is None:
                 raise ValueError("predict_costs=true but model did not return cost logits")
-            gathered_cost_preds = accelerator.gather_for_metrics(cost_logits.float()).detach().cpu()
+            cost_preds_for_metrics = _denormalize_cost_predictions(
+                cost_logits.float(),
+                cost_target_mean,
+                cost_target_std,
+                str(cost_target_normalization),
+            )
+            gathered_cost_preds = accelerator.gather_for_metrics(cost_preds_for_metrics).detach().cpu()
             gathered_cost_targets = accelerator.gather_for_metrics(batch["output_token_targets_log"].float()).detach().cpu()
         else:
             gathered_cost_preds = torch.empty((gathered_preds.shape[0], len(route_labels)))
@@ -995,6 +1147,12 @@ def main() -> None:
     parser.add_argument("--eval-batch-size", type=int, default=1)
     parser.add_argument("--gradient-accumulation-steps", type=int, default=8)
     parser.add_argument("--lr", type=float, default=1.0e-4)
+    parser.add_argument(
+        "--cost-head-lr",
+        type=float,
+        default=0.0,
+        help="Optional LR for the cost head only; <=0 uses --lr for all trainable parameters.",
+    )
     parser.add_argument("--weight-decay", type=float, default=0.01)
     parser.add_argument("--warmup-ratio", type=float, default=0.06)
     parser.add_argument("--max-train-rows", type=int, default=0)
@@ -1029,6 +1187,12 @@ def main() -> None:
         default="joint",
     )
     parser.add_argument("--cost-mse-weight", type=float, default=1.0)
+    parser.add_argument(
+        "--cost-target-normalization",
+        choices=["none", "per_route_standard"],
+        default="none",
+        help="Normalize log1p output-token targets during cost training; metrics are denormalized.",
+    )
     parser.add_argument("--cost-delta-aux-weight", type=float, default=0.0)
     parser.add_argument("--predict-zero-reward-failure", action="store_true")
     parser.add_argument("--zero-reward-epsilon", type=float, default=0.0)
@@ -1092,6 +1256,7 @@ def main() -> None:
 
     train_rows = _shuffle_rows(list(_load_split(dataset_dir, "train")), args.max_train_rows, args.seed)
     eval_rows_source = _shuffle_rows(list(_load_split(dataset_dir, "eval")), args.max_eval_rows, args.seed + 1)
+    input_task = "cost" if str(args.objective) == "cost_mse" else "reward"
     train_dataset = RouterCostDataset(
         train_rows,
         tokenizer,
@@ -1103,6 +1268,7 @@ def main() -> None:
         zero_reward_epsilon=float(args.zero_reward_epsilon),
         input_mode=str(args.input_mode),
         include_primary_output_token_count=bool(args.include_primary_output_token_count),
+        input_task=input_task,
     )
     eval_dataset = RouterCostDataset(
         eval_rows_source,
@@ -1115,11 +1281,30 @@ def main() -> None:
         zero_reward_epsilon=float(args.zero_reward_epsilon),
         input_mode=str(args.input_mode),
         include_primary_output_token_count=bool(args.include_primary_output_token_count),
+        input_task=input_task,
     )
     if len(train_dataset) == 0 or len(eval_dataset) == 0:
         raise ValueError(f"Prepared empty dataset train={len(train_dataset)} eval={len(eval_dataset)}")
 
     cost_target_dim = len(cost_route_idxs)
+    if bool(args.predict_costs):
+        if str(args.cost_target_normalization) == "per_route_standard":
+            cost_target_mean_values, cost_target_std_values = _compute_cost_target_stats(
+                train_dataset,
+                cost_target_dim,
+            )
+        else:
+            cost_target_mean_values = [0.0 for _ in range(cost_target_dim)]
+            cost_target_std_values = [1.0 for _ in range(cost_target_dim)]
+    else:
+        cost_target_mean_values = []
+        cost_target_std_values = []
+    cost_target_mean_tensor = (
+        torch.tensor(cost_target_mean_values, dtype=torch.float32) if cost_target_mean_values else None
+    )
+    cost_target_std_tensor = (
+        torch.tensor(cost_target_std_values, dtype=torch.float32) if cost_target_std_values else None
+    )
     token_collate_fn = lambda batch: _collate_left_pad(
         batch,
         pad_token_id=int(pad_token_id),
@@ -1203,8 +1388,12 @@ def main() -> None:
             num_workers=0,
         )
 
-    trainable_parameters = [parameter for parameter in model.parameters() if parameter.requires_grad]
-    optimizer = torch.optim.AdamW(trainable_parameters, lr=float(args.lr), weight_decay=float(args.weight_decay))
+    optimizer = _make_optimizer(
+        model,
+        lr=float(args.lr),
+        weight_decay=float(args.weight_decay),
+        cost_head_lr=float(args.cost_head_lr),
+    )
     update_steps_per_epoch = math.ceil(len(train_loader) / int(args.gradient_accumulation_steps))
     total_update_steps = max(1, int(args.num_epochs) * update_steps_per_epoch)
     warmup_steps = int(total_update_steps * float(args.warmup_ratio))
@@ -1223,12 +1412,14 @@ def main() -> None:
         "route_labels": route_labels,
         "max_seq_length": int(args.max_seq_length),
         "input_mode": str(args.input_mode),
+        "input_task": input_task,
         "include_primary_output_token_count": bool(args.include_primary_output_token_count),
         "num_epochs": int(args.num_epochs),
         "batch_size": int(args.batch_size),
         "eval_batch_size": int(args.eval_batch_size),
         "gradient_accumulation_steps": int(args.gradient_accumulation_steps),
         "lr": float(args.lr),
+        "cost_head_lr": float(args.cost_head_lr),
         "weight_decay": float(args.weight_decay),
         "warmup_ratio": float(args.warmup_ratio),
         "max_train_rows": int(args.max_train_rows),
@@ -1260,6 +1451,9 @@ def main() -> None:
         "cost_route_labels": [route_labels[int(idx)] for idx in cost_route_idxs] if bool(args.predict_costs) else [],
         "cost_gradient_mode": str(args.cost_gradient_mode),
         "cost_mse_weight": float(args.cost_mse_weight),
+        "cost_target_normalization": str(args.cost_target_normalization),
+        "cost_target_mean_log1p": [float(value) for value in cost_target_mean_values],
+        "cost_target_std_log1p": [float(value) for value in cost_target_std_values],
         "cost_delta_aux_weight": float(args.cost_delta_aux_weight),
         "predict_zero_reward_failure": bool(args.predict_zero_reward_failure),
         "zero_reward_failure_target": "reward <= zero_reward_epsilon",
@@ -1310,7 +1504,12 @@ def main() -> None:
                     cost_logits=cost_logits.float() if cost_logits is not None else None,
                     zero_reward_logits=zero_reward_logits.float() if zero_reward_logits is not None else None,
                     targets=batch["targets"].float(),
-                    output_token_targets_log=batch["output_token_targets_log"].float(),
+                    output_token_targets_log=_normalize_cost_targets(
+                        batch["output_token_targets_log"].float(),
+                        cost_target_mean_tensor,
+                        cost_target_std_tensor,
+                        str(args.cost_target_normalization),
+                    ),
                     zero_reward_targets=batch["zero_reward_targets"].float(),
                     class_targets=batch["class_targets"],
                     objective=str(args.objective),
@@ -1348,6 +1547,9 @@ def main() -> None:
             objective=str(args.objective),
             predict_costs=bool(args.predict_costs),
             predict_zero_reward_failure=bool(args.predict_zero_reward_failure),
+            cost_target_normalization=str(args.cost_target_normalization),
+            cost_target_mean=cost_target_mean_tensor,
+            cost_target_std=cost_target_std_tensor,
         )
         train_loss = float(np.mean(running_losses)) if running_losses else math.nan
         if accelerator.is_main_process:
