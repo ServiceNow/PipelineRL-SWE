@@ -201,6 +201,11 @@ def _compute_class_target(
             if float(value) > float(success_threshold):
                 return int(idx)
         return 0
+    if mode == "cheapest_success_or_abstain":
+        for idx, value in enumerate(target_rewards):
+            if float(value) > float(success_threshold):
+                return int(idx)
+        return max(0, len(target_rewards) - 1)
     raise ValueError(f"Unsupported class_target_mode={mode!r}")
 
 
@@ -220,17 +225,25 @@ class RouterCostDataset(Dataset):
         input_task: str = "reward",
         class_target_mode: str = "argmax",
         class_success_threshold: float = 0.5,
+        append_abstain_class: bool = False,
     ) -> None:
         self.rows: list[dict[str, Any]] = []
-        target_dim = len(route_labels)
-        if len(route_indices) != target_dim:
-            raise ValueError(f"route_indices length {len(route_indices)} does not match target_dim {target_dim}")
-        if target_dim == 0:
+        source_target_dim = len(route_labels)
+        if len(route_indices) != source_target_dim:
+            raise ValueError(
+                f"route_indices length {len(route_indices)} does not match source_target_dim {source_target_dim}"
+            )
+        if source_target_dim == 0:
             raise ValueError("At least one target route is required")
+        prompt_route_labels = list(route_labels)
+        if bool(append_abstain_class):
+            prompt_route_labels.append("ABSTAIN")
         max_source_route_idx = max(int(idx) for idx in route_indices)
-        invalid_cost_route_idxs = [idx for idx in cost_route_idxs if not 0 <= int(idx) < target_dim]
+        invalid_cost_route_idxs = [idx for idx in cost_route_idxs if not 0 <= int(idx) < source_target_dim]
         if require_cost_targets and invalid_cost_route_idxs:
-            raise ValueError(f"cost_route_idxs={invalid_cost_route_idxs} are out of range for {target_dim} routes")
+            raise ValueError(
+                f"cost_route_idxs={invalid_cost_route_idxs} are out of range for {source_target_dim} routes"
+            )
         for row in rows:
             targets = row.get("performance_targets")
             output_tokens = row.get("route_output_tokens")
@@ -266,9 +279,14 @@ class RouterCostDataset(Dataset):
                         primary_output_token_count = len(
                             tokenizer(primary_output_text, add_special_tokens=False).get("input_ids") or []
                         )
+            model_target_rewards = list(target_rewards)
+            model_zero_reward_targets = list(zero_reward_targets)
+            if bool(append_abstain_class):
+                model_target_rewards.append(0.0)
+                model_zero_reward_targets.append(1.0)
             input_text = _build_embedding_input_text(
                 row,
-                route_labels,
+                prompt_route_labels,
                 input_mode=input_mode,
                 primary_output_token_count=primary_output_token_count,
                 input_task=str(input_task),
@@ -294,11 +312,11 @@ class RouterCostDataset(Dataset):
                     "language": row.get("language"),
                     "input_ids": [int(value) for value in input_ids],
                     "attention_mask": [int(value) for value in attention_mask],
-                    "targets": target_rewards,
+                    "targets": model_target_rewards,
                     "output_token_targets_log": output_token_targets_log,
-                    "zero_reward_targets": zero_reward_targets,
+                    "zero_reward_targets": model_zero_reward_targets,
                     "class_target": _compute_class_target(
-                        target_rewards,
+                        model_target_rewards,
                         mode=str(class_target_mode),
                         success_threshold=float(class_success_threshold),
                     ),
@@ -1301,7 +1319,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--class-target-mode",
-        choices=["argmax", "cheapest_success"],
+        choices=["argmax", "cheapest_success", "cheapest_success_or_abstain"],
         default="argmax",
         help=(
             "Target used for objective=route_classifier. "
@@ -1320,6 +1338,11 @@ def main() -> None:
         choices=["none", "inverse_freq"],
         default="none",
         help="Optional class weighting for objective=route_classifier.",
+    )
+    parser.add_argument(
+        "--append-abstain-class",
+        action="store_true",
+        help="Append an explicit ABSTAIN class for objective=route_classifier.",
     )
     parser.add_argument("--max-seq-length", type=int, default=24000)
     parser.add_argument("--input-mode", choices=["post_primary", "input_only"], default="post_primary")
@@ -1410,7 +1433,11 @@ def main() -> None:
 
     all_route_labels = _load_route_labels(dataset_dir)
     target_route_idxs = _parse_route_indices(args.target_route_idxs, len(all_route_labels))
-    route_labels = [all_route_labels[int(idx)] for idx in target_route_idxs]
+    source_route_labels = [all_route_labels[int(idx)] for idx in target_route_idxs]
+    append_abstain_class = bool(args.append_abstain_class)
+    if append_abstain_class and str(args.objective) != "route_classifier":
+        raise ValueError("--append-abstain-class is only supported for objective=route_classifier")
+    route_labels = list(source_route_labels) + (["ABSTAIN"] if append_abstain_class else [])
     target_dim = len(route_labels)
     if args.objective in {"reward_mse_delta_aux", "reward_bce_delta_aux"} and target_dim < 2:
         raise ValueError(f"{args.objective} expects at least two routes")
@@ -1455,7 +1482,7 @@ def main() -> None:
     train_dataset = RouterCostDataset(
         train_rows,
         tokenizer,
-        route_labels,
+        source_route_labels,
         target_route_idxs,
         int(args.max_seq_length),
         require_cost_targets=bool(args.predict_costs),
@@ -1466,11 +1493,12 @@ def main() -> None:
         input_task=input_task,
         class_target_mode=str(args.class_target_mode),
         class_success_threshold=float(args.class_success_threshold),
+        append_abstain_class=append_abstain_class,
     )
     eval_dataset = RouterCostDataset(
         eval_rows_source,
         tokenizer,
-        route_labels,
+        source_route_labels,
         target_route_idxs,
         int(args.max_seq_length),
         require_cost_targets=bool(args.predict_costs),
@@ -1481,6 +1509,7 @@ def main() -> None:
         input_task=input_task,
         class_target_mode=str(args.class_target_mode),
         class_success_threshold=float(args.class_success_threshold),
+        append_abstain_class=append_abstain_class,
     )
     if len(train_dataset) == 0 or len(eval_dataset) == 0:
         raise ValueError(f"Prepared empty dataset train={len(train_dataset)} eval={len(eval_dataset)}")
@@ -1622,7 +1651,9 @@ def main() -> None:
         "dataset_dir": str(dataset_dir),
         "all_route_labels": all_route_labels,
         "target_route_idxs": [int(idx) for idx in target_route_idxs],
+        "source_route_labels": source_route_labels,
         "route_labels": route_labels,
+        "append_abstain_class": bool(append_abstain_class),
         "max_seq_length": int(args.max_seq_length),
         "input_mode": str(args.input_mode),
         "input_task": input_task,
@@ -1822,6 +1853,16 @@ def main() -> None:
         class_success_threshold=float(args.class_success_threshold),
     )
     eval_rows_for_utility = _subset_route_stats_for_utility(eval_rows_source, target_route_idxs)
+    if append_abstain_class:
+        abstain_eval_rows = []
+        for row in eval_rows_for_utility:
+            new_row = dict(row)
+            for key in ("performance_targets", "route_prompt_tokens", "route_output_tokens"):
+                values = list(new_row.get(key) or [])
+                values.append(0.0)
+                new_row[key] = values
+            abstain_eval_rows.append(new_row)
+        eval_rows_for_utility = abstain_eval_rows
     utility_report = _compute_utility_report(pred_rows, eval_rows_for_utility, route_labels, DEFAULT_UTILITY_LAMBDAS)
     cost_route_labels = [route_labels[int(route_idx)] for route_idx in cost_route_idxs] if args.predict_costs else []
     cost_metrics = _compute_output_token_metrics(y_cost_true, y_cost_pred, cost_route_labels) if args.predict_costs else []

@@ -35,9 +35,10 @@ OBJECTIVE=${OBJECTIVE:-route_classifier}
 REWARD_BCE_WEIGHT=${REWARD_BCE_WEIGHT:-1.0}
 DELTA_AUX_WEIGHT=${DELTA_AUX_WEIGHT:-0.0}
 DELTA_AUX_HUBER_DELTA=${DELTA_AUX_HUBER_DELTA:-0.0}
-CLASS_TARGET_MODE=${CLASS_TARGET_MODE:-cheapest_success}
+CLASS_TARGET_MODE=${CLASS_TARGET_MODE:-cheapest_success_or_abstain}
 CLASS_SUCCESS_THRESHOLD=${CLASS_SUCCESS_THRESHOLD:-0.5}
 CLASS_WEIGHT_MODE=${CLASS_WEIGHT_MODE:-none}
+APPEND_ABSTAIN_CLASS=${APPEND_ABSTAIN_CLASS:-true}
 MLP_HIDDEN_SIZE=${MLP_HIDDEN_SIZE:-1024}
 DROPOUT=${DROPOUT:-0.1}
 TORCH_DTYPE=${TORCH_DTYPE:-bf16}
@@ -73,6 +74,11 @@ fi
 RESUME_ARG=""
 if [[ -n "${RESUME_FROM_CHECKPOINT}" ]]; then
   RESUME_ARG="--resume-from-checkpoint ${RESUME_FROM_CHECKPOINT}"
+fi
+
+APPEND_ABSTAIN_ARG=""
+if [[ "${APPEND_ABSTAIN_CLASS}" == "true" ]]; then
+  APPEND_ABSTAIN_ARG="--append-abstain-class"
 fi
 
 ATTN_ARG=""
@@ -111,6 +117,7 @@ make job \
       --class-target-mode ${CLASS_TARGET_MODE} \
       --class-success-threshold ${CLASS_SUCCESS_THRESHOLD} \
       --class-weight-mode ${CLASS_WEIGHT_MODE} \
+      ${APPEND_ABSTAIN_ARG} \
       --max-seq-length ${MAX_SEQ_LENGTH} \
       --input-mode ${INPUT_MODE} \
       ${PRIMARY_OUTPUT_TOKEN_COUNT_ARG} \
