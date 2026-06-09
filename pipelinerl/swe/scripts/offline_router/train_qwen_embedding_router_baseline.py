@@ -112,12 +112,47 @@ def _build_embedding_input_text(
             input_mode=input_mode,
             primary_output_token_count=primary_output_token_count,
         )
-    if input_task != "cost":
+    if input_task not in {"cost", "policy"}:
         raise ValueError(f"Unsupported input_task={input_task!r}")
     prompt_text = row.get("prompt_text")
     if not isinstance(prompt_text, str):
         return None
     route_legend = "\n".join(f"{idx}: {label}" for idx, label in enumerate(route_labels))
+    if input_task == "policy":
+        if input_mode == "input_only":
+            return (
+                "Select the cheapest model route that is likely to produce a patch passing the SWE tests.\n"
+                "If no route is likely to pass, select the cheapest route. The route order is cost-ascending.\n"
+                "Only the original repair prompt is shown. Infer the cheapest sufficient route from the task context.\n\n"
+                "[Route Order]\n"
+                f"{route_legend}\n\n"
+                "[Original Repair Prompt]\n"
+                f"{prompt_text}"
+            )
+        if input_mode != "post_primary":
+            raise ValueError(f"Unsupported input_mode={input_mode!r}")
+        primary_output_text = _get_primary_output_text(row)
+        if not isinstance(primary_output_text, str):
+            return None
+        primary_token_count_block = ""
+        if primary_output_token_count is not None:
+            primary_token_count_block = (
+                "\n\n"
+                "[Scout Attempt Output Tokens]\n"
+                f"{int(primary_output_token_count)}"
+            )
+        return (
+            "Select the cheapest model route that is likely to produce a patch passing the SWE tests.\n"
+            "If no route is likely to pass, select the cheapest route. The route order is cost-ascending.\n"
+            "The scout attempt has already been run and is shown as diagnostic context.\n\n"
+            "[Route Order]\n"
+            f"{route_legend}\n\n"
+            "[Original Repair Prompt]\n"
+            f"{prompt_text}"
+            f"{primary_token_count_block}\n\n"
+            "[Scout Attempt]\n"
+            f"{primary_output_text}"
+        )
     if input_mode == "input_only":
         return (
             "Predict the output-token cost for each requested model route.\n"
@@ -154,6 +189,21 @@ def _build_embedding_input_text(
     )
 
 
+def _compute_class_target(
+    target_rewards: list[float],
+    mode: str,
+    success_threshold: float,
+) -> int:
+    if mode == "argmax":
+        return _argmax_index(target_rewards)
+    if mode == "cheapest_success":
+        for idx, value in enumerate(target_rewards):
+            if float(value) > float(success_threshold):
+                return int(idx)
+        return 0
+    raise ValueError(f"Unsupported class_target_mode={mode!r}")
+
+
 class RouterCostDataset(Dataset):
     def __init__(
         self,
@@ -168,6 +218,8 @@ class RouterCostDataset(Dataset):
         input_mode: str,
         include_primary_output_token_count: bool,
         input_task: str = "reward",
+        class_target_mode: str = "argmax",
+        class_success_threshold: float = 0.5,
     ) -> None:
         self.rows: list[dict[str, Any]] = []
         target_dim = len(route_labels)
@@ -245,7 +297,11 @@ class RouterCostDataset(Dataset):
                     "targets": target_rewards,
                     "output_token_targets_log": output_token_targets_log,
                     "zero_reward_targets": zero_reward_targets,
-                    "class_target": _argmax_index(target_rewards),
+                    "class_target": _compute_class_target(
+                        target_rewards,
+                        mode=str(class_target_mode),
+                        success_threshold=float(class_success_threshold),
+                    ),
                 }
             )
 
@@ -672,6 +728,99 @@ def _compute_zero_reward_failure_metrics(
     return rows
 
 
+def _class_targets_from_rewards(
+    y_true_rewards: np.ndarray,
+    class_target_mode: str,
+    class_success_threshold: float,
+) -> np.ndarray:
+    if y_true_rewards.size == 0:
+        return np.empty((0,), dtype=np.int64)
+    targets: list[int] = []
+    for row in y_true_rewards.tolist():
+        targets.append(
+            _compute_class_target(
+                [float(value) for value in row],
+                mode=str(class_target_mode),
+                success_threshold=float(class_success_threshold),
+            )
+        )
+    return np.asarray(targets, dtype=np.int64)
+
+
+def _compute_class_weights(
+    dataset: Dataset,
+    target_dim: int,
+    mode: str,
+) -> list[float]:
+    if mode == "none":
+        return [1.0 for _ in range(int(target_dim))]
+    if mode != "inverse_freq":
+        raise ValueError(f"Unsupported class_weight_mode={mode!r}")
+    counts = np.zeros((int(target_dim),), dtype=np.float64)
+    for row in dataset:
+        if isinstance(row, dict):
+            counts[int(row["class_target"])] += 1.0
+    total = float(np.sum(counts))
+    if total <= 0.0:
+        return [1.0 for _ in range(int(target_dim))]
+    weights = np.ones((int(target_dim),), dtype=np.float64)
+    for idx, count in enumerate(counts):
+        weights[idx] = total / (float(target_dim) * count) if count > 0.0 else 0.0
+    positive = weights[weights > 0.0]
+    if positive.size > 0:
+        weights = weights / float(np.mean(positive))
+    return [float(value) for value in weights.tolist()]
+
+
+def _compute_route_classifier_metrics(
+    y_true_rewards: np.ndarray,
+    y_pred_scores: np.ndarray,
+    route_labels: list[str],
+    class_target_mode: str,
+    class_success_threshold: float,
+) -> dict[str, Any]:
+    if y_true_rewards.size == 0 or y_pred_scores.size == 0:
+        return {
+            "n_eval": 0,
+            "class_target_mode": str(class_target_mode),
+            "class_success_threshold": float(class_success_threshold),
+            "accuracy": math.nan,
+            "mean_reward_of_predicted_class": math.nan,
+            "target_counts_by_route": {label: 0 for label in route_labels},
+            "pred_counts_by_route": {label: 0 for label in route_labels},
+        }
+
+    target_classes = _class_targets_from_rewards(
+        y_true_rewards,
+        class_target_mode=str(class_target_mode),
+        class_success_threshold=float(class_success_threshold),
+    )
+    pred_classes = np.argmax(y_pred_scores, axis=1).astype(np.int64)
+    target_counts = np.bincount(target_classes, minlength=len(route_labels))
+    pred_counts = np.bincount(pred_classes, minlength=len(route_labels))
+    row_indices = np.arange(y_true_rewards.shape[0])
+    realized_rewards = y_true_rewards[row_indices, pred_classes]
+    target_rewards = y_true_rewards[row_indices, target_classes]
+    confusion = np.zeros((len(route_labels), len(route_labels)), dtype=np.int64)
+    for true_idx, pred_idx in zip(target_classes, pred_classes):
+        confusion[int(true_idx), int(pred_idx)] += 1
+    return {
+        "n_eval": int(target_classes.shape[0]),
+        "class_target_mode": str(class_target_mode),
+        "class_success_threshold": float(class_success_threshold),
+        "accuracy": float(np.mean(target_classes == pred_classes)),
+        "mean_reward_of_target_class": float(np.mean(target_rewards)),
+        "mean_reward_of_predicted_class": float(np.mean(realized_rewards)),
+        "target_counts_by_route": {
+            route_labels[idx]: int(target_counts[idx]) for idx in range(len(route_labels))
+        },
+        "pred_counts_by_route": {
+            route_labels[idx]: int(pred_counts[idx]) for idx in range(len(route_labels))
+        },
+        "confusion_matrix_rows_true_cols_pred": confusion.tolist(),
+    }
+
+
 def _compute_predicted_cost_utility_report(
     prediction_rows: list[dict[str, Any]],
     eval_source_rows: list[dict[str, Any]],
@@ -809,6 +958,7 @@ def _compute_train_loss(
     output_token_targets_log: torch.Tensor,
     zero_reward_targets: torch.Tensor,
     class_targets: torch.Tensor,
+    class_weights: torch.Tensor | None,
     objective: str,
     reward_mse_weight: float,
     reward_bce_weight: float,
@@ -829,7 +979,13 @@ def _compute_train_loss(
             raise ValueError("cost_delta_aux_weight is not supported for expert-only cost prediction")
         return float(cost_mse_weight) * F.mse_loss(cost_logits, output_token_targets_log.float())
     if objective == "route_classifier":
-        reward_loss = F.cross_entropy(reward_logits, class_targets.long())
+        reward_loss = F.cross_entropy(
+            reward_logits,
+            class_targets.long(),
+            weight=class_weights.to(reward_logits.device, dtype=reward_logits.dtype)
+            if class_weights is not None
+            else None,
+        )
     elif objective in {"reward_bce", "reward_bce_delta_aux"}:
         reward_loss = (
             F.binary_cross_entropy_with_logits(reward_logits, targets.float())
@@ -966,6 +1122,7 @@ def _evaluate(
     objective: str,
     predict_costs: bool,
     predict_zero_reward_failure: bool,
+    class_weights: torch.Tensor | None,
     cost_target_normalization: str,
     cost_target_mean: torch.Tensor | None,
     cost_target_std: torch.Tensor | None,
@@ -997,7 +1154,15 @@ def _evaluate(
             loss = F.mse_loss(cost_logits.float(), cost_targets_for_loss, reduction="sum")
             preds = logits
         elif objective == "route_classifier":
-            loss = F.cross_entropy(logits, batch["class_targets"].long(), reduction="sum")
+            per_example_loss = F.cross_entropy(
+                logits,
+                batch["class_targets"].long(),
+                weight=class_weights.to(logits.device, dtype=logits.dtype)
+                if class_weights is not None
+                else None,
+                reduction="none",
+            )
+            loss = per_example_loss.sum()
             preds = torch.softmax(logits, dim=-1)
         elif objective in {"reward_bce", "reward_bce_delta_aux"}:
             loss = F.binary_cross_entropy_with_logits(logits, targets, reduction="sum")
@@ -1012,6 +1177,7 @@ def _evaluate(
         gathered_loss = accelerator.gather_for_metrics(loss.detach().reshape(1)).detach().cpu()
         gathered_preds = accelerator.gather_for_metrics(preds).detach().cpu()
         gathered_targets = accelerator.gather_for_metrics(targets).detach().cpu()
+        gathered_class_targets = accelerator.gather_for_metrics(batch["class_targets"]).detach().cpu()
         if predict_costs:
             if cost_logits is None:
                 raise ValueError("predict_costs=true but model did not return cost logits")
@@ -1052,6 +1218,8 @@ def _evaluate(
                     "language": source_meta["language"],
                     "true_rewards": [float(value) for value in gathered_targets[idx].tolist()],
                     "pred_rewards": [float(value) for value in gathered_preds[idx].tolist()],
+                    "true_class_target": int(gathered_class_targets[idx].item()),
+                    "pred_class_target": int(torch.argmax(gathered_preds[idx]).item()),
                     "true_output_tokens": [
                         float(math.expm1(value)) for value in gathered_cost_targets[idx].tolist()
                     ] if predict_costs else None,
@@ -1130,6 +1298,28 @@ def main() -> None:
             "cost_mse",
         ],
         default="reward_mse",
+    )
+    parser.add_argument(
+        "--class-target-mode",
+        choices=["argmax", "cheapest_success"],
+        default="argmax",
+        help=(
+            "Target used for objective=route_classifier. "
+            "argmax picks the highest reward route; cheapest_success picks the first route above threshold, "
+            "falling back to route 0 if none pass."
+        ),
+    )
+    parser.add_argument(
+        "--class-success-threshold",
+        type=float,
+        default=0.5,
+        help="Success threshold for --class-target-mode=cheapest_success.",
+    )
+    parser.add_argument(
+        "--class-weight-mode",
+        choices=["none", "inverse_freq"],
+        default="none",
+        help="Optional class weighting for objective=route_classifier.",
     )
     parser.add_argument("--max-seq-length", type=int, default=24000)
     parser.add_argument("--input-mode", choices=["post_primary", "input_only"], default="post_primary")
@@ -1256,7 +1446,12 @@ def main() -> None:
 
     train_rows = _shuffle_rows(list(_load_split(dataset_dir, "train")), args.max_train_rows, args.seed)
     eval_rows_source = _shuffle_rows(list(_load_split(dataset_dir, "eval")), args.max_eval_rows, args.seed + 1)
-    input_task = "cost" if str(args.objective) == "cost_mse" else "reward"
+    if str(args.objective) == "cost_mse":
+        input_task = "cost"
+    elif str(args.objective) == "route_classifier":
+        input_task = "policy"
+    else:
+        input_task = "reward"
     train_dataset = RouterCostDataset(
         train_rows,
         tokenizer,
@@ -1269,6 +1464,8 @@ def main() -> None:
         input_mode=str(args.input_mode),
         include_primary_output_token_count=bool(args.include_primary_output_token_count),
         input_task=input_task,
+        class_target_mode=str(args.class_target_mode),
+        class_success_threshold=float(args.class_success_threshold),
     )
     eval_dataset = RouterCostDataset(
         eval_rows_source,
@@ -1282,6 +1479,8 @@ def main() -> None:
         input_mode=str(args.input_mode),
         include_primary_output_token_count=bool(args.include_primary_output_token_count),
         input_task=input_task,
+        class_target_mode=str(args.class_target_mode),
+        class_success_threshold=float(args.class_success_threshold),
     )
     if len(train_dataset) == 0 or len(eval_dataset) == 0:
         raise ValueError(f"Prepared empty dataset train={len(train_dataset)} eval={len(eval_dataset)}")
@@ -1304,6 +1503,16 @@ def main() -> None:
     )
     cost_target_std_tensor = (
         torch.tensor(cost_target_std_values, dtype=torch.float32) if cost_target_std_values else None
+    )
+    class_weight_values = (
+        _compute_class_weights(train_dataset, target_dim, str(args.class_weight_mode))
+        if str(args.objective) == "route_classifier"
+        else [1.0 for _ in range(target_dim)]
+    )
+    class_weights_tensor = (
+        torch.tensor(class_weight_values, dtype=torch.float32)
+        if str(args.objective) == "route_classifier" and str(args.class_weight_mode) != "none"
+        else None
     )
     token_collate_fn = lambda batch: _collate_left_pad(
         batch,
@@ -1406,6 +1615,10 @@ def main() -> None:
     config = {
         "model_name": args.model_name,
         "objective": args.objective,
+        "class_target_mode": str(args.class_target_mode),
+        "class_success_threshold": float(args.class_success_threshold),
+        "class_weight_mode": str(args.class_weight_mode),
+        "class_weights": [float(value) for value in class_weight_values],
         "dataset_dir": str(dataset_dir),
         "all_route_labels": all_route_labels,
         "target_route_idxs": [int(idx) for idx in target_route_idxs],
@@ -1512,6 +1725,7 @@ def main() -> None:
                     ),
                     zero_reward_targets=batch["zero_reward_targets"].float(),
                     class_targets=batch["class_targets"],
+                    class_weights=class_weights_tensor,
                     objective=str(args.objective),
                     reward_mse_weight=float(args.reward_mse_weight),
                     reward_bce_weight=float(args.reward_bce_weight),
@@ -1547,6 +1761,7 @@ def main() -> None:
             objective=str(args.objective),
             predict_costs=bool(args.predict_costs),
             predict_zero_reward_failure=bool(args.predict_zero_reward_failure),
+            class_weights=class_weights_tensor,
             cost_target_normalization=str(args.cost_target_normalization),
             cost_target_mean=cost_target_mean_tensor,
             cost_target_std=cost_target_std_tensor,
@@ -1599,7 +1814,13 @@ def main() -> None:
     y_zero_reward_pred = best_payload["y_zero_reward_pred"]
     route_metrics = compute_per_route_metrics(y_true, y_pred, route_labels)
     pairwise_metrics = compute_pairwise_metrics(y_true, y_pred, route_labels)
-    classifier_metrics = _compute_classifier_metrics(y_true, y_pred, route_labels)
+    classifier_metrics = _compute_route_classifier_metrics(
+        y_true,
+        y_pred,
+        route_labels,
+        class_target_mode=str(args.class_target_mode),
+        class_success_threshold=float(args.class_success_threshold),
+    )
     eval_rows_for_utility = _subset_route_stats_for_utility(eval_rows_source, target_route_idxs)
     utility_report = _compute_utility_report(pred_rows, eval_rows_for_utility, route_labels, DEFAULT_UTILITY_LAMBDAS)
     cost_route_labels = [route_labels[int(route_idx)] for route_idx in cost_route_idxs] if args.predict_costs else []
