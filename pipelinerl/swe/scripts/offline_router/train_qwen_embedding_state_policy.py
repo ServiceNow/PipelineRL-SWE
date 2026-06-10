@@ -62,6 +62,8 @@ def _mask_from_indices(route_count: int, indices: list[int]) -> list[bool]:
 
 
 def _iter_attempt_states(route_count: int, mode: str) -> list[tuple[list[bool], int]]:
+    if mode == "none":
+        return []
     if mode == "single":
         return [(_mask_from_indices(route_count, [idx]), idx) for idx in range(route_count)]
     if mode == "all_subsets":
@@ -1112,7 +1114,7 @@ def main() -> None:
     parser.add_argument("--model-name", default="Qwen/Qwen3-Embedding-8B")
     parser.add_argument("--target-route-idxs", default=None)
     parser.add_argument("--max-seq-length", type=int, default=24000)
-    parser.add_argument("--attempted-state-mode", choices=["single", "all_subsets"], default="single")
+    parser.add_argument("--attempted-state-mode", choices=["none", "single", "all_subsets"], default="single")
     parser.add_argument("--include-bare-state", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--include-costs-in-prompt", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--route-output-cost-weights", default=",".join(str(value) for value in DEFAULT_AWS_OUTPUT_COST_WEIGHTS))
