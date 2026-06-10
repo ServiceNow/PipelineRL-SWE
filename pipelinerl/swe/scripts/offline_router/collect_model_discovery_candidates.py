@@ -353,6 +353,10 @@ async def _collect_one(
             "temperature": args.temperature,
             "top_p": args.top_p,
         }
+        if getattr(args, "top_k", 0) and int(args.top_k) > 0:
+            generation_parameters["top_k"] = int(args.top_k)
+        if getattr(args, "repetition_penalty", 0.0) and float(args.repetition_penalty) > 0.0:
+            generation_parameters["repetition_penalty"] = float(args.repetition_penalty)
         if budget is not None:
             generation_parameters["max_tokens"] = budget
         try:
@@ -422,6 +426,12 @@ async def _collect_one(
         "total_tokens": int(usage.get("total_tokens", 0) or 0),
         "requested_max_tokens": int(args.max_tokens or 0),
         "used_max_tokens": used_max_tokens,
+        "generation_parameters": sanitize_for_json({
+            "temperature": args.temperature,
+            "top_p": args.top_p,
+            "top_k": getattr(args, "top_k", 0),
+            "repetition_penalty": getattr(args, "repetition_penalty", 0.0),
+        }),
         "generation_attempt_errors": sanitize_for_json(attempt_errors),
         "latency_s": float(latency_s),
         "request_error": request_error,
@@ -545,6 +555,8 @@ def _write_root_manifest(
             "max_token_fallbacks": args.max_token_fallbacks,
             "temperature": args.temperature,
             "top_p": args.top_p,
+            "top_k": args.top_k,
+            "repetition_penalty": args.repetition_penalty,
             "success_threshold": args.success_threshold,
             "tensor_parallel_size": args.tensor_parallel_size,
             "max_model_len": args.max_model_len,
@@ -754,6 +766,13 @@ def main() -> None:
     parser.add_argument("--max-token-fallbacks", default="15000,8192,4096,2048")
     parser.add_argument("--temperature", type=float, default=0.7)
     parser.add_argument("--top-p", type=float, default=1.0)
+    parser.add_argument("--top-k", type=int, default=0, help="Optional top_k sampling parameter. Omitted when <= 0.")
+    parser.add_argument(
+        "--repetition-penalty",
+        type=float,
+        default=0.0,
+        help="Optional repetition_penalty generation parameter. Omitted when <= 0.",
+    )
     parser.add_argument("--success-threshold", type=float, default=0.8)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--sleep-after-model", type=float, default=30)

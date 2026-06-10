@@ -30,6 +30,8 @@ MAX_TOKENS=${MAX_TOKENS:-32000}
 MAX_TOKEN_FALLBACKS=${MAX_TOKEN_FALLBACKS:-15000,8192,4096,2048}
 TEMPERATURE=${TEMPERATURE:-0.7}
 TOP_P=${TOP_P:-1.0}
+TOP_K=${TOP_K:-0}
+REPETITION_PENALTY=${REPETITION_PENALTY:-0}
 SUCCESS_THRESHOLD=${SUCCESS_THRESHOLD:-0.8}
 SLEEP_AFTER_MODEL=${SLEEP_AFTER_MODEL:-30}
 SEED=${SEED:-42}
@@ -106,6 +108,8 @@ make job \
     --max-token-fallbacks '${MAX_TOKEN_FALLBACKS}' \
     --temperature ${TEMPERATURE} \
     --top-p ${TOP_P} \
+    --top-k ${TOP_K} \
+    --repetition-penalty ${REPETITION_PENALTY} \
     --success-threshold ${SUCCESS_THRESHOLD} \
     --sleep-after-model ${SLEEP_AFTER_MODEL} \
     --seed ${SEED} \

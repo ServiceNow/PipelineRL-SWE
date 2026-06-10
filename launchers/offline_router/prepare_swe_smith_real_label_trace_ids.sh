@@ -17,6 +17,17 @@ if [[ ! -x "${PYTHON_BIN}" ]]; then
   PYTHON_BIN=${PYTHON_BIN_FALLBACK:-python}
 fi
 
+EXCLUDE_ARGS=()
+for path in ${EXCLUDE_IDS_PATHS:-}; do
+  EXCLUDE_ARGS+=(--exclude-ids-path "${path}")
+done
+for path in ${EXCLUDE_TRAIN_IDS_PATHS:-}; do
+  EXCLUDE_ARGS+=(--exclude-train-ids-path "${path}")
+done
+for path in ${EXCLUDE_EVAL_IDS_PATHS:-}; do
+  EXCLUDE_ARGS+=(--exclude-eval-ids-path "${path}")
+done
+
 "${PYTHON_BIN}" pipelinerl/swe/scripts/offline_router/sample_real_label_instance_ids.py \
   --output-dir "${ID_ROOT}" \
   --train-dataset-path "${TRAIN_DATASET_PATH}" \
@@ -26,6 +37,7 @@ fi
   --train-n "${TRAIN_N}" \
   --eval-n "${EVAL_N}" \
   --seed "${SEED}" \
+  "${EXCLUDE_ARGS[@]}" \
   "$@"
 
 echo "ID_ROOT=${ID_ROOT}"
