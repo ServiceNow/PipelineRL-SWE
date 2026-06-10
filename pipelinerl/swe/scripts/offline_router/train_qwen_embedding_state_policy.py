@@ -417,6 +417,7 @@ def _utility_decision_aux_loss(
     temperature: float,
     sample_weights: torch.Tensor,
     stop_tie_bonus: float,
+    bare_out_action: bool,
 ) -> torch.Tensor:
     if not lambdas:
         return probs.new_tensor(0.0)
@@ -442,6 +443,13 @@ def _utility_decision_aux_loss(
             valid_actions[stop_rows, stop_cols] = True
             pred_scores[stop_rows, stop_cols] = probs.float()[stop_rows, stop_cols]
             true_scores[stop_rows, stop_cols] = targets[stop_rows, stop_cols] + float(stop_tie_bonus)
+        if bool(bare_out_action):
+            bare_rows = (~has_stop).view(-1, 1)
+            out_pred_scores = torch.zeros((batch_size, 1), dtype=pred_scores.dtype, device=pred_scores.device)
+            out_true_scores = torch.zeros((batch_size, 1), dtype=true_scores.dtype, device=true_scores.device)
+            pred_scores = torch.cat([pred_scores, out_pred_scores], dim=1)
+            true_scores = torch.cat([true_scores, out_true_scores], dim=1)
+            valid_actions = torch.cat([valid_actions, bare_rows], dim=1)
         masked_pred_scores = pred_scores.masked_fill(~valid_actions, -1.0e9) / float(temperature)
         masked_true_scores = true_scores.masked_fill(~valid_actions, -1.0e9)
         target_actions = torch.argmax(masked_true_scores, dim=1)
@@ -629,6 +637,7 @@ def _simulate_direct_policy(
     lambda_value: float,
     route_count: int,
     selection_route_costs: list[float],
+    policy_bare_out_action: bool,
 ) -> list[dict[str, Any]]:
     decisions: list[dict[str, Any]] = []
     bare_mask = [False] * route_count
@@ -637,16 +646,26 @@ def _simulate_direct_policy(
         if probs is None:
             choice = 0
         else:
-            choice = _choose_run_from_probs(probs, selection_route_costs, lambda_value, bare_mask)
-            choice = 0 if choice is None else int(choice)
-        decisions.append(
-            {
-                "choice": int(choice),
-                "called_routes": [int(choice)],
-                "reward": float(example["rewards"][choice]),
-                "cost": float(example["route_costs"][choice]),
-            }
-        )
+            selected = _choose_run_from_probs(probs, selection_route_costs, lambda_value, bare_mask)
+            if selected is None:
+                choice = -1 if bool(policy_bare_out_action) else 0
+            else:
+                choice = int(selected)
+                if bool(policy_bare_out_action):
+                    run_score = float(probs[choice]) - float(lambda_value) * float(selection_route_costs[choice])
+                    if run_score <= 0.0:
+                        choice = -1
+        if int(choice) < 0:
+            decisions.append({"choice": -1, "called_routes": [], "reward": 0.0, "cost": 0.0})
+        else:
+            decisions.append(
+                {
+                    "choice": int(choice),
+                    "called_routes": [int(choice)],
+                    "reward": float(example["rewards"][choice]),
+                    "cost": float(example["route_costs"][choice]),
+                }
+            )
     return decisions
 
 
@@ -659,6 +678,7 @@ def _simulate_chain_policy(
     max_steps: int,
     forced_first_route: int | None,
     selection_route_costs: list[float],
+    policy_bare_out_action: bool,
 ) -> list[dict[str, Any]]:
     decisions: list[dict[str, Any]] = []
     for example in examples:
@@ -666,6 +686,7 @@ def _simulate_chain_policy(
         called_routes: list[int] = []
         total_cost = 0.0
         latest_route_idx: int | None = None
+        abstained = False
         if forced_first_route is not None:
             first = int(forced_first_route)
             attempted_mask[first] = True
@@ -678,8 +699,19 @@ def _simulate_chain_policy(
                 if probs is None:
                     next_route = 0
                 else:
-                    next_route = _choose_run_from_probs(probs, selection_route_costs, lambda_value, attempted_mask)
-                    next_route = 0 if next_route is None else int(next_route)
+                    selected = _choose_run_from_probs(probs, selection_route_costs, lambda_value, attempted_mask)
+                    if selected is None:
+                        if bool(policy_bare_out_action):
+                            abstained = True
+                            break
+                        next_route = 0
+                    else:
+                        next_route = int(selected)
+                        if bool(policy_bare_out_action):
+                            run_score = float(probs[next_route]) - float(lambda_value) * float(selection_route_costs[next_route])
+                            if run_score <= 0.0:
+                                abstained = True
+                                break
                 attempted_mask[next_route] = True
                 latest_route_idx = next_route
                 called_routes.append(next_route)
@@ -703,6 +735,9 @@ def _simulate_chain_policy(
             total_cost += float(example["route_costs"][next_route])
             if len(called_routes) >= max(1, int(max_steps)):
                 break
+        if abstained:
+            decisions.append({"choice": -1, "called_routes": [], "reward": 0.0, "cost": 0.0})
+            continue
         if latest_route_idx is None:
             latest_route_idx = 0
             called_routes = [0]
@@ -733,25 +768,32 @@ def _summarize_decisions(
     choice_counts = [0] * route_count
     call_counts = [0] * route_count
     first_call_counts = [0] * route_count
+    out_count = 0
     oracle_matches = 0
     total_reward = 0.0
     total_cost = 0.0
     total_calls = 0.0
     for example, decision in zip(examples, decisions):
         choice = int(decision["choice"])
-        choice_counts[choice] += 1
+        if 0 <= choice < route_count:
+            choice_counts[choice] += 1
+        else:
+            out_count += 1
         total_reward += float(decision["reward"])
         total_cost += float(decision["cost"])
         called = [int(value) for value in decision["called_routes"]]
         total_calls += len(called)
-        if called:
-            first_call_counts[called[0]] += 1
+        if called and 0 <= int(called[0]) < route_count:
+            first_call_counts[int(called[0])] += 1
         for route_idx in called:
-            call_counts[route_idx] += 1
-        if choice == int(example["oracle_choice_idx"]):
+            if 0 <= int(route_idx) < route_count:
+                call_counts[int(route_idx)] += 1
+        if 0 <= choice < route_count and choice == int(example["oracle_choice_idx"]):
             oracle_matches += 1
     mean_reward = math.nan if n == 0 else total_reward / n
     mean_cost = math.nan if n == 0 else total_cost / n
+    choice_counts_by_route = {route_labels[idx]: int(choice_counts[idx]) for idx in range(route_count)}
+    choice_counts_by_route["OUT"] = int(out_count)
     return {
         "policy": policy,
         "policy_type": policy_type,
@@ -762,7 +804,8 @@ def _summarize_decisions(
         "mean_utility": mean_reward - float(lambda_value) * mean_cost,
         "oracle_match_rate": math.nan if n == 0 else oracle_matches / n,
         "mean_called_routes": math.nan if n == 0 else total_calls / n,
-        "choice_counts_by_route": {route_labels[idx]: int(choice_counts[idx]) for idx in range(route_count)},
+        "out_rate": math.nan if n == 0 else out_count / n,
+        "choice_counts_by_route": choice_counts_by_route,
         "call_counts_by_route": {route_labels[idx]: int(call_counts[idx]) for idx in range(route_count)},
         "first_call_counts_by_route": {route_labels[idx]: int(first_call_counts[idx]) for idx in range(route_count)},
     }
@@ -778,11 +821,25 @@ def _simulate_policies(
     max_policy_steps: int,
     selection_route_costs: list[float],
     selection_cost_mode: str,
+    policy_bare_out_action: bool,
 ) -> list[dict[str, Any]]:
     route_count = len(route_labels)
     pred_lookup = _prediction_lookup(pred_rows)
     rows: list[dict[str, Any]] = []
     for lambda_value in lambdas:
+        if bool(policy_bare_out_action):
+            decisions = [{"choice": -1, "called_routes": [], "reward": 0.0, "cost": 0.0} for _ in examples]
+            rows.append(
+                _summarize_decisions(
+                    policy="always::OUT",
+                    policy_type="always_out",
+                    lambda_value=float(lambda_value),
+                    examples=examples,
+                    decisions=decisions,
+                    route_labels=route_labels,
+                    selection_cost_mode="none",
+                )
+            )
         for route_idx, route_label in enumerate(route_labels):
             decisions = [
                 {
@@ -810,15 +867,18 @@ def _simulate_policies(
                 float(example["rewards"][idx]) - float(lambda_value) * float(example["route_costs"][idx])
                 for idx in range(route_count)
             ]
-            choice = _argmax(scores)
-            oracle_decisions.append(
-                {
-                    "choice": int(choice),
-                    "called_routes": [int(choice)],
-                    "reward": float(example["rewards"][choice]),
-                    "cost": float(example["route_costs"][choice]),
-                }
-            )
+            if bool(policy_bare_out_action) and max(scores) <= 0.0:
+                oracle_decisions.append({"choice": -1, "called_routes": [], "reward": 0.0, "cost": 0.0})
+            else:
+                choice = _argmax(scores)
+                oracle_decisions.append(
+                    {
+                        "choice": int(choice),
+                        "called_routes": [int(choice)],
+                        "reward": float(example["rewards"][choice]),
+                        "cost": float(example["route_costs"][choice]),
+                    }
+                )
         rows.append(
             _summarize_decisions(
                 policy="oracle_direct",
@@ -836,15 +896,18 @@ def _simulate_policies(
                 float(example["rewards"][idx]) - float(lambda_value) * float(selection_route_costs[idx])
                 for idx in range(route_count)
             ]
-            fixed_choice = _argmax(fixed_scores)
-            oracle_fixed_decisions.append(
-                {
-                    "choice": int(fixed_choice),
-                    "called_routes": [int(fixed_choice)],
-                    "reward": float(example["rewards"][fixed_choice]),
-                    "cost": float(example["route_costs"][fixed_choice]),
-                }
-            )
+            if bool(policy_bare_out_action) and max(fixed_scores) <= 0.0:
+                oracle_fixed_decisions.append({"choice": -1, "called_routes": [], "reward": 0.0, "cost": 0.0})
+            else:
+                fixed_choice = _argmax(fixed_scores)
+                oracle_fixed_decisions.append(
+                    {
+                        "choice": int(fixed_choice),
+                        "called_routes": [int(fixed_choice)],
+                        "reward": float(example["rewards"][fixed_choice]),
+                        "cost": float(example["route_costs"][fixed_choice]),
+                    }
+                )
         rows.append(
             _summarize_decisions(
                 policy="oracle_direct_fixed_cost_selection",
@@ -858,7 +921,7 @@ def _simulate_policies(
         )
         rows.append(
             _summarize_decisions(
-                policy="state_policy::input_only_direct",
+                policy="state_policy::input_only_direct_with_out" if bool(policy_bare_out_action) else "state_policy::input_only_direct",
                 policy_type="input_only_direct",
                 lambda_value=float(lambda_value),
                 examples=examples,
@@ -868,6 +931,7 @@ def _simulate_policies(
                     lambda_value=float(lambda_value),
                     route_count=route_count,
                     selection_route_costs=selection_route_costs,
+                    policy_bare_out_action=bool(policy_bare_out_action),
                 ),
                 route_labels=route_labels,
                 selection_cost_mode=str(selection_cost_mode),
@@ -875,7 +939,11 @@ def _simulate_policies(
         )
         rows.append(
             _summarize_decisions(
-                policy=f"state_policy::flexible_bare_max{int(max_policy_steps)}",
+                policy=(
+                    f"state_policy::flexible_bare_max{int(max_policy_steps)}_with_out"
+                    if bool(policy_bare_out_action)
+                    else f"state_policy::flexible_bare_max{int(max_policy_steps)}"
+                ),
                 policy_type="flexible_bare_chain",
                 lambda_value=float(lambda_value),
                 examples=examples,
@@ -887,6 +955,7 @@ def _simulate_policies(
                     max_steps=int(max_policy_steps),
                     forced_first_route=None,
                     selection_route_costs=selection_route_costs,
+                    policy_bare_out_action=bool(policy_bare_out_action),
                 ),
                 route_labels=route_labels,
                 selection_cost_mode=str(selection_cost_mode),
@@ -906,6 +975,7 @@ def _simulate_policies(
                     max_steps=int(max_policy_steps),
                     forced_first_route=int(scout_route_idx),
                     selection_route_costs=selection_route_costs,
+                    policy_bare_out_action=False,
                 ),
                 route_labels=route_labels,
                 selection_cost_mode=str(selection_cost_mode),
@@ -954,6 +1024,7 @@ def _write_reports(
     eval_loss: float,
     selection_route_costs: list[float],
     selection_cost_mode: str,
+    policy_bare_out_action: bool,
 ) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
     _write_jsonl(output_dir / "train_state_predictions.jsonl", train_pred_rows)
@@ -973,6 +1044,7 @@ def _write_reports(
         max_policy_steps=int(max_policy_steps),
         selection_route_costs=selection_route_costs,
         selection_cost_mode=str(selection_cost_mode),
+        policy_bare_out_action=bool(policy_bare_out_action),
     )
     utility_headers = [
         "policy",
@@ -984,6 +1056,7 @@ def _write_reports(
         "mean_utility",
         "oracle_match_rate",
         "mean_called_routes",
+        "out_rate",
         "choice_counts_by_route",
         "call_counts_by_route",
         "first_call_counts_by_route",
@@ -1018,6 +1091,7 @@ def _write_reports(
             "lambdas": lambdas,
             "scout_route_idx": int(scout_route_idx),
             "max_policy_steps": int(max_policy_steps),
+            "policy_bare_out_action": bool(policy_bare_out_action),
             "selection_cost_mode": str(selection_cost_mode),
             "selection_route_costs": [float(value) for value in selection_route_costs],
             "n_train_examples": len(train_examples),
@@ -1073,6 +1147,8 @@ def main() -> None:
     parser.add_argument("--decision-aux-temperature", type=float, default=0.1)
     parser.add_argument("--decision-aux-cost-mode", choices=["actual", "fixed_train_mean"], default="fixed_train_mean")
     parser.add_argument("--decision-aux-stop-tie-bonus", type=float, default=1.0e-4)
+    parser.add_argument("--decision-aux-bare-out-action", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--policy-bare-out-action", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--sample-weighting", choices=["uniform", "regret_default", "oracle_margin"], default="uniform")
     parser.add_argument("--regret-lambdas", default=None)
     parser.add_argument("--regret-default-route-idx", type=int, default=0)
@@ -1247,6 +1323,8 @@ def main() -> None:
         "decision_aux_temperature": float(args.decision_aux_temperature),
         "decision_aux_cost_mode": str(args.decision_aux_cost_mode),
         "decision_aux_stop_tie_bonus": float(args.decision_aux_stop_tie_bonus),
+        "decision_aux_bare_out_action": bool(args.decision_aux_bare_out_action),
+        "policy_bare_out_action": bool(args.policy_bare_out_action),
         "sample_weighting": str(args.sample_weighting),
         "regret_default_route_idx": int(args.regret_default_route_idx),
         "regret_weight_scale": float(args.regret_weight_scale),
@@ -1359,6 +1437,7 @@ def main() -> None:
                         temperature=float(args.decision_aux_temperature),
                         sample_weights=sample_weights,
                         stop_tie_bonus=float(args.decision_aux_stop_tie_bonus),
+                        bare_out_action=bool(args.decision_aux_bare_out_action),
                     )
                     loss = loss + float(args.decision_aux_weight) * decision_loss
                 accelerator.backward(loss)
@@ -1413,6 +1492,7 @@ def main() -> None:
                     eval_loss=float(eval_loss),
                     selection_route_costs=fixed_train_costs,
                     selection_cost_mode="fixed_train_mean",
+                    policy_bare_out_action=bool(args.policy_bare_out_action),
                 )
             accelerator.wait_for_everyone()
         if bool(args.checkpoint_every_epoch):
@@ -1456,6 +1536,7 @@ def main() -> None:
         eval_loss=float(eval_loss),
         selection_route_costs=fixed_train_costs,
         selection_cost_mode="fixed_train_mean",
+        policy_bare_out_action=bool(args.policy_bare_out_action),
     )
     if args.save_model:
         unwrapped = accelerator.unwrap_model(model)

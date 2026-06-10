@@ -42,6 +42,8 @@ DECISION_AUX_LAMBDAS=${DECISION_AUX_LAMBDAS:-${UTILITY_LAMBDAS}}
 DECISION_AUX_TEMPERATURE=${DECISION_AUX_TEMPERATURE:-0.1}
 DECISION_AUX_COST_MODE=${DECISION_AUX_COST_MODE:-fixed_train_mean}
 DECISION_AUX_STOP_TIE_BONUS=${DECISION_AUX_STOP_TIE_BONUS:-1.0e-4}
+DECISION_AUX_BARE_OUT_ACTION=${DECISION_AUX_BARE_OUT_ACTION:-false}
+POLICY_BARE_OUT_ACTION=${POLICY_BARE_OUT_ACTION:-false}
 MLP_HIDDEN_SIZE=${MLP_HIDDEN_SIZE:-1024}
 DROPOUT=${DROPOUT:-0.1}
 TORCH_DTYPE=${TORCH_DTYPE:-bf16}
@@ -100,6 +102,16 @@ if [[ "${INCLUDE_COSTS_IN_PROMPT}" != "true" ]]; then
   COSTS_IN_PROMPT_ARG="--no-include-costs-in-prompt"
 fi
 
+DECISION_AUX_BARE_OUT_ARG=""
+if [[ "${DECISION_AUX_BARE_OUT_ACTION}" == "true" ]]; then
+  DECISION_AUX_BARE_OUT_ARG="--decision-aux-bare-out-action"
+fi
+
+POLICY_BARE_OUT_ARG=""
+if [[ "${POLICY_BARE_OUT_ACTION}" == "true" ]]; then
+  POLICY_BARE_OUT_ARG="--policy-bare-out-action"
+fi
+
 if [[ ! -f "${REAL_LABEL_DATASET_DIR}/metadata.json" ]]; then
   echo "Missing real-label router dataset: ${REAL_LABEL_DATASET_DIR}/metadata.json" >&2
   echo "Generate it once with pipelinerl/swe/scripts/offline_router/materialize_real_label_router_dataset.py, or set REAL_LABEL_DATASET_DIR." >&2
@@ -154,6 +166,8 @@ make job \
       --decision-aux-temperature ${DECISION_AUX_TEMPERATURE} \
       --decision-aux-cost-mode ${DECISION_AUX_COST_MODE} \
       --decision-aux-stop-tie-bonus ${DECISION_AUX_STOP_TIE_BONUS} \
+      ${DECISION_AUX_BARE_OUT_ARG} \
+      ${POLICY_BARE_OUT_ARG} \
       --epoch-report-every ${EPOCH_REPORT_EVERY} \
       ${CHECKPOINT_ARG} \
       ${RESUME_ARG} \
