@@ -3,13 +3,14 @@ set -euo pipefail
 
 OUTPUT_DIR=${OUTPUT_DIR:-/mnt/llmd/results/exps/aristides/reason/offline_router_swe_smith_trace_cost_4route_expanded_1781073985/collect}
 OVERWRITE=${OVERWRITE:-false}
+PYTHON=${PYTHON:-/home/toolkit/.conda/envs/pipeline-rl/bin/python}
 
 OVERWRITE_ARG=""
 if [[ "${OVERWRITE}" == "true" ]]; then
   OVERWRITE_ARG="--overwrite"
 fi
 
-python pipelinerl/swe/scripts/offline_router/materialize_trace_cost_router_dataset.py \
+"${PYTHON}" pipelinerl/swe/scripts/offline_router/materialize_trace_cost_router_dataset.py \
   --output-dir "${OUTPUT_DIR}" \
   --train-dataset-path /mnt/llmd/data/swe_smith_bugged_context/ds_train \
   --eval-dataset-path /mnt/llmd/data/swe_smith_bugged_context/ds_test \
