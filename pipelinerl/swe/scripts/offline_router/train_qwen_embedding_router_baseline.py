@@ -1494,6 +1494,12 @@ def main() -> None:
     parser.add_argument("--ddp-find-unused-parameters", action="store_true")
     parser.add_argument("--checkpoint-every-epoch", action="store_true")
     parser.add_argument("--resume-from-checkpoint", default=None)
+    parser.add_argument("--eval-only", action="store_true")
+    parser.add_argument(
+        "--cost-normalization-config",
+        default=None,
+        help="Optional train_config.json/summary.json whose cost_target_mean/std should be reused for eval-only scoring.",
+    )
     parser.add_argument("--save-model", action="store_true")
     args = parser.parse_args()
 
@@ -1617,6 +1623,21 @@ def main() -> None:
     cost_target_mean_tensor = (
         torch.tensor(cost_target_mean_values, dtype=torch.float32) if cost_target_mean_values else None
     )
+    if args.cost_normalization_config:
+        cost_normalization_config = Path(args.cost_normalization_config)
+        if not cost_normalization_config.exists():
+            raise FileNotFoundError(f"Missing cost normalization config: {cost_normalization_config}")
+        normalization_payload = json.loads(cost_normalization_config.read_text())
+        normalization_config = normalization_payload.get("config", normalization_payload)
+        cost_target_mean_values = [float(value) for value in normalization_config.get("cost_target_mean_log1p", [])]
+        cost_target_std_values = [float(value) for value in normalization_config.get("cost_target_std_log1p", [])]
+        if bool(args.predict_costs) and (
+            len(cost_target_mean_values) != cost_target_dim or len(cost_target_std_values) != cost_target_dim
+        ):
+            raise ValueError(
+                "Cost normalization config dimension mismatch: "
+                f"mean={len(cost_target_mean_values)} std={len(cost_target_std_values)} expected={cost_target_dim}"
+            )
     cost_target_std_tensor = (
         torch.tensor(cost_target_std_values, dtype=torch.float32) if cost_target_std_values else None
     )
@@ -1795,6 +1816,8 @@ def main() -> None:
         "ddp_find_unused_parameters": bool(args.ddp_find_unused_parameters),
         "checkpoint_every_epoch": bool(args.checkpoint_every_epoch),
         "resume_from_checkpoint": str(args.resume_from_checkpoint) if args.resume_from_checkpoint else None,
+        "eval_only": bool(args.eval_only),
+        "cost_normalization_config": str(args.cost_normalization_config) if args.cost_normalization_config else None,
     }
     if accelerator.is_main_process:
         write_json(output_dir / "train_config.json", config)
@@ -1822,49 +1845,9 @@ def main() -> None:
         if accelerator.is_main_process:
             print(f"Resumed from {resume_from_checkpoint}; starting at epoch {start_epoch}", flush=True)
 
-    for epoch in range(start_epoch, int(args.num_epochs)):
-        model.train()
-        running_losses: list[float] = []
-        for batch in tqdm(train_loader, desc=f"Train Qwen embedding router epoch {epoch}", disable=not accelerator.is_main_process):
-            with accelerator.accumulate(model):
-                reward_logits, cost_logits, zero_reward_logits = _predict_from_batch(
-                    model,
-                    batch,
-                    cost_only=args.objective == "cost_mse",
-                )
-                loss = _compute_train_loss(
-                    reward_logits=reward_logits.float(),
-                    cost_logits=cost_logits.float() if cost_logits is not None else None,
-                    zero_reward_logits=zero_reward_logits.float() if zero_reward_logits is not None else None,
-                    targets=batch["targets"].float(),
-                    output_token_targets_log=_normalize_cost_targets(
-                        batch["output_token_targets_log"].float(),
-                        cost_target_mean_tensor,
-                        cost_target_std_tensor,
-                        str(args.cost_target_normalization),
-                    ),
-                    zero_reward_targets=batch["zero_reward_targets"].float(),
-                    class_targets=batch["class_targets"],
-                    class_weights=class_weights_tensor,
-                    objective=str(args.objective),
-                    hierarchical_any_success_weight=float(args.hierarchical_any_success_weight),
-                    hierarchical_route_weight=float(args.hierarchical_route_weight),
-                    reward_mse_weight=float(args.reward_mse_weight),
-                    reward_bce_weight=float(args.reward_bce_weight),
-                    delta_aux_weight=float(args.delta_aux_weight),
-                    delta_aux_huber_delta=float(args.delta_aux_huber_delta),
-                    predict_costs=bool(args.predict_costs),
-                    cost_mse_weight=float(args.cost_mse_weight),
-                    cost_delta_aux_weight=float(args.cost_delta_aux_weight),
-                    predict_zero_reward_failure=bool(args.predict_zero_reward_failure),
-                    zero_reward_bce_weight=float(args.zero_reward_bce_weight),
-                )
-                accelerator.backward(loss)
-                optimizer.step()
-                scheduler.step()
-                optimizer.zero_grad(set_to_none=True)
-                running_losses.append(float(loss.detach().item()))
-        accelerator.wait_for_everyone()
+    if bool(args.eval_only):
+        if resume_from_checkpoint is None:
+            raise ValueError("--eval-only requires --resume-from-checkpoint")
         (
             eval_loss,
             pred_rows,
@@ -1890,39 +1873,122 @@ def main() -> None:
             cost_target_mean=cost_target_mean_tensor,
             cost_target_std=cost_target_std_tensor,
         )
-        train_loss = float(np.mean(running_losses)) if running_losses else math.nan
         if accelerator.is_main_process:
-            epoch_summary = {"epoch": epoch, "train_loss": train_loss, "eval_loss": eval_loss}
-            history.append(epoch_summary)
-            if eval_loss < best_eval_loss:
-                best_eval_loss = eval_loss
-                best_payload = {
-                    "epoch": epoch,
-                    "prediction_rows": pred_rows,
-                    "y_true": y_true,
-                    "y_pred": y_pred,
-                    "y_cost_true": y_cost_true,
-                    "y_cost_pred": y_cost_pred,
-                    "y_zero_reward_true": y_zero_reward_true,
-                    "y_zero_reward_pred": y_zero_reward_pred,
-                }
+            best_eval_loss = float(eval_loss)
+            best_payload = {
+                "epoch": int(start_epoch),
+                "prediction_rows": pred_rows,
+                "y_true": y_true,
+                "y_pred": y_pred,
+                "y_cost_true": y_cost_true,
+                "y_cost_pred": y_cost_pred,
+                "y_zero_reward_true": y_zero_reward_true,
+                "y_zero_reward_pred": y_zero_reward_pred,
+            }
+            history.append({"epoch": int(start_epoch), "train_loss": math.nan, "eval_loss": float(eval_loss), "eval_only": True})
         accelerator.wait_for_everyone()
-        if bool(args.checkpoint_every_epoch):
-            checkpoint_dir = output_dir / "checkpoints" / f"epoch_{epoch:04d}"
-            accelerator.save_state(str(checkpoint_dir))
+    else:
+        for epoch in range(start_epoch, int(args.num_epochs)):
+            model.train()
+            running_losses: list[float] = []
+            for batch in tqdm(train_loader, desc=f"Train Qwen embedding router epoch {epoch}", disable=not accelerator.is_main_process):
+                with accelerator.accumulate(model):
+                    reward_logits, cost_logits, zero_reward_logits = _predict_from_batch(
+                        model,
+                        batch,
+                        cost_only=args.objective == "cost_mse",
+                    )
+                    loss = _compute_train_loss(
+                        reward_logits=reward_logits.float(),
+                        cost_logits=cost_logits.float() if cost_logits is not None else None,
+                        zero_reward_logits=zero_reward_logits.float() if zero_reward_logits is not None else None,
+                        targets=batch["targets"].float(),
+                        output_token_targets_log=_normalize_cost_targets(
+                            batch["output_token_targets_log"].float(),
+                            cost_target_mean_tensor,
+                            cost_target_std_tensor,
+                            str(args.cost_target_normalization),
+                        ),
+                        zero_reward_targets=batch["zero_reward_targets"].float(),
+                        class_targets=batch["class_targets"],
+                        class_weights=class_weights_tensor,
+                        objective=str(args.objective),
+                        hierarchical_any_success_weight=float(args.hierarchical_any_success_weight),
+                        hierarchical_route_weight=float(args.hierarchical_route_weight),
+                        reward_mse_weight=float(args.reward_mse_weight),
+                        reward_bce_weight=float(args.reward_bce_weight),
+                        delta_aux_weight=float(args.delta_aux_weight),
+                        delta_aux_huber_delta=float(args.delta_aux_huber_delta),
+                        predict_costs=bool(args.predict_costs),
+                        cost_mse_weight=float(args.cost_mse_weight),
+                        cost_delta_aux_weight=float(args.cost_delta_aux_weight),
+                        predict_zero_reward_failure=bool(args.predict_zero_reward_failure),
+                        zero_reward_bce_weight=float(args.zero_reward_bce_weight),
+                    )
+                    accelerator.backward(loss)
+                    optimizer.step()
+                    scheduler.step()
+                    optimizer.zero_grad(set_to_none=True)
+                    running_losses.append(float(loss.detach().item()))
             accelerator.wait_for_everyone()
+            (
+                eval_loss,
+                pred_rows,
+                y_true,
+                y_pred,
+                y_cost_true,
+                y_cost_pred,
+                y_zero_reward_true,
+                y_zero_reward_pred,
+            ) = _evaluate(
+                accelerator,
+                model,
+                eval_loader,
+                eval_dataset,
+                route_labels,
+                objective=str(args.objective),
+                predict_costs=bool(args.predict_costs),
+                predict_zero_reward_failure=bool(args.predict_zero_reward_failure),
+                class_weights=class_weights_tensor,
+                hierarchical_any_success_weight=float(args.hierarchical_any_success_weight),
+                hierarchical_route_weight=float(args.hierarchical_route_weight),
+                cost_target_normalization=str(args.cost_target_normalization),
+                cost_target_mean=cost_target_mean_tensor,
+                cost_target_std=cost_target_std_tensor,
+            )
+            train_loss = float(np.mean(running_losses)) if running_losses else math.nan
             if accelerator.is_main_process:
-                write_json(
-                    checkpoint_dir / "trainer_state.json",
-                    {
-                        "epoch": int(epoch),
-                        "next_epoch": int(epoch) + 1,
-                        "history": history,
-                        "best_eval_loss": float(best_eval_loss),
-                        "num_epochs": int(args.num_epochs),
-                    },
-                )
+                epoch_summary = {"epoch": epoch, "train_loss": train_loss, "eval_loss": eval_loss}
+                history.append(epoch_summary)
+                if eval_loss < best_eval_loss:
+                    best_eval_loss = eval_loss
+                    best_payload = {
+                        "epoch": epoch,
+                        "prediction_rows": pred_rows,
+                        "y_true": y_true,
+                        "y_pred": y_pred,
+                        "y_cost_true": y_cost_true,
+                        "y_cost_pred": y_cost_pred,
+                        "y_zero_reward_true": y_zero_reward_true,
+                        "y_zero_reward_pred": y_zero_reward_pred,
+                    }
             accelerator.wait_for_everyone()
+            if bool(args.checkpoint_every_epoch):
+                checkpoint_dir = output_dir / "checkpoints" / f"epoch_{epoch:04d}"
+                accelerator.save_state(str(checkpoint_dir))
+                accelerator.wait_for_everyone()
+                if accelerator.is_main_process:
+                    write_json(
+                        checkpoint_dir / "trainer_state.json",
+                        {
+                            "epoch": int(epoch),
+                            "next_epoch": int(epoch) + 1,
+                            "history": history,
+                            "best_eval_loss": float(best_eval_loss),
+                            "num_epochs": int(args.num_epochs),
+                        },
+                    )
+                accelerator.wait_for_everyone()
 
     if not accelerator.is_main_process:
         return

@@ -416,15 +416,48 @@ def _utility_decision_aux_loss(
     latest_route_idxs: torch.Tensor,
     route_costs: torch.Tensor,
     lambdas: list[float],
+    lambda_sampling: str,
+    lambda_sample_count: int,
+    lambda_min: float,
+    lambda_max: float,
     temperature: float,
     sample_weights: torch.Tensor,
     stop_tie_bonus: float,
     bare_out_action: bool,
+    regret_weight_mode: str,
+    regret_default_route_idx: int,
+    regret_weight_scale: float,
+    regret_weight_power: float,
+    regret_weight_min: float,
+    regret_weight_max: float,
 ) -> torch.Tensor:
-    if not lambdas:
+    if lambda_sampling == "none":
+        sampled_lambdas = [float(value) for value in lambdas]
+    else:
+        if lambda_sample_count <= 0:
+            raise ValueError("decision auxiliary lambda sample count must be positive")
+        if lambda_min < 0.0 or lambda_max < lambda_min:
+            raise ValueError("invalid decision auxiliary lambda sampling range")
+        if lambda_sampling == "uniform":
+            values = torch.empty((int(lambda_sample_count),), device=probs.device).uniform_(
+                float(lambda_min), float(lambda_max)
+            )
+        elif lambda_sampling == "log_uniform":
+            if lambda_min <= 0.0:
+                raise ValueError("log-uniform decision auxiliary lambda sampling requires lambda_min > 0")
+            values = torch.empty((int(lambda_sample_count),), device=probs.device).uniform_(
+                math.log(float(lambda_min)), math.log(float(lambda_max))
+            ).exp()
+        else:
+            raise ValueError(f"Unsupported decision auxiliary lambda sampling mode: {lambda_sampling}")
+        sampled_lambdas = [float(value.detach().item()) for value in values]
+
+    if not sampled_lambdas:
         return probs.new_tensor(0.0)
     if temperature <= 0.0:
         raise ValueError("decision auxiliary temperature must be positive")
+    if regret_weight_mode not in {"none", "oracle_margin", "default_action"}:
+        raise ValueError(f"Unsupported decision auxiliary regret weight mode: {regret_weight_mode}")
     targets = targets.float()
     route_costs = route_costs.float()
     attempted_masks = attempted_masks.bool()
@@ -434,7 +467,7 @@ def _utility_decision_aux_loss(
     batch_size, route_count = targets.shape
     route_positions = torch.arange(batch_size, device=targets.device)
     losses: list[torch.Tensor] = []
-    for lambda_value in lambdas:
+    for lambda_value in sampled_lambdas:
         lambda_float = float(lambda_value)
         pred_scores = probs.float() - lambda_float * route_costs
         true_scores = targets - lambda_float * route_costs
@@ -455,7 +488,35 @@ def _utility_decision_aux_loss(
         masked_pred_scores = pred_scores.masked_fill(~valid_actions, -1.0e9) / float(temperature)
         masked_true_scores = true_scores.masked_fill(~valid_actions, -1.0e9)
         target_actions = torch.argmax(masked_true_scores, dim=1)
-        losses.append(F.cross_entropy(masked_pred_scores, target_actions, reduction="none"))
+        per_sample_ce = F.cross_entropy(masked_pred_scores, target_actions, reduction="none")
+        if regret_weight_mode != "none":
+            best_values = masked_true_scores.max(dim=1).values
+            if regret_weight_mode == "oracle_margin":
+                topk = torch.topk(masked_true_scores, k=min(2, masked_true_scores.shape[1]), dim=1).values
+                if topk.shape[1] > 1:
+                    margins = (topk[:, 0] - topk[:, 1]).clamp_min(0.0)
+                else:
+                    margins = torch.zeros_like(best_values)
+            else:
+                default_cols = torch.full(
+                    (batch_size,),
+                    min(max(int(regret_default_route_idx), 0), route_count - 1),
+                    dtype=torch.long,
+                    device=targets.device,
+                )
+                if bool(has_stop.any().item()):
+                    default_cols = torch.where(has_stop, latest_route_idxs, default_cols)
+                default_values = true_scores.gather(1, default_cols.view(-1, 1)).squeeze(1)
+                margins = (best_values - default_values).clamp_min(0.0)
+            powered = torch.where(
+                margins > 0.0,
+                margins.pow(float(regret_weight_power)),
+                torch.zeros_like(margins),
+            )
+            regret_weights = float(regret_weight_min) + float(regret_weight_scale) * powered
+            regret_weights = regret_weights.clamp(float(regret_weight_min), float(regret_weight_max))
+            per_sample_ce = per_sample_ce * regret_weights
+        losses.append(per_sample_ce)
     per_sample_loss = torch.stack(losses, dim=0).mean(dim=0)
     return (per_sample_loss * sample_weights).sum() / sample_weights.sum().clamp_min(1.0)
 
@@ -1146,10 +1207,19 @@ def main() -> None:
     parser.add_argument("--delta-aux-huber-delta", type=float, default=0.0)
     parser.add_argument("--decision-aux-weight", type=float, default=0.0)
     parser.add_argument("--decision-aux-lambdas", default=None)
+    parser.add_argument("--decision-aux-lambda-sampling", choices=["none", "uniform", "log_uniform"], default="none")
+    parser.add_argument("--decision-aux-lambda-sample-count", type=int, default=1)
+    parser.add_argument("--decision-aux-lambda-min", type=float, default=0.0)
+    parser.add_argument("--decision-aux-lambda-max", type=float, default=0.0)
     parser.add_argument("--decision-aux-temperature", type=float, default=0.1)
     parser.add_argument("--decision-aux-cost-mode", choices=["actual", "fixed_train_mean"], default="fixed_train_mean")
     parser.add_argument("--decision-aux-stop-tie-bonus", type=float, default=1.0e-4)
     parser.add_argument("--decision-aux-bare-out-action", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--decision-aux-regret-weight-mode", choices=["none", "oracle_margin", "default_action"], default="none")
+    parser.add_argument("--decision-aux-regret-weight-scale", type=float, default=0.0)
+    parser.add_argument("--decision-aux-regret-weight-power", type=float, default=1.0)
+    parser.add_argument("--decision-aux-regret-weight-min", type=float, default=1.0)
+    parser.add_argument("--decision-aux-regret-weight-max", type=float, default=8.0)
     parser.add_argument("--policy-bare-out-action", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--sample-weighting", choices=["uniform", "regret_default", "oracle_margin"], default="uniform")
     parser.add_argument("--regret-lambdas", default=None)
@@ -1322,10 +1392,19 @@ def main() -> None:
         "regret_lambdas": regret_lambdas,
         "decision_aux_lambdas": decision_aux_lambdas,
         "decision_aux_weight": float(args.decision_aux_weight),
+        "decision_aux_lambda_sampling": str(args.decision_aux_lambda_sampling),
+        "decision_aux_lambda_sample_count": int(args.decision_aux_lambda_sample_count),
+        "decision_aux_lambda_min": float(args.decision_aux_lambda_min),
+        "decision_aux_lambda_max": float(args.decision_aux_lambda_max),
         "decision_aux_temperature": float(args.decision_aux_temperature),
         "decision_aux_cost_mode": str(args.decision_aux_cost_mode),
         "decision_aux_stop_tie_bonus": float(args.decision_aux_stop_tie_bonus),
         "decision_aux_bare_out_action": bool(args.decision_aux_bare_out_action),
+        "decision_aux_regret_weight_mode": str(args.decision_aux_regret_weight_mode),
+        "decision_aux_regret_weight_scale": float(args.decision_aux_regret_weight_scale),
+        "decision_aux_regret_weight_power": float(args.decision_aux_regret_weight_power),
+        "decision_aux_regret_weight_min": float(args.decision_aux_regret_weight_min),
+        "decision_aux_regret_weight_max": float(args.decision_aux_regret_weight_max),
         "policy_bare_out_action": bool(args.policy_bare_out_action),
         "sample_weighting": str(args.sample_weighting),
         "regret_default_route_idx": int(args.regret_default_route_idx),
@@ -1436,10 +1515,20 @@ def main() -> None:
                         latest_route_idxs=batch["latest_route_idxs"],
                         route_costs=decision_route_costs,
                         lambdas=decision_aux_lambdas,
+                        lambda_sampling=str(args.decision_aux_lambda_sampling),
+                        lambda_sample_count=int(args.decision_aux_lambda_sample_count),
+                        lambda_min=float(args.decision_aux_lambda_min),
+                        lambda_max=float(args.decision_aux_lambda_max),
                         temperature=float(args.decision_aux_temperature),
                         sample_weights=sample_weights,
                         stop_tie_bonus=float(args.decision_aux_stop_tie_bonus),
                         bare_out_action=bool(args.decision_aux_bare_out_action),
+                        regret_weight_mode=str(args.decision_aux_regret_weight_mode),
+                        regret_default_route_idx=int(args.regret_default_route_idx),
+                        regret_weight_scale=float(args.decision_aux_regret_weight_scale),
+                        regret_weight_power=float(args.decision_aux_regret_weight_power),
+                        regret_weight_min=float(args.decision_aux_regret_weight_min),
+                        regret_weight_max=float(args.decision_aux_regret_weight_max),
                     )
                     loss = loss + float(args.decision_aux_weight) * decision_loss
                 accelerator.backward(loss)

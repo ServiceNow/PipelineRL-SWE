@@ -39,11 +39,28 @@ DELTA_AUX_WEIGHT=${DELTA_AUX_WEIGHT:-0.0}
 DELTA_AUX_HUBER_DELTA=${DELTA_AUX_HUBER_DELTA:-0.0}
 DECISION_AUX_WEIGHT=${DECISION_AUX_WEIGHT:-0.0}
 DECISION_AUX_LAMBDAS=${DECISION_AUX_LAMBDAS:-${UTILITY_LAMBDAS}}
+DECISION_AUX_LAMBDA_SAMPLING=${DECISION_AUX_LAMBDA_SAMPLING:-none}
+DECISION_AUX_LAMBDA_SAMPLE_COUNT=${DECISION_AUX_LAMBDA_SAMPLE_COUNT:-1}
+DECISION_AUX_LAMBDA_MIN=${DECISION_AUX_LAMBDA_MIN:-0}
+DECISION_AUX_LAMBDA_MAX=${DECISION_AUX_LAMBDA_MAX:-0}
 DECISION_AUX_TEMPERATURE=${DECISION_AUX_TEMPERATURE:-0.1}
 DECISION_AUX_COST_MODE=${DECISION_AUX_COST_MODE:-fixed_train_mean}
 DECISION_AUX_STOP_TIE_BONUS=${DECISION_AUX_STOP_TIE_BONUS:-1.0e-4}
 DECISION_AUX_BARE_OUT_ACTION=${DECISION_AUX_BARE_OUT_ACTION:-false}
+DECISION_AUX_REGRET_WEIGHT_MODE=${DECISION_AUX_REGRET_WEIGHT_MODE:-none}
+DECISION_AUX_REGRET_WEIGHT_SCALE=${DECISION_AUX_REGRET_WEIGHT_SCALE:-0.0}
+DECISION_AUX_REGRET_WEIGHT_POWER=${DECISION_AUX_REGRET_WEIGHT_POWER:-1.0}
+DECISION_AUX_REGRET_WEIGHT_MIN=${DECISION_AUX_REGRET_WEIGHT_MIN:-1.0}
+DECISION_AUX_REGRET_WEIGHT_MAX=${DECISION_AUX_REGRET_WEIGHT_MAX:-8.0}
 POLICY_BARE_OUT_ACTION=${POLICY_BARE_OUT_ACTION:-false}
+SAMPLE_WEIGHTING=${SAMPLE_WEIGHTING:-uniform}
+REGRET_LAMBDAS=${REGRET_LAMBDAS:-${UTILITY_LAMBDAS}}
+REGRET_DEFAULT_ROUTE_IDX=${REGRET_DEFAULT_ROUTE_IDX:-0}
+REGRET_WEIGHT_SCALE=${REGRET_WEIGHT_SCALE:-4.0}
+REGRET_WEIGHT_POWER=${REGRET_WEIGHT_POWER:-1.0}
+REGRET_WEIGHT_MIN=${REGRET_WEIGHT_MIN:-1.0}
+REGRET_WEIGHT_MAX=${REGRET_WEIGHT_MAX:-8.0}
+NORMALIZE_SAMPLE_WEIGHTS=${NORMALIZE_SAMPLE_WEIGHTS:-true}
 MLP_HIDDEN_SIZE=${MLP_HIDDEN_SIZE:-1024}
 DROPOUT=${DROPOUT:-0.1}
 TORCH_DTYPE=${TORCH_DTYPE:-bf16}
@@ -112,6 +129,11 @@ if [[ "${POLICY_BARE_OUT_ACTION}" == "true" ]]; then
   POLICY_BARE_OUT_ARG="--policy-bare-out-action"
 fi
 
+NORMALIZE_SAMPLE_WEIGHTS_ARG="--normalize-sample-weights"
+if [[ "${NORMALIZE_SAMPLE_WEIGHTS}" != "true" ]]; then
+  NORMALIZE_SAMPLE_WEIGHTS_ARG="--no-normalize-sample-weights"
+fi
+
 if [[ ! -f "${REAL_LABEL_DATASET_DIR}/metadata.json" ]]; then
   echo "Missing real-label router dataset: ${REAL_LABEL_DATASET_DIR}/metadata.json" >&2
   echo "Generate it once with pipelinerl/swe/scripts/offline_router/materialize_real_label_router_dataset.py, or set REAL_LABEL_DATASET_DIR." >&2
@@ -163,11 +185,28 @@ make job \
       --delta-aux-huber-delta ${DELTA_AUX_HUBER_DELTA} \
       --decision-aux-weight ${DECISION_AUX_WEIGHT} \
       --decision-aux-lambdas ${DECISION_AUX_LAMBDAS} \
+      --decision-aux-lambda-sampling ${DECISION_AUX_LAMBDA_SAMPLING} \
+      --decision-aux-lambda-sample-count ${DECISION_AUX_LAMBDA_SAMPLE_COUNT} \
+      --decision-aux-lambda-min ${DECISION_AUX_LAMBDA_MIN} \
+      --decision-aux-lambda-max ${DECISION_AUX_LAMBDA_MAX} \
       --decision-aux-temperature ${DECISION_AUX_TEMPERATURE} \
       --decision-aux-cost-mode ${DECISION_AUX_COST_MODE} \
       --decision-aux-stop-tie-bonus ${DECISION_AUX_STOP_TIE_BONUS} \
       ${DECISION_AUX_BARE_OUT_ARG} \
+      --decision-aux-regret-weight-mode ${DECISION_AUX_REGRET_WEIGHT_MODE} \
+      --decision-aux-regret-weight-scale ${DECISION_AUX_REGRET_WEIGHT_SCALE} \
+      --decision-aux-regret-weight-power ${DECISION_AUX_REGRET_WEIGHT_POWER} \
+      --decision-aux-regret-weight-min ${DECISION_AUX_REGRET_WEIGHT_MIN} \
+      --decision-aux-regret-weight-max ${DECISION_AUX_REGRET_WEIGHT_MAX} \
       ${POLICY_BARE_OUT_ARG} \
+      --sample-weighting ${SAMPLE_WEIGHTING} \
+      --regret-lambdas ${REGRET_LAMBDAS} \
+      --regret-default-route-idx ${REGRET_DEFAULT_ROUTE_IDX} \
+      --regret-weight-scale ${REGRET_WEIGHT_SCALE} \
+      --regret-weight-power ${REGRET_WEIGHT_POWER} \
+      --regret-weight-min ${REGRET_WEIGHT_MIN} \
+      --regret-weight-max ${REGRET_WEIGHT_MAX} \
+      ${NORMALIZE_SAMPLE_WEIGHTS_ARG} \
       --epoch-report-every ${EPOCH_REPORT_EVERY} \
       ${CHECKPOINT_ARG} \
       ${RESUME_ARG} \
