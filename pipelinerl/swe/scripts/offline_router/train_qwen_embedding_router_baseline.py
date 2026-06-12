@@ -1185,6 +1185,8 @@ def _compute_predicted_cost_utility_report(
     route_labels: list[str],
     lambdas: list[float],
     cost_route_idxs: list[int],
+    reported_cost_route_idxs: list[int] | None = None,
+    reported_cost_route_labels: list[str] | None = None,
 ) -> dict[str, Any]:
     target_dim = len(route_labels)
     cost_route_pos = {int(route_idx): idx for idx, route_idx in enumerate(cost_route_idxs)}
@@ -1286,8 +1288,13 @@ def _compute_predicted_cost_utility_report(
         "skipped_invalid_stats": skipped_invalid_stats,
         "lambdas": [float(value) for value in lambdas],
         "route_labels": list(route_labels),
-        "predicted_cost_route_idxs": [int(idx) for idx in cost_route_idxs],
-        "predicted_cost_route_labels": [route_labels[int(idx)] for idx in cost_route_idxs],
+        "predicted_cost_route_idxs": [int(idx) for idx in (reported_cost_route_idxs or cost_route_idxs)],
+        "predicted_cost_route_labels": list(
+            reported_cost_route_labels
+            if reported_cost_route_labels is not None
+            else [route_labels[int(idx)] for idx in cost_route_idxs]
+        ),
+        "predicted_cost_local_route_idxs": [int(idx) for idx in cost_route_idxs],
         "utility_rows": utility_rows,
     }
 
@@ -1539,6 +1546,8 @@ def _evaluate(
     loader: DataLoader,
     eval_dataset: RouterCostDataset,
     route_labels: list[str],
+    cost_route_idxs: list[int] | None,
+    cost_route_labels: list[str] | None,
     objective: str,
     predict_costs: bool,
     predict_zero_reward_failure: bool,
@@ -1692,6 +1701,8 @@ def _evaluate(
                     "pred_output_tokens_log": [
                         float(value) for value in gathered_cost_preds[idx].tolist()
                     ] if predict_costs else None,
+                    "cost_route_idxs": [int(value) for value in (cost_route_idxs or [])] if predict_costs else None,
+                    "cost_route_labels": list(cost_route_labels or []) if predict_costs else None,
                     "true_zero_reward_failure": [
                         float(value) for value in gathered_zero_reward_targets[idx].tolist()
                     ] if predict_zero_reward_failure else None,
@@ -1857,11 +1868,19 @@ def main() -> None:
     parser.add_argument("--delta-aux-weight", type=float, default=1.0)
     parser.add_argument("--delta-aux-huber-delta", type=float, default=0.0)
     parser.add_argument("--predict-costs", action="store_true")
-    parser.add_argument("--cost-route-idx", type=int, default=1)
+    parser.add_argument(
+        "--cost-route-idx",
+        type=int,
+        default=1,
+        help="Original dataset route index to predict costs for when --cost-route-idxs is omitted.",
+    )
     parser.add_argument(
         "--cost-route-idxs",
         default=None,
-        help="Comma-separated route indices to predict costs for. Defaults to --cost-route-idx.",
+        help=(
+            "Comma-separated original dataset route indices to predict costs for. "
+            "Every index must be included in --target-route-idxs. Defaults to --cost-route-idx."
+        ),
     )
     parser.add_argument(
         "--cost-gradient-mode",
@@ -1952,9 +1971,19 @@ def main() -> None:
     if not cost_route_idxs:
         raise ValueError("--cost-route-idxs resolved to an empty list")
     cost_route_idx = int(cost_route_idxs[0])
-    invalid_cost_route_idxs = [idx for idx in cost_route_idxs if not 0 <= int(idx) < target_dim]
+    target_route_idx_to_local = {int(source_idx): local_idx for local_idx, source_idx in enumerate(target_route_idxs)}
+    invalid_cost_route_idxs = [idx for idx in cost_route_idxs if int(idx) not in target_route_idx_to_local]
     if bool(args.predict_costs) and invalid_cost_route_idxs:
-        raise ValueError(f"--cost-route-idxs contains out-of-range values for {target_dim} routes: {invalid_cost_route_idxs}")
+        raise ValueError(
+            "--cost-route-idxs now expects original dataset route indices, not local filtered positions. "
+            f"Invalid values {invalid_cost_route_idxs}; available target route ids are {target_route_idxs}."
+        )
+    local_cost_route_idxs = [
+        int(target_route_idx_to_local[int(idx)]) for idx in cost_route_idxs if int(idx) in target_route_idx_to_local
+    ]
+    if not local_cost_route_idxs:
+        local_cost_route_idxs = [0]
+    cost_route_labels = [all_route_labels[int(idx)] for idx in cost_route_idxs] if bool(args.predict_costs) else []
     if args.cost_gradient_mode == "separate_adapter" and not args.use_lora:
         raise ValueError("--cost-gradient-mode=separate_adapter requires --use-lora")
     if args.precompute_embeddings and args.cost_gradient_mode == "separate_adapter":
@@ -1980,7 +2009,7 @@ def main() -> None:
         target_route_idxs,
         int(args.max_seq_length),
         require_cost_targets=bool(args.predict_costs),
-        cost_route_idxs=cost_route_idxs,
+        cost_route_idxs=local_cost_route_idxs,
         zero_reward_epsilon=float(args.zero_reward_epsilon),
         input_mode=str(args.input_mode),
         include_primary_output_token_count=bool(args.include_primary_output_token_count),
@@ -1997,7 +2026,7 @@ def main() -> None:
         target_route_idxs,
         int(args.max_seq_length),
         require_cost_targets=bool(args.predict_costs),
-        cost_route_idxs=cost_route_idxs,
+        cost_route_idxs=local_cost_route_idxs,
         zero_reward_epsilon=float(args.zero_reward_epsilon),
         input_mode=str(args.input_mode),
         include_primary_output_token_count=bool(args.include_primary_output_token_count),
@@ -2017,7 +2046,7 @@ def main() -> None:
     if eval_has_segments and len(eval_dataset.rows[0]["segment_input_ids"]) != embedding_segment_count:
         raise ValueError("Train/eval segment counts do not match")
 
-    cost_target_dim = len(cost_route_idxs)
+    cost_target_dim = len(local_cost_route_idxs)
     if bool(args.predict_costs):
         if str(args.cost_target_normalization) == "per_route_standard":
             cost_target_mean_values, cost_target_std_values = _compute_cost_target_stats(
@@ -2249,8 +2278,10 @@ def main() -> None:
         "cost_target": "log1p_route_output_tokens",
         "cost_route_idx": cost_route_idx,
         "cost_route_idxs": [int(idx) for idx in cost_route_idxs],
-        "cost_route_label": route_labels[cost_route_idx] if bool(args.predict_costs) else None,
-        "cost_route_labels": [route_labels[int(idx)] for idx in cost_route_idxs] if bool(args.predict_costs) else [],
+        "cost_route_label": all_route_labels[cost_route_idx] if bool(args.predict_costs) else None,
+        "cost_route_labels": list(cost_route_labels),
+        "local_cost_route_idx": int(local_cost_route_idxs[0]),
+        "local_cost_route_idxs": [int(idx) for idx in local_cost_route_idxs],
         "cost_gradient_mode": str(args.cost_gradient_mode),
         "cost_mse_weight": float(args.cost_mse_weight),
         "cost_target_normalization": str(args.cost_target_normalization),
@@ -2311,6 +2342,8 @@ def main() -> None:
             eval_loader,
             eval_dataset,
             route_labels,
+            cost_route_idxs=cost_route_idxs,
+            cost_route_labels=cost_route_labels,
             objective=str(args.objective),
             predict_costs=bool(args.predict_costs),
             predict_zero_reward_failure=bool(args.predict_zero_reward_failure),
@@ -2394,6 +2427,8 @@ def main() -> None:
                 eval_loader,
                 eval_dataset,
                 route_labels,
+                cost_route_idxs=cost_route_idxs,
+                cost_route_labels=cost_route_labels,
                 objective=str(args.objective),
                 predict_costs=bool(args.predict_costs),
                 predict_zero_reward_failure=bool(args.predict_zero_reward_failure),
@@ -2474,7 +2509,7 @@ def main() -> None:
             abstain_eval_rows.append(new_row)
         eval_rows_for_utility = abstain_eval_rows
     utility_report = _compute_utility_report(pred_rows, eval_rows_for_utility, route_labels, DEFAULT_UTILITY_LAMBDAS)
-    cost_route_labels = [route_labels[int(route_idx)] for route_idx in cost_route_idxs] if args.predict_costs else []
+    cost_route_labels = list(cost_route_labels) if args.predict_costs else []
     cost_metrics = _compute_output_token_metrics(y_cost_true, y_cost_pred, cost_route_labels) if args.predict_costs else []
     zero_reward_failure_metrics = (
         _compute_zero_reward_failure_metrics(y_zero_reward_true, y_zero_reward_pred, route_labels)
@@ -2487,7 +2522,9 @@ def main() -> None:
             eval_rows_for_utility,
             route_labels,
             DEFAULT_UTILITY_LAMBDAS,
-            cost_route_idxs=cost_route_idxs,
+            cost_route_idxs=local_cost_route_idxs,
+            reported_cost_route_idxs=cost_route_idxs,
+            reported_cost_route_labels=cost_route_labels,
         )
         if args.predict_costs
         else None

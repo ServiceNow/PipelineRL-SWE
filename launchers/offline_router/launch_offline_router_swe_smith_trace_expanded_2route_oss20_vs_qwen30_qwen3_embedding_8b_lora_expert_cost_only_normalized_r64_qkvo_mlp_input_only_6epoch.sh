@@ -10,7 +10,7 @@ export PREPARE_TRACE_DATASET=${PREPARE_TRACE_DATASET:-false}
 export INPUT_MODE=${INPUT_MODE:-input_only}
 export INCLUDE_PRIMARY_OUTPUT_TOKEN_COUNT=${INCLUDE_PRIMARY_OUTPUT_TOKEN_COUNT:-false}
 
-# Original route 1 = OSS-20B, original route 2 = Qwen3-Coder-30B-A3B.
+# Route ids are original dataset indices. The trainer maps them to local tensor columns.
 export TARGET_ROUTE_IDXS=${TARGET_ROUTE_IDXS:-1,2}
 export COST_ROUTE_IDXS=${COST_ROUTE_IDXS:-1,2}
 export NUM_EPOCHS=${NUM_EPOCHS:-6}
