@@ -13,7 +13,7 @@ import torch
 import torch.nn.functional as F
 from accelerate import Accelerator, DistributedDataParallelKwargs
 from torch import Tensor
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 from tqdm import tqdm
 from transformers import AutoModel, AutoTokenizer, get_linear_schedule_with_warmup
 
@@ -339,6 +339,12 @@ def _compute_class_target(
             if float(value) > float(success_threshold):
                 return int(idx)
         return max(0, len(target_rewards) - 1)
+    if mode == "joint_success_2route":
+        if len(target_rewards) != 2:
+            raise ValueError("class_target_mode=joint_success_2route requires exactly two routes")
+        first_success = float(target_rewards[0]) > float(success_threshold)
+        second_success = float(target_rewards[1]) > float(success_threshold)
+        return int(first_success) + (2 * int(second_success))
     raise ValueError(f"Unsupported class_target_mode={mode!r}")
 
 
@@ -1004,6 +1010,101 @@ def _class_targets_from_rewards(
     return np.asarray(targets, dtype=np.int64)
 
 
+def _joint_outcome_class_labels(route_labels: list[str]) -> list[str]:
+    if len(route_labels) != 2:
+        raise ValueError("Joint outcome classification currently requires exactly two routes")
+    return [
+        "both_fail",
+        f"{route_labels[0]}_only",
+        f"{route_labels[1]}_only",
+        "both_pass",
+    ]
+
+
+def _joint_outcome_probs_to_route_probs(class_probs: torch.Tensor) -> torch.Tensor:
+    if class_probs.shape[-1] != 4:
+        raise ValueError("Joint outcome class probabilities must have dimension 4")
+    first_route_prob = class_probs[:, 1] + class_probs[:, 3]
+    second_route_prob = class_probs[:, 2] + class_probs[:, 3]
+    return torch.stack([first_route_prob, second_route_prob], dim=-1)
+
+
+def _compute_joint_outcome_metrics(prediction_rows: list[dict[str, Any]], class_labels: list[str]) -> dict[str, Any]:
+    true_classes: list[int] = []
+    pred_classes: list[int] = []
+    probs: list[list[float]] = []
+    for row in prediction_rows:
+        true_class = row.get("true_class_target")
+        pred_class = row.get("pred_joint_class_target", row.get("pred_class_target"))
+        pred_probs = row.get("pred_joint_outcome_probs")
+        if not isinstance(true_class, int) or not isinstance(pred_class, int):
+            continue
+        true_classes.append(int(true_class))
+        pred_classes.append(int(pred_class))
+        if isinstance(pred_probs, list) and len(pred_probs) == len(class_labels):
+            probs.append([float(value) for value in pred_probs])
+    if not true_classes:
+        return {
+            "n_eval": 0,
+            "class_labels": list(class_labels),
+            "accuracy": math.nan,
+            "true_counts_by_class": {label: 0 for label in class_labels},
+            "pred_counts_by_class": {label: 0 for label in class_labels},
+        }
+    y_true = np.asarray(true_classes, dtype=np.int64)
+    y_pred = np.asarray(pred_classes, dtype=np.int64)
+    true_counts = np.bincount(y_true, minlength=len(class_labels))
+    pred_counts = np.bincount(y_pred, minlength=len(class_labels))
+    confusion = np.zeros((len(class_labels), len(class_labels)), dtype=np.int64)
+    for true_idx, pred_idx in zip(y_true, y_pred):
+        if 0 <= int(true_idx) < len(class_labels) and 0 <= int(pred_idx) < len(class_labels):
+            confusion[int(true_idx), int(pred_idx)] += 1
+    auc_by_class: dict[str, float | None] = {}
+    if len(probs) == len(true_classes):
+        prob_arr = np.asarray(probs, dtype=np.float64)
+        for idx, label in enumerate(class_labels):
+            auc_by_class[label] = _roc_auc_binary((y_true == idx).astype(np.int64), prob_arr[:, idx])
+    disagreement_mask = np.isin(y_true, [1, 2])
+    return {
+        "n_eval": int(y_true.shape[0]),
+        "class_labels": list(class_labels),
+        "accuracy": float(np.mean(y_true == y_pred)),
+        "true_counts_by_class": {class_labels[idx]: int(true_counts[idx]) for idx in range(len(class_labels))},
+        "pred_counts_by_class": {class_labels[idx]: int(pred_counts[idx]) for idx in range(len(class_labels))},
+        "confusion_matrix_rows_true_cols_pred": confusion.tolist(),
+        "one_vs_rest_auc_by_class": auc_by_class,
+        "disagreement_accuracy": (
+            float(np.mean(y_true[disagreement_mask] == y_pred[disagreement_mask]))
+            if bool(np.any(disagreement_mask))
+            else math.nan
+        ),
+    }
+
+
+def _compute_class_sample_weights(dataset: Dataset, class_count: int, mode: str) -> list[float] | None:
+    if mode == "none":
+        return None
+    if mode != "inverse_freq":
+        raise ValueError(f"Unsupported class_oversample_mode={mode!r}")
+    counts = np.zeros((int(class_count),), dtype=np.float64)
+    row_targets: list[int] = []
+    for row in dataset:
+        if not isinstance(row, dict):
+            continue
+        target = int(row["class_target"])
+        if target < 0 or target >= int(class_count):
+            raise ValueError(f"class target {target} is out of range for {class_count} classes")
+        counts[target] += 1.0
+        row_targets.append(target)
+    if not row_targets:
+        return None
+    sample_weights = []
+    for target in row_targets:
+        count = counts[int(target)]
+        sample_weights.append(float(1.0 / count) if count > 0.0 else 0.0)
+    return sample_weights
+
+
 def _compute_class_weights(
     dataset: Dataset,
     target_dim: int,
@@ -1282,7 +1383,7 @@ def _compute_train_loss(
         if float(cost_delta_aux_weight) != 0.0:
             raise ValueError("cost_delta_aux_weight is not supported for expert-only cost prediction")
         return float(cost_mse_weight) * F.mse_loss(cost_logits, output_token_targets_log.float())
-    if objective == "route_classifier":
+    if objective in {"route_classifier", "joint_outcome_2route"}:
         reward_loss = F.cross_entropy(
             reward_logits,
             class_targets.long(),
@@ -1485,6 +1586,19 @@ def _evaluate(
             )
             loss = per_example_loss.sum()
             preds = torch.softmax(logits, dim=-1)
+            class_pred_scores = preds
+        elif objective == "joint_outcome_2route":
+            per_example_loss = F.cross_entropy(
+                logits,
+                batch["class_targets"].long(),
+                weight=class_weights.to(logits.device, dtype=logits.dtype)
+                if class_weights is not None
+                else None,
+                reduction="none",
+            )
+            loss = per_example_loss.sum()
+            class_pred_scores = torch.softmax(logits, dim=-1)
+            preds = _joint_outcome_probs_to_route_probs(class_pred_scores)
         elif objective == "route_classifier_hierarchical":
             loss = _hierarchical_route_classifier_loss(
                 logits,
@@ -1495,20 +1609,28 @@ def _evaluate(
                 reduction="sum",
             )
             preds = torch.softmax(logits, dim=-1)
+            class_pred_scores = preds
         elif objective in {"reward_bce", "reward_bce_delta_aux"}:
             loss = F.binary_cross_entropy_with_logits(logits, targets, reduction="sum")
             preds = torch.sigmoid(logits)
+            class_pred_scores = preds
             if predict_costs and cost_logits is not None:
                 loss = loss + F.mse_loss(cost_logits.float(), cost_targets_for_loss, reduction="sum")
         else:
             loss = F.mse_loss(logits, targets, reduction="sum")
             preds = logits
+            class_pred_scores = preds
             if predict_costs and cost_logits is not None:
                 loss = loss + F.mse_loss(cost_logits.float(), cost_targets_for_loss, reduction="sum")
         gathered_loss = accelerator.gather_for_metrics(loss.detach().reshape(1)).detach().cpu()
         gathered_preds = accelerator.gather_for_metrics(preds).detach().cpu()
         gathered_targets = accelerator.gather_for_metrics(targets).detach().cpu()
         gathered_class_targets = accelerator.gather_for_metrics(batch["class_targets"]).detach().cpu()
+        gathered_joint_scores = (
+            accelerator.gather_for_metrics(class_pred_scores).detach().cpu()
+            if objective == "joint_outcome_2route"
+            else None
+        )
         if predict_costs:
             if cost_logits is None:
                 raise ValueError("predict_costs=true but model did not return cost logits")
@@ -1541,8 +1663,15 @@ def _evaluate(
             total_examples += int(gathered_targets.shape[0])
         for idx in range(gathered_preds.shape[0]):
             source_meta = eval_dataset.rows[int(gathered_indices[idx])]
-            rows.append(
-                {
+            pred_class_target = int(torch.argmax(gathered_preds[idx]).item())
+            row_extra: dict[str, Any] = {}
+            if gathered_joint_scores is not None:
+                pred_class_target = int(torch.argmax(gathered_joint_scores[idx]).item())
+                row_extra = {
+                    "pred_joint_outcome_probs": [float(value) for value in gathered_joint_scores[idx].tolist()],
+                    "pred_joint_class_target": pred_class_target,
+                }
+            row_payload = {
                     "problem_id": source_meta["problem_id"],
                     "dataset": source_meta["dataset"],
                     "repo": source_meta["repo"],
@@ -1550,7 +1679,7 @@ def _evaluate(
                     "true_rewards": [float(value) for value in gathered_targets[idx].tolist()],
                     "pred_rewards": [float(value) for value in gathered_preds[idx].tolist()],
                     "true_class_target": int(gathered_class_targets[idx].item()),
-                    "pred_class_target": int(torch.argmax(gathered_preds[idx]).item()),
+                    "pred_class_target": pred_class_target,
                     "true_output_tokens": [
                         float(math.expm1(value)) for value in gathered_cost_targets[idx].tolist()
                     ] if predict_costs else None,
@@ -1571,7 +1700,8 @@ def _evaluate(
                     ] if predict_zero_reward_failure else None,
                     "route_labels": list(route_labels),
                 }
-            )
+            row_payload.update(row_extra)
+            rows.append(row_payload)
         y_true_chunks.append(gathered_targets.numpy())
         y_pred_chunks.append(gathered_preds.numpy())
         if predict_costs:
@@ -1602,7 +1732,7 @@ def _evaluate(
         if zero_reward_pred_chunks
         else np.empty((0, len(route_labels)))
     )
-    if objective in {"route_classifier", "route_classifier_hierarchical"}:
+    if objective in {"route_classifier", "route_classifier_hierarchical", "joint_outcome_2route"}:
         eval_loss = float(total_loss / total_examples) if total_examples > 0 else math.nan
     elif objective == "cost_mse":
         total_values = total_examples * (int(y_cost_true.shape[1]) if y_cost_true.ndim == 2 else 1)
@@ -1627,13 +1757,14 @@ def main() -> None:
             "reward_bce_delta_aux",
             "route_classifier",
             "route_classifier_hierarchical",
+            "joint_outcome_2route",
             "cost_mse",
         ],
         default="reward_mse",
     )
     parser.add_argument(
         "--class-target-mode",
-        choices=["argmax", "cheapest_success", "cheapest_success_or_abstain"],
+        choices=["argmax", "cheapest_success", "cheapest_success_or_abstain", "joint_success_2route"],
         default="argmax",
         help=(
             "Target used for objective=route_classifier. "
@@ -1651,7 +1782,13 @@ def main() -> None:
         "--class-weight-mode",
         choices=["none", "inverse_freq"],
         default="none",
-        help="Optional class weighting for objective=route_classifier.",
+        help="Optional class weighting for classifier-style objectives.",
+    )
+    parser.add_argument(
+        "--class-oversample-mode",
+        choices=["none", "inverse_freq"],
+        default="none",
+        help="Optional class-balanced sampling for classifier-style objectives.",
     )
     parser.add_argument(
         "--append-abstain-class",
@@ -1774,6 +1911,8 @@ def main() -> None:
     source_route_labels = [all_route_labels[int(idx)] for idx in target_route_idxs]
     append_abstain_class = bool(args.append_abstain_class)
     route_classifier_objectives = {"route_classifier", "route_classifier_hierarchical"}
+    joint_outcome_objectives = {"joint_outcome_2route"}
+    classifier_loss_objectives = route_classifier_objectives | joint_outcome_objectives
     if append_abstain_class and str(args.objective) not in route_classifier_objectives:
         raise ValueError("--append-abstain-class is only supported for route-classifier objectives")
     if str(args.objective) == "route_classifier_hierarchical":
@@ -1783,6 +1922,17 @@ def main() -> None:
             raise ValueError("objective=route_classifier_hierarchical requires --class-target-mode=cheapest_success_or_abstain")
     route_labels = list(source_route_labels) + (["ABSTAIN"] if append_abstain_class else [])
     target_dim = len(route_labels)
+    joint_outcome_class_labels: list[str] = []
+    model_output_dim = target_dim
+    if str(args.objective) == "joint_outcome_2route":
+        if append_abstain_class:
+            raise ValueError("objective=joint_outcome_2route does not support --append-abstain-class")
+        if target_dim != 2:
+            raise ValueError("objective=joint_outcome_2route requires exactly two target routes")
+        if str(args.class_target_mode) != "joint_success_2route":
+            raise ValueError("objective=joint_outcome_2route requires --class-target-mode=joint_success_2route")
+        joint_outcome_class_labels = _joint_outcome_class_labels(route_labels)
+        model_output_dim = len(joint_outcome_class_labels)
     if args.objective in {"reward_mse_delta_aux", "reward_bce_delta_aux"} and target_dim < 2:
         raise ValueError(f"{args.objective} expects at least two routes")
     if args.objective == "cost_mse" and not args.predict_costs:
@@ -1902,13 +2052,13 @@ def main() -> None:
         torch.tensor(cost_target_std_values, dtype=torch.float32) if cost_target_std_values else None
     )
     class_weight_values = (
-        _compute_class_weights(train_dataset, target_dim, str(args.class_weight_mode))
-        if str(args.objective) in route_classifier_objectives
-        else [1.0 for _ in range(target_dim)]
+        _compute_class_weights(train_dataset, model_output_dim, str(args.class_weight_mode))
+        if str(args.objective) in classifier_loss_objectives
+        else [1.0 for _ in range(model_output_dim)]
     )
     class_weights_tensor = (
         torch.tensor(class_weight_values, dtype=torch.float32)
-        if str(args.objective) in route_classifier_objectives and str(args.class_weight_mode) != "none"
+        if str(args.objective) in classifier_loss_objectives and str(args.class_weight_mode) != "none"
         else None
     )
     token_collate_fn = lambda batch: _collate_left_pad(
@@ -1917,10 +2067,25 @@ def main() -> None:
         target_dim=target_dim,
         cost_target_dim=cost_target_dim,
     )
+    train_sample_weights = (
+        _compute_class_sample_weights(train_dataset, model_output_dim, str(args.class_oversample_mode))
+        if str(args.objective) in classifier_loss_objectives
+        else None
+    )
+    train_sampler = (
+        WeightedRandomSampler(
+            weights=torch.as_tensor(train_sample_weights, dtype=torch.double),
+            num_samples=len(train_sample_weights),
+            replacement=True,
+        )
+        if train_sample_weights is not None
+        else None
+    )
     train_loader: DataLoader = DataLoader(
         train_dataset,
         batch_size=int(args.batch_size),
-        shuffle=True,
+        shuffle=train_sampler is None,
+        sampler=train_sampler,
         collate_fn=token_collate_fn,
         num_workers=0,
     )
@@ -1934,7 +2099,7 @@ def main() -> None:
 
     model = QwenEmbeddingRouter(
         args.model_name,
-        target_dim=target_dim,
+        target_dim=model_output_dim,
         dropout=float(args.dropout),
         mlp_hidden_size=int(args.mlp_hidden_size),
         torch_dtype=_dtype_from_name(str(args.torch_dtype)),
@@ -1981,10 +2146,25 @@ def main() -> None:
             target_dim=target_dim,
             cost_target_dim=cost_target_dim,
         )
+        train_sample_weights = (
+            _compute_class_sample_weights(train_dataset, model_output_dim, str(args.class_oversample_mode))
+            if str(args.objective) in classifier_loss_objectives
+            else None
+        )
+        train_sampler = (
+            WeightedRandomSampler(
+                weights=torch.as_tensor(train_sample_weights, dtype=torch.double),
+                num_samples=len(train_sample_weights),
+                replacement=True,
+            )
+            if train_sample_weights is not None
+            else None
+        )
         train_loader = DataLoader(
             train_dataset,
             batch_size=int(args.batch_size),
-            shuffle=True,
+            shuffle=train_sampler is None,
+            sampler=train_sampler,
             collate_fn=embedding_collate_fn,
             num_workers=0,
         )
@@ -2017,7 +2197,11 @@ def main() -> None:
         "class_target_mode": str(args.class_target_mode),
         "class_success_threshold": float(args.class_success_threshold),
         "class_weight_mode": str(args.class_weight_mode),
+        "class_oversample_mode": str(args.class_oversample_mode),
         "class_weights": [float(value) for value in class_weight_values],
+        "class_oversampling_enabled": bool(train_sample_weights is not None),
+        "model_output_dim": int(model_output_dim),
+        "joint_outcome_class_labels": list(joint_outcome_class_labels),
         "hierarchical_any_success_weight": float(args.hierarchical_any_success_weight),
         "hierarchical_route_weight": float(args.hierarchical_route_weight),
         "dataset_dir": str(dataset_dir),
@@ -2268,13 +2452,16 @@ def main() -> None:
     y_zero_reward_pred = best_payload["y_zero_reward_pred"]
     route_metrics = compute_per_route_metrics(y_true, y_pred, route_labels)
     pairwise_metrics = compute_pairwise_metrics(y_true, y_pred, route_labels)
-    classifier_metrics = _compute_route_classifier_metrics(
-        y_true,
-        y_pred,
-        route_labels,
-        class_target_mode=str(args.class_target_mode),
-        class_success_threshold=float(args.class_success_threshold),
-    )
+    if str(args.objective) == "joint_outcome_2route":
+        classifier_metrics = _compute_joint_outcome_metrics(pred_rows, joint_outcome_class_labels)
+    else:
+        classifier_metrics = _compute_route_classifier_metrics(
+            y_true,
+            y_pred,
+            route_labels,
+            class_target_mode=str(args.class_target_mode),
+            class_success_threshold=float(args.class_success_threshold),
+        )
     eval_rows_for_utility = _subset_route_stats_for_utility(eval_rows_source, target_route_idxs)
     if append_abstain_class:
         abstain_eval_rows = []

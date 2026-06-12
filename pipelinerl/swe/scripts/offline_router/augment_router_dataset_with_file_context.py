@@ -45,22 +45,38 @@ def _read_json(path: Path) -> Any:
     return json.loads(path.read_text())
 
 
-def _load_source_by_id(dataset_path: Path, dataset_name: str, seed: int) -> dict[str, dict[str, Any]]:
-    rows = load_local_swe_dataset(
-        dataset_names=[dataset_name] if dataset_name else [],
-        dataset_path=str(dataset_path),
-        shuffle=False,
-        seed=int(seed),
-        dataset_label=dataset_name or None,
-        max_samples=None,
-    )
+def _split_csv_arg(value: str) -> list[str]:
+    return [part.strip() for part in str(value).split(",") if part.strip()]
+
+
+def _load_source_by_id(
+    dataset_paths: list[Path],
+    dataset_names: list[str],
+    seed: int,
+) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
+    if len(dataset_paths) != len(dataset_names):
+        raise ValueError(
+            "--source-dataset-path and --source-dataset-name must have the same number of comma-separated values"
+        )
+
     by_id: dict[str, dict[str, Any]] = {}
-    for row in rows:
-        problem_id = problem_id_from_item(row)
-        by_id.setdefault(problem_id, row)
+    loaded_counts: list[dict[str, Any]] = []
+    for dataset_path, dataset_name in zip(dataset_paths, dataset_names, strict=True):
+        rows = load_local_swe_dataset(
+            dataset_names=[dataset_name] if dataset_name else [],
+            dataset_path=str(dataset_path),
+            shuffle=False,
+            seed=int(seed),
+            dataset_label=dataset_name or None,
+            max_samples=None,
+        )
+        loaded_counts.append({"dataset_path": str(dataset_path), "dataset_name": dataset_name, "rows": len(rows)})
+        for row in rows:
+            problem_id = problem_id_from_item(row)
+            by_id.setdefault(problem_id, row)
     if not by_id:
-        raise ValueError(f"No source rows loaded from {dataset_path}")
-    return by_id
+        raise ValueError(f"No source rows loaded from {dataset_paths}")
+    return by_id, loaded_counts
 
 
 def _file_context_from_source(problem: dict[str, Any]) -> tuple[str, list[str]]:
@@ -143,9 +159,11 @@ def main() -> None:
         shutil.rmtree(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    source_by_id = _load_source_by_id(
-        Path(args.source_dataset_path),
-        str(args.source_dataset_name),
+    source_dataset_paths = [Path(path) for path in _split_csv_arg(str(args.source_dataset_path))]
+    source_dataset_names = _split_csv_arg(str(args.source_dataset_name))
+    source_by_id, loaded_counts = _load_source_by_id(
+        source_dataset_paths,
+        source_dataset_names,
         int(args.seed),
     )
     _copy_sidecar_files(input_dir, output_dir)
@@ -154,6 +172,7 @@ def main() -> None:
         "output_dir": str(output_dir),
         "source_dataset_path": str(args.source_dataset_path),
         "source_dataset_name": str(args.source_dataset_name),
+        "source_datasets": loaded_counts,
         "source_rows": len(source_by_id),
         "splits": [],
     }
