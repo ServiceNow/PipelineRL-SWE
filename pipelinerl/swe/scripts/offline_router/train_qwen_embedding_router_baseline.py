@@ -2030,9 +2030,6 @@ def main() -> None:
     else:
         cost_target_mean_values = []
         cost_target_std_values = []
-    cost_target_mean_tensor = (
-        torch.tensor(cost_target_mean_values, dtype=torch.float32) if cost_target_mean_values else None
-    )
     if args.cost_normalization_config:
         cost_normalization_config = Path(args.cost_normalization_config)
         if not cost_normalization_config.exists():
@@ -2048,6 +2045,9 @@ def main() -> None:
                 "Cost normalization config dimension mismatch: "
                 f"mean={len(cost_target_mean_values)} std={len(cost_target_std_values)} expected={cost_target_dim}"
             )
+    cost_target_mean_tensor = (
+        torch.tensor(cost_target_mean_values, dtype=torch.float32) if cost_target_mean_values else None
+    )
     cost_target_std_tensor = (
         torch.tensor(cost_target_std_values, dtype=torch.float32) if cost_target_std_values else None
     )
