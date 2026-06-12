@@ -33,6 +33,12 @@ MAX_TRAIN_ROWS=${MAX_TRAIN_ROWS:-0}
 MAX_EVAL_ROWS=${MAX_EVAL_ROWS:-0}
 SEED=${SEED:-17}
 OBJECTIVE=${OBJECTIVE:-reward_bce_delta_aux}
+CLASS_TARGET_MODE=${CLASS_TARGET_MODE:-argmax}
+CLASS_SUCCESS_THRESHOLD=${CLASS_SUCCESS_THRESHOLD:-0.5}
+CLASS_WEIGHT_MODE=${CLASS_WEIGHT_MODE:-none}
+APPEND_ABSTAIN_CLASS=${APPEND_ABSTAIN_CLASS:-false}
+HIERARCHICAL_ANY_SUCCESS_WEIGHT=${HIERARCHICAL_ANY_SUCCESS_WEIGHT:-1.0}
+HIERARCHICAL_ROUTE_WEIGHT=${HIERARCHICAL_ROUTE_WEIGHT:-1.0}
 REWARD_BCE_WEIGHT=${REWARD_BCE_WEIGHT:-1.0}
 DELTA_AUX_WEIGHT=${DELTA_AUX_WEIGHT:-1.0}
 DELTA_AUX_HUBER_DELTA=${DELTA_AUX_HUBER_DELTA:-0.0}
@@ -88,6 +94,11 @@ if [[ -n "${TARGET_ROUTE_IDXS}" ]]; then
   TARGET_ROUTE_IDXS_ARG="--target-route-idxs ${TARGET_ROUTE_IDXS}"
 fi
 
+APPEND_ABSTAIN_ARG=""
+if [[ "${APPEND_ABSTAIN_CLASS}" == "true" ]]; then
+  APPEND_ABSTAIN_ARG="--append-abstain-class"
+fi
+
 if [[ ! -f "${REAL_LABEL_DATASET_DIR}/metadata.json" ]]; then
   echo "Missing real-label router dataset: ${REAL_LABEL_DATASET_DIR}/metadata.json" >&2
   echo "Generate it once with pipelinerl/swe/scripts/offline_router/materialize_real_label_router_dataset.py, or set REAL_LABEL_DATASET_DIR." >&2
@@ -106,6 +117,12 @@ make job \
       --output-dir ${TRAIN_OUTPUT_DIR} \
       --model-name ${MODEL_NAME} \
       --objective ${OBJECTIVE} \
+      --class-target-mode ${CLASS_TARGET_MODE} \
+      --class-success-threshold ${CLASS_SUCCESS_THRESHOLD} \
+      --class-weight-mode ${CLASS_WEIGHT_MODE} \
+      ${APPEND_ABSTAIN_ARG} \
+      --hierarchical-any-success-weight ${HIERARCHICAL_ANY_SUCCESS_WEIGHT} \
+      --hierarchical-route-weight ${HIERARCHICAL_ROUTE_WEIGHT} \
       --max-seq-length ${MAX_SEQ_LENGTH} \
       --input-mode ${INPUT_MODE} \
       --embedding-input-layout ${EMBEDDING_INPUT_LAYOUT} \
