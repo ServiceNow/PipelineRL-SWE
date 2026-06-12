@@ -63,38 +63,64 @@ def _collate_left_pad(
     target_dim: int,
     cost_target_dim: int,
 ) -> dict[str, Any]:
-    max_len = max(len(row["input_ids"]) for row in batch)
-    input_ids = torch.full((len(batch), max_len), int(pad_token_id), dtype=torch.long)
-    attention_mask = torch.zeros((len(batch), max_len), dtype=torch.long)
+    has_segments = "segment_input_ids" in batch[0]
+    if has_segments:
+        segment_count = len(batch[0]["segment_input_ids"])
+        segment_input_ids: list[torch.Tensor] = []
+        segment_attention_mask: list[torch.Tensor] = []
+        for segment_idx in range(segment_count):
+            max_len = max(len(row["segment_input_ids"][segment_idx]) for row in batch)
+            input_ids_tensor = torch.full((len(batch), max_len), int(pad_token_id), dtype=torch.long)
+            attention_mask_tensor = torch.zeros((len(batch), max_len), dtype=torch.long)
+            for row_idx, row in enumerate(batch):
+                seq_len = len(row["segment_input_ids"][segment_idx])
+                start = max_len - seq_len
+                input_ids_tensor[row_idx, start:] = torch.tensor(
+                    row["segment_input_ids"][segment_idx], dtype=torch.long
+                )
+                attention_mask_tensor[row_idx, start:] = torch.tensor(
+                    row["segment_attention_mask"][segment_idx], dtype=torch.long
+                )
+            segment_input_ids.append(input_ids_tensor)
+            segment_attention_mask.append(attention_mask_tensor)
+    else:
+        max_len = max(len(row["input_ids"]) for row in batch)
+        input_ids = torch.full((len(batch), max_len), int(pad_token_id), dtype=torch.long)
+        attention_mask = torch.zeros((len(batch), max_len), dtype=torch.long)
+        for idx, row in enumerate(batch):
+            seq_len = len(row["input_ids"])
+            start = max_len - seq_len
+            input_ids[idx, start:] = torch.tensor(row["input_ids"], dtype=torch.long)
+            attention_mask[idx, start:] = torch.tensor(row["attention_mask"], dtype=torch.long)
     targets = torch.zeros((len(batch), target_dim), dtype=torch.float32)
     output_token_targets_log = torch.zeros((len(batch), cost_target_dim), dtype=torch.float32)
     zero_reward_targets = torch.zeros((len(batch), target_dim), dtype=torch.float32)
     class_targets = torch.zeros((len(batch),), dtype=torch.long)
     row_indices = torch.zeros((len(batch),), dtype=torch.long)
     for idx, row in enumerate(batch):
-        seq_len = len(row["input_ids"])
-        start = max_len - seq_len
-        input_ids[idx, start:] = torch.tensor(row["input_ids"], dtype=torch.long)
-        attention_mask[idx, start:] = torch.tensor(row["attention_mask"], dtype=torch.long)
         targets[idx] = torch.tensor(row["targets"], dtype=torch.float32)
         output_token_targets_log[idx] = torch.tensor(row["output_token_targets_log"], dtype=torch.float32)
         zero_reward_targets[idx] = torch.tensor(row["zero_reward_targets"], dtype=torch.float32)
         class_targets[idx] = int(row["class_target"])
         row_indices[idx] = int(row["row_idx"])
-    return {
+    collated = {
         "problem_ids": [row["problem_id"] for row in batch],
         "datasets": [row["dataset"] for row in batch],
         "repos": [row["repo"] for row in batch],
         "languages": [row["language"] for row in batch],
-        "input_ids": input_ids,
-        "attention_mask": attention_mask,
         "targets": targets,
         "output_token_targets_log": output_token_targets_log,
         "zero_reward_targets": zero_reward_targets,
         "class_targets": class_targets,
         "row_indices": row_indices,
     }
-
+    if has_segments:
+        collated["segment_input_ids"] = segment_input_ids
+        collated["segment_attention_mask"] = segment_attention_mask
+    else:
+        collated["input_ids"] = input_ids
+        collated["attention_mask"] = attention_mask
+    return collated
 
 def _build_embedding_input_text(
     row: dict[str, Any],
@@ -189,6 +215,85 @@ def _build_embedding_input_text(
     )
 
 
+
+def _embedding_task_instruction(input_task: str) -> str:
+    if input_task == "reward":
+        return (
+            "Predict the probability that each SWE repair model route produces a patch that passes the tests. "
+            "Use the route identities and the available repair evidence to estimate per-route success."
+        )
+    if input_task == "cost":
+        return (
+            "Predict the output-token cost for each requested SWE repair model route. "
+            "Use the route identities and the available repair evidence to estimate completion length."
+        )
+    if input_task == "policy":
+        return (
+            "Select the cheapest SWE repair model route that is likely to produce a passing patch. "
+            "Use route identities and evidence to estimate the cheapest sufficient solver."
+        )
+    raise ValueError(f"Unsupported input_task={input_task!r}")
+
+
+def _build_segmented_embedding_input_texts(
+    row: dict[str, Any],
+    route_labels: list[str],
+    input_mode: str,
+    primary_output_token_count: int | None,
+    input_task: str,
+    embedding_input_layout: str,
+) -> list[str] | None:
+    prompt_text = row.get("prompt_text")
+    if not isinstance(prompt_text, str):
+        return None
+    route_legend = "\n".join(f"{idx}: {label}" for idx, label in enumerate(route_labels))
+    task = _embedding_task_instruction(str(input_task))
+    task_segment = (
+        f"Instruct: {task}\n"
+        "Query: Represent the route set and prediction task for this SWE routing example.\n\n"
+        "[Route Order]\n"
+        f"{route_legend}"
+    )
+    prompt_segment = (
+        f"Instruct: {task}\n"
+        "Query: Represent the original SWE repair task. Focus on the repository, language, failing behavior, "
+        "and the code/edit context that may determine which solver succeeds.\n\n"
+        "[Original Repair Prompt]\n"
+        f"{prompt_text}"
+    )
+    segments: list[str]
+    if embedding_input_layout in {"late_fusion", "late_fusion_prompt_only"}:
+        segments = [task_segment, prompt_segment]
+    elif embedding_input_layout == "late_fusion_scout_only":
+        segments = [task_segment]
+    else:
+        raise ValueError(f"Unsupported embedding_input_layout={embedding_input_layout!r}")
+
+    if embedding_input_layout == "late_fusion_prompt_only" or input_mode == "input_only":
+        return segments
+    if input_mode != "post_primary":
+        raise ValueError(f"Unsupported input_mode={input_mode!r}")
+    primary_output_text = _get_primary_output_text(row)
+    if not isinstance(primary_output_text, str):
+        return None
+    primary_token_count_block = ""
+    if primary_output_token_count is not None:
+        primary_token_count_block = (
+            "\n\n"
+            "[Scout Attempt Output Tokens]\n"
+            f"{int(primary_output_token_count)}"
+        )
+    scout_segment = (
+        f"Instruct: {task}\n"
+        "Query: Represent the scout model attempt as diagnostic evidence. Focus on whether the attempt looks valid, "
+        "where it fails, and what it implies about difficulty or solver compatibility.\n"
+        f"{primary_token_count_block}\n\n"
+        "[Scout Attempt]\n"
+        f"{primary_output_text}"
+    )
+    segments.append(scout_segment)
+    return segments
+
 def _compute_class_target(
     target_rewards: list[float],
     mode: str,
@@ -223,6 +328,7 @@ class RouterCostDataset(Dataset):
         input_mode: str,
         include_primary_output_token_count: bool,
         input_task: str = "reward",
+        embedding_input_layout: str = "single",
         class_target_mode: str = "argmax",
         class_success_threshold: float = 0.5,
         append_abstain_class: bool = False,
@@ -235,6 +341,8 @@ class RouterCostDataset(Dataset):
             )
         if source_target_dim == 0:
             raise ValueError("At least one target route is required")
+        if embedding_input_layout not in {"single", "late_fusion", "late_fusion_prompt_only", "late_fusion_scout_only"}:
+            raise ValueError(f"Unsupported embedding_input_layout={embedding_input_layout!r}")
         prompt_route_labels = list(route_labels)
         if bool(append_abstain_class):
             prompt_route_labels.append("ABSTAIN")
@@ -284,44 +392,78 @@ class RouterCostDataset(Dataset):
             if bool(append_abstain_class):
                 model_target_rewards.append(0.0)
                 model_zero_reward_targets.append(1.0)
-            input_text = _build_embedding_input_text(
-                row,
-                prompt_route_labels,
-                input_mode=input_mode,
-                primary_output_token_count=primary_output_token_count,
-                input_task=str(input_task),
-            )
-            if not input_text:
-                continue
-            encoded = tokenizer(
-                input_text,
-                add_special_tokens=True,
-                truncation=True,
-                max_length=max_seq_length,
-            )
-            input_ids = encoded.get("input_ids")
-            attention_mask = encoded.get("attention_mask")
-            if not input_ids or not attention_mask:
-                continue
-            self.rows.append(
-                {
-                    "row_idx": len(self.rows),
-                    "problem_id": problem_id,
-                    "dataset": row.get("dataset"),
-                    "repo": row.get("repo"),
-                    "language": row.get("language"),
-                    "input_ids": [int(value) for value in input_ids],
-                    "attention_mask": [int(value) for value in attention_mask],
-                    "targets": model_target_rewards,
-                    "output_token_targets_log": output_token_targets_log,
-                    "zero_reward_targets": model_zero_reward_targets,
-                    "class_target": _compute_class_target(
-                        model_target_rewards,
-                        mode=str(class_target_mode),
-                        success_threshold=float(class_success_threshold),
-                    ),
-                }
-            )
+
+            encoded_payload: dict[str, Any] = {}
+            if embedding_input_layout == "single":
+                input_text = _build_embedding_input_text(
+                    row,
+                    prompt_route_labels,
+                    input_mode=input_mode,
+                    primary_output_token_count=primary_output_token_count,
+                    input_task=str(input_task),
+                )
+                if not input_text:
+                    continue
+                encoded = tokenizer(
+                    input_text,
+                    add_special_tokens=True,
+                    truncation=True,
+                    max_length=max_seq_length,
+                )
+                input_ids = encoded.get("input_ids")
+                attention_mask = encoded.get("attention_mask")
+                if not input_ids or not attention_mask:
+                    continue
+                encoded_payload["input_ids"] = [int(value) for value in input_ids]
+                encoded_payload["attention_mask"] = [int(value) for value in attention_mask]
+            else:
+                segment_texts = _build_segmented_embedding_input_texts(
+                    row,
+                    prompt_route_labels,
+                    input_mode=input_mode,
+                    primary_output_token_count=primary_output_token_count,
+                    input_task=str(input_task),
+                    embedding_input_layout=str(embedding_input_layout),
+                )
+                if not segment_texts:
+                    continue
+                segment_input_ids: list[list[int]] = []
+                segment_attention_mask: list[list[int]] = []
+                for segment_text in segment_texts:
+                    encoded = tokenizer(
+                        segment_text,
+                        add_special_tokens=True,
+                        truncation=True,
+                        max_length=max_seq_length,
+                    )
+                    input_ids = encoded.get("input_ids")
+                    attention_mask = encoded.get("attention_mask")
+                    if not input_ids or not attention_mask:
+                        break
+                    segment_input_ids.append([int(value) for value in input_ids])
+                    segment_attention_mask.append([int(value) for value in attention_mask])
+                if len(segment_input_ids) != len(segment_texts):
+                    continue
+                encoded_payload["segment_input_ids"] = segment_input_ids
+                encoded_payload["segment_attention_mask"] = segment_attention_mask
+
+            dataset_row = {
+                "row_idx": len(self.rows),
+                "problem_id": problem_id,
+                "dataset": row.get("dataset"),
+                "repo": row.get("repo"),
+                "language": row.get("language"),
+                "targets": model_target_rewards,
+                "output_token_targets_log": output_token_targets_log,
+                "zero_reward_targets": model_zero_reward_targets,
+                "class_target": _compute_class_target(
+                    model_target_rewards,
+                    mode=str(class_target_mode),
+                    success_threshold=float(class_success_threshold),
+                ),
+            }
+            dataset_row.update(encoded_payload)
+            self.rows.append(dataset_row)
 
     def __len__(self) -> int:
         return len(self.rows)
@@ -350,14 +492,20 @@ class QwenEmbeddingRouter(torch.nn.Module):
         cost_target_dim: int,
         cost_gradient_mode: str,
         predict_zero_reward_failure: bool,
+        embedding_input_layout: str,
+        segment_count: int,
     ) -> None:
         super().__init__()
         if bool(use_lora) and bool(encoder_frozen):
             raise ValueError("use_lora=true requires encoder_frozen=false")
         if cost_gradient_mode not in {"joint", "detached", "separate_adapter"}:
             raise ValueError(f"Unsupported cost_gradient_mode={cost_gradient_mode}")
+        if embedding_input_layout not in {"single", "late_fusion", "late_fusion_prompt_only", "late_fusion_scout_only"}:
+            raise ValueError(f"Unsupported embedding_input_layout={embedding_input_layout!r}")
         self.encoder_frozen = bool(encoder_frozen)
         self.cost_gradient_mode = str(cost_gradient_mode)
+        self.embedding_input_layout = str(embedding_input_layout)
+        self.segment_count = max(1, int(segment_count))
         self.target_dim = int(target_dim)
         self.reward_adapter_name = "reward_adapter"
         self.cost_adapter_name = "cost_adapter"
@@ -391,15 +539,16 @@ class QwenEmbeddingRouter(torch.nn.Module):
             for parameter in self.encoder.parameters():
                 parameter.requires_grad_(False)
         hidden_size = int(self.encoder.config.hidden_size)
+        effective_hidden_size = hidden_size * self.segment_count
         self.predict_costs = bool(predict_costs)
         self.predict_zero_reward_failure = bool(predict_zero_reward_failure)
-        self.reward_head = self._make_head(hidden_size, target_dim, dropout, mlp_hidden_size)
+        self.reward_head = self._make_head(effective_hidden_size, target_dim, dropout, mlp_hidden_size)
         self.head = self.reward_head
         self.cost_head = (
-            self._make_head(hidden_size, cost_target_dim, dropout, mlp_hidden_size) if self.predict_costs else None
+            self._make_head(effective_hidden_size, cost_target_dim, dropout, mlp_hidden_size) if self.predict_costs else None
         )
         self.zero_reward_head = (
-            self._make_head(hidden_size, target_dim, dropout, mlp_hidden_size)
+            self._make_head(effective_hidden_size, target_dim, dropout, mlp_hidden_size)
             if self.predict_zero_reward_failure
             else None
         )
@@ -448,10 +597,45 @@ class QwenEmbeddingRouter(torch.nn.Module):
                 outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask, return_dict=True)
                 pooled = _last_token_pool(outputs.last_hidden_state, attention_mask)
                 return F.normalize(pooled.float(), p=2, dim=1)
-        else:
-            outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask, return_dict=True)
-            pooled = _last_token_pool(outputs.last_hidden_state, attention_mask)
-            return F.normalize(pooled.float(), p=2, dim=1)
+        outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask, return_dict=True)
+        pooled = _last_token_pool(outputs.last_hidden_state, attention_mask)
+        return F.normalize(pooled.float(), p=2, dim=1)
+
+    def encode_segmented_inputs(
+        self,
+        segment_input_ids: list[torch.Tensor],
+        segment_attention_mask: list[torch.Tensor],
+        adapter_name: str | None = None,
+    ) -> torch.Tensor:
+        if len(segment_input_ids) != self.segment_count or len(segment_attention_mask) != self.segment_count:
+            raise ValueError(
+                f"Expected {self.segment_count} input segments, got "
+                f"{len(segment_input_ids)} ids and {len(segment_attention_mask)} masks"
+            )
+        embeddings = []
+        for input_ids, attention_mask in zip(segment_input_ids, segment_attention_mask, strict=True):
+            embeddings.append(self.encode_inputs(input_ids, attention_mask, adapter_name=adapter_name))
+        return torch.cat(embeddings, dim=1)
+
+    def _encode_batch(
+        self,
+        input_ids: torch.Tensor | None,
+        attention_mask: torch.Tensor | None,
+        segment_input_ids: list[torch.Tensor] | None,
+        segment_attention_mask: list[torch.Tensor] | None,
+        adapter_name: str | None,
+    ) -> torch.Tensor:
+        if segment_input_ids is not None or segment_attention_mask is not None:
+            if segment_input_ids is None or segment_attention_mask is None:
+                raise ValueError("Both segment_input_ids and segment_attention_mask are required for late-fusion inputs")
+            return self.encode_segmented_inputs(
+                segment_input_ids,
+                segment_attention_mask,
+                adapter_name=adapter_name,
+            )
+        if input_ids is None or attention_mask is None:
+            raise ValueError("input_ids and attention_mask are required for single-sequence inputs")
+        return self.encode_inputs(input_ids, attention_mask, adapter_name=adapter_name)
 
     def predict_from_embeddings(
         self,
@@ -478,8 +662,10 @@ class QwenEmbeddingRouter(torch.nn.Module):
 
     def forward_cost_only(
         self,
-        input_ids: torch.Tensor,
-        attention_mask: torch.Tensor,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        segment_input_ids: list[torch.Tensor] | None = None,
+        segment_attention_mask: list[torch.Tensor] | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
         if self.cost_head is None:
             raise ValueError("cost-only forward requires a cost head")
@@ -488,28 +674,45 @@ class QwenEmbeddingRouter(torch.nn.Module):
             if self.cost_gradient_mode == "separate_adapter"
             else self.reward_adapter_name if hasattr(self.encoder, "set_adapter") else None
         )
-        embeddings = self.encode_inputs(input_ids, attention_mask, adapter_name=adapter_name)
+        embeddings = self._encode_batch(
+            input_ids,
+            attention_mask,
+            segment_input_ids,
+            segment_attention_mask,
+            adapter_name=adapter_name,
+        )
         return self.predict_cost_only_from_embeddings(embeddings)
 
     def forward(
         self,
-        input_ids: torch.Tensor,
-        attention_mask: torch.Tensor,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        segment_input_ids: list[torch.Tensor] | None = None,
+        segment_attention_mask: list[torch.Tensor] | None = None,
         cost_only: bool = False,
     ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
         if cost_only:
-            return self.forward_cost_only(input_ids=input_ids, attention_mask=attention_mask)
-        reward_embeddings = self.encode_inputs(
+            return self.forward_cost_only(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                segment_input_ids=segment_input_ids,
+                segment_attention_mask=segment_attention_mask,
+            )
+        reward_embeddings = self._encode_batch(
             input_ids,
             attention_mask,
+            segment_input_ids,
+            segment_attention_mask,
             adapter_name=self.reward_adapter_name if hasattr(self.encoder, "set_adapter") else None,
         )
         if self.cost_head is None:
             return self.predict_from_embeddings(reward_embeddings)
         if self.cost_gradient_mode == "separate_adapter":
-            cost_embeddings = self.encode_inputs(
+            cost_embeddings = self._encode_batch(
                 input_ids,
                 attention_mask,
+                segment_input_ids,
+                segment_attention_mask,
                 adapter_name=self.cost_adapter_name,
             )
             zero_reward_logits = (
@@ -573,9 +776,17 @@ def _precompute_embeddings(
     model.eval()
     rows: list[dict[str, Any]] = []
     for batch in tqdm(loader, desc=desc, disable=not accelerator.is_main_process):
-        input_ids = batch["input_ids"].to(accelerator.device)
-        attention_mask = batch["attention_mask"].to(accelerator.device)
-        embeddings = model.encode_inputs(input_ids=input_ids, attention_mask=attention_mask).detach().cpu()
+        if "segment_input_ids" in batch:
+            segment_input_ids = [tensor.to(accelerator.device) for tensor in batch["segment_input_ids"]]
+            segment_attention_mask = [tensor.to(accelerator.device) for tensor in batch["segment_attention_mask"]]
+            embeddings = model.encode_segmented_inputs(
+                segment_input_ids=segment_input_ids,
+                segment_attention_mask=segment_attention_mask,
+            ).detach().cpu()
+        else:
+            input_ids = batch["input_ids"].to(accelerator.device)
+            attention_mask = batch["attention_mask"].to(accelerator.device)
+            embeddings = model.encode_inputs(input_ids=input_ids, attention_mask=attention_mask).detach().cpu()
         for idx in range(embeddings.shape[0]):
             source_meta = source_dataset.rows[int(batch["row_indices"][idx].item())]
             rows.append(
@@ -1181,6 +1392,12 @@ def _predict_from_batch(
             batch["embeddings"].float(),
             detach_cost_embeddings=model.cost_gradient_mode == "detached",
         )
+    if "segment_input_ids" in batch:
+        return model(
+            segment_input_ids=batch["segment_input_ids"],
+            segment_attention_mask=batch["segment_attention_mask"],
+            cost_only=cost_only,
+        )
     if cost_only:
         return model(input_ids=batch["input_ids"], attention_mask=batch["attention_mask"], cost_only=True)
     return model(input_ids=batch["input_ids"], attention_mask=batch["attention_mask"])
@@ -1427,6 +1644,12 @@ def main() -> None:
     )
     parser.add_argument("--max-seq-length", type=int, default=24000)
     parser.add_argument("--input-mode", choices=["post_primary", "input_only"], default="post_primary")
+    parser.add_argument(
+        "--embedding-input-layout",
+        choices=["single", "late_fusion", "late_fusion_prompt_only", "late_fusion_scout_only"],
+        default="single",
+        help="How to present evidence to Qwen embeddings: one sequence or separate shared-encoder segments fused by the head.",
+    )
     parser.add_argument("--include-primary-output-token-count", action="store_true")
     parser.add_argument(
         "--target-route-idxs",
@@ -1584,6 +1807,7 @@ def main() -> None:
         input_mode=str(args.input_mode),
         include_primary_output_token_count=bool(args.include_primary_output_token_count),
         input_task=input_task,
+        embedding_input_layout=str(args.embedding_input_layout),
         class_target_mode=str(args.class_target_mode),
         class_success_threshold=float(args.class_success_threshold),
         append_abstain_class=append_abstain_class,
@@ -1600,12 +1824,20 @@ def main() -> None:
         input_mode=str(args.input_mode),
         include_primary_output_token_count=bool(args.include_primary_output_token_count),
         input_task=input_task,
+        embedding_input_layout=str(args.embedding_input_layout),
         class_target_mode=str(args.class_target_mode),
         class_success_threshold=float(args.class_success_threshold),
         append_abstain_class=append_abstain_class,
     )
     if len(train_dataset) == 0 or len(eval_dataset) == 0:
         raise ValueError(f"Prepared empty dataset train={len(train_dataset)} eval={len(eval_dataset)}")
+    train_has_segments = "segment_input_ids" in train_dataset.rows[0]
+    eval_has_segments = "segment_input_ids" in eval_dataset.rows[0]
+    if train_has_segments != eval_has_segments:
+        raise ValueError("Train/eval embedding input layouts do not match")
+    embedding_segment_count = len(train_dataset.rows[0]["segment_input_ids"]) if train_has_segments else 1
+    if eval_has_segments and len(eval_dataset.rows[0]["segment_input_ids"]) != embedding_segment_count:
+        raise ValueError("Train/eval segment counts do not match")
 
     cost_target_dim = len(cost_route_idxs)
     if bool(args.predict_costs):
@@ -1690,6 +1922,8 @@ def main() -> None:
         cost_target_dim=cost_target_dim,
         cost_gradient_mode=str(args.cost_gradient_mode),
         predict_zero_reward_failure=bool(args.predict_zero_reward_failure),
+        embedding_input_layout=str(args.embedding_input_layout),
+        segment_count=int(embedding_segment_count),
     )
     if args.objective == "cost_mse":
         for parameter in model.reward_head.parameters():
@@ -1766,6 +2000,8 @@ def main() -> None:
         "append_abstain_class": bool(append_abstain_class),
         "max_seq_length": int(args.max_seq_length),
         "input_mode": str(args.input_mode),
+        "embedding_input_layout": str(args.embedding_input_layout),
+        "embedding_segment_count": int(embedding_segment_count),
         "input_task": input_task,
         "include_primary_output_token_count": bool(args.include_primary_output_token_count),
         "num_epochs": int(args.num_epochs),
