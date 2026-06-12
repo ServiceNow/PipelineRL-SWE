@@ -243,9 +243,6 @@ def _build_segmented_embedding_input_texts(
     input_task: str,
     embedding_input_layout: str,
 ) -> list[str] | None:
-    prompt_text = row.get("prompt_text")
-    if not isinstance(prompt_text, str):
-        return None
     route_legend = "\n".join(f"{idx}: {label}" for idx, label in enumerate(route_labels))
     task = _embedding_task_instruction(str(input_task))
     task_segment = (
@@ -254,22 +251,53 @@ def _build_segmented_embedding_input_texts(
         "[Route Order]\n"
         f"{route_legend}"
     )
-    prompt_segment = (
-        f"Instruct: {task}\n"
-        "Query: Represent the original SWE repair task. Focus on the repository, language, failing behavior, "
-        "and the code/edit context that may determine which solver succeeds.\n\n"
-        "[Original Repair Prompt]\n"
-        f"{prompt_text}"
-    )
-    segments: list[str]
-    if embedding_input_layout in {"late_fusion", "late_fusion_prompt_only"}:
-        segments = [task_segment, prompt_segment]
-    elif embedding_input_layout == "late_fusion_scout_only":
-        segments = [task_segment]
+
+    if embedding_input_layout in {"late_fusion", "late_fusion_prompt_only", "late_fusion_scout_only"}:
+        prompt_text = row.get("prompt_text")
+        if not isinstance(prompt_text, str):
+            return None
+        prompt_segment = (
+            f"Instruct: {task}\n"
+            "Query: Represent the original SWE repair task. Focus on the repository, language, failing behavior, "
+            "and the code/edit context that may determine which solver succeeds.\n\n"
+            "[Original Repair Prompt]\n"
+            f"{prompt_text}"
+        )
+        if embedding_input_layout in {"late_fusion", "late_fusion_prompt_only"}:
+            segments = [task_segment, prompt_segment]
+        else:
+            segments = [task_segment]
+    elif embedding_input_layout in {"semantic_late_fusion", "semantic_problem_only", "semantic_code_only"}:
+        problem_statement = row.get("problem_statement")
+        file_context = row.get("file_context")
+        if not isinstance(problem_statement, str) or not problem_statement.strip():
+            return None
+        if not isinstance(file_context, str) or not file_context.strip():
+            return None
+        problem_segment = (
+            f"Instruct: {task}\n"
+            "Query: Represent the natural-language SWE issue report and reproduction details.\n\n"
+            "[Problem Statement]\n"
+            f"{problem_statement}"
+        )
+        code_segment = (
+            f"Instruct: {task}\n"
+            "Query: Represent the relevant repository code files independently from the issue text and solver attempt.\n\n"
+            "[Code Context]\n"
+            f"{file_context}"
+        )
+        if embedding_input_layout == "semantic_problem_only":
+            segments = [task_segment, problem_segment]
+        elif embedding_input_layout == "semantic_code_only":
+            segments = [task_segment, code_segment]
+        else:
+            segments = [task_segment, problem_segment, code_segment]
     else:
         raise ValueError(f"Unsupported embedding_input_layout={embedding_input_layout!r}")
 
-    if embedding_input_layout == "late_fusion_prompt_only" or input_mode == "input_only":
+    if embedding_input_layout in {"late_fusion_prompt_only", "semantic_problem_only", "semantic_code_only"}:
+        return segments
+    if input_mode == "input_only":
         return segments
     if input_mode != "post_primary":
         raise ValueError(f"Unsupported input_mode={input_mode!r}")
@@ -341,7 +369,7 @@ class RouterCostDataset(Dataset):
             )
         if source_target_dim == 0:
             raise ValueError("At least one target route is required")
-        if embedding_input_layout not in {"single", "late_fusion", "late_fusion_prompt_only", "late_fusion_scout_only"}:
+        if embedding_input_layout not in {"single", "late_fusion", "late_fusion_prompt_only", "late_fusion_scout_only", "semantic_late_fusion", "semantic_problem_only", "semantic_code_only"}:
             raise ValueError(f"Unsupported embedding_input_layout={embedding_input_layout!r}")
         prompt_route_labels = list(route_labels)
         if bool(append_abstain_class):
@@ -500,7 +528,7 @@ class QwenEmbeddingRouter(torch.nn.Module):
             raise ValueError("use_lora=true requires encoder_frozen=false")
         if cost_gradient_mode not in {"joint", "detached", "separate_adapter"}:
             raise ValueError(f"Unsupported cost_gradient_mode={cost_gradient_mode}")
-        if embedding_input_layout not in {"single", "late_fusion", "late_fusion_prompt_only", "late_fusion_scout_only"}:
+        if embedding_input_layout not in {"single", "late_fusion", "late_fusion_prompt_only", "late_fusion_scout_only", "semantic_late_fusion", "semantic_problem_only", "semantic_code_only"}:
             raise ValueError(f"Unsupported embedding_input_layout={embedding_input_layout!r}")
         self.encoder_frozen = bool(encoder_frozen)
         self.cost_gradient_mode = str(cost_gradient_mode)
@@ -1646,9 +1674,9 @@ def main() -> None:
     parser.add_argument("--input-mode", choices=["post_primary", "input_only"], default="post_primary")
     parser.add_argument(
         "--embedding-input-layout",
-        choices=["single", "late_fusion", "late_fusion_prompt_only", "late_fusion_scout_only"],
+        choices=["single", "late_fusion", "late_fusion_prompt_only", "late_fusion_scout_only", "semantic_late_fusion", "semantic_problem_only", "semantic_code_only"],
         default="single",
-        help="How to present evidence to Qwen embeddings: one sequence or separate shared-encoder segments fused by the head.",
+        help="How to present evidence to Qwen embeddings: one sequence, full-prompt late fusion, or semantic problem/code/scout fusion.",
     )
     parser.add_argument("--include-primary-output-token-count", action="store_true")
     parser.add_argument(

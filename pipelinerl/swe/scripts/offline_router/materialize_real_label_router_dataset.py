@@ -191,7 +191,7 @@ def _make_router_row(
         raise ValueError(f"{problem_id} missing file_contents")
     if not isinstance(problem_statement, str) or not problem_statement.strip():
         raise ValueError(f"{problem_id} missing problem_statement")
-    repair_messages, _stage_input = build_repair_messages(problem_statement, file_contents)
+    repair_messages, file_context = build_repair_messages(problem_statement, file_contents)
     prompt_text = render_prompt_text(tokenizer, repair_messages)
 
     vector_values: dict[str, list[Any]] = {
@@ -217,6 +217,8 @@ def _make_router_row(
         "base_commit": str(problem.get("base_commit") or ""),
         "language": infer_language_from_problem(problem),
         "problem_statement": problem_statement,
+        "file_context": file_context,
+        "file_paths": sorted(str(path) for path in file_contents),
         "prompt_text": prompt_text,
         "primary_output_text": str(vector_values["route_outputs"][0] or ""),
         "route_labels": list(route_labels),

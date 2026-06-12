@@ -221,7 +221,7 @@ async def _collect_problem(
     if not isinstance(problem_statement, str) or not problem_statement.strip():
         raise ValueError(f"Problem {problem_id} missing problem_statement")
 
-    repair_messages, _stage_input = build_repair_messages(problem_statement, file_contents)
+    repair_messages, file_context = build_repair_messages(problem_statement, file_contents)
     prompt_text = render_prompt_text(prompt_tokenizer, repair_messages)
     route_results = await asyncio.gather(
         *[
@@ -246,6 +246,8 @@ async def _collect_problem(
         "base_commit": str(problem.get("base_commit") or ""),
         "language": infer_language_from_problem(problem),
         "problem_statement": problem_statement,
+        "file_context": file_context,
+        "file_paths": sorted(str(path) for path in file_contents),
         "prompt_text": prompt_text,
         "primary_output_text": primary_output_text,
         "performance_targets": [result["reward"] for result in route_results],
