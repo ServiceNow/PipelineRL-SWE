@@ -1546,6 +1546,7 @@ def _evaluate(
     loader: DataLoader,
     eval_dataset: RouterCostDataset,
     route_labels: list[str],
+    route_idxs: list[int] | None,
     cost_route_idxs: list[int] | None,
     cost_route_labels: list[str] | None,
     objective: str,
@@ -1710,6 +1711,7 @@ def _evaluate(
                         float(value) for value in gathered_zero_reward_preds[idx].tolist()
                     ] if predict_zero_reward_failure else None,
                     "route_labels": list(route_labels),
+                    "route_idxs": [int(value) for value in (route_idxs or [])],
                 }
             row_payload.update(row_extra)
             rows.append(row_payload)
@@ -2342,6 +2344,7 @@ def main() -> None:
             eval_loader,
             eval_dataset,
             route_labels,
+            route_idxs=target_route_idxs,
             cost_route_idxs=cost_route_idxs,
             cost_route_labels=cost_route_labels,
             objective=str(args.objective),
@@ -2427,6 +2430,7 @@ def main() -> None:
                 eval_loader,
                 eval_dataset,
                 route_labels,
+                route_idxs=target_route_idxs,
                 cost_route_idxs=cost_route_idxs,
                 cost_route_labels=cost_route_labels,
                 objective=str(args.objective),
