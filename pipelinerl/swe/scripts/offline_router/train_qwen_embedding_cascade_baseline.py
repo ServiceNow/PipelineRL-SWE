@@ -705,6 +705,8 @@ def main() -> None:
         cost_target_dim=0,
         cost_gradient_mode="joint",
         predict_zero_reward_failure=False,
+        embedding_input_layout="single",
+        segment_count=1,
     )
     trainable_parameters = [parameter for parameter in model.parameters() if parameter.requires_grad]
     optimizer = torch.optim.AdamW(trainable_parameters, lr=float(args.lr), weight_decay=float(args.weight_decay))
