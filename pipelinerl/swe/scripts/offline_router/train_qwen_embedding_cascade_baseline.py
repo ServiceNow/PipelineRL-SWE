@@ -455,6 +455,22 @@ def _compute_cascade_report(
     }
 
 
+def _score_loss_and_predictions(
+    reward_logits: torch.Tensor,
+    targets: torch.Tensor,
+    loss_type: str,
+    reduction: str,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    logits = reward_logits.float()
+    target_values = targets.float().clamp(0.0, 1.0)
+    if loss_type == "mse":
+        return F.mse_loss(logits, target_values, reduction=reduction), logits
+    if loss_type == "soft_bce":
+        return F.binary_cross_entropy_with_logits(logits, target_values, reduction=reduction), torch.sigmoid(logits)
+    raise ValueError(f"Unsupported loss_type={loss_type!r}")
+
+
+
 @torch.no_grad()
 def _evaluate(
     accelerator: Accelerator,
@@ -462,6 +478,7 @@ def _evaluate(
     loader: DataLoader,
     dataset: CascadeAttemptDataset,
     desc: str,
+    loss_type: str,
 ) -> tuple[float, list[dict[str, Any]]]:
     model.eval()
     total_loss = 0.0
@@ -469,9 +486,8 @@ def _evaluate(
     rows: list[dict[str, Any]] = []
     for batch in tqdm(loader, desc=desc, disable=not accelerator.is_main_process):
         reward_logits, _, _ = model(input_ids=batch["input_ids"], attention_mask=batch["attention_mask"])
-        preds = reward_logits.float()
         targets = batch["targets"].float()
-        loss = F.mse_loss(preds, targets, reduction="sum")
+        loss, preds = _score_loss_and_predictions(reward_logits, targets, loss_type, reduction="sum")
         gathered_loss = accelerator.gather_for_metrics(loss.detach().reshape(1)).detach().cpu()
         gathered_preds = accelerator.gather_for_metrics(preds).detach().cpu()
         gathered_targets = accelerator.gather_for_metrics(targets).detach().cpu()
@@ -602,6 +618,7 @@ def main() -> None:
     parser.add_argument("--lora-target-modules", default="q_proj,k_proj,v_proj,o_proj")
     parser.add_argument("--gradient-checkpointing", action="store_true")
     parser.add_argument("--max-threshold-candidates", type=int, default=51)
+    parser.add_argument("--loss-type", choices=["mse", "soft_bce"], default="mse")
     parser.add_argument("--utility-lambdas", default=",".join(str(value) for value in DEFAULT_UTILITY_LAMBDAS))
     parser.add_argument("--ddp-find-unused-parameters", action="store_true")
     parser.add_argument("--checkpoint-every-epoch", action="store_true")
@@ -751,6 +768,7 @@ def main() -> None:
         "lora_target_modules": [module.strip() for module in str(args.lora_target_modules).split(",") if module.strip()],
         "gradient_checkpointing": bool(args.gradient_checkpointing),
         "max_threshold_candidates": int(args.max_threshold_candidates),
+        "loss_type": str(args.loss_type),
         "utility_lambdas": lambdas,
         "ddp_find_unused_parameters": bool(args.ddp_find_unused_parameters),
         "checkpoint_every_epoch": bool(args.checkpoint_every_epoch),
@@ -786,7 +804,9 @@ def main() -> None:
         for batch in tqdm(train_loader, desc=f"Train Qwen cascade scorer epoch {epoch}", disable=not accelerator.is_main_process):
             with accelerator.accumulate(model):
                 reward_logits, _, _ = model(input_ids=batch["input_ids"], attention_mask=batch["attention_mask"])
-                loss = F.mse_loss(reward_logits.float(), batch["targets"].float())
+                loss, _ = _score_loss_and_predictions(
+                    reward_logits, batch["targets"].float(), str(args.loss_type), reduction="mean"
+                )
                 accelerator.backward(loss)
                 optimizer.step()
                 scheduler.step()
@@ -794,7 +814,7 @@ def main() -> None:
                 running_losses.append(float(loss.detach().item()))
         accelerator.wait_for_everyone()
         eval_loss, eval_pred_rows = _evaluate(
-            accelerator, model, eval_loader, eval_dataset, desc="Eval Qwen cascade scorer"
+            accelerator, model, eval_loader, eval_dataset, desc="Eval Qwen cascade scorer", loss_type=str(args.loss_type)
         )
         if accelerator.is_main_process:
             history.append(
@@ -812,6 +832,7 @@ def main() -> None:
                 train_report_loader,
                 train_dataset,
                 desc=f"Predict train Qwen cascade scorer epoch {epoch}",
+                loss_type=str(args.loss_type),
             )
             _, eval_pred_rows = _evaluate(
                 accelerator,
@@ -819,6 +840,7 @@ def main() -> None:
                 eval_loader,
                 eval_dataset,
                 desc=f"Predict eval Qwen cascade scorer epoch {epoch}",
+                loss_type=str(args.loss_type),
             )
             if accelerator.is_main_process:
                 _build_and_write_reports(
@@ -854,10 +876,10 @@ def main() -> None:
             accelerator.wait_for_everyone()
 
     train_loss, train_pred_rows = _evaluate(
-        accelerator, model, train_report_loader, train_dataset, desc="Predict train Qwen cascade scorer"
+        accelerator, model, train_report_loader, train_dataset, desc="Predict train Qwen cascade scorer", loss_type=str(args.loss_type)
     )
     eval_loss, eval_pred_rows = _evaluate(
-        accelerator, model, eval_loader, eval_dataset, desc="Predict eval Qwen cascade scorer"
+        accelerator, model, eval_loader, eval_dataset, desc="Predict eval Qwen cascade scorer", loss_type=str(args.loss_type)
     )
     if not accelerator.is_main_process:
         return
