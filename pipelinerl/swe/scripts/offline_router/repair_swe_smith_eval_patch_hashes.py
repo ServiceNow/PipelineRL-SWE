@@ -11,11 +11,31 @@ import tarfile
 from pathlib import Path
 from typing import Any
 
-from pipelinerl.swe.load_datasets import load_local_swe_dataset
-from pipelinerl.swe.scripts.offline_router.common import problem_id_from_item
+from datasets import load_from_disk
 
 FAKE_INDEX_RE = re.compile(r"^index 0{7,40}\.\.1{7,40}(?: \d+)?$")
 DIFF_RE = re.compile(r"^diff --git a/(.+?) b/(.+?)$")
+
+
+def parse_file_contents(raw: Any) -> dict[str, str]:
+    if isinstance(raw, dict):
+        return {str(k): str(v) for k, v in raw.items()}
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return {}
+        if isinstance(parsed, dict):
+            return {str(k): str(v) for k, v in parsed.items()}
+    return {}
+
+
+def problem_id_from_item(item: dict[str, Any]) -> str:
+    for key in ("instance_id", "issue_id", "id"):
+        value = item.get(key)
+        if value:
+            return str(value)
+    raise ValueError("Missing instance id")
 
 
 def git_blob_hash(text: str) -> str:
@@ -24,19 +44,19 @@ def git_blob_hash(text: str) -> str:
 
 
 def load_dataset_by_id(path: str, name: str, ids: set[str]) -> dict[str, dict[str, Any]]:
-    rows = load_local_swe_dataset(
-        dataset_names=[name],
-        dataset_path=path,
-        shuffle=False,
-        seed=42,
-        dataset_label=name,
-        max_samples=None,
-    )
+    _ = name
+    dataset = load_from_disk(path)
     out: dict[str, dict[str, Any]] = {}
-    for row in rows:
-        pid = problem_id_from_item(row)
-        if pid in ids:
-            out[pid] = row
+    for item in dataset:
+        row = dict(item)
+        try:
+            pid = problem_id_from_item(row)
+        except ValueError:
+            continue
+        if pid not in ids:
+            continue
+        file_contents = parse_file_contents(row.get("repair_file_contents", row.get("gold_file_contents", "{}")))
+        out[pid] = {**row, "file_contents": file_contents}
     missing = ids - set(out)
     if missing:
         raise ValueError(f"Missing {len(missing)} selected ids from {path}; first={sorted(missing)[:5]}")
@@ -158,10 +178,29 @@ def main() -> None:
     pkg = Path(args.package_dir)
     manifest_path = pkg / "manifest.json"
     manifest = json.loads(manifest_path.read_text())
-    split_dataset_info = {
-        "train1500": (args.train_dataset_path, args.train_dataset_name),
-        "eval500": (args.eval_dataset_path, args.eval_dataset_name),
-    }
+    def dataset_info_for_split(split: str) -> tuple[str, str]:
+        split_lower = str(split).lower()
+        if split_lower.startswith("train"):
+            return args.train_dataset_path, args.train_dataset_name
+        if split_lower.startswith("eval") or split_lower.startswith("test"):
+            return args.eval_dataset_path, args.eval_dataset_name
+        raise ValueError(f"Cannot infer dataset for split={split!r}; expected train*/eval*/test*")
+
+    def iter_manifest_splits() -> dict[str, dict[str, Any]]:
+        if isinstance(manifest.get("splits"), dict):
+            return manifest["splits"]
+        split = str(manifest.get("split") or "")
+        ids_path = manifest.get("ids_path")
+        routes = manifest.get("routes")
+        if not split or not ids_path or not isinstance(routes, list):
+            raise ValueError("Unsupported manifest shape: expected either manifest['splits'] or top-level split/ids_path/routes")
+        return {
+            split: {
+                "ids_path": ids_path,
+                "routes": {str(route["route_id"]): route for route in routes},
+            }
+        }
+
     totals = {
         "prediction_files_changed": 0,
         "prediction_rows_changed": 0,
@@ -172,10 +211,10 @@ def main() -> None:
         "apply_failures": 0,
     }
     repair_manifest: dict[str, Any] = {"splits": {}}
-    for split, split_info in manifest["splits"].items():
+    for split, split_info in iter_manifest_splits().items():
         ids_path = pkg / split_info["ids_path"]
         ids = {line.strip() for line in ids_path.read_text().splitlines() if line.strip()}
-        dataset_path, dataset_name = split_dataset_info[split]
+        dataset_path, dataset_name = dataset_info_for_split(split)
         dataset = load_dataset_by_id(dataset_path, dataset_name, ids)
         repair_manifest["splits"][split] = {"routes": {}}
         for route, route_info in split_info["routes"].items():

@@ -20,12 +20,18 @@ def main() -> None:
     parser.add_argument("--output-path", required=True)
     parser.add_argument("--n", type=int, required=True)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--exclude-path", action="append", default=[], help="Optional newline-delimited IDs to remove from the sampling pool. Can be passed more than once.")
     parser.add_argument("--sort-output", action=argparse.BooleanOptionalAction, default=False)
     args = parser.parse_args()
 
     pool_path = Path(args.pool_path)
     output_path = Path(args.output_path)
     ids = _read_ids(pool_path)
+    excluded: set[str] = set()
+    for exclude_path in args.exclude_path:
+        excluded.update(_read_ids(Path(exclude_path)))
+    if excluded:
+        ids = [instance_id for instance_id in ids if instance_id not in excluded]
     if args.n <= 0:
         raise ValueError("--n must be positive")
     if args.n > len(ids):
@@ -41,7 +47,8 @@ def main() -> None:
         for instance_id in sampled:
             handle.write(instance_id + "\n")
 
-    print(f"Wrote {len(sampled)} ids to {output_path} from {pool_path}")
+    suffix = f" after excluding {len(excluded)} ids" if excluded else ""
+    print(f"Wrote {len(sampled)} ids to {output_path} from {pool_path}{suffix}")
 
 
 if __name__ == "__main__":
