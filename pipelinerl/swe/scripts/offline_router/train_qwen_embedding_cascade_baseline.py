@@ -41,6 +41,29 @@ from pipelinerl.swe.scripts.offline_router.train_qwen_embedding_router_baseline 
 )
 
 
+def _load_model_only_checkpoint(model: torch.nn.Module, checkpoint_path: Path) -> dict[str, Any]:
+    """Load model weights from an Accelerate checkpoint without optimizer state."""
+    model_path = checkpoint_path
+    if model_path.is_dir():
+        model_path = model_path / "model.safetensors"
+    if not model_path.exists():
+        raise FileNotFoundError(f"Missing model-only checkpoint: {model_path}")
+    try:
+        from safetensors.torch import load_file
+    except ImportError as exc:
+        raise ImportError("safetensors is required for --init-from-model-checkpoint") from exc
+    state_dict = load_file(str(model_path), device="cpu")
+    incompatible = model.load_state_dict(state_dict, strict=False)
+    return {
+        "checkpoint": str(model_path),
+        "loaded_tensors": len(state_dict),
+        "missing_key_count": len(incompatible.missing_keys),
+        "unexpected_key_count": len(incompatible.unexpected_keys),
+        "missing_key_sample": list(incompatible.missing_keys)[:20],
+        "unexpected_key_sample": list(incompatible.unexpected_keys)[:20],
+    }
+
+
 def _problem_key(dataset: Any, problem_id: str) -> str:
     return f"{dataset}::{problem_id}"
 
@@ -624,6 +647,7 @@ def main() -> None:
     parser.add_argument("--checkpoint-every-epoch", action="store_true")
     parser.add_argument("--epoch-report-every", type=int, default=0)
     parser.add_argument("--resume-from-checkpoint", default=None)
+    parser.add_argument("--init-from-model-checkpoint", default=None)
     parser.add_argument("--save-model", action="store_true")
     args = parser.parse_args()
 
@@ -725,6 +749,17 @@ def main() -> None:
         embedding_input_layout="single",
         segment_count=1,
     )
+    init_from_model_checkpoint_report = None
+    if args.init_from_model_checkpoint:
+        init_from_model_checkpoint_report = _load_model_only_checkpoint(
+            model, Path(args.init_from_model_checkpoint)
+        )
+        if accelerator.is_main_process:
+            print(
+                f"Initialized model weights from {init_from_model_checkpoint_report['checkpoint']} "
+                f"({init_from_model_checkpoint_report['loaded_tensors']} tensors)",
+                flush=True,
+            )
     trainable_parameters = [parameter for parameter in model.parameters() if parameter.requires_grad]
     optimizer = torch.optim.AdamW(trainable_parameters, lr=float(args.lr), weight_decay=float(args.weight_decay))
     update_steps_per_epoch = math.ceil(len(train_loader) / int(args.gradient_accumulation_steps))
@@ -774,6 +809,8 @@ def main() -> None:
         "checkpoint_every_epoch": bool(args.checkpoint_every_epoch),
         "epoch_report_every": int(args.epoch_report_every),
         "resume_from_checkpoint": str(args.resume_from_checkpoint) if args.resume_from_checkpoint else None,
+        "init_from_model_checkpoint": str(args.init_from_model_checkpoint) if args.init_from_model_checkpoint else None,
+        "init_from_model_checkpoint_report": init_from_model_checkpoint_report,
     }
     if accelerator.is_main_process:
         write_json(output_dir / "train_config.json", config)
