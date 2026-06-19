@@ -9,6 +9,7 @@ LOCAL_PYTHON=${LOCAL_PYTHON:-/home/toolkit/.conda/envs/pipeline-rl/bin/python}
 SOURCE_DATASET_DIR=${SOURCE_DATASET_DIR:-/mnt/llmd/results/exps/aristides/reason/offline_router_swe_smith_train1500_real_labels_4route_1780639659/collect}
 BUDGET_INSTANCES=${BUDGET_INSTANCES:-128}
 ACTIVE_STRATEGY=${ACTIVE_STRATEGY:-uncertainty}
+PROXY_PREDICTIONS=${PROXY_PREDICTIONS:-}
 SEED=${SEED:-17}
 SUBMIT_SLEEP_SECS=${SUBMIT_SLEEP_SECS:-20}
 NUM_EPOCHS=${NUM_EPOCHS:-5}
@@ -22,9 +23,29 @@ ACTIVE_DATASET_DIR=${ACTIVE_DATASET_DIR:-${DATASET_ROOT}/${ACTIVE_STRATEGY}_${BU
 
 mkdir -p "${DATASET_ROOT}"
 
-"${LOCAL_PYTHON}" "${REPO_ROOT}/pipelinerl/swe/scripts/offline_router/materialize_active_real_label_verifier_subset.py"   --source-dataset-dir "${SOURCE_DATASET_DIR}"   --output-dir "${RANDOM_DATASET_DIR}"   --strategy random   --budget-instances "${BUDGET_INSTANCES}"   --seed "${SEED}"
+PROXY_ARGS=()
+if [[ -n "${PROXY_PREDICTIONS}" ]]; then
+  IFS=',' read -r -a PROXY_PATHS <<< "${PROXY_PREDICTIONS}"
+  for proxy_path in "${PROXY_PATHS[@]}"; do
+    PROXY_ARGS+=(--proxy-predictions "${proxy_path}")
+  done
+fi
 
-"${LOCAL_PYTHON}" "${REPO_ROOT}/pipelinerl/swe/scripts/offline_router/materialize_active_real_label_verifier_subset.py"   --source-dataset-dir "${SOURCE_DATASET_DIR}"   --output-dir "${ACTIVE_DATASET_DIR}"   --strategy "${ACTIVE_STRATEGY}"   --budget-instances "${BUDGET_INSTANCES}"   --seed "${SEED}"
+"${LOCAL_PYTHON}" "${REPO_ROOT}/pipelinerl/swe/scripts/offline_router/materialize_active_real_label_verifier_subset.py" \
+  --source-dataset-dir "${SOURCE_DATASET_DIR}" \
+  --output-dir "${RANDOM_DATASET_DIR}" \
+  --strategy random \
+  --budget-instances "${BUDGET_INSTANCES}" \
+  --seed "${SEED}" \
+  "${PROXY_ARGS[@]}"
+
+"${LOCAL_PYTHON}" "${REPO_ROOT}/pipelinerl/swe/scripts/offline_router/materialize_active_real_label_verifier_subset.py" \
+  --source-dataset-dir "${SOURCE_DATASET_DIR}" \
+  --output-dir "${ACTIVE_DATASET_DIR}" \
+  --strategy "${ACTIVE_STRATEGY}" \
+  --budget-instances "${BUDGET_INSTANCES}" \
+  --seed "${SEED}" \
+  "${PROXY_ARGS[@]}"
 
 REAL_LABEL_DATASET_DIR="${RANDOM_DATASET_DIR}" JOB_NAME="offline_router_swe_smith_real4route_proxyinit_random${BUDGET_INSTANCES}_${NUM_EPOCHS}epoch" OUTPUT_ROOT="${RUN_ROOT}/random_${BUDGET_INSTANCES}" TRAIN_OUTPUT_DIR="${RUN_ROOT}/random_${BUDGET_INSTANCES}/train_qwen3_embedding_8b_lora_verifier_proxy_init_real_random_${NUM_EPOCHS}epoch" INIT_FROM_MODEL_CHECKPOINT="${INIT_FROM_MODEL_CHECKPOINT}" NUM_EPOCHS="${NUM_EPOCHS}" LR="${LR}" SEED="${SEED}" bash "${SCRIPT_DIR}/launch_offline_router_swe_smith_real_verifier_proxy_init_finetune.sh"
 
