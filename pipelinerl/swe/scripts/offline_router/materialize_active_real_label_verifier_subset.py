@@ -167,7 +167,7 @@ def main() -> None:
     train_rows = _load_split(source_dir, "train")
     eval_rows = _load_split(source_dir, "eval")
     proxy_paths = [Path(path) for path in (args.proxy_predictions or DEFAULT_PROXY_PREDICTIONS)]
-    proxy_scores = _load_proxy_scores(proxy_paths)
+    proxy_scores = {} if str(args.strategy) == "random" else _load_proxy_scores(proxy_paths)
     selected_train_rows, selection_summary = _select_rows(
         train_rows,
         proxy_scores,
