@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 TIMESTAMP=${TIMESTAMP:-$(date +%s)}
-SUBMIT_SLEEP_SECS=${SUBMIT_SLEEP_SECS:-20}
+SUBMIT_SLEEP_SECS=${SUBMIT_SLEEP_SECS:-10}
 JOB_NAME_PREFIX=${JOB_NAME_PREFIX:-analyze_swe_smith_multirollout}
 
 echo "Launching controller pathway analysis jobs with TIMESTAMP=${TIMESTAMP}"

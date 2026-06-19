@@ -25,6 +25,7 @@ make job \
   CONDA_EXE=/opt/conda/bin/conda \
   SNAPSHOT=1 \
   GPU=0 \
+  GPU_MEM=0 \
   NPROC=1 \
   CPU=${CPU:-4} \
   CPU_MEM=${CPU_MEM:-32} \
