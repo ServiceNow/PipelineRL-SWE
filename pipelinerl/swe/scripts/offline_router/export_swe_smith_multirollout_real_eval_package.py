@@ -16,6 +16,18 @@ ROUTES = [
     {"base_route_id": "gpt_oss_120b", "model_slug": "openai_gpt-oss-120b", "model_name_or_path": "openai/gpt-oss-120b"},
 ]
 
+def route_rollouts_for_profile(profile: str, route: dict[str, str], n_rollouts: int) -> list[int]:
+    base_route_id = route["base_route_id"]
+    if profile == "full":
+        return list(range(n_rollouts))
+    if profile == "20b_resample_120b_escalate":
+        if base_route_id == "gpt_oss_20b":
+            return list(range(n_rollouts))
+        if base_route_id == "gpt_oss_120b":
+            return [0]
+        return []
+    raise ValueError(f"Unknown export profile: {profile}")
+
 def read_json(path: Path) -> Any:
     with path.open() as handle:
         return json.load(handle)
@@ -110,6 +122,16 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--split", default="eval300")
     p.add_argument("--output-dir", required=True)
     p.add_argument("--rollouts", type=int, default=3)
+    p.add_argument(
+        "--profile",
+        choices=["full", "20b_resample_120b_escalate"],
+        default="full",
+        help=(
+            "Which route/rollout subset to export. "
+            "20b_resample_120b_escalate exports gpt-oss-20b r0/r1/r2 "
+            "plus gpt-oss-120b r0 for stop/resample/escalate controller analysis."
+        ),
+    )
     p.add_argument("--make-tarball", action="store_true")
     p.add_argument("--helper-source-dir", default="router_analysis/aws_eval_packages/swe_smith_multirollout_eval150_1781382734/scripts")
     return p.parse_args()
@@ -127,7 +149,7 @@ def main() -> None:
     routes_manifest: list[dict[str, Any]] = []
     reference_ids: list[str] | None = None
     for route in ROUTES:
-        for rollout_idx in range(int(args.rollouts)):
+        for rollout_idx in route_rollouts_for_profile(args.profile, route, int(args.rollouts)):
             route_id = f"{route['base_route_id']}_r{rollout_idx}"
             route_ids.append(route_id)
             collect_dir = source_root / split / route["base_route_id"] / f"rollout_{rollout_idx}" / "collect"
@@ -153,7 +175,7 @@ def main() -> None:
         raise ValueError("No routes exported")
     write_runner(output_dir, split, route_ids)
     write_readme(output_dir)
-    manifest = {"created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "format": "SWE-Smith predictions; rows include instance_id, patch, model_patch, model_name_or_path", "source_root": str(source_root), "split": split, "ids_path": f"ids/{split}.txt", "n_ids": len(reference_ids), "n_rollouts": int(args.rollouts), "routes": routes_manifest}
+    manifest = {"created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "format": "SWE-Smith predictions; rows include instance_id, patch, model_patch, model_name_or_path", "source_root": str(source_root), "split": split, "ids_path": f"ids/{split}.txt", "n_ids": len(reference_ids), "n_rollouts": int(args.rollouts), "profile": args.profile, "routes": routes_manifest}
     write_json(output_dir / "manifest.json", manifest)
     if args.make_tarball:
         tar_path = output_dir.with_suffix(".tar.gz")

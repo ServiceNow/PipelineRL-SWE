@@ -486,7 +486,7 @@ def _score_loss_and_predictions(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     logits = reward_logits.float()
     target_values = targets.float().clamp(0.0, 1.0)
-    if loss_type == "mse":
+    if loss_type in {"mse", "proxy_listwise_ce"}:
         return F.mse_loss(logits, target_values, reduction=reduction), logits
     if loss_type == "soft_bce":
         return F.binary_cross_entropy_with_logits(logits, target_values, reduction=reduction), torch.sigmoid(logits)

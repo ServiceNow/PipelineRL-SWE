@@ -110,7 +110,7 @@ def main() -> None:
     parser.add_argument("--route-order", default="0,1,2,3")
     parser.add_argument("--max-seq-length", type=int, default=24000)
     parser.add_argument("--batch-size", type=int, default=1)
-    parser.add_argument("--loss-type", choices=["mse", "soft_bce"], default=None)
+    parser.add_argument("--loss-type", choices=["mse", "soft_bce", "proxy_listwise_ce"], default=None)
     parser.add_argument("--device", default="cuda")
     args = parser.parse_args()
 
