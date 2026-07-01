@@ -402,9 +402,10 @@ def main() -> None:
     dataset_dir = Path(args.dataset_dir)
     candidate_route_order = _parse_int_list(str(args.candidate_route_order))
 
-    kwargs_handlers = []
-    if args.ddp_find_unused_parameters:
-        kwargs_handlers.append(DistributedDataParallelKwargs(find_unused_parameters=True))
+    # static_graph=True is required: the sequential candidate forward loop calls model() N times
+    # per backward pass, which causes DDP's gradient-ready hooks to fire multiple times for the
+    # same LoRA parameters when gradient checkpointing is enabled (reentrant backward).
+    kwargs_handlers = [DistributedDataParallelKwargs(find_unused_parameters=False, static_graph=True)]
     accelerator = Accelerator(
         gradient_accumulation_steps=int(args.gradient_accumulation_steps),
         kwargs_handlers=kwargs_handlers,
