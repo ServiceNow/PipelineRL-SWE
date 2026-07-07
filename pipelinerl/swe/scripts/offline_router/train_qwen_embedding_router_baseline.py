@@ -38,6 +38,29 @@ from pipelinerl.swe.scripts.offline_router.train_modernbert_router_baseline impo
 )
 
 
+def _load_model_only_checkpoint(model: torch.nn.Module, checkpoint_path: Path) -> dict[str, Any]:
+    """Load model weights from a checkpoint without optimizer state."""
+    model_path = checkpoint_path
+    if model_path.is_dir():
+        model_path = model_path / "model.safetensors"
+    if not model_path.exists():
+        raise FileNotFoundError(f"Missing model-only checkpoint: {model_path}")
+    try:
+        from safetensors.torch import load_file
+    except ImportError as exc:
+        raise ImportError("safetensors is required for --init-from-model-checkpoint") from exc
+    state_dict = load_file(str(model_path), device="cpu")
+    incompatible = model.load_state_dict(state_dict, strict=False)
+    return {
+        "checkpoint": str(model_path),
+        "loaded_tensors": len(state_dict),
+        "missing_key_count": len(incompatible.missing_keys),
+        "unexpected_key_count": len(incompatible.unexpected_keys),
+        "missing_key_sample": list(incompatible.missing_keys)[:20],
+        "unexpected_key_sample": list(incompatible.unexpected_keys)[:20],
+    }
+
+
 def _dtype_from_name(name: str) -> torch.dtype:
     if name == "bf16":
         return torch.bfloat16
@@ -1903,6 +1926,8 @@ def main() -> None:
     parser.add_argument("--ddp-find-unused-parameters", action="store_true")
     parser.add_argument("--checkpoint-every-epoch", action="store_true")
     parser.add_argument("--resume-from-checkpoint", default=None)
+    parser.add_argument("--init-from-model-checkpoint", default=None,
+                        help="Load model weights only (no optimizer state) from this checkpoint path.")
     parser.add_argument("--eval-only", action="store_true")
     parser.add_argument(
         "--cost-normalization-config",
@@ -2149,6 +2174,18 @@ def main() -> None:
         embedding_input_layout=str(args.embedding_input_layout),
         segment_count=int(embedding_segment_count),
     )
+    init_from_model_checkpoint_report = None
+    if args.init_from_model_checkpoint:
+        init_from_model_checkpoint_report = _load_model_only_checkpoint(
+            model, Path(args.init_from_model_checkpoint)
+        )
+        if accelerator.is_main_process:
+            print(
+                f"Initialized model weights from {init_from_model_checkpoint_report['checkpoint']} "
+                f"({init_from_model_checkpoint_report['loaded_tensors']} tensors)",
+                flush=True,
+            )
+
     if args.objective == "cost_mse":
         for parameter in model.reward_head.parameters():
             parameter.requires_grad_(False)
@@ -2297,6 +2334,8 @@ def main() -> None:
         "ddp_find_unused_parameters": bool(args.ddp_find_unused_parameters),
         "checkpoint_every_epoch": bool(args.checkpoint_every_epoch),
         "resume_from_checkpoint": str(args.resume_from_checkpoint) if args.resume_from_checkpoint else None,
+        "init_from_model_checkpoint": str(args.init_from_model_checkpoint) if args.init_from_model_checkpoint else None,
+        "init_from_model_checkpoint_report": init_from_model_checkpoint_report,
         "eval_only": bool(args.eval_only),
         "cost_normalization_config": str(args.cost_normalization_config) if args.cost_normalization_config else None,
     }
