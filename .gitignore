@@ -189,5 +189,5 @@ dump.rdb
 
 router_analysis/
 eval_exports
-overleaf
+overleaf/uploaded_*
 res
