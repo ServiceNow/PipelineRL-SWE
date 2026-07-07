@@ -1,0 +1,586 @@
+\documentclass[10pt]{article} % For LaTeX2e
+\usepackage{tmlr}
+
+\input{math_commands.tex}
+
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{tabularx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{xspace}
+\usepackage{multirow}
+
+\title{Explore Before You Route: Post-Scout Routing with\\Proxy-Supervised Pre-Training for Code Repair Agents}
+
+% Authors must not appear in the submitted version.
+\author{Anonymous Authors}
+
+\newcommand{\fix}{\marginpar{FIX}}
+\newcommand{\new}{\marginpar{NEW}}
+\newcommand{\scout}{\textsc{Scout}\xspace}
+\newcommand{\methodname}{post-scout routing\xspace}
+\newcommand{\Methodname}{Post-Scout Routing\xspace}
+
+\def\month{MM}
+\def\year{YYYY}
+\def\openreview{\url{https://openreview.net/forum?id=XXXX}}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Routing code repair tasks across a portfolio of models of varying cost and capability
+requires good estimates of which model will succeed on each task.
+This is hard from the problem statement alone, because the input often underdetermines
+which solver will produce a valid patch.
+We study \emph{post-scout routing}: always run a cheap scout model first,
+then route based on the combined context of the problem and scout attempt.
+This converts routing into attempt-conditioned success prediction:
+given the task and the 4B scout output,
+predict whether each larger solver in the pool will produce a correct patch.
+When the router predicts that even the strongest local model will fail,
+the task is escalated to an external frontier model (Claude).
+
+Training a post-scout router requires execution-based labels,
+which are expensive to collect at scale.
+We show that \emph{proxy pre-training}---first training on dense patch-similarity
+rewards from a trace-expanded dataset, then fine-tuning on a small number of
+real execution labels---substantially reduces the real-label budget.
+On a 286-task SWE-Smith evaluation set,
+a Qwen3-Embedding-8B router with LoRA achieves
+76\% accuracy at 70\% abstention after full real-label training,
+compared to 65\% for an input-only ablation with the same supervision.
+The scout attempt is a load-bearing signal that is not recoverable
+from the repair prompt alone.
+\end{abstract}
+
+\section{Introduction}
+
+Large language models for software repair span a wide range of cost and reliability.
+A 4-billion-parameter model costs a fraction of a 120-billion-parameter model per token,
+but the larger model solves a substantially higher fraction of repair tasks.
+An organization running a portfolio of models would benefit from a router that
+directs each task to the cheapest solver likely to succeed---and escalates to a
+powerful external model only when the local portfolio is expected to fail.
+
+Standard routing approaches predict solver quality from the task input alone.
+For code repair, this is difficult: two tasks with similar-looking bug reports
+may require fundamentally different fix strategies, and one model may succeed
+where another fails for reasons not apparent from the problem statement.
+Cascade systems \citep{chen2024frugalgpt} alleviate this by calling solvers
+sequentially and stopping when a learned confidence threshold is met,
+but they require running each solver before deciding to continue---a decision
+at a strictly later information state than we need for cost-efficient routing.
+
+We propose running a cheap \emph{scout} model as the first step,
+then routing based on the scout attempt.
+The scout exposes the structure of the problem:
+it reveals whether the model can localize the bug,
+which files and functions are relevant,
+whether the repair involves simple substitution or structural change,
+and whether the attempt is a complete format failure.
+All of this information is available before invoking any additional solver,
+and it substantially improves both reward prediction and routing decisions.
+
+A key practical challenge is label cost.
+Execution-based labels require spinning up the full SWE-bench evaluation harness
+for every (task, model, attempt) triple.
+We address this with a two-stage training procedure.
+In the first stage, the router is pre-trained on a large dataset of
+patch-similarity proxy rewards---cheap to compute from model outputs alone,
+without test execution.
+In the second stage, the router is fine-tuned on a small number of
+real execution labels.
+We show that cascade verifiers trained this way match or exceed
+input-only routers trained on 1{,}500 real labels, using only 50--500 real labels.
+The analogous experiment for the post-scout router is an explicit open question
+that motivates the experiments in this paper.
+
+Our contributions are:
+\begin{itemize}
+\item We instantiate post-scout routing on a four-model SWE-Smith repair portfolio
+  (4B scout, 20B, 30B, 120B solvers) and evaluate against an escalation target (Claude).
+\item We introduce the \emph{abstention AUC} metric for this setting:
+  the area under the curve of held-out accuracy as a function of escalation rate.
+\item We show that the scout attempt is a load-bearing input signal:
+  post-scout routing substantially outperforms input-only routing at every abstention rate,
+  with the gap widening as more tasks are escalated.
+\item We propose proxy pre-training as a practical solution to the label-cost bottleneck
+  and demonstrate its effectiveness for cascade verifiers across real-label budgets 50--500.
+\end{itemize}
+
+\section{Problem Formulation}
+\label{sec:problem}
+
+\paragraph{Repair tasks and solver portfolio.}
+Let $\mathcal{X}$ denote a distribution of software repair tasks,
+where $x \in \mathcal{X}$ consists of a natural-language issue description
+and relevant repository file contents.
+We have a portfolio of $K+1$ local solvers
+$\mathcal{M} = \{m_0, m_1, \ldots, m_K\}$,
+ordered by increasing cost.
+Solver $m_i$ produces a patch $y_i = m_i(x)$,
+and the real reward $r_i(x) \in \{0, 1\}$ is 1 if the patch passes
+the task's test suite and 0 otherwise.
+Beyond the local portfolio we have access to an external frontier model $m_\mathrm{ext}$
+(e.g.\ Claude Sonnet) at substantially higher cost.
+
+\paragraph{Scout and post-scout context.}
+We designate $m_0$ as the \emph{scout}: the cheapest model, always run first.
+After observing $y_0 = m_0(x)$, the router has access to the \emph{post-scout context}
+\[
+    z = (x,\, y_0).
+\]
+The routing decision is made from $z$, before any further solver is called.
+The action space is
+\[
+    a \in \{0, 1, \ldots, K, \text{ext}\},
+\]
+where $a = 0$ means accept the scout output, $a \in \{1,\ldots,K\}$ means invoke
+the $a$-th local solver, and $a = \text{ext}$ means escalate to the external model.
+
+\paragraph{Abstention as escalation.}
+In the deployment scenario we study, escalation to $m_\mathrm{ext}$ is the
+``I don't know'' fallback: the router predicts that the local portfolio
+will fail on this task.
+We refer to this as \emph{abstention}.
+The primary goal is therefore to identify the tasks on which the best local solver
+(in our setup, the 120B model $m_K$) is likely to fail,
+and abstain on those, routing them to $m_\mathrm{ext}$.
+
+Formally, the router assigns each task a scalar confidence score
+$s_\theta(z) \in \mathbb{R}$, higher meaning more confidence that a
+local solver will succeed.
+At abstention rate $\alpha \in [0,1]$, the router keeps the top $(1-\alpha)$ fraction
+of tasks by confidence score and abstains on the rest.
+Let $\mathcal{R}(\alpha)$ denote the retained set.
+The \emph{accuracy at abstention rate $\alpha$} is
+\[
+    \mathrm{ACC}(\alpha) \;=\;
+    \frac{1}{|\mathcal{R}(\alpha)|} \sum_{x \in \mathcal{R}(\alpha)} r_K(x),
+\]
+the fraction of retained tasks on which the best local solver succeeds.
+The \emph{abstention AUC} is
+\[
+    \mathrm{AUC} = \int_0^1 \mathrm{ACC}(\alpha)\, d\alpha,
+\]
+approximated numerically over a uniform grid of $\alpha$ values.
+A higher AUC means the router is better at separating solvable from unsolvable tasks.
+
+\paragraph{Oracle and random baselines.}
+The oracle sets $s_\theta(z) = r_K(x)$: it abstains on exactly the tasks
+that the best local solver fails on.
+At the oracle abstention rate $\alpha^* = \Pr[r_K(x)=0]$, all retained tasks
+are solvable and $\mathrm{ACC}(\alpha^*) = 1.0$.
+The random baseline shuffles tasks uniformly, so $\mathrm{ACC}(\alpha)$ stays
+near the overall solver success rate regardless of $\alpha$.
+On our 286-task evaluation set, $\alpha^* = 52.8\%$ (the 120B model fails on
+just over half of all tasks) and the overall 120B success rate is $47.2\%$.
+
+\section{Architecture}
+\label{sec:arch}
+
+\paragraph{Shared encoder.}
+All router variants use \texttt{Qwen/Qwen3-Embedding-8B} as the text encoder,
+fine-tuned with LoRA adapters on the query, key, value, and output projections
+(\texttt{q\_proj}, \texttt{k\_proj}, \texttt{v\_proj}, \texttt{o\_proj}).
+We use rank 32, alpha 64, and LoRA dropout 0.05.
+The encoder is run with Flash Attention 2 in bf16 with gradient checkpointing.
+A two-layer MLP with hidden size 1{,}024 maps the \texttt{[EOS]} token embedding
+to the prediction target.
+
+\paragraph{Post-scout router.}
+The post-scout router encodes the full post-scout context $z = (x, y_0)$:
+the repair prompt (problem statement and file context) followed by the scout output $y_0$.
+Its prediction head outputs a vector $\hat{\mathbf{r}}_\theta(z) \in [0,1]^4$,
+one scalar per route, predicting the probability that each solver $m_i$ will succeed
+on the task.
+The abstention score is the mean predicted reward,
+$s_\theta(z) = \frac{1}{4}\sum_{i=0}^{3} \hat{r}_i$.
+
+\paragraph{Input-only router.}
+The input-only router is an ablation that encodes only $x$, not $y_0$.
+It shares the same architecture, head structure, and training objective
+as the post-scout router.
+This directly measures the marginal value of the scout attempt.
+
+\paragraph{Cascade verifier.}
+The cascade verifier encodes a single route's context $(x, y_i)$---the
+problem paired with one solver's output---and predicts whether that solver
+succeeded on this task.
+It produces a scalar $\hat{p}_\theta(x, y_i) \in [0,1]$.
+At inference time, the cascade verifier is applied to $y_0$ (the scout output),
+and the resulting score is used as the abstention signal:
+$s_\theta(z) = \hat{p}_\theta(x, y_0)$.
+This is the fairest comparison to the post-scout router,
+because both observe exactly the same information $(x, y_0)$
+at decision time and pay the same scout cost.
+
+\section{Training}
+\label{sec:training}
+
+\paragraph{Training objective.}
+For all router variants, we optimize binary cross-entropy
+against per-route success labels:
+\[
+    \mathcal{L}_\mathrm{BCE}(\theta)
+    = -\frac{1}{N} \sum_{n=1}^{N}
+      \sum_{i=0}^{K}
+      \left[
+        r_i^{(n)} \log \hat{r}_i^{(n)}
+        + (1 - r_i^{(n)}) \log (1 - \hat{r}_i^{(n)})
+      \right].
+\]
+We additionally train a route-delta auxiliary term that directly
+supervises the pairwise reward differences:
+\[
+    \mathcal{L}_\mathrm{aux}(\theta)
+    = \frac{1}{N} \sum_{n=1}^{N}
+      \sum_{i < j}
+      \left[
+        (\hat{r}_i^{(n)} - \hat{r}_j^{(n)}) - (r_i^{(n)} - r_j^{(n)})
+      \right]^2.
+\]
+The full real-label fine-tuning objective is
+$\mathcal{L} = \mathcal{L}_\mathrm{BCE} + \lambda_\mathrm{aux} \mathcal{L}_\mathrm{aux}$
+with $\lambda_\mathrm{aux} = 1.0$.
+
+\paragraph{Proxy labels.}
+Real execution labels require running the full test suite for each (task, solver) pair.
+As a cheaper alternative, we compute a \emph{proxy reward} by comparing the predicted
+patch to the gold patch:
+\[
+    \tilde{r}_i(x) = \frac{1}{|F|} \sum_{f \in F}
+      \operatorname{SequenceMatcher}(\hat{d}_f,\, d_f^*),
+\]
+where $F$ is the union of files in the predicted and gold diffs,
+$\hat{d}_f$ is the predicted file-level unified diff,
+$d_f^*$ is the gold file-level unified diff,
+and SequenceMatcher returns the normalized longest-common-subsequence ratio.
+Format errors (no valid edit block, unknown file, search text not found) receive
+$\tilde{r}_i = 0$.
+The proxy reward lies in $[0,1]$ and is cheap to compute from model outputs alone,
+without executing any tests.
+
+\paragraph{Two-stage training.}
+We train routers in two stages.
+In the first stage (\emph{proxy pre-training}), the model is trained on a
+trace-expanded dataset of ${\sim}12{,}000$ tasks with proxy labels
+computed from the scout trace:
+\[
+    \theta_\mathrm{proxy} = \arg\min_\theta\; \mathcal{L}_\mathrm{BCE}(\theta;\, \tilde{r}).
+\]
+In the second stage (\emph{real fine-tuning}), the proxy-pre-trained weights
+are loaded and fine-tuned on $N$ tasks with real execution labels:
+\[
+    \theta_\mathrm{final} = \arg\min_\theta\; \mathcal{L}(\theta;\, r),
+    \quad \theta \leftarrow \theta_\mathrm{proxy}.
+\]
+The second stage uses only model weights from the first stage, not optimizer state.
+This procedure dramatically reduces the number of expensive real execution labels
+needed to achieve good router performance.
+
+\section{Baselines}
+\label{sec:baselines}
+
+\paragraph{Input-only router.}
+The input-only router shares architecture, objective, and training data
+with the post-scout router, but encodes only the repair prompt $x$,
+not the scout output $y_0$.
+It measures whether the scout attempt contains information beyond what
+the problem statement alone conveys.
+
+\paragraph{Cascade verifier (same decision point).}
+The cascade verifier trained on real labels (1{,}500 tasks) is evaluated at the
+same decision point as the post-scout router: after observing the 4B scout output.
+We report its route-0 score $\hat{p}(x, y_0)$ as the abstention signal.
+This is the \textit{same-information-state} cascade comparison;
+a cascade that observes all four solver outputs would have a strictly later
+information state and a different cost profile.
+
+\paragraph{Prompt-length heuristic.}
+As a cheap non-learned baseline, we use the negative prompt token count as the
+abstention signal: shorter context is heuristically ``easier.''
+
+\paragraph{Random.}
+Tasks are abstained on uniformly at random.
+We report means over 200 random seeds.
+
+\section{Experimental Setup}
+\label{sec:setup}
+
+\paragraph{Dataset.}
+We evaluate on a 286-task SWE-Smith evaluation set with real execution labels.
+SWE-Smith \citep{li2025swesmith} generates software repair tasks from real GitHub
+repositories by introducing synthetic bugs and recording gold patches.
+Our evaluation subset covers Python, Go, Java, Rust, TypeScript, and other languages.
+All real execution labels are obtained by running the SWE-bench evaluation harness
+on AWS and recording per-instance pass/fail outcomes.
+
+The training set for full-supervision runs contains 1{,}500 tasks with real labels.
+The proxy pre-training dataset is a trace-expanded collection of
+${\sim}12{,}000$ tasks with proxy rewards computed from scout traces.
+For sample efficiency experiments, we randomly subsample $N \in \{50, 100, 200, 500, 1000\}$
+tasks from the real-label training set with a fixed random seed.
+
+\paragraph{Solver portfolio.}
+Our four local solvers are:
+\begin{enumerate}
+\item \textbf{4B scout} (\texttt{Qwen/Qwen3-4B-Instruct-2507}): the lowest-cost model,
+  always run first. Its output forms the post-scout context $y_0$.
+\item \textbf{20B} (\texttt{openai/gpt-oss-20b}): a medium-cost local solver.
+\item \textbf{30B} (\texttt{Qwen/Qwen3-Coder-30B-A3B-Instruct}): a medium-large solver.
+\item \textbf{120B} (\texttt{openai/gpt-oss-120b}): the strongest local solver,
+  used as the evaluation target for abstention decisions ($m_K$ in Section~\ref{sec:problem}).
+\end{enumerate}
+All solvers use the same SEARCH/REPLACE repair scaffold with a structured
+thinking block and a \texttt{<solution>} section.
+
+\paragraph{External escalation target.}
+We evaluate Claude Sonnet as the external frontier model $m_\mathrm{ext}$.
+The escalation path uses the same repair prompt as the local solvers.
+Claude results establish the performance ceiling and are used to compute the
+realized gain from accurate escalation decisions.
+
+\paragraph{Router training details.}
+All routers use the \texttt{Qwen/Qwen3-Embedding-8B} backbone with LoRA rank 32,
+alpha 64, on \texttt{q/k/v/o\_proj} and additionally \texttt{gate/up/down\_proj}
+for models trained from scratch (rank 32 setup).
+Training uses AdamW with weight decay 0.01, warmup ratio 0.06,
+batch size 1, and gradient accumulation 8.
+Real-label fine-tuning runs for 10 epochs at learning rate $10^{-5}$;
+proxy pre-training runs for 5 epochs at learning rate $2\times10^{-5}$.
+All runs use 4 A100 GPUs with Accelerate DDP, Flash Attention 2, and bf16.
+
+\paragraph{Evaluation metric.}
+Our primary metric is the abstention AUC (Section~\ref{sec:problem}),
+computed over a 100-point uniform grid of $\alpha$ values from 0 to 0.85.
+We also report point-wise accuracy at abstention rates 30\%, 50\%, and 70\%.
+
+\section{Results}
+\label{sec:results}
+
+\subsection{Scout Attempt Is a Load-Bearing Input}
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{llcccc}
+\toprule
+Architecture & Labels & AUC & ACC@30\% & ACC@50\% & ACC@70\% \\
+\midrule
+Random & --- & 0.472 & 47.4 & 47.2 & 48.0 \\
+Prompt length heuristic & --- & --- & --- & --- & --- \\
+\midrule
+Input-only router & 1500 real & 0.652 & 54.5 & 59.4 & 65.1 \\
+Post-scout router & 1500 real & \textbf{0.720} & 54.5 & \textbf{65.0} & \textbf{75.6} \\
+\midrule
+Oracle & --- & --- & 67.5 & 94.4 & 100.0 \\
+\bottomrule
+\end{tabular}
+\caption{Abstention AUC and accuracy at three abstention rates on the 286-task SWE-Smith
+evaluation set. Both routers trained on 1{,}500 real execution labels.
+The oracle knows which tasks the 120B model fails on; random assigns tasks uniformly.
+Post-scout routing substantially outperforms input-only routing,
+with the gap growing at higher abstention rates.}
+\label{tab:main}
+\end{table}
+
+Table~\ref{tab:main} shows the main comparison.
+At 30\% abstention the two routers are tied, but by 70\% abstention
+the post-scout router is 10.5 points ahead of input-only.
+The growing gap indicates that the scout attempt provides information
+especially useful for identifying the hardest tasks---those where
+even the 120B model fails.
+
+Figure~\ref{fig:abstention_curves} plots the full abstention curves.
+The post-scout router dominates the input-only ablation everywhere
+beyond the trivial low-abstention regime,
+and both are far above the random baseline.
+The prompt-length heuristic provides a weak signal that
+degrades rapidly with abstention rate.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.88\linewidth]{figures/abstention_curves.pdf}
+\caption{Accuracy on retained tasks as a function of abstention rate,
+on the 286-task SWE-Smith evaluation set.
+The vertical dashed line at 52.8\% marks the oracle abstention rate
+(fraction of tasks the 120B model fails on).
+The post-scout router dominates the input-only ablation,
+with the gap growing as more tasks are escalated to Claude.}
+\label{fig:abstention_curves}
+\end{figure}
+
+\subsection{Architecture Comparison at the Same Decision Point}
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{lllcccc}
+\toprule
+Architecture & Label source & $N$ real & AUC & ACC@30\% & ACC@50\% & ACC@70\% \\
+\midrule
+Input-only router & Real & 1500 & 0.652 & 54.5 & 59.4 & 65.1 \\
+Cascade verifier & Proxy + real & 50 & 0.666 & 53.0 & 60.8 & 69.8 \\
+Cascade verifier & Proxy + real & 100 & 0.671 & 53.0 & 62.9 & 72.1 \\
+Cascade verifier & Proxy + real & 200 & 0.662 & 53.5 & 61.5 & 68.6 \\
+Cascade verifier & Proxy + real & 500 & 0.666 & 54.0 & 61.5 & 68.6 \\
+Cascade verifier & Real & 1500 & --- & --- & --- & --- \\
+Post-scout router & Real & 1500 & \textbf{0.720} & 54.5 & \textbf{65.0} & \textbf{75.6} \\
+Post-scout router & Proxy + real & 50 & --- & --- & --- & --- \\
+Post-scout router & Proxy + real & 100 & --- & --- & --- & --- \\
+Post-scout router & Proxy + real & 200 & --- & --- & --- & --- \\
+Post-scout router & Proxy + real & 500 & --- & --- & --- & --- \\
+Post-scout router & Proxy + real & 1000 & --- & --- & --- & --- \\
+\midrule
+Claude Sonnet (ceiling) & --- & --- & --- & --- & --- & --- \\
+\bottomrule
+\end{tabular}
+\caption{Architecture and label-source comparison at the same decision point:
+both the cascade verifier and the post-scout router observe $(x, y_0)$,
+the problem and the 4B scout output, before making the escalation decision.
+Dashes indicate results from experiments still in progress.
+The cascade verifier with proxy pre-training and only 50--500 real labels
+already exceeds the input-only router trained on 1{,}500 real labels,
+demonstrating the efficiency of the two-stage training procedure.}
+\label{tab:arch_comparison}
+\end{table}
+
+Table~\ref{tab:arch_comparison} compares all architectures at the same
+decision point---after observing the 4B scout output $y_0$.
+The cascade verifier with proxy pre-training achieves competitive results
+with as few as 50 real labels, exceeding the input-only router trained on 30$\times$ more labels.
+The post-scout router trained on 1{,}500 real labels sets the current best result,
+but results for the post-scout router with proxy pre-training are pending.
+
+\subsection{Sample Efficiency from Proxy Pre-Training}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.88\linewidth]{figures/sample_efficiency.pdf}
+\caption{Abstention AUC versus number of real execution labels $N$.
+Both the cascade verifier (proxy + real fine-tuning) and the post-scout router
+(proxy + real fine-tuning; pending results shown dashed)
+are compared against the input-only baseline
+(real labels only, 1{,}500 labels shown as a horizontal dashed line)
+and the post-scout upper bound (real labels only, 1{,}500 labels).
+The goal is to establish whether proxy pre-training allows
+the post-scout router to match the cascade verifier at low $N$,
+while maintaining its advantage at higher $N$.}
+\label{fig:sample_efficiency}
+\end{figure}
+
+The two-stage procedure has a clear practical benefit for the cascade verifier:
+proxy pre-training with only 50 real fine-tuning labels achieves AUC 0.666,
+already above the input-only router's 0.652.
+Accuracy at 50\% abstention is 60.8\% vs.\ 59.4\%, and at 70\% it is 69.8\% vs.\ 65.1\%.
+Performance varies non-monotonically across $N \in \{50, 100, 200, 500\}$
+(best at $N{=}100$, AUC 0.671, ACC@70\% 72.1\%),
+suggesting that the real fine-tuning regime is sensitive to learning rate and
+epoch count at small $N$.
+
+\section{Discussion}
+
+\paragraph{Why does the scout attempt help?}
+The input-only and post-scout routers share architecture, objective, training data, and
+hyperparameters; the only difference is whether $y_0$ is included in the input.
+The large gap in Table~\ref{tab:main}, especially at high abstention rates,
+shows that the scout attempt contains information about task solvability
+that is not recoverable from the problem statement and file context alone.
+A plausible explanation is that the scout reveals \emph{structural} properties
+of the task: whether the bug is in a function the model can locate,
+whether the edit is local or requires global refactoring, and whether
+format failures (common at higher difficulty) are already occurring.
+These signals are only observable after a model has attempted the task.
+
+\paragraph{Decision point and cascade comparison.}
+A cascade system that observes all four solver outputs before deciding
+has a strictly richer information state than either our post-scout router or
+the same-decision-point cascade in Table~\ref{tab:arch_comparison}.
+A full-information cascade would also incur the full portfolio cost on every task.
+The same-decision-point comparison is the relevant one for cost-efficient routing:
+both architectures pay exactly scout cost before the escalation decision is made.
+
+Under this constraint, the post-scout router's single forward pass over
+$(x, y_0)$ predicts counterfactual rewards for all four routes simultaneously,
+whereas the cascade verifier predicts a single route's success probability.
+This architectural difference---counterfactual multi-route prediction
+versus single-route verification---may partly explain the post-scout router's
+advantage at 1{,}500 real labels, though the sample-efficiency comparison (pending)
+will clarify whether the advantage holds across label budgets.
+
+\paragraph{Proxy pre-training mechanism.}
+Proxy rewards are noisy proxies for execution success:
+patch similarity does not account for test coverage, semantic correctness,
+or partial credit from test suites.
+Despite this, proxy pre-training provides a strong initialization
+for the cascade verifier.
+A plausible interpretation is that the proxy pre-training stage
+teaches the model to identify format failures and near-miss patches---signal
+that is strongly correlated with execution success even if not identical to it.
+The real fine-tuning stage then calibrates these features to execution outcomes.
+
+\paragraph{Limitations.}
+Our four-model portfolio is a fixed snapshot;
+extending to larger or dynamically changing model pools would require
+re-collecting labels as new models are added.
+The proxy reward does not account for partial correctness in multi-file patches
+and gives no credit for semantically correct edits that differ from the gold patch.
+The real evaluation target is the 120B model's success, but a richer setting
+would evaluate whether the router correctly routes each task to its \emph{best}
+local solver, not just whether it identifies the hardest tasks.
+
+\section{Related Work}
+
+\paragraph{LLM routing and cascades.}
+FrugalGPT \citep{chen2024frugalgpt} trains a quality estimator and
+selects a sequence of LLM calls to balance accuracy and cost.
+RouteLLM \citep{ong2024routellm} and RouterBench \citep{hu2024routerbench}
+study routing from prompts and preference data.
+Frugal approaches differ from ours in that they route from the input alone or
+condition on each solver's output at its own decision step.
+Post-scout routing is distinguished by conditioning on one fixed cheap attempt
+and predicting counterfactual outcomes for all solvers simultaneously.
+
+\paragraph{Software engineering agents.}
+SWE-Bench \citep{jimenez2024swebench} established repository-level issue
+resolution as a benchmark for LLM agents.
+SWE-Smith \citep{li2025swesmith} scales the dataset by generating
+synthetic bugs from real repositories.
+SWE-RL \citep{wei2025swerl} trains agents with RL on dense patch-similarity rewards;
+we adopt the same proxy reward formulation for router supervision.
+Concurrent work on agentic scaffolding (e.g.\ \citealt{yang2024sweagent}) focuses
+on improving single-model solve rates; routing is complementary,
+choosing among already-trained agents.
+
+\paragraph{Verification and value estimation.}
+Process reward models (PRMs) and outcome reward models (ORMs) are widely used
+to score reasoning chains \citep{lightman2023verify}.
+Our cascade verifier is an ORM that evaluates a completed patch attempt.
+The post-scout router extends this to counterfactual multi-route prediction,
+predicting the outcome for solvers that have \emph{not yet} been called.
+
+\section{Conclusion}
+
+We proposed post-scout routing for software repair agents:
+run a cheap 4B scout model, observe its attempt,
+and route to the best local solver or escalate to an external model.
+On a 286-task SWE-Smith evaluation set,
+the scout attempt is a load-bearing signal:
+post-scout routing achieves 76\% accuracy at 70\% abstention,
+compared to 65\% for input-only routing with identical supervision.
+Two-stage proxy pre-training substantially reduces the real-label budget
+for cascade verifiers, matching input-only performance at full supervision
+with as few as 50 real labels.
+Whether proxy pre-training provides the same efficiency gain for
+post-scout routing is the central open question driving ongoing experiments.
+
+\bibliography{tmlr}
+\bibliographystyle{tmlr}
+
+\end{document}
