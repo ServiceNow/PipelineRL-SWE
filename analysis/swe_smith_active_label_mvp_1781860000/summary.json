@@ -1,0 +1,134 @@
+{
+  "best_by_portfolio": [
+    {
+      "best_of_n_lift_vs_raw_mean": 0.0,
+      "best_of_n_lift_vs_raw_std": 0.0,
+      "best_of_n_oracle_gap_recovered_mean": 0.0,
+      "best_of_n_oracle_gap_recovered_std": 0.0,
+      "best_of_n_pass_rate_calibrated_mean": 0.5211711711711711,
+      "best_of_n_pass_rate_calibrated_std": 0.04598346816203703,
+      "best_of_n_pass_rate_raw_mean": 0.5211711711711711,
+      "best_of_n_pass_rate_raw_std": 0.04598346816203703,
+      "brier_calibrated_mean": 0.2253903935325464,
+      "brier_calibrated_std": 0.017719740712823846,
+      "budget": 16,
+      "calibration": "global",
+      "n_splits": 30,
+      "nll_calibrated_mean": 0.6423071039135876,
+      "nll_calibrated_std": 0.03617149814561936,
+      "oracle_best_of_n_pass_rate_mean": 0.5396396396396396,
+      "oracle_best_of_n_pass_rate_std": 0.04229439493443424,
+      "patch_auc_calibrated_mean": 0.8070082249845831,
+      "patch_auc_calibrated_std": 0.02661459386971603,
+      "portfolio": "20b_x3",
+      "strategy": "route_balanced_random"
+    },
+    {
+      "best_of_n_lift_vs_raw_mean": 0.01441441441441441,
+      "best_of_n_lift_vs_raw_std": 0.018768168158558238,
+      "best_of_n_oracle_gap_recovered_mean": 0.2672222222222221,
+      "best_of_n_oracle_gap_recovered_std": 0.3408997716646163,
+      "best_of_n_pass_rate_calibrated_mean": 0.5585585585585585,
+      "best_of_n_pass_rate_calibrated_std": 0.04633294007431996,
+      "best_of_n_pass_rate_raw_mean": 0.5441441441441441,
+      "best_of_n_pass_rate_raw_std": 0.0431492973507317,
+      "brier_calibrated_mean": 0.24887583902595975,
+      "brier_calibrated_std": 0.017590499826427842,
+      "budget": 128,
+      "calibration": "route_intercept",
+      "n_splits": 30,
+      "nll_calibrated_mean": 0.691056890043614,
+      "nll_calibrated_std": 0.036748921597568596,
+      "oracle_best_of_n_pass_rate_mean": 0.5981981981981982,
+      "oracle_best_of_n_pass_rate_std": 0.041568547729943534,
+      "patch_auc_calibrated_mean": 0.7520652344150689,
+      "patch_auc_calibrated_std": 0.04891043026732296,
+      "portfolio": "20b_120b_x3",
+      "strategy": "uncertainty"
+    },
+    {
+      "best_of_n_lift_vs_raw_mean": 0.028378378378378373,
+      "best_of_n_lift_vs_raw_std": 0.045002231906342456,
+      "best_of_n_oracle_gap_recovered_mean": 0.2697679172679172,
+      "best_of_n_oracle_gap_recovered_std": 0.5537124846780425,
+      "best_of_n_pass_rate_calibrated_mean": 0.5396396396396397,
+      "best_of_n_pass_rate_calibrated_std": 0.04884013033668395,
+      "best_of_n_pass_rate_raw_mean": 0.5112612612612613,
+      "best_of_n_pass_rate_raw_std": 0.03964219893457982,
+      "brier_calibrated_mean": 0.242481258946785,
+      "brier_calibrated_std": 0.024884978673136212,
+      "budget": 16,
+      "calibration": "route_intercept",
+      "n_splits": 30,
+      "nll_calibrated_mean": 0.6804096314861144,
+      "nll_calibrated_std": 0.05755382980751668,
+      "oracle_best_of_n_pass_rate_mean": 0.6022522522522523,
+      "oracle_best_of_n_pass_rate_std": 0.042258398677011325,
+      "patch_auc_calibrated_mean": 0.694379273656888,
+      "patch_auc_calibrated_std": 0.06267802673368926,
+      "portfolio": "all_4route_x3",
+      "strategy": "random"
+    }
+  ],
+  "manifest": {
+    "budgets": [
+      0,
+      16,
+      32,
+      64,
+      128
+    ],
+    "calibrations": [
+      "global",
+      "route_intercept"
+    ],
+    "n_attempts": 1783,
+    "n_splits": 30,
+    "portfolios": {
+      "20b_120b_x3": {
+        "candidates_per_id": 6,
+        "n_complete_ids": 148,
+        "routes": [
+          "OSS-20B",
+          "OSS-120B"
+        ]
+      },
+      "20b_x3": {
+        "candidates_per_id": 3,
+        "n_complete_ids": 148,
+        "routes": [
+          "OSS-20B"
+        ]
+      },
+      "all_4route_x3": {
+        "candidates_per_id": 12,
+        "n_complete_ids": 148,
+        "routes": [
+          "Qwen3-4B",
+          "OSS-20B",
+          "Qwen3-Coder-30B-A3B",
+          "OSS-120B"
+        ]
+      }
+    },
+    "report_root": "router_analysis/uploaded_eval_full_20260617/swe_smith_multirollout_eval150_1781382734/logs/run_evaluation",
+    "route_cost_weights": [
+      2.78e-07,
+      1.299e-06,
+      4.64e-06,
+      1.113e-05
+    ],
+    "scores_jsonl": "/mnt/llmd/results/exps/aristides/reason/score_swe_smith_multirollout_eval150_proxy_verifier_soft_bce_1781735614/scores/eval_verifier_scores.jsonl",
+    "seed": 29,
+    "strategies": [
+      "random",
+      "uncertainty",
+      "top2_margin",
+      "route_balanced_random",
+      "high_score"
+    ],
+    "train_frac": 0.5
+  },
+  "rows_csv": "router_analysis/swe_smith_active_label_mvp_1781860000/active_label_sim_rows.csv",
+  "summary_csv": "router_analysis/swe_smith_active_label_mvp_1781860000/active_label_sim_summary.csv"
+}

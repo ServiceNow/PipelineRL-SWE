@@ -1,0 +1,1009 @@
+{
+  "always_oss120_cost": 0.01390635125874126,
+  "always_points": [
+    {
+      "cost": 0.0002618322587412587,
+      "cost_pct_120b": 0.01882825004701906,
+      "counts": {
+        "scout:Qwen/Qwen3-4B-Instruct-2507": 286
+      },
+      "family": "always",
+      "lambda": null,
+      "policy": "4B scout",
+      "reward": 0.2902097902097902
+    },
+    {
+      "cost": 0.0030106595979020982,
+      "cost_pct_120b": 0.216495293545074,
+      "counts": {
+        "solver:openai/gpt-oss-20b": 286
+      },
+      "family": "always",
+      "lambda": null,
+      "policy": "OSS-20B",
+      "reward": 0.3881118881118881
+    },
+    {
+      "cost": 0.004328844195804196,
+      "cost_pct_120b": 0.3112854058740368,
+      "counts": {
+        "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 286
+      },
+      "family": "always",
+      "lambda": null,
+      "policy": "Qwen30",
+      "reward": 0.4020979020979021
+    },
+    {
+      "cost": 0.01390635125874126,
+      "cost_pct_120b": 1.0,
+      "counts": {
+        "solver:openai/gpt-oss-120b": 286
+      },
+      "family": "always",
+      "lambda": null,
+      "policy": "OSS-120B",
+      "reward": 0.47202797202797203
+    }
+  ],
+  "aws_output_cost_weights": [
+    2.78e-07,
+    1.299e-06,
+    4.64e-06,
+    1.113e-05
+  ],
+  "frontiers": {
+    "cascade": [
+      {
+        "cost": 0.0002618322587412587,
+        "cost_pct_120b": 0.01882825004701906,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 286,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 0
+        },
+        "family": "cascade",
+        "lambda": 61.36964236686985,
+        "policy": "Cascade lambda=61.3696",
+        "reward": 0.2902097902097902
+      },
+      {
+        "cost": 0.0031047300944055944,
+        "cost_pct_120b": 0.22325986426195166,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 38,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 248
+        },
+        "family": "cascade",
+        "lambda": 10.868076653167988,
+        "policy": "Cascade lambda=10.8681",
+        "reward": 0.3776223776223776
+      },
+      {
+        "cost": 0.005603321423076923,
+        "cost_pct_120b": 0.4029325391557893,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 38,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 148,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 100
+        },
+        "family": "cascade",
+        "lambda": 10.396226833217089,
+        "policy": "Cascade lambda=10.3962",
+        "reward": 0.3881118881118881
+      },
+      {
+        "cost": 0.005663730709790209,
+        "cost_pct_120b": 0.407276546119896,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 27,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 149,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 110
+        },
+        "family": "cascade",
+        "lambda": 4.88841043274441,
+        "policy": "Cascade lambda=4.88841",
+        "reward": 0.3951048951048951
+      },
+      {
+        "cost": 0.01480299110839161,
+        "cost_pct_120b": 1.0644770028433403,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 27,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 71,
+          "solver:openai/gpt-oss-120b": 134,
+          "solver:openai/gpt-oss-20b": 54
+        },
+        "family": "cascade",
+        "lambda": 0.0,
+        "policy": "Cascade lambda=0",
+        "reward": 0.4125874125874126
+      }
+    ],
+    "input_only": [
+      {
+        "cost": 0.0002618322587412587,
+        "cost_pct_120b": 0.01882825004701906,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 286,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 0
+        },
+        "family": "input_only",
+        "lambda": 46.25,
+        "policy": "Input-only lambda=46.25",
+        "reward": 0.2902097902097902
+      },
+      {
+        "cost": 0.0003805324195804195,
+        "cost_pct_120b": 0.027363929797273333,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 275,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 11
+        },
+        "family": "input_only",
+        "lambda": 45.53193511787164,
+        "policy": "Input-only lambda=45.5319",
+        "reward": 0.2937062937062937
+      },
+      {
+        "cost": 0.0007518254125874126,
+        "cost_pct_120b": 0.054063456229385104,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 236,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 50
+        },
+        "family": "input_only",
+        "lambda": 44.75,
+        "policy": "Input-only lambda=44.75",
+        "reward": 0.2972027972027972
+      },
+      {
+        "cost": 0.001183714555944056,
+        "cost_pct_120b": 0.08512042691284648,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 199,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 87
+        },
+        "family": "input_only",
+        "lambda": 44.0,
+        "policy": "Input-only lambda=44",
+        "reward": 0.3181818181818182
+      },
+      {
+        "cost": 0.0013209392552447554,
+        "cost_pct_120b": 0.09498819860561475,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 187,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 99
+        },
+        "family": "input_only",
+        "lambda": 43.75,
+        "policy": "Input-only lambda=43.75",
+        "reward": 0.3321678321678322
+      },
+      {
+        "cost": 0.0019026549230769232,
+        "cost_pct_120b": 0.13681913304763904,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 140,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 146
+        },
+        "family": "input_only",
+        "lambda": 42.5,
+        "policy": "Input-only lambda=42.5",
+        "reward": 0.33916083916083917
+      },
+      {
+        "cost": 0.0020275228636363637,
+        "cost_pct_120b": 0.1457983353010663,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 131,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 155
+        },
+        "family": "input_only",
+        "lambda": 41.97295047093781,
+        "policy": "Input-only lambda=41.973",
+        "reward": 0.34615384615384615
+      },
+      {
+        "cost": 0.0021313446363636366,
+        "cost_pct_120b": 0.15326411628096298,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 124,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 162
+        },
+        "family": "input_only",
+        "lambda": 41.5,
+        "policy": "Input-only lambda=41.5",
+        "reward": 0.34965034965034963
+      },
+      {
+        "cost": 0.0021834447727272725,
+        "cost_pct_120b": 0.15701061566058183,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 113,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 173
+        },
+        "family": "input_only",
+        "lambda": 40.5,
+        "policy": "Input-only lambda=40.5",
+        "reward": 0.3531468531468531
+      },
+      {
+        "cost": 0.002193536776223776,
+        "cost_pct_120b": 0.15773632748165783,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 111,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 175
+        },
+        "family": "input_only",
+        "lambda": 40.25,
+        "policy": "Input-only lambda=40.25",
+        "reward": 0.35664335664335667
+      },
+      {
+        "cost": 0.0023183630909090905,
+        "cost_pct_120b": 0.16671253643559542,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 96,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 190
+        },
+        "family": "input_only",
+        "lambda": 37.0,
+        "policy": "Input-only lambda=37",
+        "reward": 0.36013986013986016
+      },
+      {
+        "cost": 0.0023393478601398602,
+        "cost_pct_120b": 0.16822154256094976,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 94,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 192
+        },
+        "family": "input_only",
+        "lambda": 36.25,
+        "policy": "Input-only lambda=36.25",
+        "reward": 0.36363636363636365
+      },
+      {
+        "cost": 0.002369221129370629,
+        "cost_pct_120b": 0.17036971706588983,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 87,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 199
+        },
+        "family": "input_only",
+        "lambda": 35.667796477208945,
+        "policy": "Input-only lambda=35.6678",
+        "reward": 0.36713286713286714
+      },
+      {
+        "cost": 0.002378634223776224,
+        "cost_pct_120b": 0.17104660881344133,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 84,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 202
+        },
+        "family": "input_only",
+        "lambda": 35.5,
+        "policy": "Input-only lambda=35.5",
+        "reward": 0.3706293706293706
+      },
+      {
+        "cost": 0.002492171125874126,
+        "cost_pct_120b": 0.17921100075101265,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 67,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 219
+        },
+        "family": "input_only",
+        "lambda": 34.0,
+        "policy": "Input-only lambda=34",
+        "reward": 0.3741258741258741
+      },
+      {
+        "cost": 0.002503047034965035,
+        "cost_pct_120b": 0.17999308290099955,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 66,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 220
+        },
+        "family": "input_only",
+        "lambda": 33.75,
+        "policy": "Input-only lambda=33.75",
+        "reward": 0.3776223776223776
+      },
+      {
+        "cost": 0.002599052101398601,
+        "cost_pct_120b": 0.1868967677459526,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 53,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 233
+        },
+        "family": "input_only",
+        "lambda": 33.0,
+        "policy": "Input-only lambda=33",
+        "reward": 0.3811188811188811
+      },
+      {
+        "cost": 0.0027003955209790207,
+        "cost_pct_120b": 0.194184331370287,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 43,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 243
+        },
+        "family": "input_only",
+        "lambda": 31.999814975719577,
+        "policy": "Input-only lambda=31.9998",
+        "reward": 0.38461538461538464
+      },
+      {
+        "cost": 0.0029131853741258744,
+        "cost_pct_120b": 0.20948596219980442,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 9,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 277
+        },
+        "family": "input_only",
+        "lambda": 29.25,
+        "policy": "Input-only lambda=29.25",
+        "reward": 0.3881118881118881
+      },
+      {
+        "cost": 0.004328608552447552,
+        "cost_pct_120b": 0.3112684608571694,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 0,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 37,
+          "solver:openai/gpt-oss-20b": 249
+        },
+        "family": "input_only",
+        "lambda": 4.790636796161128,
+        "policy": "Input-only lambda=4.79064",
+        "reward": 0.3916083916083916
+      },
+      {
+        "cost": 0.009007010496503497,
+        "cost_pct_120b": 0.6476904206516333,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 0,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 149,
+          "solver:openai/gpt-oss-20b": 137
+        },
+        "family": "input_only",
+        "lambda": 4.416178676548257,
+        "policy": "Input-only lambda=4.41618",
+        "reward": 0.40559440559440557
+      },
+      {
+        "cost": 0.0101648068006993,
+        "cost_pct_120b": 0.7309470767401982,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 0,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 177,
+          "solver:openai/gpt-oss-20b": 109
+        },
+        "family": "input_only",
+        "lambda": 4.18294573072331,
+        "policy": "Input-only lambda=4.18295",
+        "reward": 0.4125874125874126
+      },
+      {
+        "cost": 0.010293043814685314,
+        "cost_pct_120b": 0.7401685476781918,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 0,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 181,
+          "solver:openai/gpt-oss-20b": 105
+        },
+        "family": "input_only",
+        "lambda": 4.070989919091237,
+        "policy": "Input-only lambda=4.07099",
+        "reward": 0.4160839160839161
+      },
+      {
+        "cost": 0.010365214489510489,
+        "cost_pct_120b": 0.745358311224529,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 0,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 185,
+          "solver:openai/gpt-oss-20b": 101
+        },
+        "family": "input_only",
+        "lambda": 3.9620305851964037,
+        "policy": "Input-only lambda=3.96203",
+        "reward": 0.4195804195804196
+      },
+      {
+        "cost": 0.010505314227272728,
+        "cost_pct_120b": 0.755432825750701,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 0,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 190,
+          "solver:openai/gpt-oss-20b": 96
+        },
+        "family": "input_only",
+        "lambda": 3.8559875288357226,
+        "policy": "Input-only lambda=3.85599",
+        "reward": 0.4230769230769231
+      },
+      {
+        "cost": 0.010875656863636363,
+        "cost_pct_120b": 0.7820640124274251,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 0,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 202,
+          "solver:openai/gpt-oss-20b": 84
+        },
+        "family": "input_only",
+        "lambda": 3.652340123174693,
+        "policy": "Input-only lambda=3.65234",
+        "reward": 0.42657342657342656
+      },
+      {
+        "cost": 0.01116997625874126,
+        "cost_pct_120b": 0.8032283990899504,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 0,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 214,
+          "solver:openai/gpt-oss-20b": 72
+        },
+        "family": "input_only",
+        "lambda": 3.554585877920427,
+        "policy": "Input-only lambda=3.55459",
+        "reward": 0.43006993006993005
+      },
+      {
+        "cost": 0.011772524097902097,
+        "cost_pct_120b": 0.8465573664049453,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 0,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 232,
+          "solver:openai/gpt-oss-20b": 54
+        },
+        "family": "input_only",
+        "lambda": 3.3668564864676496,
+        "policy": "Input-only lambda=3.36686",
+        "reward": 0.4370629370629371
+      },
+      {
+        "cost": 0.012120354472027972,
+        "cost_pct_120b": 0.871569705562367,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 0,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 241,
+          "solver:openai/gpt-oss-20b": 45
+        },
+        "family": "input_only",
+        "lambda": 3.276743160869706,
+        "policy": "Input-only lambda=3.27674",
+        "reward": 0.4405594405594406
+      },
+      {
+        "cost": 0.01262694924125874,
+        "cost_pct_120b": 0.9079987270795916,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 0,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 256,
+          "solver:openai/gpt-oss-20b": 30
+        },
+        "family": "input_only",
+        "lambda": 3.103687558708534,
+        "policy": "Input-only lambda=3.10369",
+        "reward": 0.44755244755244755
+      },
+      {
+        "cost": 0.01315713382867133,
+        "cost_pct_120b": 0.9461240827209088,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 0,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 268,
+          "solver:openai/gpt-oss-20b": 18
+        },
+        "family": "input_only",
+        "lambda": 3.020617903480782,
+        "policy": "Input-only lambda=3.02062",
+        "reward": 0.458041958041958
+      },
+      {
+        "cost": 0.013481254594405596,
+        "cost_pct_120b": 0.969431473689516,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 0,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 277,
+          "solver:openai/gpt-oss-20b": 9
+        },
+        "family": "input_only",
+        "lambda": 2.9397715930611423,
+        "policy": "Input-only lambda=2.93977",
+        "reward": 0.46153846153846156
+      },
+      {
+        "cost": 0.013671877583916083,
+        "cost_pct_120b": 0.9831390944711114,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 0,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 281,
+          "solver:openai/gpt-oss-20b": 5
+        },
+        "family": "input_only",
+        "lambda": 2.861089120014292,
+        "policy": "Input-only lambda=2.86109",
+        "reward": 0.46853146853146854
+      },
+      {
+        "cost": 0.01390635125874126,
+        "cost_pct_120b": 1.0,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 0,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 286,
+          "solver:openai/gpt-oss-20b": 0
+        },
+        "family": "input_only",
+        "lambda": 0.0,
+        "policy": "Input-only lambda=0",
+        "reward": 0.47202797202797203
+      }
+    ],
+    "post_scout": [
+      {
+        "cost": 0.0002618322587412587,
+        "cost_pct_120b": 0.01882825004701906,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 286,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 0
+        },
+        "family": "post_scout",
+        "lambda": 41.25,
+        "policy": "Post-scout lambda=41.25",
+        "reward": 0.2902097902097902
+      },
+      {
+        "cost": 0.00027953681118881115,
+        "cost_pct_120b": 0.020101377132488277,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 283,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 3
+        },
+        "family": "post_scout",
+        "lambda": 40.849551785161864,
+        "policy": "Post-scout lambda=40.8496",
+        "reward": 0.2937062937062937
+      },
+      {
+        "cost": 0.0002899151853146853,
+        "cost_pct_120b": 0.020847681747751787,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 281,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 5
+        },
+        "family": "post_scout",
+        "lambda": 40.75,
+        "policy": "Post-scout lambda=40.75",
+        "reward": 0.2972027972027972
+      },
+      {
+        "cost": 0.00046763746153846144,
+        "cost_pct_120b": 0.03362761754234517,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 265,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 21
+        },
+        "family": "post_scout",
+        "lambda": 40.5,
+        "policy": "Post-scout lambda=40.5",
+        "reward": 0.3111888111888112
+      },
+      {
+        "cost": 0.0008211971013986013,
+        "cost_pct_120b": 0.059051945842545354,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 246,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 40
+        },
+        "family": "post_scout",
+        "lambda": 40.25,
+        "policy": "Post-scout lambda=40.25",
+        "reward": 0.32517482517482516
+      },
+      {
+        "cost": 0.0013358372832167832,
+        "cost_pct_120b": 0.09605950967023806,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 214,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 72
+        },
+        "family": "post_scout",
+        "lambda": 40.0,
+        "policy": "Post-scout lambda=40",
+        "reward": 0.33916083916083917
+      },
+      {
+        "cost": 0.001723170923076923,
+        "cost_pct_120b": 0.12391251242080999,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 193,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 93
+        },
+        "family": "post_scout",
+        "lambda": 39.75,
+        "policy": "Post-scout lambda=39.75",
+        "reward": 0.34965034965034963
+      },
+      {
+        "cost": 0.0019066796538461538,
+        "cost_pct_120b": 0.13710854978207546,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 181,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 105
+        },
+        "family": "post_scout",
+        "lambda": 39.5,
+        "policy": "Post-scout lambda=39.5",
+        "reward": 0.35664335664335667
+      },
+      {
+        "cost": 0.0020071477657342654,
+        "cost_pct_120b": 0.1443331703902281,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 172,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 114
+        },
+        "family": "post_scout",
+        "lambda": 39.25,
+        "policy": "Post-scout lambda=39.25",
+        "reward": 0.36363636363636365
+      },
+      {
+        "cost": 0.0021319834825174826,
+        "cost_pct_120b": 0.15331005544515924,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 164,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 122
+        },
+        "family": "post_scout",
+        "lambda": 38.75,
+        "policy": "Post-scout lambda=38.75",
+        "reward": 0.36713286713286714
+      },
+      {
+        "cost": 0.002270331524475524,
+        "cost_pct_120b": 0.16325860624643998,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 155,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 131
+        },
+        "family": "post_scout",
+        "lambda": 38.25,
+        "policy": "Post-scout lambda=38.25",
+        "reward": 0.3706293706293706
+      },
+      {
+        "cost": 0.0022863328426573426,
+        "cost_pct_120b": 0.1644092544563189,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 154,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 132
+        },
+        "family": "post_scout",
+        "lambda": 38.0,
+        "policy": "Post-scout lambda=38",
+        "reward": 0.3741258741258741
+      },
+      {
+        "cost": 0.002354148818181818,
+        "cost_pct_120b": 0.16928587336682194,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 144,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 142
+        },
+        "family": "post_scout",
+        "lambda": 33.5,
+        "policy": "Post-scout lambda=33.5",
+        "reward": 0.3776223776223776
+      },
+      {
+        "cost": 0.0024815098636363636,
+        "cost_pct_120b": 0.1784443537679616,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 126,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 0,
+          "solver:openai/gpt-oss-20b": 160
+        },
+        "family": "post_scout",
+        "lambda": 19.75,
+        "policy": "Post-scout lambda=19.75",
+        "reward": 0.3811188811188811
+      },
+      {
+        "cost": 0.009003532048951048,
+        "cost_pct_120b": 0.6474402869186555,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 96,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 127,
+          "solver:openai/gpt-oss-20b": 63
+        },
+        "family": "post_scout",
+        "lambda": 4.662416239339333,
+        "policy": "Post-scout lambda=4.66242",
+        "reward": 0.38461538461538464
+      },
+      {
+        "cost": 0.009298121979020978,
+        "cost_pct_120b": 0.6686241276392584,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 96,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 134,
+          "solver:openai/gpt-oss-20b": 56
+        },
+        "family": "post_scout",
+        "lambda": 4.537627483317979,
+        "policy": "Post-scout lambda=4.53763",
+        "reward": 0.3881118881118881
+      },
+      {
+        "cost": 0.009947962027972029,
+        "cost_pct_120b": 0.7153538583112471,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 93,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 150,
+          "solver:openai/gpt-oss-20b": 43
+        },
+        "family": "post_scout",
+        "lambda": 3.1890417026866524,
+        "policy": "Post-scout lambda=3.18904",
+        "reward": 0.3916083916083916
+      },
+      {
+        "cost": 0.010404861272727273,
+        "cost_pct_120b": 0.7482092951008252,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 90,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 161,
+          "solver:openai/gpt-oss-20b": 35
+        },
+        "family": "post_scout",
+        "lambda": 2.0660696015950557,
+        "policy": "Post-scout lambda=2.06607",
+        "reward": 0.3951048951048951
+      },
+      {
+        "cost": 0.010428634342657343,
+        "cost_pct_120b": 0.7499188067827718,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 89,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 162,
+          "solver:openai/gpt-oss-20b": 35
+        },
+        "family": "post_scout",
+        "lambda": 2.0,
+        "policy": "Post-scout lambda=2",
+        "reward": 0.3986013986013986
+      },
+      {
+        "cost": 0.010520469209790209,
+        "cost_pct_120b": 0.7565226143110148,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 89,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 165,
+          "solver:openai/gpt-oss-20b": 32
+        },
+        "family": "post_scout",
+        "lambda": 1.755705739782703,
+        "policy": "Post-scout lambda=1.75571",
+        "reward": 0.4020979020979021
+      },
+      {
+        "cost": 0.010761340143356644,
+        "cost_pct_120b": 0.7738435440851011,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 87,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 173,
+          "solver:openai/gpt-oss-20b": 26
+        },
+        "family": "post_scout",
+        "lambda": 1.1070169617286159,
+        "policy": "Post-scout lambda=1.10702",
+        "reward": 0.40559440559440557
+      },
+      {
+        "cost": 0.011074078898601398,
+        "cost_pct_120b": 0.7963324593602832,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 85,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 183,
+          "solver:openai/gpt-oss-20b": 18
+        },
+        "family": "post_scout",
+        "lambda": 0.7171979253675953,
+        "policy": "Post-scout lambda=0.717198",
+        "reward": 0.4090909090909091
+      },
+      {
+        "cost": 0.01125463974125874,
+        "cost_pct_120b": 0.809316515299748,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 85,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 187,
+          "solver:openai/gpt-oss-20b": 14
+        },
+        "family": "post_scout",
+        "lambda": 0.6793203399878822,
+        "policy": "Post-scout lambda=0.67932",
+        "reward": 0.4125874125874126
+      },
+      {
+        "cost": 0.01137902274125874,
+        "cost_pct_120b": 0.8182608456769785,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 84,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 191,
+          "solver:openai/gpt-oss-20b": 11
+        },
+        "family": "post_scout",
+        "lambda": 0.46464768105123283,
+        "policy": "Post-scout lambda=0.464648",
+        "reward": 0.4160839160839161
+      },
+      {
+        "cost": 0.011412700447552448,
+        "cost_pct_120b": 0.8206825956865319,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 84,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 193,
+          "solver:openai/gpt-oss-20b": 9
+        },
+        "family": "post_scout",
+        "lambda": 0.39484855687754494,
+        "policy": "Post-scout lambda=0.394849",
+        "reward": 0.4195804195804196
+      },
+      {
+        "cost": 0.011570087653846152,
+        "cost_pct_120b": 0.8320002449652939,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 84,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 199,
+          "solver:openai/gpt-oss-20b": 3
+        },
+        "family": "post_scout",
+        "lambda": 0.13706438815436753,
+        "policy": "Post-scout lambda=0.137064",
+        "reward": 0.4230769230769231
+      },
+      {
+        "cost": 0.011600720139860141,
+        "cost_pct_120b": 0.8342030144368858,
+        "counts": {
+          "scout:Qwen/Qwen3-4B-Instruct-2507": 84,
+          "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+          "solver:openai/gpt-oss-120b": 201,
+          "solver:openai/gpt-oss-20b": 1
+        },
+        "family": "post_scout",
+        "lambda": 0.1103232396566269,
+        "policy": "Post-scout lambda=0.110323",
+        "reward": 0.42657342657342656
+      }
+    ]
+  },
+  "highlight_post_scout_under_20pct": {
+    "cost": 0.0024815098636363636,
+    "cost_pct_120b": 0.1784443537679616,
+    "counts": {
+      "scout:Qwen/Qwen3-4B-Instruct-2507": 126,
+      "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 0,
+      "solver:openai/gpt-oss-120b": 0,
+      "solver:openai/gpt-oss-20b": 160
+    },
+    "family": "post_scout",
+    "lambda": 19.75,
+    "policy": "Post-scout lambda=19.75",
+    "reward": 0.3811188811188811
+  },
+  "n_eval": 286,
+  "note": "Lines connect Pareto policy points and can be interpreted as randomized mixtures under an average-budget constraint.",
+  "route_labels": [
+    "scout:Qwen/Qwen3-4B-Instruct-2507",
+    "solver:openai/gpt-oss-20b",
+    "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct",
+    "solver:openai/gpt-oss-120b"
+  ]
+}

@@ -1,0 +1,137 @@
+series,cost_mode,lambda,policy,mean_reward,mean_cost,mean_utility,choice_counts_by_route
+raw_input_only,fixed_train_mean,0.0,raw_input_only,0.40559440559440557,0.009137211993006994,0.40559440559440557,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 48, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 64, ""solver:openai/gpt-oss-120b"": 174, ""solver:openai/gpt-oss-20b"": 0}"
+platt_input_only,fixed_train_mean,0.0,platt_input_only,0.4020979020979021,0.008244505545454545,0.4020979020979021,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 37, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 88, ""solver:openai/gpt-oss-120b"": 149, ""solver:openai/gpt-oss-20b"": 12}"
+best_always,fixed_train_mean,0.0,always::solver:openai/gpt-oss-120b,0.47202797202797203,0.01390635125874126,0.47202797202797203,
+oracle_direct,fixed_train_mean,0.0,,0.5594405594405595,0.0014341748951048952,0.5594405594405595,
+cascade,fixed_train_mean,0.0,cascade_train_tau_weighted,0.44405594405594406,0.018454961437062937,0.44405594405594406,
+raw_input_only,fixed_train_mean,5.0,raw_input_only,0.38461538461538464,0.00566420686013986,0.3562943503146853,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 120, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 29, ""solver:openai/gpt-oss-120b"": 115, ""solver:openai/gpt-oss-20b"": 22}"
+platt_input_only,fixed_train_mean,5.0,platt_input_only,0.38461538461538464,0.005955895409090909,0.3548359075699301,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 120, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 11, ""solver:openai/gpt-oss-120b"": 118, ""solver:openai/gpt-oss-20b"": 37}"
+best_always,fixed_train_mean,5.0,always::solver:openai/gpt-oss-120b,0.47202797202797203,0.01390635125874126,0.4024962157342658,
+oracle_direct,fixed_train_mean,5.0,,0.5594405594405595,0.0014218673041958042,0.5523312229195805,
+cascade,fixed_train_mean,5.0,cascade_train_tau_weighted,0.3776223776223776,0.006477620916083915,0.34523427304195803,
+raw_input_only,fixed_train_mean,10.0,raw_input_only,0.3741258741258741,0.004575637944055943,0.3283694946853147,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 123, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 18, ""solver:openai/gpt-oss-120b"": 78, ""solver:openai/gpt-oss-20b"": 67}"
+platt_input_only,fixed_train_mean,10.0,platt_input_only,0.36363636363636365,0.004849136451048951,0.3151449991258741,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 128, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 5, ""solver:openai/gpt-oss-120b"": 83, ""solver:openai/gpt-oss-20b"": 70}"
+best_always,fixed_train_mean,10.0,always::solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,0.4020979020979021,0.004328844195804196,0.35880946013986,
+oracle_direct,fixed_train_mean,10.0,,0.5594405594405595,0.0014218673041958042,0.5452218863986014,
+cascade,fixed_train_mean,10.0,cascade_train_tau_weighted,0.3776223776223776,0.006477620916083915,0.31284616846153845,
+raw_input_only,fixed_train_mean,15.0,raw_input_only,0.36363636363636365,0.0040401072412587415,0.3030347550174825,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 130, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 10, ""solver:openai/gpt-oss-120b"": 61, ""solver:openai/gpt-oss-20b"": 85}"
+platt_input_only,fixed_train_mean,15.0,platt_input_only,0.35664335664335667,0.00406329943006993,0.2956938651923077,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 134, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 1, ""solver:openai/gpt-oss-120b"": 61, ""solver:openai/gpt-oss-20b"": 90}"
+best_always,fixed_train_mean,15.0,always::solver:openai/gpt-oss-20b,0.3881118881118881,0.0030106595979020982,0.3429519941433566,
+oracle_direct,fixed_train_mean,15.0,,0.5594405594405595,0.0014218673041958042,0.5381125498776224,
+cascade,fixed_train_mean,15.0,cascade_train_tau_weighted,0.3741258741258741,0.003035288097902098,0.32859655265734267,
+raw_input_only,fixed_train_mean,20.0,raw_input_only,0.35664335664335667,0.003638724881118881,0.283868859020979,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 134, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 5, ""solver:openai/gpt-oss-120b"": 50, ""solver:openai/gpt-oss-20b"": 97}"
+platt_input_only,fixed_train_mean,20.0,platt_input_only,0.35664335664335667,0.003610900318181818,0.2844253502797203,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 141, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 53, ""solver:openai/gpt-oss-20b"": 92}"
+best_always,fixed_train_mean,20.0,always::solver:openai/gpt-oss-20b,0.3881118881118881,0.0030106595979020982,0.3278986961538462,
+oracle_direct,fixed_train_mean,20.0,,0.5594405594405595,0.0014218673041958042,0.5310032133566432,
+cascade,fixed_train_mean,20.0,cascade_train_tau_weighted,0.3741258741258741,0.003035288097902098,0.31342011216783217,
+raw_input_only,fixed_train_mean,25.0,raw_input_only,0.36013986013986016,0.0029269143951048946,0.28696700026223776,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 139, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 4, ""solver:openai/gpt-oss-120b"": 37, ""solver:openai/gpt-oss-20b"": 106}"
+platt_input_only,fixed_train_mean,25.0,platt_input_only,0.3531468531468531,0.0032302678461538464,0.27239015699300695,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 143, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 44, ""solver:openai/gpt-oss-20b"": 99}"
+best_always,fixed_train_mean,25.0,always::solver:openai/gpt-oss-20b,0.3881118881118881,0.0030106595979020982,0.3128453981643358,
+oracle_direct,fixed_train_mean,25.0,,0.5594405594405595,0.0014218673041958042,0.5238938768356644,
+cascade,fixed_train_mean,25.0,cascade_train_tau_weighted,0.3741258741258741,0.003035288097902098,0.29824367167832166,
+raw_input_only,fixed_train_mean,30.0,raw_input_only,0.3531468531468531,0.0021297763916083914,0.28925356139860137,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 144, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 21, ""solver:openai/gpt-oss-20b"": 121}"
+platt_input_only,fixed_train_mean,30.0,platt_input_only,0.35664335664335667,0.0023709575419580417,0.28551463038461544,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 148, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 29, ""solver:openai/gpt-oss-20b"": 109}"
+best_always,fixed_train_mean,30.0,always::solver:openai/gpt-oss-20b,0.3881118881118881,0.0030106595979020982,0.29779210017482544,
+oracle_direct,fixed_train_mean,30.0,,0.5559440559440559,0.0012962475349650347,0.5170566298951049,
+cascade,fixed_train_mean,30.0,cascade_train_tau_weighted,0.3741258741258741,0.003035288097902098,0.28306723118881116,
+raw_input_only,fixed_train_mean,35.0,raw_input_only,0.35664335664335667,0.001527906576923077,0.30316662645104897,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 148, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 6, ""solver:openai/gpt-oss-20b"": 132}"
+platt_input_only,fixed_train_mean,35.0,platt_input_only,0.35664335664335667,0.0019257400034965032,0.2892424565209791,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 151, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 19, ""solver:openai/gpt-oss-20b"": 116}"
+best_always,fixed_train_mean,35.0,always::solver:openai/gpt-oss-20b,0.3881118881118881,0.0030106595979020982,0.2827388021853147,
+oracle_direct,fixed_train_mean,35.0,,0.5559440559440559,0.0012962475349650347,0.5105753922202797,
+cascade,fixed_train_mean,35.0,cascade_train_tau_weighted,0.3741258741258741,0.003035288097902098,0.26789079069930066,
+raw_input_only,fixed_train_mean,40.0,raw_input_only,0.34965034965034963,0.001351192958041958,0.2956026313286713,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 150, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 0, ""solver:openai/gpt-oss-20b"": 136}"
+platt_input_only,fixed_train_mean,40.0,platt_input_only,0.35664335664335667,0.001606324804195804,0.2923903644755245,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 157, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 11, ""solver:openai/gpt-oss-20b"": 118}"
+best_always,fixed_train_mean,40.0,always::scout:Qwen/Qwen3-4B-Instruct-2507,0.2902097902097902,0.0002618322587412587,0.27973649986013965,
+oracle_direct,fixed_train_mean,40.0,,0.5559440559440559,0.0012962475349650347,0.5040941545454545,
+cascade,fixed_train_mean,40.0,cascade_train_tau_weighted,0.3741258741258741,0.003035288097902098,0.25271435020979016,
+raw_input_only,fixed_train_mean,45.0,raw_input_only,0.3531468531468531,0.0013188516538461537,0.2937985287237762,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 153, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 0, ""solver:openai/gpt-oss-20b"": 133}"
+platt_input_only,fixed_train_mean,45.0,platt_input_only,0.34615384615384615,0.0013066481468531465,0.28735467954545457,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 160, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 1, ""solver:openai/gpt-oss-20b"": 125}"
+best_always,fixed_train_mean,45.0,always::scout:Qwen/Qwen3-4B-Instruct-2507,0.2902097902097902,0.0002618322587412587,0.2784273385664334,
+oracle_direct,fixed_train_mean,45.0,,0.5559440559440559,0.0012962475349650347,0.4976129168706294,
+raw_input_only,fixed_train_mean,50.0,raw_input_only,0.3531468531468531,0.0012955603461538463,0.28836883583916084,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 157, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 0, ""solver:openai/gpt-oss-20b"": 129}"
+platt_input_only,fixed_train_mean,50.0,platt_input_only,0.34615384615384615,0.0011839086118881116,0.28695841555944057,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 165, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 0, ""solver:openai/gpt-oss-20b"": 121}"
+best_always,fixed_train_mean,50.0,always::scout:Qwen/Qwen3-4B-Instruct-2507,0.2902097902097902,0.0002618322587412587,0.27711817727272736,
+oracle_direct,fixed_train_mean,50.0,,0.5559440559440559,0.0012962475349650347,0.4911316791958042,
+cascade,fixed_train_mean,50.0,cascade_train_tau_weighted,0.3741258741258741,0.003035288097902098,0.22236146923076922,
+raw_input_only,fixed_train_mean,60.0,raw_input_only,0.34965034965034963,0.0011437060174825174,0.2810279886013986,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 169, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 0, ""solver:openai/gpt-oss-20b"": 117}"
+platt_input_only,fixed_train_mean,60.0,platt_input_only,0.34615384615384615,0.0011234101258741256,0.2787492386013986,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 174, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 0, ""solver:openai/gpt-oss-20b"": 112}"
+best_always,fixed_train_mean,60.0,always::scout:Qwen/Qwen3-4B-Instruct-2507,0.2902097902097902,0.0002618322587412587,0.2744998546853147,
+oracle_direct,fixed_train_mean,60.0,,0.548951048951049,0.0011704038916083915,0.47872681545454543,
+raw_input_only,fixed_train_mean,75.0,raw_input_only,0.33916083916083917,0.0010605578286713286,0.25961900201048954,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 182, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 0, ""solver:openai/gpt-oss-20b"": 104}"
+platt_input_only,fixed_train_mean,75.0,platt_input_only,0.33916083916083917,0.0009773994965034964,0.26585587692307694,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 185, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 0, ""solver:openai/gpt-oss-20b"": 101}"
+best_always,fixed_train_mean,75.0,always::scout:Qwen/Qwen3-4B-Instruct-2507,0.2902097902097902,0.0002618322587412587,0.2705723708041958,
+oracle_direct,fixed_train_mean,75.0,,0.5384615384615384,0.0010137947447552448,0.4624269326048951,
+cascade,fixed_train_mean,75.0,cascade_train_tau_weighted,0.2902097902097902,0.0002618322587412587,0.2705723708041958,
+raw_input_only,fixed_train_mean,100.0,raw_input_only,0.34265734265734266,0.0009199154650349648,0.25066579615384615,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 198, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 0, ""solver:openai/gpt-oss-20b"": 88}"
+platt_input_only,fixed_train_mean,100.0,platt_input_only,0.3321678321678322,0.0009260574265734265,0.23956208951048952,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 195, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 0, ""solver:openai/gpt-oss-20b"": 91}"
+best_always,fixed_train_mean,100.0,always::scout:Qwen/Qwen3-4B-Instruct-2507,0.2902097902097902,0.0002618322587412587,0.2640265643356643,
+oracle_direct,fixed_train_mean,100.0,,0.5244755244755245,0.0008451209755244754,0.43996342692307694,
+cascade,fixed_train_mean,100.0,cascade_train_tau_weighted,0.2902097902097902,0.0002618322587412587,0.26402656433566435,
+raw_input_only,predicted_expert_fixed_scout,0.0,raw_input_only,0.40559440559440557,0.009137211993006994,0.40559440559440557,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 48, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 64, ""solver:openai/gpt-oss-120b"": 174, ""solver:openai/gpt-oss-20b"": 0}"
+platt_input_only,predicted_expert_fixed_scout,0.0,platt_input_only,0.4020979020979021,0.008244505545454545,0.4020979020979021,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 37, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 88, ""solver:openai/gpt-oss-120b"": 149, ""solver:openai/gpt-oss-20b"": 12}"
+best_always,predicted_expert_fixed_scout,0.0,always::solver:openai/gpt-oss-120b,0.47202797202797203,0.01390635125874126,0.47202797202797203,
+oracle_direct,predicted_expert_fixed_scout,0.0,,0.5594405594405595,0.0014341748951048952,0.5594405594405595,
+cascade,predicted_expert_fixed_scout,0.0,cascade_train_tau_weighted,0.44405594405594406,0.018454961437062937,0.44405594405594406,
+raw_input_only,predicted_expert_fixed_scout,5.0,raw_input_only,0.3916083916083916,0.006048597174825174,0.36136540573426573,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 113, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 24, ""solver:openai/gpt-oss-120b"": 125, ""solver:openai/gpt-oss-20b"": 24}"
+platt_input_only,predicted_expert_fixed_scout,5.0,platt_input_only,0.38461538461538464,0.0060358271993007,0.3544362486188811,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 120, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 11, ""solver:openai/gpt-oss-120b"": 120, ""solver:openai/gpt-oss-20b"": 35}"
+best_always,predicted_expert_fixed_scout,5.0,always::solver:openai/gpt-oss-120b,0.47202797202797203,0.01390635125874126,0.4024962157342658,
+oracle_direct,predicted_expert_fixed_scout,5.0,,0.5594405594405595,0.0014218673041958042,0.5523312229195805,
+cascade,predicted_expert_fixed_scout,5.0,cascade_train_tau_weighted,0.3776223776223776,0.006477620916083915,0.34523427304195803,
+raw_input_only,predicted_expert_fixed_scout,10.0,raw_input_only,0.3706293706293706,0.004848357744755245,0.3221457931818182,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 123, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 19, ""solver:openai/gpt-oss-120b"": 91, ""solver:openai/gpt-oss-20b"": 53}"
+platt_input_only,predicted_expert_fixed_scout,10.0,platt_input_only,0.3706293706293706,0.004914646590909091,0.32148290472027974,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 128, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 7, ""solver:openai/gpt-oss-120b"": 93, ""solver:openai/gpt-oss-20b"": 58}"
+best_always,predicted_expert_fixed_scout,10.0,always::solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,0.4020979020979021,0.004328844195804196,0.35880946013986,
+oracle_direct,predicted_expert_fixed_scout,10.0,,0.5594405594405595,0.0014218673041958042,0.5452218863986014,
+cascade,predicted_expert_fixed_scout,10.0,cascade_train_tau_weighted,0.3776223776223776,0.006477620916083915,0.31284616846153845,
+raw_input_only,predicted_expert_fixed_scout,15.0,raw_input_only,0.36363636363636365,0.004140309097902099,0.30153172716783216,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 131, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 9, ""solver:openai/gpt-oss-120b"": 73, ""solver:openai/gpt-oss-20b"": 73}"
+platt_input_only,predicted_expert_fixed_scout,15.0,platt_input_only,0.3531468531468531,0.004230002881118881,0.2896968099300699,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 136, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 1, ""solver:openai/gpt-oss-120b"": 76, ""solver:openai/gpt-oss-20b"": 73}"
+best_always,predicted_expert_fixed_scout,15.0,always::solver:openai/gpt-oss-20b,0.3881118881118881,0.0030106595979020982,0.3429519941433566,
+oracle_direct,predicted_expert_fixed_scout,15.0,,0.5594405594405595,0.0014218673041958042,0.5381125498776224,
+cascade,predicted_expert_fixed_scout,15.0,cascade_train_tau_weighted,0.3741258741258741,0.003035288097902098,0.32859655265734267,
+raw_input_only,predicted_expert_fixed_scout,20.0,raw_input_only,0.35664335664335667,0.0031805442237762237,0.2930324721678322,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 138, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 6, ""solver:openai/gpt-oss-120b"": 52, ""solver:openai/gpt-oss-20b"": 90}"
+platt_input_only,predicted_expert_fixed_scout,20.0,platt_input_only,0.34965034965034963,0.003593700737762238,0.2777763348951049,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 139, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 64, ""solver:openai/gpt-oss-20b"": 83}"
+best_always,predicted_expert_fixed_scout,20.0,always::solver:openai/gpt-oss-20b,0.3881118881118881,0.0030106595979020982,0.3278986961538462,
+oracle_direct,predicted_expert_fixed_scout,20.0,,0.5594405594405595,0.0014218673041958042,0.5310032133566432,
+cascade,predicted_expert_fixed_scout,20.0,cascade_train_tau_weighted,0.3741258741258741,0.003035288097902098,0.31342011216783217,
+raw_input_only,predicted_expert_fixed_scout,25.0,raw_input_only,0.35664335664335667,0.0026658749405594406,0.28999648312937065,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 141, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 3, ""solver:openai/gpt-oss-120b"": 41, ""solver:openai/gpt-oss-20b"": 101}"
+platt_input_only,predicted_expert_fixed_scout,25.0,platt_input_only,0.3531468531468531,0.0029065746818181817,0.2804824861013986,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 142, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 45, ""solver:openai/gpt-oss-20b"": 99}"
+best_always,predicted_expert_fixed_scout,25.0,always::solver:openai/gpt-oss-20b,0.3881118881118881,0.0030106595979020982,0.3128453981643358,
+oracle_direct,predicted_expert_fixed_scout,25.0,,0.5594405594405595,0.0014218673041958042,0.5238938768356644,
+cascade,predicted_expert_fixed_scout,25.0,cascade_train_tau_weighted,0.3741258741258741,0.003035288097902098,0.29824367167832166,
+raw_input_only,predicted_expert_fixed_scout,30.0,raw_input_only,0.36363636363636365,0.002290096944055944,0.29493345531468534,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 142, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 31, ""solver:openai/gpt-oss-20b"": 113}"
+platt_input_only,predicted_expert_fixed_scout,30.0,platt_input_only,0.35664335664335667,0.002469434493006993,0.2825603218531469,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 145, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 37, ""solver:openai/gpt-oss-20b"": 104}"
+best_always,predicted_expert_fixed_scout,30.0,always::solver:openai/gpt-oss-20b,0.3881118881118881,0.0030106595979020982,0.29779210017482544,
+oracle_direct,predicted_expert_fixed_scout,30.0,,0.5559440559440559,0.0012962475349650347,0.5170566298951049,
+cascade,predicted_expert_fixed_scout,30.0,cascade_train_tau_weighted,0.3741258741258741,0.003035288097902098,0.28306723118881116,
+raw_input_only,predicted_expert_fixed_scout,35.0,raw_input_only,0.36363636363636365,0.0020327718671328673,0.2924893482867133,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 144, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 23, ""solver:openai/gpt-oss-20b"": 119}"
+platt_input_only,predicted_expert_fixed_scout,35.0,platt_input_only,0.36013986013986016,0.0021718698636363637,0.28412441491258744,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 148, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 28, ""solver:openai/gpt-oss-20b"": 110}"
+best_always,predicted_expert_fixed_scout,35.0,always::solver:openai/gpt-oss-20b,0.3881118881118881,0.0030106595979020982,0.2827388021853147,
+oracle_direct,predicted_expert_fixed_scout,35.0,,0.5559440559440559,0.0012962475349650347,0.5105753922202797,
+cascade,predicted_expert_fixed_scout,35.0,cascade_train_tau_weighted,0.3741258741258741,0.003035288097902098,0.26789079069930066,
+raw_input_only,predicted_expert_fixed_scout,40.0,raw_input_only,0.35664335664335667,0.0015974626013986015,0.2927448525874126,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 147, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 13, ""solver:openai/gpt-oss-20b"": 126}"
+platt_input_only,predicted_expert_fixed_scout,40.0,platt_input_only,0.36363636363636365,0.0019601861713286718,0.28522891678321677,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 151, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 23, ""solver:openai/gpt-oss-20b"": 112}"
+best_always,predicted_expert_fixed_scout,40.0,always::scout:Qwen/Qwen3-4B-Instruct-2507,0.2902097902097902,0.0002618322587412587,0.27973649986013965,
+oracle_direct,predicted_expert_fixed_scout,40.0,,0.5559440559440559,0.0012962475349650347,0.5040941545454545,
+cascade,predicted_expert_fixed_scout,40.0,cascade_train_tau_weighted,0.3741258741258741,0.003035288097902098,0.25271435020979016,
+raw_input_only,predicted_expert_fixed_scout,45.0,raw_input_only,0.35664335664335667,0.001396591437062937,0.2937967419755245,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 149, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 6, ""solver:openai/gpt-oss-20b"": 131}"
+platt_input_only,predicted_expert_fixed_scout,45.0,platt_input_only,0.35664335664335667,0.0015342348916083915,0.28760278652097904,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 157, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 14, ""solver:openai/gpt-oss-20b"": 115}"
+best_always,predicted_expert_fixed_scout,45.0,always::scout:Qwen/Qwen3-4B-Instruct-2507,0.2902097902097902,0.0002618322587412587,0.2784273385664334,
+oracle_direct,predicted_expert_fixed_scout,45.0,,0.5559440559440559,0.0012962475349650347,0.4976129168706294,
+raw_input_only,predicted_expert_fixed_scout,50.0,raw_input_only,0.35664335664335667,0.0012710948916083917,0.29308861206293707,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 153, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 4, ""solver:openai/gpt-oss-20b"": 129}"
+platt_input_only,predicted_expert_fixed_scout,50.0,platt_input_only,0.3531468531468531,0.0013584821433566432,0.285222745979021,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 159, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 9, ""solver:openai/gpt-oss-20b"": 118}"
+best_always,predicted_expert_fixed_scout,50.0,always::scout:Qwen/Qwen3-4B-Instruct-2507,0.2902097902097902,0.0002618322587412587,0.27711817727272736,
+oracle_direct,predicted_expert_fixed_scout,50.0,,0.5559440559440559,0.0012962475349650347,0.4911316791958042,
+cascade,predicted_expert_fixed_scout,50.0,cascade_train_tau_weighted,0.3741258741258741,0.003035288097902098,0.22236146923076922,
+raw_input_only,predicted_expert_fixed_scout,60.0,raw_input_only,0.34615384615384615,0.0012094986258741258,0.2735839286013986,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 157, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 2, ""solver:openai/gpt-oss-20b"": 127}"
+platt_input_only,predicted_expert_fixed_scout,60.0,platt_input_only,0.3531468531468531,0.0012188293146853145,0.28001709426573423,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 161, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 4, ""solver:openai/gpt-oss-20b"": 121}"
+best_always,predicted_expert_fixed_scout,60.0,always::scout:Qwen/Qwen3-4B-Instruct-2507,0.2902097902097902,0.0002618322587412587,0.2744998546853147,
+oracle_direct,predicted_expert_fixed_scout,60.0,,0.548951048951049,0.0011704038916083915,0.47872681545454543,
+raw_input_only,predicted_expert_fixed_scout,75.0,raw_input_only,0.34615384615384615,0.001156716,0.25940014615384616,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 163, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 0, ""solver:openai/gpt-oss-20b"": 123}"
+platt_input_only,predicted_expert_fixed_scout,75.0,platt_input_only,0.34965034965034963,0.0011595206083916082,0.26268630402097903,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 165, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 1, ""solver:openai/gpt-oss-20b"": 120}"
+best_always,predicted_expert_fixed_scout,75.0,always::scout:Qwen/Qwen3-4B-Instruct-2507,0.2902097902097902,0.0002618322587412587,0.2705723708041958,
+oracle_direct,predicted_expert_fixed_scout,75.0,,0.5384615384615384,0.0010137947447552448,0.4624269326048951,
+cascade,predicted_expert_fixed_scout,75.0,cascade_train_tau_weighted,0.2902097902097902,0.0002618322587412587,0.2705723708041958,
+raw_input_only,predicted_expert_fixed_scout,100.0,raw_input_only,0.34615384615384615,0.0011051762587412587,0.23563622027972028,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 172, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 0, ""solver:openai/gpt-oss-20b"": 114}"
+platt_input_only,predicted_expert_fixed_scout,100.0,platt_input_only,0.34265734265734266,0.001060088062937063,0.23664853636363636,"{""scout:Qwen/Qwen3-4B-Instruct-2507"": 178, ""solver:Qwen/Qwen3-Coder-30B-A3B-Instruct"": 0, ""solver:openai/gpt-oss-120b"": 0, ""solver:openai/gpt-oss-20b"": 108}"
+best_always,predicted_expert_fixed_scout,100.0,always::scout:Qwen/Qwen3-4B-Instruct-2507,0.2902097902097902,0.0002618322587412587,0.2640265643356643,
+oracle_direct,predicted_expert_fixed_scout,100.0,,0.5244755244755245,0.0008451209755244754,0.43996342692307694,
+cascade,predicted_expert_fixed_scout,100.0,cascade_train_tau_weighted,0.2902097902097902,0.0002618322587412587,0.26402656433566435,

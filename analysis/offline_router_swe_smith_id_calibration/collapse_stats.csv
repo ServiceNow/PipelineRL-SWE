@@ -1,0 +1,7 @@
+run_name,route_idx,route_label,n_eval,bias,mean_ratio_pred_over_true,pred_exact_zero_count,pred_exact_zero_rate,true_exact_zero_count,true_exact_zero_rate,pred_near_zero_count,pred_near_zero_rate,true_near_zero_count,true_near_zero_rate
+vector,0,primary_model,500,0.06283088653743267,1.1033523237266403,52,0.104,40,0.08,52,0.104,40,0.08
+vector,1,expert_0:openai/gpt-oss-120b,500,-0.25651421020820736,0.17887655460309773,412,0.824,90,0.18,412,0.824,92,0.184
+scalar,0,primary_model,500,0.061876886537432674,1.1017830618194973,48,0.096,40,0.08,48,0.096,40,0.08
+scalar,1,expert_0:openai/gpt-oss-120b,500,-0.15808021020820737,0.4939720230318975,299,0.598,90,0.18,299,0.598,92,0.184
+bin,0,primary_model,500,-0.09910837450623512,0.8369737979124804,0,0.0,40,0.08,0,0.0,40,0.08
+bin,1,expert_0:openai/gpt-oss-120b,500,-0.07666392743960022,0.7545923549975381,0,0.0,90,0.18,0,0.0,92,0.184

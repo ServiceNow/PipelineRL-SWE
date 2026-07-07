@@ -1,0 +1,913 @@
+method,reward,cost,cost_pct_of_120b,reward_pct_of_120b,label,lambda,source
+Always direct,0.290209790,0.000261832258741,1.883,61.481,scout:Qwen/Qwen3-4B-Instruct-2507,0,q_predicted_rows
+Always direct,0.388111888,0.0030106595979,21.650,82.222,solver:openai/gpt-oss-20b,0,q_predicted_rows
+Always direct,0.402097902,0.0043288441958,31.129,85.185,solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,0,q_predicted_rows
+Always direct,0.472027972,0.0139063512587,100.000,100.000,solver:openai/gpt-oss-120b,0,q_predicted_rows
+Best Q policy (pred cost),0.318181818,0.000769900451049,5.536,67.407,Q direct (pred cost): lambda=200,200,q_diag_rows
+Best Q policy (pred cost),0.332167832,0.000807166993007,5.804,70.370,Q chain forced-scout (pred cost): state_policy::forced_scout_0_max4,200,q_predicted_rows
+Best Q policy (pred cost),0.332167832,0.000859623111888,6.182,70.370,Q direct (pred cost): lambda=150,150,q_diag_rows
+Best Q policy (pred cost),0.335664336,0.000872339548951,6.273,71.111,Q chain forced-scout (pred cost): state_policy::forced_scout_0_max4,150,q_predicted_rows
+Best Q policy (pred cost),0.332167832,0.00107179403147,7.707,70.370,Q chain flexible (pred cost): state_policy::flexible_bare_max4,200,q_predicted_rows
+Best Q policy (pred cost),0.346153846,0.00110517625874,7.947,73.333,Q direct (pred cost): lambda=100,100,q_diag_rows
+Best Q policy (pred cost),0.335664336,0.00111627250699,8.027,71.111,Q chain forced-scout (pred cost): state_policy::forced_scout_0_max4,100,q_predicted_rows
+Best Q policy (pred cost),0.346153846,0.001156716,8.318,73.333,Q direct (pred cost): lambda=75,75,q_diag_rows
+Best Q policy (pred cost),0.346153846,0.00116883377273,8.405,73.333,Q chain flexible (pred cost): state_policy::flexible_bare_max4,150,q_predicted_rows
+Best Q policy (pred cost),0.346153846,0.00120949862587,8.697,73.333,Q direct (pred cost): lambda=60,60,q_diag_rows
+Best Q policy (pred cost),0.349650350,0.00123838010839,8.905,74.074,Q direct (pred cost): lambda=55,55,q_diag_rows
+Best Q policy (pred cost),0.356643357,0.00127109489161,9.140,75.556,Q direct (pred cost): lambda=50,50,q_diag_rows
+Best Q policy (pred cost),0.339160839,0.00129774586364,9.332,71.852,Q chain forced-scout (pred cost): state_policy::forced_scout_0_max4,75,q_predicted_rows
+Best Q policy (pred cost),0.356643357,0.00139659143706,10.043,75.556,Q direct (pred cost): lambda=45,45,q_diag_rows
+Best Q policy (pred cost),0.360139860,0.00149542346503,10.754,76.296,Q chain flexible (pred cost): state_policy::flexible_bare_max4,100,q_predicted_rows
+Best Q policy (pred cost),0.356643357,0.0015974626014,11.487,75.556,Q direct (pred cost): lambda=40,40,q_diag_rows
+Best Q policy (pred cost),0.363636364,0.00160574855245,11.547,77.037,Q chain flexible (pred cost): state_policy::flexible_bare_max4,75,q_predicted_rows
+Best Q policy (pred cost),0.349650350,0.00187553767133,13.487,74.074,Q chain forced-scout (pred cost): state_policy::forced_scout_0_max4,50,q_predicted_rows
+Best Q policy (pred cost),0.370629371,0.00197302292308,14.188,78.519,Q chain flexible (pred cost): state_policy::flexible_bare_max4,50,q_predicted_rows
+Best Q policy (pred cost),0.363636364,0.00203277186713,14.618,77.037,Q direct (pred cost): lambda=35,35,q_diag_rows
+Best Q policy (pred cost),0.346153846,0.00226117258392,16.260,73.333,Q chain forced-scout (pred cost): state_policy::forced_scout_0_max4,40,q_predicted_rows
+Best Q policy (pred cost),0.363636364,0.00229009694406,16.468,77.037,Q direct (pred cost): lambda=30,30,q_diag_rows
+Best Q policy (pred cost),0.367132867,0.00256203907692,18.424,77.778,Q chain flexible (pred cost): state_policy::flexible_bare_max4,40,q_predicted_rows
+Best Q policy (pred cost),0.356643357,0.00266587494056,19.170,75.556,Q direct (pred cost): lambda=25,25,q_diag_rows
+Best Q policy (pred cost),0.353146853,0.00271322121678,19.511,74.815,Q chain forced-scout (pred cost): state_policy::forced_scout_0_max4,35,q_predicted_rows
+Best Q policy (pred cost),0.377622378,0.00301653346853,21.692,80.000,Q chain flexible (pred cost): state_policy::flexible_bare_max4,35,q_predicted_rows
+Best Q policy (pred cost),0.356643357,0.00318054422378,22.871,75.556,Q direct (pred cost): lambda=20,20,q_diag_rows
+Best Q policy (pred cost),0.353146853,0.00346793097552,24.938,74.815,Q chain forced-scout (pred cost): state_policy::forced_scout_0_max4,30,q_predicted_rows
+Best Q policy (pred cost),0.384615385,0.00375107402448,26.974,81.481,Q chain flexible (pred cost): state_policy::flexible_bare_max4,30,q_predicted_rows
+Best Q policy (pred cost),0.363636364,0.0041403090979,29.773,77.037,Q direct (pred cost): lambda=15,15,q_diag_rows
+Best Q policy (pred cost),0.367132867,0.00417608248951,30.030,77.778,Q chain forced-scout (pred cost): state_policy::forced_scout_0_max4,25,q_predicted_rows
+Best Q policy (pred cost),0.381118881,0.00451885258042,32.495,80.741,Q chain flexible (pred cost): state_policy::flexible_bare_max4,25,q_predicted_rows
+Best Q policy (pred cost),0.370629371,0.00484835774476,34.864,78.519,Q direct (pred cost): lambda=10,10,q_diag_rows
+Best Q policy (pred cost),0.367132867,0.00486060418531,34.952,77.778,Q chain forced-scout (pred cost): state_policy::forced_scout_0_max4,20,q_predicted_rows
+Best Q policy (pred cost),0.391608392,0.00541362621329,38.929,82.963,Q chain flexible (pred cost): state_policy::flexible_bare_max4,20,q_predicted_rows
+Best Q policy (pred cost),0.391608392,0.00604859717483,43.495,82.963,Q direct (pred cost): lambda=5,5,q_diag_rows
+Best Q policy (pred cost),0.370629371,0.00610564283217,43.905,78.519,Q chain forced-scout (pred cost): state_policy::forced_scout_0_max4,15,q_predicted_rows
+Best Q policy (pred cost),0.395104895,0.00664872312587,47.811,83.704,Q chain flexible (pred cost): state_policy::flexible_bare_max4,15,q_predicted_rows
+Best Q policy (pred cost),0.381118881,0.00732627399301,52.683,80.741,Q chain forced-scout (pred cost): state_policy::forced_scout_0_max4,10,q_predicted_rows
+Best Q policy (pred cost),0.402097902,0.00763130838811,54.876,85.185,Q chain flexible (pred cost): state_policy::flexible_bare_max4,10,q_predicted_rows
+Best Q policy (pred cost),0.402097902,0.00787656328671,56.640,85.185,Q chain forced-scout (pred cost): state_policy::forced_scout_0_max4,5,q_predicted_rows
+Best Q policy (pred cost),0.412587413,0.00890882177622,64.063,87.407,Q chain flexible (pred cost): state_policy::flexible_bare_max4,5,q_predicted_rows
+Best Q policy (pred cost),0.405594406,0.00913721199301,65.705,85.926,Q direct (pred cost): lambda=0,0,q_diag_rows
+Best Q policy (pred cost),0.430069930,0.0102412348287,73.644,91.111,Q chain forced-scout (pred cost): state_policy::forced_scout_0_max4,0,q_predicted_rows
+Best Q policy (pred cost),0.433566434,0.0116671341573,83.898,91.852,Q chain flexible (pred cost): state_policy::flexible_bare_max4,0,q_predicted_rows
+Cascade,0.290209790,0.000261832258741,1.883,61.481,lambda=75,75,cascade_rows
+Cascade,0.290209790,0.000261832258741,1.883,61.481,lambda=100,100,cascade_rows
+Cascade,0.290209790,0.000261832258741,1.883,61.481,lambda=150,150,cascade_rows
+Cascade,0.290209790,0.000261832258741,1.883,61.481,lambda=200,200,cascade_rows
+Cascade,0.374125874,0.0030352880979,21.827,79.259,lambda=15,15,cascade_rows
+Cascade,0.374125874,0.0030352880979,21.827,79.259,lambda=20,20,cascade_rows
+Cascade,0.374125874,0.0030352880979,21.827,79.259,lambda=25,25,cascade_rows
+Cascade,0.374125874,0.0030352880979,21.827,79.259,lambda=30,30,cascade_rows
+Cascade,0.374125874,0.0030352880979,21.827,79.259,lambda=35,35,cascade_rows
+Cascade,0.374125874,0.0030352880979,21.827,79.259,lambda=40,40,cascade_rows
+Cascade,0.374125874,0.0030352880979,21.827,79.259,lambda=50,50,cascade_rows
+Cascade,0.377622378,0.00647762091608,46.580,80.000,lambda=5,5,cascade_rows
+Cascade,0.377622378,0.00647762091608,46.580,80.000,lambda=10,10,cascade_rows
+Cascade,0.444055944,0.0184549614371,132.709,94.074,lambda=0,0,cascade_rows
+Direct random,0.290418678,0.000267697261731,1.925,61.526,0.9979*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.0021*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.290790144,0.000278127025175,2.000,61.604,0.9941*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.0059*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.290852055,0.000279865319082,2.013,61.618,0.9934*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.0066*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.291285432,0.000292033376434,2.100,61.709,0.9890*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.0110*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.291718809,0.000304201433785,2.188,61.801,0.9846*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.0154*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.292028364,0.000312892903322,2.250,61.867,0.9814*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.0186*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.292152186,0.000316369491136,2.275,61.893,0.9802*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.0198*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.292585562,0.000328537548488,2.362,61.985,0.9757*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.0243*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.293018939,0.000340705605839,2.450,62.077,0.9713*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.0287*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.293266583,0.000347658781469,2.500,62.129,0.9688*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.0312*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.293452316,0.000352873663191,2.538,62.168,0.9669*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.0331*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.293885693,0.000365041720542,2.625,62.260,0.9625*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.0375*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.294319070,0.000377209777893,2.712,62.352,0.9580*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.0420*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.294504803,0.000382424659615,2.750,62.391,0.9561*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.0439*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.294752447,0.000389377835245,2.800,62.444,0.9536*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.0464*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.295185824,0.000401545892596,2.887,62.536,0.9492*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.0508*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.295619201,0.000413713949948,2.975,62.627,0.9447*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.0553*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.295743023,0.000417190537762,3.000,62.654,0.9435*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.0565*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.296052578,0.000425882007299,3.062,62.719,0.9403*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.0597*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.296485955,0.00043805006465,3.150,62.811,0.9359*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.0641*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.296919332,0.000450218122002,3.237,62.903,0.9315*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.0685*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.296981243,0.000451956415909,3.250,62.916,0.9308*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.0692*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.297352709,0.000462386179353,3.325,62.995,0.9270*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.0730*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.297786086,0.000474554236705,3.413,63.087,0.9226*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.0774*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.298219463,0.000486722294056,3.500,63.178,0.9182*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.0818*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.298652839,0.000498890351407,3.587,63.270,0.9138*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.0862*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.299086216,0.000511058408759,3.675,63.362,0.9093*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.0907*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.299457682,0.000521488172203,3.750,63.441,0.9055*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.0945*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.299519593,0.00052322646611,3.763,63.454,0.9049*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.0951*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.299952970,0.000535394523462,3.850,63.546,0.9005*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.0995*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.300386347,0.000547562580813,3.938,63.637,0.8961*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.1039*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.300695902,0.00055625405035,4.000,63.703,0.8929*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.1071*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.300819724,0.000559730638164,4.025,63.729,0.8916*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.1084*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.301253101,0.000571898695516,4.113,63.821,0.8872*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.1128*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.301686478,0.000584066752867,4.200,63.913,0.8828*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.1172*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.301934122,0.000591019928497,4.250,63.965,0.8802*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.1198*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.302119855,0.000596234810219,4.287,64.005,0.8783*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.1217*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.302553232,0.00060840286757,4.375,64.096,0.8739*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.1261*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.302986609,0.000620570924921,4.463,64.188,0.8695*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.1305*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.303172342,0.000625785806643,4.500,64.228,0.8676*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.1324*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.303419986,0.000632738982273,4.550,64.280,0.8651*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.1349*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.303853363,0.000644907039624,4.638,64.372,0.8606*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.1394*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.304286739,0.000657075096976,4.725,64.464,0.8562*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.1438*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.304410561,0.00066055168479,4.750,64.490,0.8549*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.1451*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.304720116,0.000669243154327,4.812,64.556,0.8518*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.1482*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.305153493,0.000681411211678,4.900,64.647,0.8474*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.1526*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.305586870,0.00069357926903,4.987,64.739,0.8429*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.1571*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.305648781,0.000695317562937,5.000,64.752,0.8423*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.1577*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.306020247,0.000705747326381,5.075,64.831,0.8385*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.1615*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.306453624,0.000717915383733,5.162,64.923,0.8341*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.1659*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.306887001,0.000730083441084,5.250,65.015,0.8297*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.1703*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.307320378,0.000742251498435,5.338,65.106,0.8252*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.1748*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.307753755,0.000754419555787,5.425,65.198,0.8208*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.1792*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.308125221,0.000764849319231,5.500,65.277,0.8170*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.1830*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.308187132,0.000766587613138,5.512,65.290,0.8164*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.1836*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.308620509,0.00077875567049,5.600,65.382,0.8119*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.1881*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.309053886,0.000790923727841,5.688,65.474,0.8075*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.1925*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.309363441,0.000799615197378,5.750,65.539,0.8044*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.1956*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.309487263,0.000803091785192,5.775,65.565,0.8031*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.1969*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.309920640,0.000815259842544,5.862,65.657,0.7987*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.2013*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.310354016,0.000827427899895,5.950,65.749,0.7942*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.2058*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.310601660,0.000834381075524,6.000,65.802,0.7917*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.2083*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.310787393,0.000839595957247,6.037,65.841,0.7898*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.2102*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.311220770,0.000851764014598,6.125,65.933,0.7854*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.2146*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.311654147,0.000863932071949,6.213,66.025,0.7810*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.2190*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.311839880,0.000869146953671,6.250,66.064,0.7791*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.2209*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.312087524,0.000876100129301,6.300,66.116,0.7765*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.2235*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.312520901,0.000888268186652,6.387,66.208,0.7721*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.2279*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.312954278,0.000900436244003,6.475,66.300,0.7677*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.2323*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.313078100,0.000903912831818,6.500,66.326,0.7664*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.2336*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.313387655,0.000912604301355,6.562,66.392,0.7633*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.2367*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.313821032,0.000924772358706,6.650,66.484,0.7588*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.2412*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.314254409,0.000936940416058,6.737,66.575,0.7544*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.2456*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.314316320,0.000938678709965,6.750,66.588,0.7538*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.2462*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.314687786,0.000949108473409,6.825,66.667,0.7500*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.2500*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.315121163,0.00096127653076,6.912,66.759,0.7455*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.2545*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.315554540,0.000973444588112,7.000,66.851,0.7411*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.2589*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.315987916,0.000985612645463,7.087,66.943,0.7367*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.2633*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.316421293,0.000997780702815,7.175,67.034,0.7323*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.2677*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.316792759,0.00100821046626,7.250,67.113,0.7285*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.2715*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.316854670,0.00100994876017,7.262,67.126,0.7278*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.2722*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.317288047,0.00102211681752,7.350,67.218,0.7234*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.2766*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.317721424,0.00103428487487,7.438,67.310,0.7190*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.2810*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.318030979,0.00104297634441,7.500,67.375,0.7158*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.2842*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.318154801,0.00104645293222,7.525,67.402,0.7146*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.2854*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.318588178,0.00105862098957,7.612,67.493,0.7101*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.2899*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.319021555,0.00107078904692,7.700,67.585,0.7057*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.2943*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.319269199,0.00107774222255,7.750,67.638,0.7032*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.2968*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.319454932,0.00108295710427,7.787,67.677,0.7013*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.2987*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.319888309,0.00109512516163,7.875,67.769,0.6969*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.3031*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.320321686,0.00110729321898,7.962,67.861,0.6924*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.3076*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.320507419,0.0011125081007,8.000,67.900,0.6905*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.3095*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.320755063,0.00111946127633,8.050,67.953,0.6880*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.3120*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.321188440,0.00113162933368,8.137,68.044,0.6836*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.3164*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.321621817,0.00114379739103,8.225,68.136,0.6791*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.3209*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.321745639,0.00114727397885,8.250,68.162,0.6779*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.3221*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.322055193,0.00115596544838,8.312,68.228,0.6747*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.3253*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.322488570,0.00116813350573,8.400,68.320,0.6703*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.3297*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.322921947,0.00118030156309,8.487,68.412,0.6659*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.3341*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.322983858,0.00118203985699,8.500,68.425,0.6652*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.3348*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.323355324,0.00119246962044,8.575,68.503,0.6614*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.3386*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.323788701,0.00120463767779,8.662,68.595,0.6570*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.3430*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.324222078,0.00121680573514,8.750,68.687,0.6526*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.3474*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.324655455,0.00122897379249,8.837,68.779,0.6482*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.3518*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.325088832,0.00124114184984,8.925,68.871,0.6437*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.3563*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.325460298,0.00125157161329,9.000,68.949,0.6399*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.3601*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.325522209,0.00125330990719,9.012,68.962,0.6393*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.3607*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.325955586,0.00126547796455,9.100,69.054,0.6349*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.3651*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.326388963,0.0012776460219,9.187,69.146,0.6305*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.3695*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.326698518,0.00128633749143,9.250,69.212,0.6273*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.3727*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.326822340,0.00128981407925,9.275,69.238,0.6260*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.3740*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.327255717,0.0013019821366,9.362,69.330,0.6216*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.3784*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.327689093,0.00131415019395,9.450,69.422,0.6172*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.3828*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.327936737,0.00132110336958,9.500,69.474,0.6146*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.3854*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.328122470,0.0013263182513,9.537,69.513,0.6127*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.3873*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.328555847,0.00133848630865,9.625,69.605,0.6083*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.3917*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.328989224,0.00135065436601,9.712,69.697,0.6039*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.3961*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.329174957,0.00135586924773,9.750,69.736,0.6020*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.3980*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.329422601,0.00136282242336,9.800,69.789,0.5995*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.4005*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.329855978,0.00137499048071,9.887,69.881,0.5950*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.4050*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.330289355,0.00138715853806,9.975,69.972,0.5906*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.4094*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.330413177,0.00139063512587,10.000,69.999,0.5894*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.4106*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.330722732,0.00139932659541,10.062,70.064,0.5862*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.4138*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.331156109,0.00141149465276,10.150,70.156,0.5818*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.4182*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.331589486,0.00142366271011,10.238,70.248,0.5773*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.4227*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.331651397,0.00142540100402,10.250,70.261,0.5767*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.4233*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.332022863,0.00143583076747,10.325,70.340,0.5729*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.4271*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.332456240,0.00144799882482,10.412,70.431,0.5685*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.4315*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.332889617,0.00146016688217,10.500,70.523,0.5641*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.4359*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.333322994,0.00147233493952,10.588,70.615,0.5596*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.4404*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.333756370,0.00148450299687,10.675,70.707,0.5552*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.4448*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.334127836,0.00149493276031,10.750,70.786,0.5514*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.4486*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.334189747,0.00149667105422,10.762,70.799,0.5508*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.4492*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.334623124,0.00150883911157,10.850,70.891,0.5463*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.4537*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.335056501,0.00152100716892,10.938,70.982,0.5419*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.4581*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.335366056,0.00152969863846,11.000,71.048,0.5388*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.4612*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.335489878,0.00153317522628,11.025,71.074,0.5375*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.4625*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.335923255,0.00154534328363,11.112,71.166,0.5331*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.4669*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.336356632,0.00155751134098,11.200,71.258,0.5286*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.4714*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.336604276,0.00156446451661,11.250,71.310,0.5261*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.4739*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.336790009,0.00156967939833,11.287,71.350,0.5242*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.4758*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.337223386,0.00158184745568,11.375,71.441,0.5198*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.4802*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.337656763,0.00159401551303,11.462,71.533,0.5154*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.4846*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.337842496,0.00159923039476,11.500,71.573,0.5135*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.4865*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.338090140,0.00160618357038,11.550,71.625,0.5109*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.4891*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.338523517,0.00161835162774,11.637,71.717,0.5065*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.4935*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.338956894,0.00163051968509,11.725,71.809,0.5021*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.4979*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.339080716,0.0016339962729,11.750,71.835,0.5008*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.4992*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.339390270,0.00164268774244,11.812,71.900,0.4977*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.5023*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.339823647,0.00165485579979,11.900,71.992,0.4932*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.5068*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.340257024,0.00166702385714,11.988,72.084,0.4888*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.5112*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.340318935,0.00166876215105,12.000,72.097,0.4882*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.5118*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.340690401,0.00167919191449,12.075,72.176,0.4844*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.5156*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.341123778,0.00169135997184,12.162,72.268,0.4799*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.5201*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.341557155,0.0017035280292,12.250,72.360,0.4755*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.5245*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.341990532,0.00171569608655,12.338,72.451,0.4711*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.5289*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.342423909,0.0017278641439,12.425,72.543,0.4667*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.5333*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.342795375,0.00173829390734,12.500,72.622,0.4629*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.5371*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.342857286,0.00174003220125,12.512,72.635,0.4622*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.5378*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.343290663,0.0017522002586,12.600,72.727,0.4578*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.5422*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.343724040,0.00176436831595,12.687,72.819,0.4534*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.5466*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.344033595,0.00177305978549,12.750,72.884,0.4502*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.5498*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.344157417,0.0017765363733,12.775,72.910,0.4490*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.5510*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.344590794,0.00178870443066,12.863,73.002,0.4445*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.5555*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.345024171,0.00180087248801,12.950,73.094,0.4401*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.5599*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.345271814,0.00180782566364,13.000,73.146,0.4376*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.5624*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.345457547,0.00181304054536,13.037,73.186,0.4357*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.5643*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.345890924,0.00182520860271,13.125,73.278,0.4313*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.5687*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.346324301,0.00183737666006,13.213,73.369,0.4268*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.5732*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.346510034,0.00184259154178,13.250,73.409,0.4249*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.5751*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.346757678,0.00184954471741,13.300,73.461,0.4224*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.5776*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.347191055,0.00186171277476,13.387,73.553,0.4180*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.5820*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.347624432,0.00187388083212,13.475,73.645,0.4136*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.5864*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.347748254,0.00187735741993,13.500,73.671,0.4123*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.5877*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.348057809,0.00188604888947,13.562,73.737,0.4091*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.5909*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.348491186,0.00189821694682,13.650,73.829,0.4047*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.5953*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.348924563,0.00191038500417,13.738,73.920,0.4003*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.5997*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.348986474,0.00191212329808,13.750,73.933,0.3996*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.6004*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.349357940,0.00192255306152,13.825,74.012,0.3958*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.6042*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.349791317,0.00193472111887,13.912,74.104,0.3914*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.6086*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.350224694,0.00194688917622,14.000,74.196,0.3870*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.6130*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.350658071,0.00195905723358,14.087,74.288,0.3826*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.6174*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.351091447,0.00197122529093,14.175,74.379,0.3781*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.6219*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.351462913,0.00198165505437,14.250,74.458,0.3743*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.6257*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.351524824,0.00198339334828,14.262,74.471,0.3737*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.6263*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.351958201,0.00199556140563,14.350,74.563,0.3693*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.6307*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.352391578,0.00200772946298,14.438,74.655,0.3649*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.6351*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.352701133,0.00201642093252,14.500,74.720,0.3617*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.6383*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.352824955,0.00201989752033,14.525,74.747,0.3604*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.6396*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.353258332,0.00203206557768,14.612,74.838,0.3560*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.6440*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.353691709,0.00204423363503,14.700,74.930,0.3516*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.6484*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.353939353,0.00205118681066,14.750,74.983,0.3490*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.6510*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.354125086,0.00205640169239,14.787,75.022,0.3472*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.6528*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.354558463,0.00206856974974,14.875,75.114,0.3427*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.6573*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.354991840,0.00208073780709,14.962,75.206,0.3383*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.6617*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.355177573,0.00208595268881,15.000,75.245,0.3364*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.6636*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.355425217,0.00209290586444,15.050,75.297,0.3339*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.6661*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.355858594,0.00210507392179,15.137,75.389,0.3294*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.6706*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.356291971,0.00211724197914,15.225,75.481,0.3250*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.6750*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.356415793,0.00212071856696,15.250,75.507,0.3238*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.6762*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.356725348,0.00212941003649,15.312,75.573,0.3206*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.6794*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.357158724,0.00214157809385,15.400,75.665,0.3162*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.6838*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.357592101,0.0021537461512,15.488,75.757,0.3117*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.6883*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.357654012,0.0021554844451,15.500,75.770,0.3111*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.6889*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.358025478,0.00216591420855,15.575,75.848,0.3073*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.6927*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.358458855,0.0021780822659,15.662,75.940,0.3029*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.6971*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.358892232,0.00219025032325,15.750,76.032,0.2985*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.7015*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.359325609,0.0022024183806,15.837,76.124,0.2940*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.7060*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.359758986,0.00221458643795,15.925,76.216,0.2896*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.7104*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.360130452,0.0022250162014,16.000,76.294,0.2858*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.7142*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.360192363,0.00222675449531,16.012,76.307,0.2852*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.7148*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.360625740,0.00223892255266,16.100,76.399,0.2808*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.7192*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.361059117,0.00225109061001,16.188,76.491,0.2763*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.7237*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.361368672,0.00225978207955,16.250,76.557,0.2732*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.7268*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.361492494,0.00226325866736,16.275,76.583,0.2719*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.7281*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.361925871,0.00227542672471,16.363,76.675,0.2675*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.7325*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.362359248,0.00228759478206,16.450,76.766,0.2630*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.7370*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.362606892,0.00229454795769,16.500,76.819,0.2605*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.7395*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.362792624,0.00229976283941,16.538,76.858,0.2586*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.7414*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.363226001,0.00231193089677,16.625,76.950,0.2542*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.7458*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.363659378,0.00232409895412,16.712,77.042,0.2498*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.7502*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.363845111,0.00232931383584,16.750,77.081,0.2479*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.7521*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.364092755,0.00233626701147,16.800,77.134,0.2453*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.7547*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.364526132,0.00234843506882,16.887,77.226,0.2409*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.7591*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.364959509,0.00236060312617,16.975,77.317,0.2365*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.7635*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.365083331,0.00236407971399,17.000,77.344,0.2352*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.7648*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.365392886,0.00237277118352,17.062,77.409,0.2321*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.7679*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.365826263,0.00238493924087,17.150,77.501,0.2276*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.7724*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.366259640,0.00239710729823,17.238,77.593,0.2232*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.7768*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.366321551,0.00239884559213,17.250,77.606,0.2226*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.7774*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.366693017,0.00240927535558,17.325,77.685,0.2188*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.7812*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.367126394,0.00242144341293,17.413,77.776,0.2144*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.7856*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.367559771,0.00243361147028,17.500,77.868,0.2099*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.7901*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.367993148,0.00244577952763,17.587,77.960,0.2055*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.7945*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.368426525,0.00245794758498,17.675,78.052,0.2011*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.7989*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.368797990,0.00246837734843,17.750,78.131,0.1973*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.8027*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.368859901,0.00247011564233,17.763,78.144,0.1966*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.8034*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.369293278,0.00248228369969,17.850,78.235,0.1922*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.8078*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.369726655,0.00249445175704,17.937,78.327,0.1878*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.8122*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.370036210,0.00250314322657,18.000,78.393,0.1846*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.8154*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.370160032,0.00250661981439,18.025,78.419,0.1834*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.8166*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.370593409,0.00251878787174,18.112,78.511,0.1789*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.8211*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.371026786,0.00253095592909,18.200,78.603,0.1745*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.8255*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.371274430,0.00253790910472,18.250,78.655,0.1720*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.8280*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.371460163,0.00254312398644,18.288,78.695,0.1701*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.8299*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.371893540,0.00255529204379,18.375,78.786,0.1657*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.8343*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.372326917,0.00256746010115,18.463,78.878,0.1612*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.8388*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.372512650,0.00257267498287,18.500,78.917,0.1593*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.8407*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.372760294,0.0025796281585,18.550,78.970,0.1568*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.8432*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.373193671,0.00259179621585,18.637,79.062,0.1524*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.8476*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.373627048,0.0026039642732,18.725,79.154,0.1480*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.8520*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.373750870,0.00260744086101,18.750,79.180,0.1467*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.8533*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.374060425,0.00261613233055,18.812,79.245,0.1435*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.8565*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.374493801,0.0026283003879,18.900,79.337,0.1391*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.8609*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.374927178,0.00264046844525,18.988,79.429,0.1347*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.8653*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.374989089,0.00264220673916,19.000,79.442,0.1340*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.8660*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.375360555,0.0026526365026,19.075,79.521,0.1302*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.8698*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.375793932,0.00266480455996,19.163,79.613,0.1258*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.8742*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.376227309,0.00267697261731,19.250,79.704,0.1214*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.8786*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.376660686,0.00268914067466,19.338,79.796,0.1170*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.8830*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.377094063,0.00270130873201,19.425,79.888,0.1125*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.8875*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.377465529,0.00271173849545,19.500,79.967,0.1087*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.8913*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.377527440,0.00271347678936,19.512,79.980,0.1081*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.8919*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.377960817,0.00272564484671,19.600,80.072,0.1037*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.8963*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.378394194,0.00273781290406,19.688,80.164,0.0993*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.9007*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.378703749,0.0027465043736,19.750,80.229,0.0961*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.9039*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.378827571,0.00274998096142,19.775,80.255,0.0948*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.9052*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.379260948,0.00276214901877,19.863,80.347,0.0904*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.9096*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.379694325,0.00277431707612,19.950,80.439,0.0860*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.9140*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.379941969,0.00278127025175,20.000,80.491,0.0834*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.9166*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.380127702,0.00278648513347,20.038,80.531,0.0816*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.9184*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.380561078,0.00279865319082,20.125,80.623,0.0771*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.9229*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.380994455,0.00281082124817,20.212,80.714,0.0727*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.9273*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.381180188,0.0028160361299,20.250,80.754,0.0708*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.9292*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.381427832,0.00282298930552,20.300,80.806,0.0683*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.9317*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.381861209,0.00283515736288,20.387,80.898,0.0638*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.9362*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.382294586,0.00284732542023,20.475,80.990,0.0594*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.9406*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.382418408,0.00285080200804,20.500,81.016,0.0582*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.9418*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.382727963,0.00285949347758,20.562,81.082,0.0550*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.9450*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.383161340,0.00287166153493,20.650,81.173,0.0506*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.9494*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.383594717,0.00288382959228,20.738,81.265,0.0461*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.9539*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.383656628,0.00288556788619,20.750,81.278,0.0455*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.9545*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.384028094,0.00289599764963,20.825,81.357,0.0417*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.9583*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.384461471,0.00290816570698,20.913,81.449,0.0373*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.9627*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.384894848,0.00292033376434,21.000,81.541,0.0329*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.9671*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.385328225,0.00293250182169,21.087,81.632,0.0284*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.9716*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.385761602,0.00294466987904,21.175,81.724,0.0240*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.9760*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.386133068,0.00295509964248,21.250,81.803,0.0202*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.9798*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.386194978,0.00295683793639,21.263,81.816,0.0196*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.9804*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.386628355,0.00296900599374,21.350,81.908,0.0152*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.9848*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.387061732,0.00298117405109,21.438,82.000,0.0107*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.9893*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.387371287,0.00298986552063,21.500,82.065,0.0076*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.9924*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.387495109,0.00299334210844,21.525,82.092,0.0063*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.9937*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.387928486,0.0030055101658,21.613,82.183,0.0019*scout:Qwen/Qwen3-4B-Instruct-2507 + 0.9981*solver:openai/gpt-oss-20b,,computed_convex_hull
+Direct random,0.388186356,0.00301767822315,21.700,82.238,0.9947*solver:openai/gpt-oss-20b + 0.0053*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.388260130,0.00302463139878,21.750,82.254,0.9894*solver:openai/gpt-oss-20b + 0.0106*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.388315460,0.0030298462805,21.788,82.265,0.9854*solver:openai/gpt-oss-20b + 0.0146*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.388444564,0.00304201433785,21.875,82.293,0.9762*solver:openai/gpt-oss-20b + 0.0238*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.388573667,0.0030541823952,21.962,82.320,0.9670*solver:openai/gpt-oss-20b + 0.0330*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.388628998,0.00305939727692,22.000,82.332,0.9630*solver:openai/gpt-oss-20b + 0.0370*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.388702771,0.00306635045255,22.050,82.347,0.9578*solver:openai/gpt-oss-20b + 0.0422*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.388831875,0.0030785185099,22.137,82.375,0.9485*solver:openai/gpt-oss-20b + 0.0515*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.388960979,0.00309068656726,22.225,82.402,0.9393*solver:openai/gpt-oss-20b + 0.0607*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.388997866,0.00309416315507,22.250,82.410,0.9367*solver:openai/gpt-oss-20b + 0.0633*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.389090083,0.00310285462461,22.313,82.429,0.9301*solver:openai/gpt-oss-20b + 0.0699*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.389219186,0.00311502268196,22.400,82.457,0.9208*solver:openai/gpt-oss-20b + 0.0792*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.389348290,0.00312719073931,22.488,82.484,0.9116*solver:openai/gpt-oss-20b + 0.0884*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.389366734,0.00312892903322,22.500,82.488,0.9103*solver:openai/gpt-oss-20b + 0.0897*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.389477394,0.00313935879666,22.575,82.512,0.9024*solver:openai/gpt-oss-20b + 0.0976*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.389606498,0.00315152685401,22.663,82.539,0.8931*solver:openai/gpt-oss-20b + 0.1069*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.389735602,0.00316369491136,22.750,82.566,0.8839*solver:openai/gpt-oss-20b + 0.1161*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.389864705,0.00317586296872,22.838,82.594,0.8747*solver:openai/gpt-oss-20b + 0.1253*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.389993809,0.00318803102607,22.925,82.621,0.8654*solver:openai/gpt-oss-20b + 0.1346*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.390104469,0.00319846078951,23.000,82.644,0.8575*solver:openai/gpt-oss-20b + 0.1425*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.390122913,0.00320019908342,23.012,82.648,0.8562*solver:openai/gpt-oss-20b + 0.1438*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.390252017,0.00321236714077,23.100,82.676,0.8470*solver:openai/gpt-oss-20b + 0.1530*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.390381120,0.00322453519812,23.188,82.703,0.8377*solver:openai/gpt-oss-20b + 0.1623*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.390473337,0.00323322666766,23.250,82.722,0.8312*solver:openai/gpt-oss-20b + 0.1688*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.390510224,0.00323670325547,23.275,82.730,0.8285*solver:openai/gpt-oss-20b + 0.1715*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.390639328,0.00324887131282,23.363,82.758,0.8193*solver:openai/gpt-oss-20b + 0.1807*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.390768432,0.00326103937017,23.450,82.785,0.8101*solver:openai/gpt-oss-20b + 0.1899*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.390842205,0.0032679925458,23.500,82.801,0.8048*solver:openai/gpt-oss-20b + 0.1952*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.390897536,0.00327320742753,23.538,82.812,0.8008*solver:openai/gpt-oss-20b + 0.1992*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.391026639,0.00328537548488,23.625,82.840,0.7916*solver:openai/gpt-oss-20b + 0.2084*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.391155743,0.00329754354223,23.712,82.867,0.7824*solver:openai/gpt-oss-20b + 0.2176*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.391211073,0.00330275842395,23.750,82.879,0.7784*solver:openai/gpt-oss-20b + 0.2216*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.391284847,0.00330971159958,23.800,82.894,0.7731*solver:openai/gpt-oss-20b + 0.2269*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.391413951,0.00332187965693,23.887,82.922,0.7639*solver:openai/gpt-oss-20b + 0.2361*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.391543055,0.00333404771428,23.975,82.949,0.7547*solver:openai/gpt-oss-20b + 0.2453*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.391579941,0.0033375243021,24.000,82.957,0.7520*solver:openai/gpt-oss-20b + 0.2480*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.391672158,0.00334621577163,24.062,82.976,0.7454*solver:openai/gpt-oss-20b + 0.2546*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.391801262,0.00335838382899,24.150,83.004,0.7362*solver:openai/gpt-oss-20b + 0.2638*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.391930366,0.00337055188634,24.238,83.031,0.7270*solver:openai/gpt-oss-20b + 0.2730*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.391948809,0.00337229018024,24.250,83.035,0.7257*solver:openai/gpt-oss-20b + 0.2743*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.392059470,0.00338271994369,24.325,83.059,0.7177*solver:openai/gpt-oss-20b + 0.2823*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.392188573,0.00339488800104,24.413,83.086,0.7085*solver:openai/gpt-oss-20b + 0.2915*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.392317677,0.00340705605839,24.500,83.113,0.6993*solver:openai/gpt-oss-20b + 0.3007*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.392446781,0.00341922411574,24.587,83.141,0.6901*solver:openai/gpt-oss-20b + 0.3099*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.392575885,0.00343139217309,24.675,83.168,0.6808*solver:openai/gpt-oss-20b + 0.3192*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.392686545,0.00344182193654,24.750,83.191,0.6729*solver:openai/gpt-oss-20b + 0.3271*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.392704989,0.00344356023045,24.762,83.195,0.6716*solver:openai/gpt-oss-20b + 0.3284*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.392834092,0.0034557282878,24.850,83.223,0.6624*solver:openai/gpt-oss-20b + 0.3376*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.392963196,0.00346789634515,24.938,83.250,0.6531*solver:openai/gpt-oss-20b + 0.3469*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.393055413,0.00347658781469,25.000,83.270,0.6465*solver:openai/gpt-oss-20b + 0.3535*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.393092300,0.0034800644025,25.025,83.277,0.6439*solver:openai/gpt-oss-20b + 0.3561*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.393221404,0.00349223245985,25.113,83.305,0.6347*solver:openai/gpt-oss-20b + 0.3653*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.393350508,0.0035044005172,25.200,83.332,0.6254*solver:openai/gpt-oss-20b + 0.3746*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.393424281,0.00351135369283,25.250,83.348,0.6202*solver:openai/gpt-oss-20b + 0.3798*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.393479611,0.00351656857455,25.288,83.359,0.6162*solver:openai/gpt-oss-20b + 0.3838*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.393608715,0.00352873663191,25.375,83.387,0.6070*solver:openai/gpt-oss-20b + 0.3930*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.393737819,0.00354090468926,25.462,83.414,0.5977*solver:openai/gpt-oss-20b + 0.4023*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.393793149,0.00354611957098,25.500,83.426,0.5938*solver:openai/gpt-oss-20b + 0.4062*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.393866923,0.00355307274661,25.550,83.441,0.5885*solver:openai/gpt-oss-20b + 0.4115*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.393996026,0.00356524080396,25.637,83.469,0.5793*solver:openai/gpt-oss-20b + 0.4207*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.394125130,0.00357740886131,25.725,83.496,0.5701*solver:openai/gpt-oss-20b + 0.4299*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.394162017,0.00358088544913,25.750,83.504,0.5674*solver:openai/gpt-oss-20b + 0.4326*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.394254234,0.00358957691866,25.812,83.523,0.5608*solver:openai/gpt-oss-20b + 0.4392*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.394383338,0.00360174497601,25.900,83.551,0.5516*solver:openai/gpt-oss-20b + 0.4484*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.394512442,0.00361391303337,25.988,83.578,0.5424*solver:openai/gpt-oss-20b + 0.4576*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.394530885,0.00361565132727,26.000,83.582,0.5410*solver:openai/gpt-oss-20b + 0.4590*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.394641545,0.00362608109072,26.075,83.606,0.5331*solver:openai/gpt-oss-20b + 0.4669*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.394770649,0.00363824914807,26.162,83.633,0.5239*solver:openai/gpt-oss-20b + 0.4761*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.394899753,0.00365041720542,26.250,83.660,0.5147*solver:openai/gpt-oss-20b + 0.4853*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.395028857,0.00366258526277,26.337,83.688,0.5054*solver:openai/gpt-oss-20b + 0.4946*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.395157960,0.00367475332012,26.425,83.715,0.4962*solver:openai/gpt-oss-20b + 0.5038*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.395268621,0.00368518308357,26.500,83.738,0.4883*solver:openai/gpt-oss-20b + 0.5117*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.395287064,0.00368692137747,26.512,83.742,0.4870*solver:openai/gpt-oss-20b + 0.5130*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.395416168,0.00369908943483,26.600,83.770,0.4777*solver:openai/gpt-oss-20b + 0.5223*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.395545272,0.00371125749218,26.687,83.797,0.4685*solver:openai/gpt-oss-20b + 0.5315*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.395637489,0.00371994896171,26.750,83.817,0.4619*solver:openai/gpt-oss-20b + 0.5381*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.395674376,0.00372342554953,26.775,83.824,0.4593*solver:openai/gpt-oss-20b + 0.5407*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.395803479,0.00373559360688,26.863,83.852,0.4501*solver:openai/gpt-oss-20b + 0.5499*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.395932583,0.00374776166423,26.950,83.879,0.4408*solver:openai/gpt-oss-20b + 0.5592*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.396006357,0.00375471483986,27.000,83.895,0.4355*solver:openai/gpt-oss-20b + 0.5645*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.396061687,0.00375992972158,27.038,83.906,0.4316*solver:openai/gpt-oss-20b + 0.5684*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.396190791,0.00377209777893,27.125,83.934,0.4224*solver:openai/gpt-oss-20b + 0.5776*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.396319895,0.00378426583628,27.212,83.961,0.4131*solver:openai/gpt-oss-20b + 0.5869*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.396375225,0.00378948071801,27.250,83.973,0.4092*solver:openai/gpt-oss-20b + 0.5908*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.396448998,0.00379643389364,27.300,83.988,0.4039*solver:openai/gpt-oss-20b + 0.5961*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.396578102,0.00380860195099,27.388,84.016,0.3947*solver:openai/gpt-oss-20b + 0.6053*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.396707206,0.00382077000834,27.475,84.043,0.3854*solver:openai/gpt-oss-20b + 0.6146*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.396744093,0.00382424659615,27.500,84.051,0.3828*solver:openai/gpt-oss-20b + 0.6172*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.396836310,0.00383293806569,27.562,84.071,0.3762*solver:openai/gpt-oss-20b + 0.6238*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.396965413,0.00384510612304,27.650,84.098,0.3670*solver:openai/gpt-oss-20b + 0.6330*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.397094517,0.00385727418039,27.738,84.125,0.3577*solver:openai/gpt-oss-20b + 0.6423*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.397112961,0.0038590124743,27.750,84.129,0.3564*solver:openai/gpt-oss-20b + 0.6436*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.397223621,0.00386944223774,27.825,84.153,0.3485*solver:openai/gpt-oss-20b + 0.6515*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.397352725,0.0038816102951,27.913,84.180,0.3393*solver:openai/gpt-oss-20b + 0.6607*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.397481829,0.00389377835245,28.000,84.207,0.3300*solver:openai/gpt-oss-20b + 0.6700*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.397610932,0.0039059464098,28.087,84.235,0.3208*solver:openai/gpt-oss-20b + 0.6792*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.397740036,0.00391811446715,28.175,84.262,0.3116*solver:openai/gpt-oss-20b + 0.6884*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.397850697,0.00392854423059,28.250,84.285,0.3037*solver:openai/gpt-oss-20b + 0.6963*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.397869140,0.0039302825245,28.262,84.289,0.3024*solver:openai/gpt-oss-20b + 0.6976*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.397998244,0.00394245058185,28.350,84.317,0.2931*solver:openai/gpt-oss-20b + 0.7069*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.398127348,0.0039546186392,28.438,84.344,0.2839*solver:openai/gpt-oss-20b + 0.7161*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.398219565,0.00396331010874,28.500,84.364,0.2773*solver:openai/gpt-oss-20b + 0.7227*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.398256451,0.00396678669656,28.525,84.371,0.2747*solver:openai/gpt-oss-20b + 0.7253*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.398385555,0.00397895475391,28.613,84.399,0.2654*solver:openai/gpt-oss-20b + 0.7346*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.398514659,0.00399112281126,28.700,84.426,0.2562*solver:openai/gpt-oss-20b + 0.7438*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.398588432,0.00399807598689,28.750,84.442,0.2509*solver:openai/gpt-oss-20b + 0.7491*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.398643763,0.00400329086861,28.787,84.453,0.2470*solver:openai/gpt-oss-20b + 0.7530*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.398772866,0.00401545892596,28.875,84.481,0.2377*solver:openai/gpt-oss-20b + 0.7623*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.398901970,0.00402762698331,28.962,84.508,0.2285*solver:openai/gpt-oss-20b + 0.7715*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.398957300,0.00403284186503,29.000,84.520,0.2246*solver:openai/gpt-oss-20b + 0.7754*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.399031074,0.00403979504066,29.050,84.535,0.2193*solver:openai/gpt-oss-20b + 0.7807*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.399160178,0.00405196309802,29.137,84.563,0.2100*solver:openai/gpt-oss-20b + 0.7900*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.399289282,0.00406413115537,29.225,84.590,0.2008*solver:openai/gpt-oss-20b + 0.7992*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.399326168,0.00406760774318,29.250,84.598,0.1982*solver:openai/gpt-oss-20b + 0.8018*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.399418385,0.00407629921272,29.312,84.618,0.1916*solver:openai/gpt-oss-20b + 0.8084*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.399547489,0.00408846727007,29.400,84.645,0.1824*solver:openai/gpt-oss-20b + 0.8176*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.399676593,0.00410063532742,29.488,84.672,0.1731*solver:openai/gpt-oss-20b + 0.8269*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.399695036,0.00410237362133,29.500,84.676,0.1718*solver:openai/gpt-oss-20b + 0.8282*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.399805697,0.00411280338477,29.575,84.700,0.1639*solver:openai/gpt-oss-20b + 0.8361*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.399934801,0.00412497144212,29.663,84.727,0.1547*solver:openai/gpt-oss-20b + 0.8453*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.400063904,0.00413713949948,29.750,84.754,0.1454*solver:openai/gpt-oss-20b + 0.8546*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.400193008,0.00414930755683,29.837,84.782,0.1362*solver:openai/gpt-oss-20b + 0.8638*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.400322112,0.00416147561418,29.925,84.809,0.1270*solver:openai/gpt-oss-20b + 0.8730*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.400432772,0.00417190537762,30.000,84.832,0.1191*solver:openai/gpt-oss-20b + 0.8809*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.400451216,0.00417364367153,30.012,84.836,0.1177*solver:openai/gpt-oss-20b + 0.8823*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.400580319,0.00418581172888,30.100,84.864,0.1085*solver:openai/gpt-oss-20b + 0.8915*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.400709423,0.00419797978623,30.188,84.891,0.0993*solver:openai/gpt-oss-20b + 0.9007*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.400801640,0.00420667125577,30.250,84.911,0.0927*solver:openai/gpt-oss-20b + 0.9073*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.400838527,0.00421014784358,30.275,84.918,0.0900*solver:openai/gpt-oss-20b + 0.9100*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.400967631,0.00422231590094,30.363,84.946,0.0808*solver:openai/gpt-oss-20b + 0.9192*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.401096735,0.00423448395829,30.450,84.973,0.0716*solver:openai/gpt-oss-20b + 0.9284*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.401170508,0.00424143713392,30.500,84.989,0.0663*solver:openai/gpt-oss-20b + 0.9337*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.401225838,0.00424665201564,30.537,85.000,0.0624*solver:openai/gpt-oss-20b + 0.9376*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.401354942,0.00425882007299,30.625,85.028,0.0531*solver:openai/gpt-oss-20b + 0.9469*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.401484046,0.00427098813034,30.712,85.055,0.0439*solver:openai/gpt-oss-20b + 0.9561*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.401539376,0.00427620301206,30.750,85.067,0.0399*solver:openai/gpt-oss-20b + 0.9601*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.401613150,0.00428315618769,30.800,85.082,0.0347*solver:openai/gpt-oss-20b + 0.9653*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.401742254,0.00429532424504,30.888,85.110,0.0254*solver:openai/gpt-oss-20b + 0.9746*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.401871357,0.0043074923024,30.975,85.137,0.0162*solver:openai/gpt-oss-20b + 0.9838*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.401908244,0.00431096889021,31.000,85.145,0.0136*solver:openai/gpt-oss-20b + 0.9864*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.402000461,0.00431966035975,31.062,85.165,0.0070*solver:openai/gpt-oss-20b + 0.9930*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct,,computed_convex_hull
+Direct random,0.402119691,0.0043318284171,31.150,85.190,0.9997*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0003*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.402208536,0.00434399647445,31.237,85.209,0.9984*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0016*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.402221228,0.00434573476836,31.250,85.211,0.9982*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0018*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.402297381,0.0043561645318,31.325,85.227,0.9971*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0029*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.402386226,0.00436833258915,31.413,85.246,0.9959*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0041*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.402475071,0.0043805006465,31.500,85.265,0.9946*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0054*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.402563916,0.00439266870385,31.588,85.284,0.9933*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0067*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.402652761,0.00440483676121,31.675,85.303,0.9921*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0079*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.402728914,0.00441526652465,31.750,85.319,0.9910*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0090*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.402741606,0.00441700481856,31.762,85.322,0.9908*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0092*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.402830451,0.00442917287591,31.850,85.340,0.9895*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0105*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.402919296,0.00444134093326,31.938,85.359,0.9883*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0117*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.402982757,0.0044500324028,32.000,85.373,0.9873*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0127*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.403008141,0.00445350899061,32.025,85.378,0.9870*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0130*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.403096986,0.00446567704796,32.112,85.397,0.9857*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0143*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.403185831,0.00447784510531,32.200,85.416,0.9844*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0156*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.403236599,0.00448479828094,32.250,85.426,0.9837*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0163*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.403274676,0.00449001316267,32.288,85.434,0.9832*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0168*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.403363521,0.00450218122002,32.375,85.453,0.9819*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0181*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.403452366,0.00451434927737,32.462,85.472,0.9806*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0194*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.403490442,0.00451956415909,32.500,85.480,0.9801*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0199*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.403541211,0.00452651733472,32.550,85.491,0.9794*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0206*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.403630055,0.00453868539207,32.638,85.510,0.9781*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0219*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.403718900,0.00455085344942,32.725,85.529,0.9768*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0232*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.403744285,0.00455433003724,32.750,85.534,0.9765*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0235*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.403807745,0.00456302150677,32.812,85.547,0.9755*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0245*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.403896590,0.00457518956413,32.900,85.566,0.9743*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0257*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.403985435,0.00458735762148,32.987,85.585,0.9730*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0270*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.403998127,0.00458909591538,33.000,85.588,0.9728*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0272*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.404074280,0.00459952567883,33.075,85.604,0.9717*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0283*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.404163125,0.00461169373618,33.162,85.623,0.9705*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0295*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.404251970,0.00462386179353,33.250,85.642,0.9692*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0308*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.404340815,0.00463602985088,33.337,85.660,0.9679*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0321*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.404429660,0.00464819790823,33.425,85.679,0.9667*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0333*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.404505813,0.00465862767168,33.500,85.695,0.9656*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0344*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.404518505,0.00466036596559,33.513,85.698,0.9654*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0346*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.404607350,0.00467253402294,33.600,85.717,0.9641*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0359*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.404696195,0.00468470208029,33.688,85.736,0.9628*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0372*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.404759655,0.00469339354983,33.750,85.749,0.9619*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0381*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.404785040,0.00469687013764,33.775,85.754,0.9616*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0384*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.404873885,0.00470903819499,33.862,85.773,0.9603*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0397*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.404962730,0.00472120625234,33.950,85.792,0.9590*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0410*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.405013498,0.00472815942797,34.000,85.803,0.9583*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0417*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.405051575,0.00473337430969,34.038,85.811,0.9578*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0422*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.405140420,0.00474554236705,34.125,85.830,0.9565*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0435*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.405229264,0.0047577104244,34.212,85.849,0.9552*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0448*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.405267341,0.00476292530612,34.250,85.857,0.9547*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0453*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.405318109,0.00476987848175,34.300,85.867,0.9540*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0460*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.405406954,0.0047820465391,34.388,85.886,0.9527*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0473*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.405495799,0.00479421459645,34.475,85.905,0.9514*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0486*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.405521184,0.00479769118427,34.500,85.910,0.9510*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0490*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.405584644,0.0048063826538,34.562,85.924,0.9501*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0499*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.405673489,0.00481855071115,34.650,85.943,0.9489*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0511*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.405762334,0.00483071876851,34.737,85.962,0.9476*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0524*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.405775026,0.00483245706241,34.750,85.964,0.9474*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0526*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.405851179,0.00484288682586,34.825,85.980,0.9463*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0537*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.405940024,0.00485505488321,34.913,85.999,0.9451*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0549*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.406028869,0.00486722294056,35.000,86.018,0.9438*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0562*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.406282712,0.00490198881871,35.250,86.072,0.9402*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0598*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.406536554,0.00493675469685,35.500,86.126,0.9365*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0635*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.406790397,0.004971520575,35.750,86.179,0.9329*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0671*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.407044240,0.00500628645315,36.000,86.233,0.9293*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0707*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.407298083,0.00504105233129,36.250,86.287,0.9256*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0744*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.407551925,0.00507581820944,36.500,86.341,0.9220*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0780*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.407805768,0.00511058408759,36.750,86.394,0.9184*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0816*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.408059611,0.00514534996573,37.000,86.448,0.9147*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0853*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.408313453,0.00518011584388,37.250,86.502,0.9111*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0889*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.408567296,0.00521488172203,37.500,86.556,0.9075*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0925*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.408821139,0.00524964760017,37.750,86.610,0.9039*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0961*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.409074981,0.00528441347832,38.000,86.663,0.9002*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.0998*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.409328824,0.00531917935647,38.250,86.717,0.8966*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.1034*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.409582667,0.00535394523462,38.500,86.771,0.8930*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.1070*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.409836510,0.00538871111276,38.750,86.825,0.8893*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.1107*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.410090352,0.00542347699091,39.000,86.878,0.8857*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.1143*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.410344195,0.00545824286906,39.250,86.932,0.8821*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.1179*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.410598038,0.0054930087472,39.500,86.986,0.8784*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.1216*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.410851880,0.00552777462535,39.750,87.040,0.8748*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.1252*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.411105723,0.0055625405035,40.000,87.094,0.8712*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.1288*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.411359566,0.00559730638164,40.250,87.147,0.8676*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.1324*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.411613408,0.00563207225979,40.500,87.201,0.8639*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.1361*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.411867251,0.00566683813794,40.750,87.255,0.8603*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.1397*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.412121094,0.00570160401608,41.000,87.309,0.8567*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.1433*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.412374937,0.00573636989423,41.250,87.362,0.8530*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.1470*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.412628779,0.00577113577238,41.500,87.416,0.8494*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.1506*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.412882622,0.00580590165052,41.750,87.470,0.8458*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.1542*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.413136465,0.00584066752867,42.000,87.524,0.8421*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.1579*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.413390307,0.00587543340682,42.250,87.578,0.8385*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.1615*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.413644150,0.00591019928497,42.500,87.631,0.8349*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.1651*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.413897993,0.00594496516311,42.750,87.685,0.8313*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.1687*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.414151836,0.00597973104126,43.000,87.739,0.8276*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.1724*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.414405678,0.00601449691941,43.250,87.793,0.8240*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.1760*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.414659521,0.00604926279755,43.500,87.846,0.8204*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.1796*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.414913364,0.0060840286757,43.750,87.900,0.8167*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.1833*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.415167206,0.00611879455385,44.000,87.954,0.8131*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.1869*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.415421049,0.00615356043199,44.250,88.008,0.8095*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.1905*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.415674892,0.00618832631014,44.500,88.061,0.8058*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.1942*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.415928734,0.00622309218829,44.750,88.115,0.8022*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.1978*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.416182577,0.00625785806643,45.000,88.169,0.7986*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.2014*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.416436420,0.00629262394458,45.250,88.223,0.7950*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.2050*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.416690263,0.00632738982273,45.500,88.277,0.7913*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.2087*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.416944105,0.00636215570087,45.750,88.330,0.7877*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.2123*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.417197948,0.00639692157902,46.000,88.384,0.7841*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.2159*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.417451791,0.00643168745717,46.250,88.438,0.7804*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.2196*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.417705633,0.00646645333531,46.500,88.492,0.7768*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.2232*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.417959476,0.00650121921346,46.750,88.545,0.7732*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.2268*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.418213319,0.00653598509161,47.000,88.599,0.7695*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.2305*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.418467161,0.00657075096976,47.250,88.653,0.7659*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.2341*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.418721004,0.0066055168479,47.500,88.707,0.7623*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.2377*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.418974847,0.00664028272605,47.750,88.761,0.7587*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.2413*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.419228690,0.0066750486042,48.000,88.814,0.7550*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.2450*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.419482532,0.00670981448234,48.250,88.868,0.7514*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.2486*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.419736375,0.00674458036049,48.500,88.922,0.7478*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.2522*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.419990218,0.00677934623864,48.750,88.976,0.7441*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.2559*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.420244060,0.00681411211678,49.000,89.029,0.7405*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.2595*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.420497903,0.00684887799493,49.250,89.083,0.7369*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.2631*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.420751746,0.00688364387308,49.500,89.137,0.7333*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.2667*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.421005589,0.00691840975122,49.750,89.191,0.7296*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.2704*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.421259431,0.00695317562937,50.000,89.245,0.7260*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.2740*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.421513274,0.00698794150752,50.250,89.298,0.7224*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.2776*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.421767117,0.00702270738566,50.500,89.352,0.7187*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.2813*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.422020959,0.00705747326381,50.750,89.406,0.7151*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.2849*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.422274802,0.00709223914196,51.000,89.460,0.7115*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.2885*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.422528645,0.0071270050201,51.250,89.513,0.7078*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.2922*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.422782487,0.00716177089825,51.500,89.567,0.7042*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.2958*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.423036330,0.0071965367764,51.750,89.621,0.7006*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.2994*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.423290173,0.00723130265455,52.000,89.675,0.6970*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.3030*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.423544016,0.00726606853269,52.250,89.729,0.6933*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.3067*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.423797858,0.00730083441084,52.500,89.782,0.6897*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.3103*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.424051701,0.00733560028899,52.750,89.836,0.6861*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.3139*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.424305544,0.00737036616713,53.000,89.890,0.6824*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.3176*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.424559386,0.00740513204528,53.250,89.944,0.6788*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.3212*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.424813229,0.00743989792343,53.500,89.997,0.6752*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.3248*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.425067072,0.00747466380157,53.750,90.051,0.6715*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.3285*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.425320915,0.00750942967972,54.000,90.105,0.6679*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.3321*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.425574757,0.00754419555787,54.250,90.159,0.6643*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.3357*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.425828600,0.00757896143601,54.500,90.213,0.6607*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.3393*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.426082443,0.00761372731416,54.750,90.266,0.6570*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.3430*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.426336285,0.00764849319231,55.000,90.320,0.6534*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.3466*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.426590128,0.00768325907045,55.250,90.374,0.6498*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.3502*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.426843971,0.0077180249486,55.500,90.428,0.6461*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.3539*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.427097813,0.00775279082675,55.750,90.481,0.6425*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.3575*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.427351656,0.0077875567049,56.000,90.535,0.6389*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.3611*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.427605499,0.00782232258304,56.250,90.589,0.6352*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.3648*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.427859342,0.00785708846119,56.500,90.643,0.6316*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.3684*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.428113184,0.00789185433934,56.750,90.697,0.6280*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.3720*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.428367027,0.00792662021748,57.000,90.750,0.6244*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.3756*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.428620870,0.00796138609563,57.250,90.804,0.6207*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.3793*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.428874712,0.00799615197378,57.500,90.858,0.6171*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.3829*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.429128555,0.00803091785192,57.750,90.912,0.6135*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.3865*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.429382398,0.00806568373007,58.000,90.965,0.6098*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.3902*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.429636240,0.00810044960822,58.250,91.019,0.6062*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.3938*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.429890083,0.00813521548636,58.500,91.073,0.6026*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.3974*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.430143926,0.00816998136451,58.750,91.127,0.5989*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.4011*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.430397769,0.00820474724266,59.000,91.181,0.5953*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.4047*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.430651611,0.0082395131208,59.250,91.234,0.5917*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.4083*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.430905454,0.00827427899895,59.500,91.288,0.5881*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.4119*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.431159297,0.0083090448771,59.750,91.342,0.5844*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.4156*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.431413139,0.00834381075524,60.000,91.396,0.5808*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.4192*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.431666982,0.00837857663339,60.250,91.449,0.5772*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.4228*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.431920825,0.00841334251154,60.500,91.503,0.5735*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.4265*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.432174668,0.00844810838969,60.750,91.557,0.5699*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.4301*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.432428510,0.00848287426783,61.000,91.611,0.5663*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.4337*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.432682353,0.00851764014598,61.250,91.665,0.5626*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.4374*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.432936196,0.00855240602413,61.500,91.718,0.5590*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.4410*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.433190038,0.00858717190227,61.750,91.772,0.5554*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.4446*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.433443881,0.00862193778042,62.000,91.826,0.5518*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.4482*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.433697724,0.00865670365857,62.250,91.880,0.5481*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.4519*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.433951566,0.00869146953671,62.500,91.933,0.5445*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.4555*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.434205409,0.00872623541486,62.750,91.987,0.5409*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.4591*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.434459252,0.00876100129301,63.000,92.041,0.5372*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.4628*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.434713095,0.00879576717115,63.250,92.095,0.5336*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.4664*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.434966937,0.0088305330493,63.500,92.149,0.5300*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.4700*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.435220780,0.00886529892745,63.750,92.202,0.5263*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.4737*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.435474623,0.00890006480559,64.000,92.256,0.5227*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.4773*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.435728465,0.00893483068374,64.250,92.310,0.5191*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.4809*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.435982308,0.00896959656189,64.500,92.364,0.5155*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.4845*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.436236151,0.00900436244003,64.750,92.417,0.5118*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.4882*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.436489993,0.00903912831818,65.000,92.471,0.5082*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.4918*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.436743836,0.00907389419633,65.250,92.525,0.5046*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.4954*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.436997679,0.00910866007448,65.500,92.579,0.5009*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.4991*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.437251522,0.00914342595262,65.750,92.633,0.4973*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.5027*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.437505364,0.00917819183077,66.000,92.686,0.4937*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.5063*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.437759207,0.00921295770892,66.250,92.740,0.4900*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.5100*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.438013050,0.00924772358706,66.500,92.794,0.4864*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.5136*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.438266892,0.00928248946521,66.750,92.848,0.4828*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.5172*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.438520735,0.00931725534336,67.000,92.901,0.4792*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.5208*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.438774578,0.0093520212215,67.250,92.955,0.4755*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.5245*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.439028421,0.00938678709965,67.500,93.009,0.4719*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.5281*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.439282263,0.0094215529778,67.750,93.063,0.4683*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.5317*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.439536106,0.00945631885594,68.000,93.117,0.4646*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.5354*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.439789949,0.00949108473409,68.250,93.170,0.4610*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.5390*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.440043791,0.00952585061224,68.500,93.224,0.4574*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.5426*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.440297634,0.00956061649038,68.750,93.278,0.4537*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.5463*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.440551477,0.00959538236853,69.000,93.332,0.4501*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.5499*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.440805319,0.00963014824668,69.250,93.385,0.4465*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.5535*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.441059162,0.00966491412483,69.500,93.439,0.4429*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.5571*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.441313005,0.00969968000297,69.750,93.493,0.4392*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.5608*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.441566848,0.00973444588112,70.000,93.547,0.4356*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.5644*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.441820690,0.00976921175927,70.250,93.601,0.4320*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.5680*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.442074533,0.00980397763741,70.500,93.654,0.4283*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.5717*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.442328376,0.00983874351556,70.750,93.708,0.4247*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.5753*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.442582218,0.00987350939371,71.000,93.762,0.4211*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.5789*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.442836061,0.00990827527185,71.250,93.816,0.4174*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.5826*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.443089904,0.00994304115,71.500,93.869,0.4138*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.5862*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.443343746,0.00997780702815,71.750,93.923,0.4102*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.5898*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.443597589,0.0100125729063,72.000,93.977,0.4066*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.5934*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.443851432,0.0100473387844,72.250,94.031,0.4029*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.5971*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.444105275,0.0100821046626,72.500,94.085,0.3993*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.6007*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.444359117,0.0101168705407,72.750,94.138,0.3957*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.6043*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.444612960,0.0101516364189,73.000,94.192,0.3920*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.6080*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.444866803,0.010186402297,73.250,94.246,0.3884*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.6116*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.445120645,0.0102211681752,73.500,94.300,0.3848*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.6152*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.445374488,0.0102559340533,73.750,94.353,0.3811*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.6189*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.445628331,0.0102906999315,74.000,94.407,0.3775*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.6225*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.445882174,0.0103254658096,74.250,94.461,0.3739*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.6261*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.446136016,0.0103602316878,74.500,94.515,0.3703*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.6297*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.446389859,0.0103949975659,74.750,94.569,0.3666*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.6334*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.446643702,0.0104297634441,75.000,94.622,0.3630*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.6370*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.446897544,0.0104645293222,75.250,94.676,0.3594*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.6406*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.447151387,0.0104992952003,75.500,94.730,0.3557*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.6443*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.447405230,0.0105340610785,75.750,94.784,0.3521*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.6479*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.447659072,0.0105688269566,76.000,94.837,0.3485*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.6515*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.447912915,0.0106035928348,76.250,94.891,0.3448*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.6552*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.448166758,0.0106383587129,76.500,94.945,0.3412*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.6588*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.448420601,0.0106731245911,76.750,94.999,0.3376*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.6624*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.448674443,0.0107078904692,77.000,95.053,0.3340*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.6660*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.448928286,0.0107426563474,77.250,95.106,0.3303*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.6697*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.449182129,0.0107774222255,77.500,95.160,0.3267*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.6733*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.449435971,0.0108121881037,77.750,95.214,0.3231*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.6769*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.449689814,0.0108469539818,78.000,95.268,0.3194*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.6806*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.449943657,0.01088171986,78.250,95.321,0.3158*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.6842*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.450197499,0.0109164857381,78.500,95.375,0.3122*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.6878*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.450451342,0.0109512516163,78.750,95.429,0.3085*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.6915*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.450705185,0.0109860174944,79.000,95.483,0.3049*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.6951*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.450959028,0.0110207833726,79.250,95.537,0.3013*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.6987*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.451212870,0.0110555492507,79.500,95.590,0.2977*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.7023*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.451466713,0.0110903151288,79.750,95.644,0.2940*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.7060*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.451720556,0.011125081007,80.000,95.698,0.2904*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.7096*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.451974398,0.0111598468851,80.250,95.752,0.2868*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.7132*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.452228241,0.0111946127633,80.500,95.805,0.2831*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.7169*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.452482084,0.0112293786414,80.750,95.859,0.2795*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.7205*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.452735927,0.0112641445196,81.000,95.913,0.2759*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.7241*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.452989769,0.0112989103977,81.250,95.967,0.2722*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.7278*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.453243612,0.0113336762759,81.500,96.020,0.2686*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.7314*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.453497455,0.011368442154,81.750,96.074,0.2650*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.7350*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.453751297,0.0114032080322,82.000,96.128,0.2614*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.7386*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.454005140,0.0114379739103,82.250,96.182,0.2577*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.7423*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.454258983,0.0114727397885,82.500,96.236,0.2541*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.7459*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.454512825,0.0115075056666,82.750,96.289,0.2505*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.7495*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.454766668,0.0115422715448,83.000,96.343,0.2468*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.7532*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.455020511,0.0115770374229,83.250,96.397,0.2432*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.7568*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.455274354,0.011611803301,83.500,96.451,0.2396*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.7604*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.455528196,0.0116465691792,83.750,96.504,0.2359*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.7641*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.455782039,0.0116813350573,84.000,96.558,0.2323*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.7677*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.456035882,0.0117161009355,84.250,96.612,0.2287*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.7713*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.456289724,0.0117508668136,84.500,96.666,0.2251*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.7749*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.456543567,0.0117856326918,84.750,96.720,0.2214*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.7786*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.456797410,0.0118203985699,85.000,96.773,0.2178*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.7822*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.457051252,0.0118551644481,85.250,96.827,0.2142*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.7858*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.457305095,0.0118899303262,85.500,96.881,0.2105*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.7895*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.457558938,0.0119246962044,85.750,96.935,0.2069*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.7931*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.457812781,0.0119594620825,86.000,96.988,0.2033*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.7967*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.458066623,0.0119942279607,86.250,97.042,0.1996*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.8004*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.458320466,0.0120289938388,86.500,97.096,0.1960*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.8040*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.458574309,0.012063759717,86.750,97.150,0.1924*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.8076*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.458828151,0.0120985255951,87.000,97.204,0.1888*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.8112*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.459081994,0.0121332914733,87.250,97.257,0.1851*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.8149*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.459335837,0.0121680573514,87.500,97.311,0.1815*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.8185*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.459589680,0.0122028232295,87.750,97.365,0.1779*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.8221*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.459843522,0.0122375891077,88.000,97.419,0.1742*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.8258*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.460097365,0.0122723549858,88.250,97.472,0.1706*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.8294*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.460351208,0.012307120864,88.500,97.526,0.1670*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.8330*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.460605050,0.0123418867421,88.750,97.580,0.1633*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.8367*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.460858893,0.0123766526203,89.000,97.634,0.1597*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.8403*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.461112736,0.0124114184984,89.250,97.688,0.1561*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.8439*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.461366578,0.0124461843766,89.500,97.741,0.1525*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.8475*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.461620421,0.0124809502547,89.750,97.795,0.1488*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.8512*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.461874264,0.0125157161329,90.000,97.849,0.1452*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.8548*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.462128107,0.012550482011,90.250,97.903,0.1416*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.8584*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.462381949,0.0125852478892,90.500,97.956,0.1379*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.8621*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.462635792,0.0126200137673,90.750,98.010,0.1343*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.8657*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.462889635,0.0126547796455,91.000,98.064,0.1307*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.8693*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.463143477,0.0126895455236,91.250,98.118,0.1270*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.8730*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.463397320,0.0127243114017,91.500,98.172,0.1234*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.8766*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.463651163,0.0127590772799,91.750,98.225,0.1198*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.8802*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.463905006,0.012793843158,92.000,98.279,0.1162*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.8838*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.464158848,0.0128286090362,92.250,98.333,0.1125*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.8875*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.464412691,0.0128633749143,92.500,98.387,0.1089*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.8911*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.464666534,0.0128981407925,92.750,98.440,0.1053*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.8947*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.464920376,0.0129329066706,93.000,98.494,0.1016*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.8984*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.465174219,0.0129676725488,93.250,98.548,0.0980*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.9020*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.465428062,0.0130024384269,93.500,98.602,0.0944*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.9056*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.465681904,0.0130372043051,93.750,98.656,0.0907*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.9093*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.465935747,0.0130719701832,94.000,98.709,0.0871*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.9129*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.466189590,0.0131067360614,94.250,98.763,0.0835*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.9165*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.466443433,0.0131415019395,94.500,98.817,0.0799*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.9201*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.466697275,0.0131762678177,94.750,98.871,0.0762*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.9238*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.466951118,0.0132110336958,95.000,98.924,0.0726*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.9274*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.467204961,0.013245799574,95.250,98.978,0.0690*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.9310*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.467458803,0.0132805654521,95.500,99.032,0.0653*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.9347*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.467712646,0.0133153313302,95.750,99.086,0.0617*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.9383*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.467966489,0.0133500972084,96.000,99.140,0.0581*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.9419*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.468220331,0.0133848630865,96.250,99.193,0.0544*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.9456*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.468474174,0.0134196289647,96.500,99.247,0.0508*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.9492*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.468728017,0.0134543948428,96.750,99.301,0.0472*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.9528*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.468981860,0.013489160721,97.000,99.355,0.0436*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.9564*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.469235702,0.0135239265991,97.250,99.408,0.0399*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.9601*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.469489545,0.0135586924773,97.500,99.462,0.0363*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.9637*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.469743388,0.0135934583554,97.750,99.516,0.0327*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.9673*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.469997230,0.0136282242336,98.000,99.570,0.0290*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.9710*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.470251073,0.0136629901117,98.250,99.624,0.0254*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.9746*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.470504916,0.0136977559899,98.500,99.677,0.0218*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.9782*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.470758759,0.013732521868,98.750,99.731,0.0181*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.9819*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.471012601,0.0137672877462,99.000,99.785,0.0145*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.9855*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.471266444,0.0138020536243,99.250,99.839,0.0109*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.9891*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.471520287,0.0138368195024,99.500,99.892,0.0073*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.9927*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.471774129,0.0138715853806,99.750,99.946,0.0036*solver:Qwen/Qwen3-Coder-30B-A3B-Instruct + 0.9964*solver:openai/gpt-oss-120b,,computed_convex_hull
+Direct random,0.472027972,0.0139063512587,100.000,100.000,solver:openai/gpt-oss-120b,,computed_convex_hull
+Oracle route upper bound,0.503496503,0.000689417821678,4.958,106.667,lambda=200,200,q_diag_rows
+Oracle route upper bound,0.510489510,0.000733236877622,5.273,108.148,lambda=150,150,q_diag_rows
+Oracle route upper bound,0.524475524,0.000845120975524,6.077,111.111,lambda=100,100,q_diag_rows
+Oracle route upper bound,0.538461538,0.00101379474476,7.290,114.074,lambda=75,75,q_diag_rows
+Oracle route upper bound,0.548951049,0.00117040389161,8.416,116.296,lambda=60,60,q_diag_rows
+Oracle route upper bound,0.552447552,0.00123025883566,8.847,117.037,lambda=55,55,q_diag_rows
+Oracle route upper bound,0.555944056,0.00129624753497,9.321,117.778,lambda=30,30,q_diag_rows
+Oracle route upper bound,0.555944056,0.00129624753497,9.321,117.778,lambda=35,35,q_diag_rows
+Oracle route upper bound,0.555944056,0.00129624753497,9.321,117.778,lambda=40,40,q_diag_rows
+Oracle route upper bound,0.555944056,0.00129624753497,9.321,117.778,lambda=45,45,q_diag_rows
+Oracle route upper bound,0.555944056,0.00129624753497,9.321,117.778,lambda=50,50,q_diag_rows
+Oracle route upper bound,0.559440559,0.0014218673042,10.225,118.519,lambda=5,5,q_diag_rows
+Oracle route upper bound,0.559440559,0.0014218673042,10.225,118.519,lambda=10,10,q_diag_rows
+Oracle route upper bound,0.559440559,0.0014218673042,10.225,118.519,lambda=15,15,q_diag_rows
+Oracle route upper bound,0.559440559,0.0014218673042,10.225,118.519,lambda=20,20,q_diag_rows
+Oracle route upper bound,0.559440559,0.0014218673042,10.225,118.519,lambda=25,25,q_diag_rows
+Oracle route upper bound,0.559440559,0.0014341748951,10.313,118.519,lambda=0,0,q_diag_rows
+Q chain flexible (pred cost),0.332167832,0.00107179403147,7.707,70.370,state_policy::flexible_bare_max4,200,q_predicted_rows
+Q chain flexible (pred cost),0.346153846,0.00116883377273,8.405,73.333,state_policy::flexible_bare_max4,150,q_predicted_rows
+Q chain flexible (pred cost),0.360139860,0.00149542346503,10.754,76.296,state_policy::flexible_bare_max4,100,q_predicted_rows
+Q chain flexible (pred cost),0.363636364,0.00160574855245,11.547,77.037,state_policy::flexible_bare_max4,75,q_predicted_rows
+Q chain flexible (pred cost),0.370629371,0.00197302292308,14.188,78.519,state_policy::flexible_bare_max4,50,q_predicted_rows
+Q chain flexible (pred cost),0.367132867,0.00256203907692,18.424,77.778,state_policy::flexible_bare_max4,40,q_predicted_rows
+Q chain flexible (pred cost),0.377622378,0.00301653346853,21.692,80.000,state_policy::flexible_bare_max4,35,q_predicted_rows
+Q chain flexible (pred cost),0.384615385,0.00375107402448,26.974,81.481,state_policy::flexible_bare_max4,30,q_predicted_rows
+Q chain flexible (pred cost),0.381118881,0.00451885258042,32.495,80.741,state_policy::flexible_bare_max4,25,q_predicted_rows
+Q chain flexible (pred cost),0.391608392,0.00541362621329,38.929,82.963,state_policy::flexible_bare_max4,20,q_predicted_rows
+Q chain flexible (pred cost),0.395104895,0.00664872312587,47.811,83.704,state_policy::flexible_bare_max4,15,q_predicted_rows
+Q chain flexible (pred cost),0.402097902,0.00763130838811,54.876,85.185,state_policy::flexible_bare_max4,10,q_predicted_rows
+Q chain flexible (pred cost),0.412587413,0.00890882177622,64.063,87.407,state_policy::flexible_bare_max4,5,q_predicted_rows
+Q chain flexible (pred cost),0.433566434,0.0116671341573,83.898,91.852,state_policy::flexible_bare_max4,0,q_predicted_rows
+Q chain forced-scout (pred cost),0.332167832,0.000807166993007,5.804,70.370,state_policy::forced_scout_0_max4,200,q_predicted_rows
+Q chain forced-scout (pred cost),0.335664336,0.000872339548951,6.273,71.111,state_policy::forced_scout_0_max4,150,q_predicted_rows
+Q chain forced-scout (pred cost),0.335664336,0.00111627250699,8.027,71.111,state_policy::forced_scout_0_max4,100,q_predicted_rows
+Q chain forced-scout (pred cost),0.339160839,0.00129774586364,9.332,71.852,state_policy::forced_scout_0_max4,75,q_predicted_rows
+Q chain forced-scout (pred cost),0.349650350,0.00187553767133,13.487,74.074,state_policy::forced_scout_0_max4,50,q_predicted_rows
+Q chain forced-scout (pred cost),0.346153846,0.00226117258392,16.260,73.333,state_policy::forced_scout_0_max4,40,q_predicted_rows
+Q chain forced-scout (pred cost),0.353146853,0.00271322121678,19.511,74.815,state_policy::forced_scout_0_max4,35,q_predicted_rows
+Q chain forced-scout (pred cost),0.353146853,0.00346793097552,24.938,74.815,state_policy::forced_scout_0_max4,30,q_predicted_rows
+Q chain forced-scout (pred cost),0.367132867,0.00417608248951,30.030,77.778,state_policy::forced_scout_0_max4,25,q_predicted_rows
+Q chain forced-scout (pred cost),0.367132867,0.00486060418531,34.952,77.778,state_policy::forced_scout_0_max4,20,q_predicted_rows
+Q chain forced-scout (pred cost),0.370629371,0.00610564283217,43.905,78.519,state_policy::forced_scout_0_max4,15,q_predicted_rows
+Q chain forced-scout (pred cost),0.381118881,0.00732627399301,52.683,80.741,state_policy::forced_scout_0_max4,10,q_predicted_rows
+Q chain forced-scout (pred cost),0.402097902,0.00787656328671,56.640,85.185,state_policy::forced_scout_0_max4,5,q_predicted_rows
+Q chain forced-scout (pred cost),0.430069930,0.0102412348287,73.644,91.111,state_policy::forced_scout_0_max4,0,q_predicted_rows
+Q direct (fixed train cost),0.311188811,0.000596315975524,4.288,65.926,lambda=200,200,q_diag_rows
+Q direct (fixed train cost),0.325174825,0.000731362006993,5.259,68.889,lambda=150,150,q_diag_rows
+Q direct (fixed train cost),0.342657343,0.000919915465035,6.615,72.593,lambda=100,100,q_diag_rows
+Q direct (fixed train cost),0.339160839,0.00106055782867,7.626,71.852,lambda=75,75,q_diag_rows
+Q direct (fixed train cost),0.349650350,0.00114370601748,8.224,74.074,lambda=60,60,q_diag_rows
+Q direct (fixed train cost),0.353146853,0.0011952218042,8.595,74.815,lambda=55,55,q_diag_rows
+Q direct (fixed train cost),0.353146853,0.00129556034615,9.316,74.815,lambda=50,50,q_diag_rows
+Q direct (fixed train cost),0.353146853,0.00131885165385,9.484,74.815,lambda=45,45,q_diag_rows
+Q direct (fixed train cost),0.349650350,0.00135119295804,9.716,74.074,lambda=40,40,q_diag_rows
+Q direct (fixed train cost),0.356643357,0.00152790657692,10.987,75.556,lambda=35,35,q_diag_rows
+Q direct (fixed train cost),0.353146853,0.00212977639161,15.315,74.815,lambda=30,30,q_diag_rows
+Q direct (fixed train cost),0.360139860,0.0029269143951,21.047,76.296,lambda=25,25,q_diag_rows
+Q direct (fixed train cost),0.356643357,0.00363872488112,26.166,75.556,lambda=20,20,q_diag_rows
+Q direct (fixed train cost),0.363636364,0.00404010724126,29.052,77.037,lambda=15,15,q_diag_rows
+Q direct (fixed train cost),0.374125874,0.00457563794406,32.903,79.259,lambda=10,10,q_diag_rows
+Q direct (fixed train cost),0.384615385,0.00566420686014,40.731,81.481,lambda=5,5,q_diag_rows
+Q direct (fixed train cost),0.405594406,0.00913721199301,65.705,85.926,lambda=0,0,q_diag_rows
+Q direct (oracle cost diagnostic),0.335664336,0.000497868604895,3.580,71.111,lambda=200,200,q_diag_rows
+Q direct (oracle cost diagnostic),0.342657343,0.000634344052448,4.562,72.593,lambda=150,150,q_diag_rows
+Q direct (oracle cost diagnostic),0.353146853,0.000772915982517,5.558,74.815,lambda=100,100,q_diag_rows
+Q direct (oracle cost diagnostic),0.360139860,0.000886443174825,6.374,76.296,lambda=75,75,q_diag_rows
+Q direct (oracle cost diagnostic),0.370629371,0.000981277304196,7.056,78.519,lambda=60,60,q_diag_rows
+Q direct (oracle cost diagnostic),0.370629371,0.00106505715734,7.659,78.519,lambda=55,55,q_diag_rows
+Q direct (oracle cost diagnostic),0.377622378,0.00115500746853,8.306,80.000,lambda=50,50,q_diag_rows
+Q direct (oracle cost diagnostic),0.374125874,0.00122945317133,8.841,79.259,lambda=45,45,q_diag_rows
+Q direct (oracle cost diagnostic),0.370629371,0.00140445605594,10.099,78.519,lambda=40,40,q_diag_rows
+Q direct (oracle cost diagnostic),0.377622378,0.00154942527972,11.142,80.000,lambda=35,35,q_diag_rows
+Q direct (oracle cost diagnostic),0.377622378,0.0019611389021,14.102,80.000,lambda=30,30,q_diag_rows
+Q direct (oracle cost diagnostic),0.377622378,0.0021835555979,15.702,80.000,lambda=25,25,q_diag_rows
+Q direct (oracle cost diagnostic),0.370629371,0.00261939497203,18.836,78.519,lambda=20,20,q_diag_rows
+Q direct (oracle cost diagnostic),0.367132867,0.00343264766434,24.684,77.778,lambda=15,15,q_diag_rows
+Q direct (oracle cost diagnostic),0.374125874,0.00458596926923,32.978,79.259,lambda=10,10,q_diag_rows
+Q direct (oracle cost diagnostic),0.391608392,0.00565824442657,40.688,82.963,lambda=5,5,q_diag_rows
+Q direct (oracle cost diagnostic),0.405594406,0.00913721199301,65.705,85.926,lambda=0,0,q_diag_rows
+Q direct (pred cost),0.318181818,0.000769900451049,5.536,67.407,lambda=200,200,q_diag_rows
+Q direct (pred cost),0.332167832,0.000859623111888,6.182,70.370,lambda=150,150,q_diag_rows
+Q direct (pred cost),0.346153846,0.00110517625874,7.947,73.333,lambda=100,100,q_diag_rows
+Q direct (pred cost),0.346153846,0.001156716,8.318,73.333,lambda=75,75,q_diag_rows
+Q direct (pred cost),0.346153846,0.00120949862587,8.697,73.333,lambda=60,60,q_diag_rows
+Q direct (pred cost),0.349650350,0.00123838010839,8.905,74.074,lambda=55,55,q_diag_rows
+Q direct (pred cost),0.356643357,0.00127109489161,9.140,75.556,lambda=50,50,q_diag_rows
+Q direct (pred cost),0.356643357,0.00139659143706,10.043,75.556,lambda=45,45,q_diag_rows
+Q direct (pred cost),0.356643357,0.0015974626014,11.487,75.556,lambda=40,40,q_diag_rows
+Q direct (pred cost),0.363636364,0.00203277186713,14.618,77.037,lambda=35,35,q_diag_rows
+Q direct (pred cost),0.363636364,0.00229009694406,16.468,77.037,lambda=30,30,q_diag_rows
+Q direct (pred cost),0.356643357,0.00266587494056,19.170,75.556,lambda=25,25,q_diag_rows
+Q direct (pred cost),0.356643357,0.00318054422378,22.871,75.556,lambda=20,20,q_diag_rows
+Q direct (pred cost),0.363636364,0.0041403090979,29.773,77.037,lambda=15,15,q_diag_rows
+Q direct (pred cost),0.370629371,0.00484835774476,34.864,78.519,lambda=10,10,q_diag_rows
+Q direct (pred cost),0.391608392,0.00604859717483,43.495,82.963,lambda=5,5,q_diag_rows
+Q direct (pred cost),0.405594406,0.00913721199301,65.705,85.926,lambda=0,0,q_diag_rows

@@ -1,0 +1,38 @@
+{
+  "n_eval_joined": 286,
+  "missing_counts_after_join": {
+    "post_minus_join": 0,
+    "input_minus_join": 0,
+    "cost_minus_join": 0,
+    "real_minus_join": 0
+  },
+  "reward_label_mismatch_count": 0,
+  "route_labels": [
+    "scout:Qwen/Qwen3-4B-Instruct-2507",
+    "solver:openai/gpt-oss-20b",
+    "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct",
+    "solver:openai/gpt-oss-120b"
+  ],
+  "output_cost_weights": [
+    2.78e-07,
+    1.299e-06,
+    4.64e-06,
+    1.113e-05
+  ],
+  "fixed_train_route_costs": [
+    0.0002770223909249568,
+    0.0027746141256544486,
+    0.0043178074694589855,
+    0.014061715811518336
+  ],
+  "always_oss120_mean_cost": 0.01390635125874126,
+  "outputs": {
+    "all_points": "router_analysis/swe_smith_train1500_real_4route_predicted_cost_frontier_1780967656/all_curve_points_with_w03_and_cascade.csv",
+    "pareto_points": "router_analysis/swe_smith_train1500_real_4route_predicted_cost_frontier_1780967656/pareto_frontier_points.csv",
+    "budget_table": "router_analysis/swe_smith_train1500_real_4route_predicted_cost_frontier_1780967656/budget_cap_best_observed_points.csv",
+    "compact_budget_table": "router_analysis/swe_smith_train1500_real_4route_predicted_cost_frontier_1780967656/compact_budget_table.csv",
+    "cost_diagnostics": "router_analysis/swe_smith_train1500_real_4route_predicted_cost_frontier_1780967656/cost_prediction_diagnostics.csv",
+    "plot_full_png": "router_analysis/swe_smith_train1500_real_4route_predicted_cost_frontier_1780967656/real_reward_vs_cost_predicted_cost_frontier.png",
+    "plot_zoom_png": "router_analysis/swe_smith_train1500_real_4route_predicted_cost_frontier_1780967656/real_reward_vs_cost_predicted_cost_frontier_zoom_0_40.png"
+  }
+}

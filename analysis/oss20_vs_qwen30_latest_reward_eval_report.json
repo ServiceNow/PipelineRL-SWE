@@ -1,0 +1,564 @@
+{
+  "best_utility_by_mode": {
+    "fixed_train_mean": {
+      "choose_qwen30_rate": 0.0,
+      "cost": 0.0030106595979020982,
+      "gain_vs_best_always_utility": 0.0,
+      "lambda": 12.5,
+      "mode": "fixed_train_mean",
+      "reward": 0.3881118881118881,
+      "utility": 0.3504786431381119
+    },
+    "oracle_true_cost": {
+      "choose_qwen30_rate": 0.1958041958041958,
+      "cost": 0.0022234777482517485,
+      "gain_vs_best_always_utility": 0.18540839790209795,
+      "lambda": 200,
+      "mode": "oracle_true_cost",
+      "reward": 0.4160839160839161,
+      "utility": -0.028611633566433592
+    }
+  },
+  "disagreement": {
+    "always_balanced": 0.5,
+    "always_oss20_raw": 0.46875,
+    "always_qwen30_raw": 0.53125,
+    "balanced_winner_acc_argmax_reward": 0.5,
+    "choose_qwen30_rate_on_disagreement": 0.0,
+    "n_disagreement": 64,
+    "oss20_wins": 30,
+    "pct_disagreement": 0.22377622377622378,
+    "qwen30_wins": 34,
+    "raw_winner_acc_argmax_reward": 0.46875
+  },
+  "n": 286,
+  "pairwise": {
+    "always_oss20_success": 0.3881118881118881,
+    "always_qwen30_success": 0.4020979020979021,
+    "argmax_choose_qwen30_rate": 0.0,
+    "argmax_reward_mean_real_success": 0.3881118881118881,
+    "delta_auc_qwen30_minus_oss20": 0.5078781512605042,
+    "delta_pearson": -0.03955449661743082,
+    "oracle_best_of_two_success": 0.506993006993007
+  },
+  "route_metrics": [
+    {
+      "accuracy_at_0_5": 0.6573426573426573,
+      "auc": 0.6624710424710425,
+      "balanced_accuracy_at_0_5": 0.5816216216216217,
+      "mean_pred": 0.43969630423959316,
+      "mean_tokens": 2317.6748251748254,
+      "mean_weighted_cost": 0.0030106595979020982,
+      "n": 286,
+      "pred_success_rate_at_0_5": 0.14335664335664336,
+      "route": "OSS20",
+      "std_pred": 0.038696263245216286,
+      "true_success_rate": 0.3881118881118881
+    },
+    {
+      "accuracy_at_0_5": 0.6153846153846154,
+      "auc": 0.6285278413424866,
+      "balanced_accuracy_at_0_5": 0.5388253241800153,
+      "mean_pred": 0.42128688618019744,
+      "mean_tokens": 932.9405594405595,
+      "mean_weighted_cost": 0.004328844195804196,
+      "n": 286,
+      "pred_success_rate_at_0_5": 0.10139860139860139,
+      "route": "Qwen30",
+      "std_pred": 0.04542352185183418,
+      "true_success_rate": 0.4020979020979021
+    }
+  ],
+  "train_mean_costs": {
+    "OSS20": 0.0027746141256544486,
+    "Qwen30": 0.0043178074694589855
+  },
+  "utility_rows": [
+    {
+      "choose_qwen30_rate": 0.0,
+      "cost": 0.0030106595979020982,
+      "gain_vs_best_always_utility": -0.013986013986013957,
+      "lambda": 0,
+      "mode": "fixed_train_mean",
+      "reward": 0.3881118881118881,
+      "utility": 0.3881118881118881
+    },
+    {
+      "choose_qwen30_rate": 0.0,
+      "cost": 0.0030106595979020982,
+      "gain_vs_best_always_utility": -0.0136564678365384,
+      "lambda": 0.25,
+      "mode": "fixed_train_mean",
+      "reward": 0.3881118881118881,
+      "utility": 0.3873592232124126
+    },
+    {
+      "choose_qwen30_rate": 0.0,
+      "cost": 0.0030106595979020982,
+      "gain_vs_best_always_utility": -0.013326921687062954,
+      "lambda": 0.5,
+      "mode": "fixed_train_mean",
+      "reward": 0.3881118881118881,
+      "utility": 0.38660655831293705
+    },
+    {
+      "choose_qwen30_rate": 0.0,
+      "cost": 0.0030106595979020982,
+      "gain_vs_best_always_utility": -0.012997375537587397,
+      "lambda": 0.75,
+      "mode": "fixed_train_mean",
+      "reward": 0.3881118881118881,
+      "utility": 0.38585389341346155
+    },
+    {
+      "choose_qwen30_rate": 0.0,
+      "cost": 0.0030106595979020982,
+      "gain_vs_best_always_utility": -0.01266782938811184,
+      "lambda": 1,
+      "mode": "fixed_train_mean",
+      "reward": 0.3881118881118881,
+      "utility": 0.38510122851398604
+    },
+    {
+      "choose_qwen30_rate": 0.0,
+      "cost": 0.0030106595979020982,
+      "gain_vs_best_always_utility": -0.012008737089160837,
+      "lambda": 1.5,
+      "mode": "fixed_train_mean",
+      "reward": 0.3881118881118881,
+      "utility": 0.38359589871503497
+    },
+    {
+      "choose_qwen30_rate": 0.0,
+      "cost": 0.0030106595979020982,
+      "gain_vs_best_always_utility": -0.011349644790209723,
+      "lambda": 2,
+      "mode": "fixed_train_mean",
+      "reward": 0.3881118881118881,
+      "utility": 0.38209056891608395
+    },
+    {
+      "choose_qwen30_rate": 0.0,
+      "cost": 0.0030106595979020982,
+      "gain_vs_best_always_utility": -0.01069055249125872,
+      "lambda": 2.5,
+      "mode": "fixed_train_mean",
+      "reward": 0.3881118881118881,
+      "utility": 0.3805852391171329
+    },
+    {
+      "choose_qwen30_rate": 0.0,
+      "cost": 0.0030106595979020982,
+      "gain_vs_best_always_utility": -0.010031460192307662,
+      "lambda": 3,
+      "mode": "fixed_train_mean",
+      "reward": 0.3881118881118881,
+      "utility": 0.3790799093181818
+    },
+    {
+      "choose_qwen30_rate": 0.0,
+      "cost": 0.0030106595979020982,
+      "gain_vs_best_always_utility": -0.0087132755944056,
+      "lambda": 4,
+      "mode": "fixed_train_mean",
+      "reward": 0.3881118881118881,
+      "utility": 0.3760692497202797
+    },
+    {
+      "choose_qwen30_rate": 0.0,
+      "cost": 0.0030106595979020982,
+      "gain_vs_best_always_utility": -0.007395090996503484,
+      "lambda": 5,
+      "mode": "fixed_train_mean",
+      "reward": 0.3881118881118881,
+      "utility": 0.37305859012237763
+    },
+    {
+      "choose_qwen30_rate": 0.0,
+      "cost": 0.0030106595979020982,
+      "gain_vs_best_always_utility": -0.006076906398601367,
+      "lambda": 6,
+      "mode": "fixed_train_mean",
+      "reward": 0.3881118881118881,
+      "utility": 0.37004793052447554
+    },
+    {
+      "choose_qwen30_rate": 0.0,
+      "cost": 0.0030106595979020982,
+      "gain_vs_best_always_utility": -0.0047587218006992504,
+      "lambda": 7,
+      "mode": "fixed_train_mean",
+      "reward": 0.3881118881118881,
+      "utility": 0.36703727092657346
+    },
+    {
+      "choose_qwen30_rate": 0.0,
+      "cost": 0.0030106595979020982,
+      "gain_vs_best_always_utility": -0.0034405372027971892,
+      "lambda": 8,
+      "mode": "fixed_train_mean",
+      "reward": 0.3881118881118881,
+      "utility": 0.3640266113286713
+    },
+    {
+      "choose_qwen30_rate": 0.0,
+      "cost": 0.0030106595979020982,
+      "gain_vs_best_always_utility": -0.0021223526048950725,
+      "lambda": 9,
+      "mode": "fixed_train_mean",
+      "reward": 0.3881118881118881,
+      "utility": 0.3610159517307692
+    },
+    {
+      "choose_qwen30_rate": 0.0,
+      "cost": 0.0030106595979020982,
+      "gain_vs_best_always_utility": -0.0008041680069930113,
+      "lambda": 10,
+      "mode": "fixed_train_mean",
+      "reward": 0.3881118881118881,
+      "utility": 0.35800529213286714
+    },
+    {
+      "choose_qwen30_rate": 0.0,
+      "cost": 0.0030106595979020982,
+      "gain_vs_best_always_utility": 0.0,
+      "lambda": 12.5,
+      "mode": "fixed_train_mean",
+      "reward": 0.3881118881118881,
+      "utility": 0.3504786431381119
+    },
+    {
+      "choose_qwen30_rate": 0.0,
+      "cost": 0.0030106595979020982,
+      "gain_vs_best_always_utility": 0.0,
+      "lambda": 15,
+      "mode": "fixed_train_mean",
+      "reward": 0.3881118881118881,
+      "utility": 0.34295199414335664
+    },
+    {
+      "choose_qwen30_rate": 0.0,
+      "cost": 0.0030106595979020982,
+      "gain_vs_best_always_utility": 0.0,
+      "lambda": 20,
+      "mode": "fixed_train_mean",
+      "reward": 0.3881118881118881,
+      "utility": 0.32789869615384615
+    },
+    {
+      "choose_qwen30_rate": 0.0,
+      "cost": 0.0030106595979020982,
+      "gain_vs_best_always_utility": 0.0,
+      "lambda": 25,
+      "mode": "fixed_train_mean",
+      "reward": 0.3881118881118881,
+      "utility": 0.31284539816433565
+    },
+    {
+      "choose_qwen30_rate": 0.0,
+      "cost": 0.0030106595979020982,
+      "gain_vs_best_always_utility": 0.0,
+      "lambda": 30,
+      "mode": "fixed_train_mean",
+      "reward": 0.3881118881118881,
+      "utility": 0.29779210017482516
+    },
+    {
+      "choose_qwen30_rate": 0.0,
+      "cost": 0.0030106595979020982,
+      "gain_vs_best_always_utility": 0.0,
+      "lambda": 40,
+      "mode": "fixed_train_mean",
+      "reward": 0.3881118881118881,
+      "utility": 0.26768550419580417
+    },
+    {
+      "choose_qwen30_rate": 0.0,
+      "cost": 0.0030106595979020982,
+      "gain_vs_best_always_utility": 0.0,
+      "lambda": 50,
+      "mode": "fixed_train_mean",
+      "reward": 0.3881118881118881,
+      "utility": 0.2375789082167832
+    },
+    {
+      "choose_qwen30_rate": 0.0,
+      "cost": 0.0030106595979020982,
+      "gain_vs_best_always_utility": 0.0,
+      "lambda": 75,
+      "mode": "fixed_train_mean",
+      "reward": 0.3881118881118881,
+      "utility": 0.16231241826923076
+    },
+    {
+      "choose_qwen30_rate": 0.0,
+      "cost": 0.0030106595979020982,
+      "gain_vs_best_always_utility": 0.0,
+      "lambda": 100,
+      "mode": "fixed_train_mean",
+      "reward": 0.3881118881118881,
+      "utility": 0.08704592832167829
+    },
+    {
+      "choose_qwen30_rate": 0.0,
+      "cost": 0.0030106595979020982,
+      "gain_vs_best_always_utility": 0.0,
+      "lambda": 150,
+      "mode": "fixed_train_mean",
+      "reward": 0.3881118881118881,
+      "utility": -0.0634870515734266
+    },
+    {
+      "choose_qwen30_rate": 0.0,
+      "cost": 0.0030106595979020982,
+      "gain_vs_best_always_utility": 0.0,
+      "lambda": 200,
+      "mode": "fixed_train_mean",
+      "reward": 0.3881118881118881,
+      "utility": -0.21402003146853155
+    },
+    {
+      "choose_qwen30_rate": 0.0,
+      "cost": 0.0030106595979020982,
+      "gain_vs_best_always_utility": -0.013986013986013957,
+      "lambda": 0,
+      "mode": "oracle_true_cost",
+      "reward": 0.3881118881118881,
+      "utility": 0.3881118881118881
+    },
+    {
+      "choose_qwen30_rate": 0.0,
+      "cost": 0.0030106595979020982,
+      "gain_vs_best_always_utility": -0.0136564678365384,
+      "lambda": 0.25,
+      "mode": "oracle_true_cost",
+      "reward": 0.3881118881118881,
+      "utility": 0.3873592232124126
+    },
+    {
+      "choose_qwen30_rate": 0.0,
+      "cost": 0.0030106595979020982,
+      "gain_vs_best_always_utility": -0.013326921687062954,
+      "lambda": 0.5,
+      "mode": "oracle_true_cost",
+      "reward": 0.3881118881118881,
+      "utility": 0.38660655831293705
+    },
+    {
+      "choose_qwen30_rate": 0.0,
+      "cost": 0.0030106595979020982,
+      "gain_vs_best_always_utility": -0.012997375537587397,
+      "lambda": 0.75,
+      "mode": "oracle_true_cost",
+      "reward": 0.3881118881118881,
+      "utility": 0.38585389341346155
+    },
+    {
+      "choose_qwen30_rate": 0.0,
+      "cost": 0.0030106595979020982,
+      "gain_vs_best_always_utility": -0.01266782938811184,
+      "lambda": 1,
+      "mode": "oracle_true_cost",
+      "reward": 0.3881118881118881,
+      "utility": 0.38510122851398604
+    },
+    {
+      "choose_qwen30_rate": 0.0,
+      "cost": 0.0030106595979020982,
+      "gain_vs_best_always_utility": -0.012008737089160837,
+      "lambda": 1.5,
+      "mode": "oracle_true_cost",
+      "reward": 0.3881118881118881,
+      "utility": 0.38359589871503497
+    },
+    {
+      "choose_qwen30_rate": 0.01048951048951049,
+      "cost": 0.00286329179020979,
+      "gain_vs_best_always_utility": -0.007558405678321611,
+      "lambda": 2,
+      "mode": "oracle_true_cost",
+      "reward": 0.3916083916083916,
+      "utility": 0.38588180802797206
+    },
+    {
+      "choose_qwen30_rate": 0.03146853146853147,
+      "cost": 0.002645314286713287,
+      "gain_vs_best_always_utility": -0.0027841822202797073,
+      "lambda": 2.5,
+      "mode": "oracle_true_cost",
+      "reward": 0.3951048951048951,
+      "utility": 0.3884916093881119
+    },
+    {
+      "choose_qwen30_rate": 0.038461538461538464,
+      "cost": 0.0026110166433566434,
+      "gain_vs_best_always_utility": 0.0016569791608391782,
+      "lambda": 3,
+      "mode": "oracle_true_cost",
+      "reward": 0.3986013986013986,
+      "utility": 0.39076834867132865
+    },
+    {
+      "choose_qwen30_rate": 0.055944055944055944,
+      "cost": 0.0025275197832167833,
+      "gain_vs_best_always_utility": 0.0037087941538461178,
+      "lambda": 4,
+      "mode": "oracle_true_cost",
+      "reward": 0.3986013986013986,
+      "utility": 0.38849131946853144
+    },
+    {
+      "choose_qwen30_rate": 0.08041958041958042,
+      "cost": 0.0024156807097902096,
+      "gain_vs_best_always_utility": 0.0060693139335664115,
+      "lambda": 5,
+      "mode": "oracle_true_cost",
+      "reward": 0.3986013986013986,
+      "utility": 0.3865229950524475
+    },
+    {
+      "choose_qwen30_rate": 0.08741258741258741,
+      "cost": 0.002387371853146853,
+      "gain_vs_best_always_utility": 0.00815233055944059,
+      "lambda": 6,
+      "mode": "oracle_true_cost",
+      "reward": 0.3986013986013986,
+      "utility": 0.3842771674825175
+    },
+    {
+      "choose_qwen30_rate": 0.0979020979020979,
+      "cost": 0.0023522159755244754,
+      "gain_vs_best_always_utility": 0.013836397541958034,
+      "lambda": 7,
+      "mode": "oracle_true_cost",
+      "reward": 0.4020979020979021,
+      "utility": 0.38563239026923074
+    },
+    {
+      "choose_qwen30_rate": 0.10839160839160839,
+      "cost": 0.0023208498286713284,
+      "gain_vs_best_always_utility": 0.016063954937062974,
+      "lambda": 8,
+      "mode": "oracle_true_cost",
+      "reward": 0.4020979020979021,
+      "utility": 0.3835311034685315
+    },
+    {
+      "choose_qwen30_rate": 0.11888111888111888,
+      "cost": 0.002296357825174825,
+      "gain_vs_best_always_utility": 0.021788880832167845,
+      "lambda": 9,
+      "mode": "oracle_true_cost",
+      "reward": 0.40559440559440557,
+      "utility": 0.38492718516783214
+    },
+    {
+      "choose_qwen30_rate": 0.1258741258741259,
+      "cost": 0.0022823095454545454,
+      "gain_vs_best_always_utility": 0.027458353496503496,
+      "lambda": 10,
+      "mode": "oracle_true_cost",
+      "reward": 0.4090909090909091,
+      "utility": 0.38626781363636364
+    },
+    {
+      "choose_qwen30_rate": 0.12937062937062938,
+      "cost": 0.0022753448706293706,
+      "gain_vs_best_always_utility": 0.026673951573426558,
+      "lambda": 12.5,
+      "mode": "oracle_true_cost",
+      "reward": 0.40559440559440557,
+      "utility": 0.37715259471153845
+    },
+    {
+      "choose_qwen30_rate": 0.13636363636363635,
+      "cost": 0.002264076846153846,
+      "gain_vs_best_always_utility": 0.028681258758741224,
+      "lambda": 15,
+      "mode": "oracle_true_cost",
+      "reward": 0.40559440559440557,
+      "utility": 0.37163325290209787
+    },
+    {
+      "choose_qwen30_rate": 0.15034965034965034,
+      "cost": 0.0022498919090909093,
+      "gain_vs_best_always_utility": 0.039690878251748274,
+      "lambda": 20,
+      "mode": "oracle_true_cost",
+      "reward": 0.4125874125874126,
+      "utility": 0.3675895744055944
+    },
+    {
+      "choose_qwen30_rate": 0.16083916083916083,
+      "cost": 0.0022407313356643354,
+      "gain_vs_best_always_utility": 0.04372373103146854,
+      "lambda": 25,
+      "mode": "oracle_true_cost",
+      "reward": 0.4125874125874126,
+      "utility": 0.3565691291958042
+    },
+    {
+      "choose_qwen30_rate": 0.16783216783216784,
+      "cost": 0.00223446206993007,
+      "gain_vs_best_always_utility": 0.05475445730769235,
+      "lambda": 30,
+      "mode": "oracle_true_cost",
+      "reward": 0.4195804195804196,
+      "utility": 0.3525465574825175
+    },
+    {
+      "choose_qwen30_rate": 0.17132867132867133,
+      "cost": 0.0022318123776223775,
+      "gain_vs_best_always_utility": 0.06262242027972031,
+      "lambda": 40,
+      "mode": "oracle_true_cost",
+      "reward": 0.4195804195804196,
+      "utility": 0.3303079244755245
+    },
+    {
+      "choose_qwen30_rate": 0.17832167832167833,
+      "cost": 0.002228380555944056,
+      "gain_vs_best_always_utility": 0.07058248356643357,
+      "lambda": 50,
+      "mode": "oracle_true_cost",
+      "reward": 0.4195804195804196,
+      "utility": 0.3081613917832168
+    },
+    {
+      "choose_qwen30_rate": 0.1853146853146853,
+      "cost": 0.0022255572657342657,
+      "gain_vs_best_always_utility": 0.08685470288461541,
+      "lambda": 75,
+      "mode": "oracle_true_cost",
+      "reward": 0.4160839160839161,
+      "utility": 0.24916712115384618
+    },
+    {
+      "choose_qwen30_rate": 0.19230769230769232,
+      "cost": 0.002223780181818182,
+      "gain_vs_best_always_utility": 0.10665996958041962,
+      "lambda": 100,
+      "mode": "oracle_true_cost",
+      "reward": 0.4160839160839161,
+      "utility": 0.1937058979020979
+    },
+    {
+      "choose_qwen30_rate": 0.19230769230769232,
+      "cost": 0.002223780181818182,
+      "gain_vs_best_always_utility": 0.1460039403846154,
+      "lambda": 150,
+      "mode": "oracle_true_cost",
+      "reward": 0.4160839160839161,
+      "utility": 0.0825168888111888
+    },
+    {
+      "choose_qwen30_rate": 0.1958041958041958,
+      "cost": 0.0022234777482517485,
+      "gain_vs_best_always_utility": 0.18540839790209795,
+      "lambda": 200,
+      "mode": "oracle_true_cost",
+      "reward": 0.4160839160839161,
+      "utility": -0.028611633566433592
+    }
+  ]
+}

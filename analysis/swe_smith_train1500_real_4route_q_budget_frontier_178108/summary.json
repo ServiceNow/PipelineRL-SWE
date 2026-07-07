@@ -1,0 +1,24 @@
+{
+  "baseline_120b_cost": 0.013906351258741255,
+  "baseline_120b_reward": 0.47202797202797203,
+  "methods": [
+    "Always direct",
+    "Best Q policy (pred cost)",
+    "Cascade",
+    "Direct random",
+    "Oracle route upper bound",
+    "Q chain flexible (pred cost)",
+    "Q chain forced-scout (pred cost)",
+    "Q direct (fixed train cost)",
+    "Q direct (oracle cost diagnostic)",
+    "Q direct (pred cost)"
+  ],
+  "n_points": 912,
+  "outputs": {
+    "frontier_points": "router_analysis/swe_smith_train1500_real_4route_q_budget_frontier_178108/frontier_points.csv",
+    "budget_frontier_long": "router_analysis/swe_smith_train1500_real_4route_q_budget_frontier_178108/budget_frontier_long.csv",
+    "budget_frontier_wide": "router_analysis/swe_smith_train1500_real_4route_q_budget_frontier_178108/budget_frontier_wide.csv",
+    "budget_frontier_zoom_0_35": "router_analysis/swe_smith_train1500_real_4route_q_budget_frontier_178108/budget_frontier_zoom_0_35.png",
+    "budget_frontier_full_0_100": "router_analysis/swe_smith_train1500_real_4route_q_budget_frontier_178108/budget_frontier_full_0_100.png"
+  }
+}

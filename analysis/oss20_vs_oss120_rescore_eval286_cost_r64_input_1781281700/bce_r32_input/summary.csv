@@ -1,0 +1,2 @@
+n_examples,route_labels,skipped,best_same_cost_gain,best_same_cost_lambda,best_same_cost_reward,best_same_cost_cost,best_same_cost_random_reward,positive_same_cost_gain_lambdas,mean_positive_same_cost_gain,best_utility_gain_vs_always,best_utility_lambda,best_utility
+286,"[""solver:openai/gpt-oss-20b"", ""solver:openai/gpt-oss-120b""]","{""invalid"": 0, ""missing_cost"": 0, ""missing_eval"": 0}",0.02570366156342846,4.0,0.43356643356643354,0.005575120793706294,0.4078627720030051,13,0.012437502784578856,0.00023419054545453788,6.0,0.38882405502097905

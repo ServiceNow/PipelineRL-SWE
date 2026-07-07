@@ -1,0 +1,326 @@
+[
+  {
+    "variant": "submit_last",
+    "lambda": 0,
+    "random_pass": 0.4797297297297297,
+    "random_cost": 0.0032761529459459466,
+    "random_utility": 0.4797297297297297,
+    "random_probs": {
+      "stop": 0.0,
+      "resample": 0.0,
+      "jump": 1.0
+    },
+    "oracle_pass": 0.5405405405405406,
+    "oracle_cost": 0.0004883790270270274,
+    "oracle_utility": 0.5405405405405406,
+    "utility_lift": 0.060810810810810856,
+    "pass_lift": 0.060810810810810856,
+    "cost_delta": -0.002787773918918919
+  },
+  {
+    "variant": "submit_last",
+    "lambda": 100,
+    "random_pass": 0.35135135135135137,
+    "random_cost": 0.00025983983783783794,
+    "random_utility": 0.32536736756756757,
+    "random_probs": {
+      "stop": 1.0,
+      "resample": 0.0,
+      "jump": 0.0
+    },
+    "oracle_pass": 0.5405405405405406,
+    "oracle_cost": 0.0004883790270270274,
+    "oracle_utility": 0.49170263783783785,
+    "utility_lift": 0.16633527027027029,
+    "pass_lift": 0.1891891891891892,
+    "cost_delta": 0.00022853918918918942
+  },
+  {
+    "variant": "submit_last",
+    "lambda": 300,
+    "random_pass": 0.35135135135135137,
+    "random_cost": 0.00025983983783783794,
+    "random_utility": 0.27339939999999996,
+    "random_probs": {
+      "stop": 1.0,
+      "resample": 0.0,
+      "jump": 0.0
+    },
+    "oracle_pass": 0.5337837837837838,
+    "oracle_cost": 0.0004595026081081085,
+    "oracle_utility": 0.39593300135135123,
+    "utility_lift": 0.12253360135135127,
+    "pass_lift": 0.1824324324324324,
+    "cost_delta": 0.00019966277027027055
+  },
+  {
+    "variant": "submit_last",
+    "lambda": 500,
+    "random_pass": 0.35135135135135137,
+    "random_cost": 0.00025983983783783794,
+    "random_utility": 0.2214314324324324,
+    "random_probs": {
+      "stop": 1.0,
+      "resample": 0.0,
+      "jump": 0.0
+    },
+    "oracle_pass": 0.5067567567567568,
+    "oracle_cost": 0.0003824929729729733,
+    "oracle_utility": 0.3155102702702701,
+    "utility_lift": 0.09407883783783771,
+    "pass_lift": 0.15540540540540543,
+    "cost_delta": 0.00012265313513513536
+  },
+  {
+    "variant": "submit_last",
+    "lambda": 1000,
+    "random_pass": 0.35135135135135137,
+    "random_cost": 0.00025983983783783794,
+    "random_utility": 0.09151151351351344,
+    "random_probs": {
+      "stop": 1.0,
+      "resample": 0.0,
+      "jump": 0.0
+    },
+    "oracle_pass": 0.4527027027027027,
+    "oracle_cost": 0.00029777710810810845,
+    "oracle_utility": 0.15492559459459426,
+    "utility_lift": 0.06341408108108082,
+    "pass_lift": 0.10135135135135132,
+    "cost_delta": 3.7937270270270505e-05
+  },
+  {
+    "variant": "submit_last",
+    "lambda": 2000,
+    "random_pass": 0.35135135135135137,
+    "random_cost": 0.00025983983783783794,
+    "random_utility": -0.16832832432432449,
+    "random_probs": {
+      "stop": 1.0,
+      "resample": 0.0,
+      "jump": 0.0
+    },
+    "oracle_pass": 0.42567567567567566,
+    "oracle_cost": 0.0002760802972972975,
+    "oracle_utility": -0.12648491891891933,
+    "utility_lift": 0.041843405405405154,
+    "pass_lift": 0.07432432432432429,
+    "cost_delta": 1.6240459459459567e-05
+  },
+  {
+    "variant": "best_seen",
+    "lambda": 0,
+    "random_pass": 0.5135135135135135,
+    "random_cost": 0.0032761529459459466,
+    "random_utility": 0.5135135135135135,
+    "random_probs": {
+      "stop": 0.0,
+      "resample": 0.0,
+      "jump": 1.0
+    },
+    "oracle_pass": 0.5405405405405406,
+    "oracle_cost": 0.0004883790270270274,
+    "oracle_utility": 0.5405405405405406,
+    "utility_lift": 0.027027027027027084,
+    "pass_lift": 0.027027027027027084,
+    "cost_delta": -0.002787773918918919
+  },
+  {
+    "variant": "best_seen",
+    "lambda": 100,
+    "random_pass": 0.42567567567567566,
+    "random_cost": 0.0005638516216216218,
+    "random_utility": 0.3692905135135135,
+    "random_probs": {
+      "stop": 0.0,
+      "resample": 1.0,
+      "jump": 0.0
+    },
+    "oracle_pass": 0.5405405405405406,
+    "oracle_cost": 0.0004883790270270274,
+    "oracle_utility": 0.49170263783783785,
+    "utility_lift": 0.12241212432432436,
+    "pass_lift": 0.11486486486486491,
+    "cost_delta": -7.547259459459441e-05
+  },
+  {
+    "variant": "best_seen",
+    "lambda": 300,
+    "random_pass": 0.35135135135135137,
+    "random_cost": 0.00025983983783783794,
+    "random_utility": 0.27339939999999996,
+    "random_probs": {
+      "stop": 1.0,
+      "resample": 0.0,
+      "jump": 0.0
+    },
+    "oracle_pass": 0.5337837837837838,
+    "oracle_cost": 0.0004595026081081085,
+    "oracle_utility": 0.39593300135135123,
+    "utility_lift": 0.12253360135135127,
+    "pass_lift": 0.1824324324324324,
+    "cost_delta": 0.00019966277027027055
+  },
+  {
+    "variant": "best_seen",
+    "lambda": 500,
+    "random_pass": 0.35135135135135137,
+    "random_cost": 0.00025983983783783794,
+    "random_utility": 0.2214314324324324,
+    "random_probs": {
+      "stop": 1.0,
+      "resample": 0.0,
+      "jump": 0.0
+    },
+    "oracle_pass": 0.5067567567567568,
+    "oracle_cost": 0.0003824929729729733,
+    "oracle_utility": 0.3155102702702701,
+    "utility_lift": 0.09407883783783771,
+    "pass_lift": 0.15540540540540543,
+    "cost_delta": 0.00012265313513513536
+  },
+  {
+    "variant": "best_seen",
+    "lambda": 1000,
+    "random_pass": 0.35135135135135137,
+    "random_cost": 0.00025983983783783794,
+    "random_utility": 0.09151151351351344,
+    "random_probs": {
+      "stop": 1.0,
+      "resample": 0.0,
+      "jump": 0.0
+    },
+    "oracle_pass": 0.4527027027027027,
+    "oracle_cost": 0.00029777710810810845,
+    "oracle_utility": 0.15492559459459426,
+    "utility_lift": 0.06341408108108082,
+    "pass_lift": 0.10135135135135132,
+    "cost_delta": 3.7937270270270505e-05
+  },
+  {
+    "variant": "best_seen",
+    "lambda": 2000,
+    "random_pass": 0.35135135135135137,
+    "random_cost": 0.00025983983783783794,
+    "random_utility": -0.16832832432432449,
+    "random_probs": {
+      "stop": 1.0,
+      "resample": 0.0,
+      "jump": 0.0
+    },
+    "oracle_pass": 0.42567567567567566,
+    "oracle_cost": 0.0002760802972972975,
+    "oracle_utility": -0.12648491891891933,
+    "utility_lift": 0.041843405405405154,
+    "pass_lift": 0.07432432432432429,
+    "cost_delta": 1.6240459459459567e-05
+  },
+  {
+    "variant": "best_seen_two_resamples",
+    "lambda": 0,
+    "random_pass": 0.5135135135135135,
+    "random_cost": 0.0032761529459459466,
+    "random_utility": 0.5135135135135135,
+    "random_probs": {
+      "stop": 0.0,
+      "resample2": 0.0,
+      "jump": 1.0
+    },
+    "oracle_pass": 0.5472972972972973,
+    "oracle_cost": 0.000481611648648649,
+    "oracle_utility": 0.5472972972972973,
+    "utility_lift": 0.03378378378378377,
+    "pass_lift": 0.03378378378378377,
+    "cost_delta": -0.0027945412972972977
+  },
+  {
+    "variant": "best_seen_two_resamples",
+    "lambda": 100,
+    "random_pass": 0.4527027027027027,
+    "random_cost": 0.000866426445945946,
+    "random_utility": 0.3660600581081081,
+    "random_probs": {
+      "stop": 0.0,
+      "resample2": 1.0,
+      "jump": 0.0
+    },
+    "oracle_pass": 0.5472972972972973,
+    "oracle_cost": 0.000481611648648649,
+    "oracle_utility": 0.4991361324324324,
+    "utility_lift": 0.13307607432432428,
+    "pass_lift": 0.09459459459459457,
+    "cost_delta": -0.00038481479729729696
+  },
+  {
+    "variant": "best_seen_two_resamples",
+    "lambda": 300,
+    "random_pass": 0.35135135135135137,
+    "random_cost": 0.00025983983783783794,
+    "random_utility": 0.27339939999999996,
+    "random_probs": {
+      "stop": 1.0,
+      "resample2": 0.0,
+      "jump": 0.0
+    },
+    "oracle_pass": 0.5405405405405406,
+    "oracle_cost": 0.0004527352297297301,
+    "oracle_utility": 0.40471997162162154,
+    "utility_lift": 0.13132057162162158,
+    "pass_lift": 0.1891891891891892,
+    "cost_delta": 0.00019289539189189215
+  },
+  {
+    "variant": "best_seen_two_resamples",
+    "lambda": 500,
+    "random_pass": 0.35135135135135137,
+    "random_cost": 0.00025983983783783794,
+    "random_utility": 0.2214314324324324,
+    "random_probs": {
+      "stop": 1.0,
+      "resample2": 0.0,
+      "jump": 0.0
+    },
+    "oracle_pass": 0.5135135135135135,
+    "oracle_cost": 0.00037572559459459495,
+    "oracle_utility": 0.325650716216216,
+    "utility_lift": 0.10421928378378359,
+    "pass_lift": 0.16216216216216212,
+    "cost_delta": 0.00011588575675675701
+  },
+  {
+    "variant": "best_seen_two_resamples",
+    "lambda": 1000,
+    "random_pass": 0.35135135135135137,
+    "random_cost": 0.00025983983783783794,
+    "random_utility": 0.09151151351351344,
+    "random_probs": {
+      "stop": 1.0,
+      "resample2": 0.0,
+      "jump": 0.0
+    },
+    "oracle_pass": 0.4797297297297297,
+    "oracle_cost": 0.00032581941891891933,
+    "oracle_utility": 0.15391031081081036,
+    "utility_lift": 0.062398797297296915,
+    "pass_lift": 0.12837837837837834,
+    "cost_delta": 6.597958108108139e-05
+  },
+  {
+    "variant": "best_seen_two_resamples",
+    "lambda": 2000,
+    "random_pass": 0.35135135135135137,
+    "random_cost": 0.00025983983783783794,
+    "random_utility": -0.16832832432432449,
+    "random_probs": {
+      "stop": 1.0,
+      "resample2": 0.0,
+      "jump": 0.0
+    },
+    "oracle_pass": 0.43243243243243246,
+    "oracle_cost": 0.00029041420270270295,
+    "oracle_utility": -0.14839597297297347,
+    "utility_lift": 0.01993235135135102,
+    "pass_lift": 0.08108108108108109,
+    "cost_delta": 3.0574364864865e-05
+  }
+]

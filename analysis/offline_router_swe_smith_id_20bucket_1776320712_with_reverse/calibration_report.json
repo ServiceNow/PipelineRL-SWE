@@ -1,0 +1,3967 @@
+{
+  "bucket_count": 20,
+  "lambda_values": [
+    0.0
+  ],
+  "near_zero_threshold": 0.05,
+  "runs": {
+    "bin20": {
+      "collapse_stats": [
+        {
+          "bias": 0.0036740417331457137,
+          "mean_ratio_pred_over_true": 1.0060435364120326,
+          "n_eval": 500,
+          "pred_exact_zero_count": 0,
+          "pred_exact_zero_rate": 0.0,
+          "pred_near_zero_count": 0,
+          "pred_near_zero_rate": 0.0,
+          "route_idx": 0,
+          "route_label": "primary_model",
+          "top_rounded_pred": [
+            {
+              "count": 44,
+              "value": 0.71
+            },
+            {
+              "count": 31,
+              "value": 0.65
+            },
+            {
+              "count": 26,
+              "value": 0.72
+            },
+            {
+              "count": 25,
+              "value": 0.69
+            },
+            {
+              "count": 24,
+              "value": 0.67
+            },
+            {
+              "count": 21,
+              "value": 0.7
+            },
+            {
+              "count": 19,
+              "value": 0.66
+            },
+            {
+              "count": 18,
+              "value": 0.61
+            },
+            {
+              "count": 18,
+              "value": 0.74
+            },
+            {
+              "count": 18,
+              "value": 0.73
+            }
+          ],
+          "top_rounded_true": [
+            {
+              "count": 40,
+              "value": 0.0
+            },
+            {
+              "count": 30,
+              "value": 1.0
+            },
+            {
+              "count": 14,
+              "value": 0.64
+            },
+            {
+              "count": 13,
+              "value": 0.99
+            },
+            {
+              "count": 12,
+              "value": 0.71
+            },
+            {
+              "count": 11,
+              "value": 0.76
+            },
+            {
+              "count": 11,
+              "value": 0.92
+            },
+            {
+              "count": 10,
+              "value": 0.61
+            },
+            {
+              "count": 10,
+              "value": 0.72
+            },
+            {
+              "count": 10,
+              "value": 0.96
+            }
+          ],
+          "true_exact_zero_count": 40,
+          "true_exact_zero_rate": 0.08,
+          "true_near_zero_count": 40,
+          "true_near_zero_rate": 0.08
+        },
+        {
+          "bias": -0.011386516619473696,
+          "mean_ratio_pred_over_true": 0.9635508077698218,
+          "n_eval": 500,
+          "pred_exact_zero_count": 0,
+          "pred_exact_zero_rate": 0.0,
+          "pred_near_zero_count": 0,
+          "pred_near_zero_rate": 0.0,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b",
+          "top_rounded_pred": [
+            {
+              "count": 34,
+              "value": 0.32
+            },
+            {
+              "count": 33,
+              "value": 0.31
+            },
+            {
+              "count": 26,
+              "value": 0.36
+            },
+            {
+              "count": 26,
+              "value": 0.28
+            },
+            {
+              "count": 25,
+              "value": 0.29
+            },
+            {
+              "count": 25,
+              "value": 0.27
+            },
+            {
+              "count": 23,
+              "value": 0.3
+            },
+            {
+              "count": 22,
+              "value": 0.4
+            },
+            {
+              "count": 21,
+              "value": 0.34
+            },
+            {
+              "count": 20,
+              "value": 0.26
+            }
+          ],
+          "top_rounded_true": [
+            {
+              "count": 90,
+              "value": 0.0
+            },
+            {
+              "count": 15,
+              "value": 0.25
+            },
+            {
+              "count": 13,
+              "value": 0.26
+            },
+            {
+              "count": 12,
+              "value": 0.27
+            },
+            {
+              "count": 12,
+              "value": 0.41
+            },
+            {
+              "count": 12,
+              "value": 0.14
+            },
+            {
+              "count": 11,
+              "value": 0.18
+            },
+            {
+              "count": 11,
+              "value": 0.23
+            },
+            {
+              "count": 10,
+              "value": 0.36
+            },
+            {
+              "count": 10,
+              "value": 0.35
+            }
+          ],
+          "true_exact_zero_count": 90,
+          "true_exact_zero_rate": 0.18,
+          "true_near_zero_count": 92,
+          "true_near_zero_rate": 0.184
+        }
+      ],
+      "decisions": [
+        {
+          "always_route_0_label": "primary_model",
+          "always_route_0_mean_true_reward": 0.6079291134625673,
+          "always_route_1_label": "expert_0:openai/gpt-oss-120b",
+          "always_route_1_mean_true_reward": 0.31239421020820735,
+          "chosen_mean_true_reward": 0.6079291134625673,
+          "chosen_mean_true_utility": 0.6079291134625673,
+          "has_costs": false,
+          "lambda": 0.0,
+          "n_eval": 500,
+          "oracle_capture": 0.9416723886801532,
+          "oracle_match_rate": 0.84,
+          "oracle_mean_true_utility": 0.6455845161974431,
+          "oracle_regret": 0.03765540273487568,
+          "select_rate_route_0": 1.0,
+          "select_rate_route_1": 0.0
+        }
+      ],
+      "pairwise_metrics": [
+        {
+          "delta_mae": 0.24014863289520144,
+          "left_idx": 0,
+          "left_label": "primary_model",
+          "n_eval": 500,
+          "pearson_delta": 0.40302564348347497,
+          "ranking_accuracy_sign": 0.83,
+          "right_idx": 1,
+          "right_label": "expert_0:openai/gpt-oss-120b",
+          "roc_auc": 0.7393621545003544,
+          "spearman_delta": 0.29147325341116215
+        }
+      ],
+      "reliability": [
+        {
+          "bias": null,
+          "bucket_high": 0.05,
+          "bucket_idx": 0,
+          "bucket_low": 0.0,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.1,
+          "bucket_idx": 1,
+          "bucket_low": 0.05,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": 0.1330346092581749,
+          "bucket_high": 0.15000000000000002,
+          "bucket_idx": 2,
+          "bucket_low": 0.1,
+          "mae": 0.1330346092581749,
+          "mean_pred": 0.1330346092581749,
+          "mean_true": 0.0,
+          "n": 2,
+          "rmse": 0.13313257051930152,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": 0.16922941307226816,
+          "bucket_high": 0.2,
+          "bucket_idx": 3,
+          "bucket_low": 0.15000000000000002,
+          "mae": 0.16922941307226816,
+          "mean_pred": 0.16922941307226816,
+          "mean_true": 0.0,
+          "n": 9,
+          "rmse": 0.16969067034707624,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": 0.21899084746837616,
+          "bucket_high": 0.25,
+          "bucket_idx": 4,
+          "bucket_low": 0.2,
+          "mae": 0.21899084746837616,
+          "mean_pred": 0.21899084746837616,
+          "mean_true": 0.0,
+          "n": 10,
+          "rmse": 0.21947838402163572,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": 0.2813853571812312,
+          "bucket_high": 0.30000000000000004,
+          "bucket_idx": 5,
+          "bucket_low": 0.25,
+          "mae": 0.2813853571812312,
+          "mean_pred": 0.2813853571812312,
+          "mean_true": 0.0,
+          "n": 6,
+          "rmse": 0.28190993760641336,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": 0.12896453216671944,
+          "bucket_high": 0.35000000000000003,
+          "bucket_idx": 6,
+          "bucket_low": 0.30000000000000004,
+          "mae": 0.25716507807374,
+          "mean_pred": 0.3206584081053734,
+          "mean_true": 0.19169387593865395,
+          "n": 4,
+          "rmse": 0.26538769787021654,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": 0.22777850925922394,
+          "bucket_high": 0.4,
+          "bucket_idx": 7,
+          "bucket_low": 0.35000000000000003,
+          "mae": 0.27466998994350433,
+          "mean_pred": 0.37861542999744413,
+          "mean_true": 0.15083692073822022,
+          "n": 10,
+          "rmse": 0.2960355052529348,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": 0.05532994344830513,
+          "bucket_high": 0.45,
+          "bucket_idx": 8,
+          "bucket_low": 0.4,
+          "mae": 0.2296659953892231,
+          "mean_pred": 0.43043137341737747,
+          "mean_true": 0.37510142996907236,
+          "n": 20,
+          "rmse": 0.25903292065205075,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": 0.025705641135573387,
+          "bucket_high": 0.5,
+          "bucket_idx": 9,
+          "bucket_low": 0.45,
+          "mae": 0.18468071781098844,
+          "mean_pred": 0.4776434674859047,
+          "mean_true": 0.4519378263503313,
+          "n": 20,
+          "rmse": 0.22029707711764906,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": 0.014793135474125545,
+          "bucket_high": 0.55,
+          "bucket_idx": 10,
+          "bucket_low": 0.5,
+          "mae": 0.21178943887352944,
+          "mean_pred": 0.5305596232414246,
+          "mean_true": 0.515766487767299,
+          "n": 30,
+          "rmse": 0.24921025064159513,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": 0.06017246323504618,
+          "bucket_high": 0.6000000000000001,
+          "bucket_idx": 11,
+          "bucket_low": 0.55,
+          "mae": 0.19633706672383205,
+          "mean_pred": 0.5782875684755189,
+          "mean_true": 0.5181151052404728,
+          "n": 56,
+          "rmse": 0.2353875443289261,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": -0.008491912638986266,
+          "bucket_high": 0.65,
+          "bucket_idx": 12,
+          "bucket_low": 0.6000000000000001,
+          "mae": 0.19838830228749807,
+          "mean_pred": 0.6259272261099382,
+          "mean_true": 0.6344191387489244,
+          "n": 77,
+          "rmse": 0.24178767593022715,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": -0.025454538631009625,
+          "bucket_high": 0.7000000000000001,
+          "bucket_idx": 13,
+          "bucket_low": 0.65,
+          "mae": 0.1738458385875633,
+          "mean_pred": 0.6752336470930426,
+          "mean_true": 0.7006881857240522,
+          "n": 111,
+          "rmse": 0.21858342944537568,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": -0.05809178647975768,
+          "bucket_high": 0.75,
+          "bucket_idx": 14,
+          "bucket_low": 0.7000000000000001,
+          "mae": 0.17032234238520746,
+          "mean_pred": 0.7215859572733602,
+          "mean_true": 0.7796777437531179,
+          "n": 124,
+          "rmse": 0.19668787785476524,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": -0.06549657242638725,
+          "bucket_high": 0.8,
+          "bucket_idx": 15,
+          "bucket_low": 0.75,
+          "mae": 0.20984765745344616,
+          "mean_pred": 0.7609074200902667,
+          "mean_true": 0.8264039925166539,
+          "n": 21,
+          "rmse": 0.23108423286410296,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.8500000000000001,
+          "bucket_idx": 16,
+          "bucket_low": 0.8,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.9,
+          "bucket_idx": 17,
+          "bucket_low": 0.8500000000000001,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.9500000000000001,
+          "bucket_idx": 18,
+          "bucket_low": 0.9,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": null,
+          "bucket_high": 1.0,
+          "bucket_idx": 19,
+          "bucket_low": 0.9500000000000001,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.05,
+          "bucket_idx": 0,
+          "bucket_low": 0.0,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": -0.23693054914474487,
+          "bucket_high": 0.1,
+          "bucket_idx": 1,
+          "bucket_low": 0.05,
+          "mae": 0.23693054914474487,
+          "mean_pred": 0.08508686934198652,
+          "mean_true": 0.3220174184867314,
+          "n": 7,
+          "rmse": 0.25646082211269833,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": -0.21853408992290496,
+          "bucket_high": 0.15000000000000002,
+          "bucket_idx": 2,
+          "bucket_low": 0.1,
+          "mae": 0.23159923791885376,
+          "mean_pred": 0.12025347173213959,
+          "mean_true": 0.33878756165504453,
+          "n": 25,
+          "rmse": 0.29832799071867905,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": -0.10089445271744178,
+          "bucket_high": 0.2,
+          "bucket_idx": 3,
+          "bucket_low": 0.15000000000000002,
+          "mae": 0.15846382955519053,
+          "mean_pred": 0.18413168019973314,
+          "mean_true": 0.28502613291717493,
+          "n": 26,
+          "rmse": 0.22742182605977354,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": -0.006595433894860543,
+          "bucket_high": 0.25,
+          "bucket_idx": 4,
+          "bucket_low": 0.2,
+          "mae": 0.17668794108144306,
+          "mean_pred": 0.22968627285149137,
+          "mean_true": 0.23628170674635193,
+          "n": 59,
+          "rmse": 0.22027960335086746,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": 0.01229620308825566,
+          "bucket_high": 0.30000000000000004,
+          "bucket_idx": 5,
+          "bucket_low": 0.25,
+          "mae": 0.17789241904392838,
+          "mean_pred": 0.27730555015225566,
+          "mean_true": 0.265009347064,
+          "n": 124,
+          "rmse": 0.20917045788532954,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": -0.01104496081924846,
+          "bucket_high": 0.35000000000000003,
+          "bucket_idx": 6,
+          "bucket_low": 0.30000000000000004,
+          "mae": 0.17310004604932588,
+          "mean_pred": 0.32398525287962365,
+          "mean_true": 0.33503021369887215,
+          "n": 117,
+          "rmse": 0.22216846436052057,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": 0.02602164916418217,
+          "bucket_high": 0.4,
+          "bucket_idx": 7,
+          "bucket_low": 0.35000000000000003,
+          "mae": 0.21029114290887926,
+          "mean_pred": 0.371227154393255,
+          "mean_true": 0.3452055052290728,
+          "n": 81,
+          "rmse": 0.25003272248446623,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": 0.006985965957666965,
+          "bucket_high": 0.45,
+          "bucket_idx": 8,
+          "bucket_low": 0.4,
+          "mae": 0.18806799398140706,
+          "mean_pred": 0.4148448813468852,
+          "mean_true": 0.4078589153892182,
+          "n": 47,
+          "rmse": 0.22986945014794608,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": 0.10836555407597469,
+          "bucket_high": 0.5,
+          "bucket_idx": 9,
+          "bucket_low": 0.45,
+          "mae": 0.24489461458646333,
+          "mean_pred": 0.47159735973064715,
+          "mean_true": 0.3632318056546725,
+          "n": 13,
+          "rmse": 0.3156579665393258,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.55,
+          "bucket_idx": 10,
+          "bucket_low": 0.5,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": 0.3636792004108429,
+          "bucket_high": 0.6000000000000001,
+          "bucket_idx": 11,
+          "bucket_low": 0.55,
+          "mae": 0.3636792004108429,
+          "mean_pred": 0.5729507207870483,
+          "mean_true": 0.20927152037620544,
+          "n": 1,
+          "rmse": 0.3636792004108429,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.65,
+          "bucket_idx": 12,
+          "bucket_low": 0.6000000000000001,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.7000000000000001,
+          "bucket_idx": 13,
+          "bucket_low": 0.65,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.75,
+          "bucket_idx": 14,
+          "bucket_low": 0.7000000000000001,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.8,
+          "bucket_idx": 15,
+          "bucket_low": 0.75,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.8500000000000001,
+          "bucket_idx": 16,
+          "bucket_low": 0.8,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.9,
+          "bucket_idx": 17,
+          "bucket_low": 0.8500000000000001,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.9500000000000001,
+          "bucket_idx": 18,
+          "bucket_low": 0.9,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 1.0,
+          "bucket_idx": 19,
+          "bucket_low": 0.9500000000000001,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        }
+      ],
+      "route_metrics": [
+        {
+          "mae": 0.1903555331081152,
+          "mean_pred": 0.6116031551957131,
+          "mean_true": 0.6079291134625673,
+          "mse": 0.05082646817696708,
+          "n_eval": 500,
+          "pearson": 0.6853552564187891,
+          "r2": 0.417388127980839,
+          "rmse": 0.22544726251823746,
+          "route_idx": 0,
+          "route_label": "primary_model",
+          "spearman": 0.5831809532247108,
+          "std_pred": 0.13496587286344922,
+          "std_true": 0.2953624632195908
+        },
+        {
+          "mae": 0.18744919143244623,
+          "mean_pred": 0.3010076935887337,
+          "mean_true": 0.31239421020820735,
+          "mse": 0.054136293758442096,
+          "n_eval": 500,
+          "pearson": 0.1303942128097786,
+          "r2": -0.040885186708640164,
+          "rmse": 0.23267207343908314,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b",
+          "spearman": 0.16515173564434338,
+          "std_pred": 0.08341301967505808,
+          "std_true": 0.2280567054165478
+        }
+      ],
+      "run_summary": {
+        "best_eval_loss": 0.052481380967704494,
+        "bin_count": 21,
+        "bin_value_order": null,
+        "delta_mae": 0.24014863289520144,
+        "has_costs": false,
+        "n_eval": 500,
+        "parse_failure_rate": 0.0,
+        "pearson_delta": 0.40302564348347497,
+        "ranking_accuracy_sign": 0.83,
+        "roc_auc": 0.7393621545003544,
+        "route_count": 2,
+        "route_labels": [
+          "primary_model",
+          "expert_0:openai/gpt-oss-120b"
+        ],
+        "run_dir": "/mnt/llmd/results/exps/aristides/reason/offline_router_swe_smith_id_bin_20bucket_train_only_1776320712/train_text_lora_bin_expectation_20bucket_random",
+        "run_name": "bin20",
+        "spearman_delta": 0.29147325341116215,
+        "supervision_mode": "text_reward_bin",
+        "target_grid_count": null,
+        "target_precision": 2,
+        "train_loss": 2.9932912159274565
+      }
+    },
+    "bin20_reverse": {
+      "collapse_stats": [
+        {
+          "bias": -0.006342870101332664,
+          "mean_ratio_pred_over_true": 0.9895664314130217,
+          "n_eval": 500,
+          "pred_exact_zero_count": 0,
+          "pred_exact_zero_rate": 0.0,
+          "pred_near_zero_count": 0,
+          "pred_near_zero_rate": 0.0,
+          "route_idx": 0,
+          "route_label": "primary_model",
+          "top_rounded_pred": [
+            {
+              "count": 24,
+              "value": 0.74
+            },
+            {
+              "count": 18,
+              "value": 0.71
+            },
+            {
+              "count": 17,
+              "value": 0.6
+            },
+            {
+              "count": 17,
+              "value": 0.67
+            },
+            {
+              "count": 16,
+              "value": 0.65
+            },
+            {
+              "count": 16,
+              "value": 0.73
+            },
+            {
+              "count": 15,
+              "value": 0.58
+            },
+            {
+              "count": 15,
+              "value": 0.69
+            },
+            {
+              "count": 15,
+              "value": 0.78
+            },
+            {
+              "count": 14,
+              "value": 0.66
+            }
+          ],
+          "top_rounded_true": [
+            {
+              "count": 40,
+              "value": 0.0
+            },
+            {
+              "count": 30,
+              "value": 1.0
+            },
+            {
+              "count": 14,
+              "value": 0.64
+            },
+            {
+              "count": 13,
+              "value": 0.99
+            },
+            {
+              "count": 12,
+              "value": 0.71
+            },
+            {
+              "count": 11,
+              "value": 0.76
+            },
+            {
+              "count": 11,
+              "value": 0.92
+            },
+            {
+              "count": 10,
+              "value": 0.61
+            },
+            {
+              "count": 10,
+              "value": 0.72
+            },
+            {
+              "count": 10,
+              "value": 0.96
+            }
+          ],
+          "true_exact_zero_count": 40,
+          "true_exact_zero_rate": 0.08,
+          "true_near_zero_count": 40,
+          "true_near_zero_rate": 0.08
+        },
+        {
+          "bias": -0.05742013854160905,
+          "mean_ratio_pred_over_true": 0.8161933330859776,
+          "n_eval": 500,
+          "pred_exact_zero_count": 0,
+          "pred_exact_zero_rate": 0.0,
+          "pred_near_zero_count": 0,
+          "pred_near_zero_rate": 0.0,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b",
+          "top_rounded_pred": [
+            {
+              "count": 52,
+              "value": 0.25
+            },
+            {
+              "count": 47,
+              "value": 0.23
+            },
+            {
+              "count": 46,
+              "value": 0.24
+            },
+            {
+              "count": 40,
+              "value": 0.27
+            },
+            {
+              "count": 38,
+              "value": 0.26
+            },
+            {
+              "count": 38,
+              "value": 0.22
+            },
+            {
+              "count": 33,
+              "value": 0.29
+            },
+            {
+              "count": 23,
+              "value": 0.3
+            },
+            {
+              "count": 23,
+              "value": 0.28
+            },
+            {
+              "count": 22,
+              "value": 0.2
+            }
+          ],
+          "top_rounded_true": [
+            {
+              "count": 90,
+              "value": 0.0
+            },
+            {
+              "count": 15,
+              "value": 0.25
+            },
+            {
+              "count": 13,
+              "value": 0.26
+            },
+            {
+              "count": 12,
+              "value": 0.27
+            },
+            {
+              "count": 12,
+              "value": 0.41
+            },
+            {
+              "count": 12,
+              "value": 0.14
+            },
+            {
+              "count": 11,
+              "value": 0.18
+            },
+            {
+              "count": 11,
+              "value": 0.23
+            },
+            {
+              "count": 10,
+              "value": 0.36
+            },
+            {
+              "count": 10,
+              "value": 0.35
+            }
+          ],
+          "true_exact_zero_count": 90,
+          "true_exact_zero_rate": 0.18,
+          "true_near_zero_count": 92,
+          "true_near_zero_rate": 0.184
+        }
+      ],
+      "decisions": [
+        {
+          "always_route_0_label": "primary_model",
+          "always_route_0_mean_true_reward": 0.6079291134625673,
+          "always_route_1_label": "expert_0:openai/gpt-oss-120b",
+          "always_route_1_mean_true_reward": 0.31239421020820735,
+          "chosen_mean_true_reward": 0.6079291134625673,
+          "chosen_mean_true_utility": 0.6079291134625673,
+          "has_costs": false,
+          "lambda": 0.0,
+          "n_eval": 500,
+          "oracle_capture": 0.9416723886801532,
+          "oracle_match_rate": 0.84,
+          "oracle_mean_true_utility": 0.6455845161974431,
+          "oracle_regret": 0.03765540273487568,
+          "select_rate_route_0": 1.0,
+          "select_rate_route_1": 0.0
+        }
+      ],
+      "pairwise_metrics": [
+        {
+          "delta_mae": 0.24245817064866423,
+          "left_idx": 0,
+          "left_label": "primary_model",
+          "n_eval": 500,
+          "pearson_delta": 0.36744995010974196,
+          "ranking_accuracy_sign": 0.83,
+          "right_idx": 1,
+          "right_label": "expert_0:openai/gpt-oss-120b",
+          "roc_auc": 0.7304039688164422,
+          "spearman_delta": 0.3385661673268776
+        }
+      ],
+      "reliability": [
+        {
+          "bias": null,
+          "bucket_high": 0.05,
+          "bucket_idx": 0,
+          "bucket_low": 0.0,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.1,
+          "bucket_idx": 1,
+          "bucket_low": 0.05,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.15000000000000002,
+          "bucket_idx": 2,
+          "bucket_low": 0.1,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.2,
+          "bucket_idx": 3,
+          "bucket_low": 0.15000000000000002,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": 0.16312696039676666,
+          "bucket_high": 0.25,
+          "bucket_idx": 4,
+          "bucket_low": 0.2,
+          "mae": 0.24181587662961748,
+          "mean_pred": 0.2262760814693239,
+          "mean_true": 0.06314912107255724,
+          "n": 9,
+          "rmse": 0.24547375948025818,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": 0.22807519137859344,
+          "bucket_high": 0.30000000000000004,
+          "bucket_idx": 5,
+          "bucket_low": 0.25,
+          "mae": 0.22992579638957977,
+          "mean_pred": 0.27200451493263245,
+          "mean_true": 0.043929323554039,
+          "n": 6,
+          "rmse": 0.25099390534631644,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": 0.061549507081508636,
+          "bucket_high": 0.35000000000000003,
+          "bucket_idx": 6,
+          "bucket_low": 0.30000000000000004,
+          "mae": 0.29542068321080434,
+          "mean_pred": 0.3274705438386826,
+          "mean_true": 0.265921036757174,
+          "n": 21,
+          "rmse": 0.31617662984376405,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": 0.03816026970744133,
+          "bucket_high": 0.4,
+          "bucket_idx": 7,
+          "bucket_low": 0.35000000000000003,
+          "mae": 0.1989961378276348,
+          "mean_pred": 0.3781186997890472,
+          "mean_true": 0.3399584300816059,
+          "n": 20,
+          "rmse": 0.2398664816254539,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": -0.018040040860304963,
+          "bucket_high": 0.45,
+          "bucket_idx": 8,
+          "bucket_low": 0.4,
+          "mae": 0.217616468667984,
+          "mean_pred": 0.42799814085702637,
+          "mean_true": 0.44603818171733134,
+          "n": 37,
+          "rmse": 0.26555082746102393,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": 0.06540610898157646,
+          "bucket_high": 0.5,
+          "bucket_idx": 9,
+          "bucket_low": 0.45,
+          "mae": 0.19136055199236707,
+          "mean_pred": 0.47685034110628327,
+          "mean_true": 0.4114442321247068,
+          "n": 29,
+          "rmse": 0.2453916506341356,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": -0.0057554043045169425,
+          "bucket_high": 0.55,
+          "bucket_idx": 10,
+          "bucket_low": 0.5,
+          "mae": 0.18674147266306376,
+          "mean_pred": 0.5251388643917284,
+          "mean_true": 0.5308942686962453,
+          "n": 38,
+          "rmse": 0.22660049798406687,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": -0.015523815625592283,
+          "bucket_high": 0.6000000000000001,
+          "bucket_idx": 11,
+          "bucket_low": 0.55,
+          "mae": 0.2066527466502106,
+          "mean_pred": 0.5764602872363308,
+          "mean_true": 0.591984102861923,
+          "n": 57,
+          "rmse": 0.24387331743765275,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": 0.04065841933091482,
+          "bucket_high": 0.65,
+          "bucket_idx": 12,
+          "bucket_low": 0.6000000000000001,
+          "mae": 0.18176719932644456,
+          "mean_pred": 0.6237209858717742,
+          "mean_true": 0.5830625665408594,
+          "n": 54,
+          "rmse": 0.24191685914595937,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": -0.043773174479410246,
+          "bucket_high": 0.7000000000000001,
+          "bucket_idx": 13,
+          "bucket_low": 0.65,
+          "mae": 0.16891257464885712,
+          "mean_pred": 0.673404781075267,
+          "mean_true": 0.7171779555546773,
+          "n": 77,
+          "rmse": 0.21162066493075832,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": -0.005752627312401195,
+          "bucket_high": 0.75,
+          "bucket_idx": 14,
+          "bucket_low": 0.7000000000000001,
+          "mae": 0.1925170342495412,
+          "mean_pred": 0.7267393322638523,
+          "mean_true": 0.7324919595762536,
+          "n": 81,
+          "rmse": 0.23167378626742202,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": -0.10763223010760087,
+          "bucket_high": 0.8,
+          "bucket_idx": 15,
+          "bucket_low": 0.75,
+          "mae": 0.14797780490838564,
+          "mean_pred": 0.7742105905826275,
+          "mean_true": 0.8818428206902283,
+          "n": 52,
+          "rmse": 0.1643061729599535,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": -0.044907182455062866,
+          "bucket_high": 0.8500000000000001,
+          "bucket_idx": 16,
+          "bucket_low": 0.8,
+          "mae": 0.1393033829000261,
+          "mean_pred": 0.8162594967418246,
+          "mean_true": 0.8611666791968875,
+          "n": 18,
+          "rmse": 0.16675717856172073,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": -0.14335882663726807,
+          "bucket_high": 0.9,
+          "bucket_idx": 17,
+          "bucket_low": 0.8500000000000001,
+          "mae": 0.14335882663726807,
+          "mean_pred": 0.8566411733627319,
+          "mean_true": 1.0,
+          "n": 1,
+          "rmse": 0.14335882663726807,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.9500000000000001,
+          "bucket_idx": 18,
+          "bucket_low": 0.9,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": null,
+          "bucket_high": 1.0,
+          "bucket_idx": 19,
+          "bucket_low": 0.9500000000000001,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.05,
+          "bucket_idx": 0,
+          "bucket_low": 0.0,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.1,
+          "bucket_idx": 1,
+          "bucket_low": 0.05,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": -0.0989427799358964,
+          "bucket_high": 0.15000000000000002,
+          "bucket_idx": 2,
+          "bucket_low": 0.1,
+          "mae": 0.17039647605270147,
+          "mean_pred": 0.1383378142490983,
+          "mean_true": 0.2372805941849947,
+          "n": 8,
+          "rmse": 0.23676401004540004,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": -0.08343077189333382,
+          "bucket_high": 0.2,
+          "bucket_idx": 3,
+          "bucket_low": 0.15000000000000002,
+          "mae": 0.1469415704320584,
+          "mean_pred": 0.18108327864181428,
+          "mean_true": 0.2645140505351481,
+          "n": 42,
+          "rmse": 0.1942078863374493,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": -0.04531908452202001,
+          "bucket_high": 0.25,
+          "bucket_idx": 4,
+          "bucket_low": 0.2,
+          "mae": 0.17462128941259236,
+          "mean_pred": 0.2282505648432618,
+          "mean_true": 0.27356964936528183,
+          "n": 193,
+          "rmse": 0.22158419660530387,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": -0.06471285219654183,
+          "bucket_high": 0.30000000000000004,
+          "bucket_idx": 5,
+          "bucket_low": 0.25,
+          "mae": 0.19228035749899858,
+          "mean_pred": 0.27170157174154513,
+          "mean_true": 0.33641442393808696,
+          "n": 173,
+          "rmse": 0.2370208369087404,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": -0.08293553355379381,
+          "bucket_high": 0.35000000000000003,
+          "bucket_idx": 6,
+          "bucket_low": 0.30000000000000004,
+          "mae": 0.2274391626318296,
+          "mean_pred": 0.31916469681090204,
+          "mean_true": 0.40210023036469583,
+          "n": 69,
+          "rmse": 0.26621661547307923,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": 0.10406928722347532,
+          "bucket_high": 0.4,
+          "bucket_idx": 7,
+          "bucket_low": 0.35000000000000003,
+          "mae": 0.16590255392449244,
+          "mean_pred": 0.37133599392005373,
+          "mean_true": 0.2672667066965784,
+          "n": 14,
+          "rmse": 0.20590266152048872,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.45,
+          "bucket_idx": 8,
+          "bucket_low": 0.4,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": -0.20694607496261597,
+          "bucket_high": 0.5,
+          "bucket_idx": 9,
+          "bucket_low": 0.45,
+          "mae": 0.20694607496261597,
+          "mean_pred": 0.4970366954803467,
+          "mean_true": 0.7039827704429626,
+          "n": 1,
+          "rmse": 0.20694607496261597,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.55,
+          "bucket_idx": 10,
+          "bucket_low": 0.5,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.6000000000000001,
+          "bucket_idx": 11,
+          "bucket_low": 0.55,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.65,
+          "bucket_idx": 12,
+          "bucket_low": 0.6000000000000001,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.7000000000000001,
+          "bucket_idx": 13,
+          "bucket_low": 0.65,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.75,
+          "bucket_idx": 14,
+          "bucket_low": 0.7000000000000001,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.8,
+          "bucket_idx": 15,
+          "bucket_low": 0.75,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.8500000000000001,
+          "bucket_idx": 16,
+          "bucket_low": 0.8,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.9,
+          "bucket_idx": 17,
+          "bucket_low": 0.8500000000000001,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.9500000000000001,
+          "bucket_idx": 18,
+          "bucket_low": 0.9,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 1.0,
+          "bucket_idx": 19,
+          "bucket_low": 0.9500000000000001,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        }
+      ],
+      "route_metrics": [
+        {
+          "mae": 0.18995509000122549,
+          "mean_pred": 0.6015862433612347,
+          "mean_true": 0.6079291134625673,
+          "mse": 0.05349605044421089,
+          "n_eval": 500,
+          "pearson": 0.6395623669552345,
+          "r2": 0.38678733319783865,
+          "rmse": 0.2312921322574784,
+          "route_idx": 0,
+          "route_label": "primary_model",
+          "spearman": 0.6171699519236361,
+          "std_pred": 0.14530145568285308,
+          "std_true": 0.2953624632195908
+        },
+        {
+          "mae": 0.1854480250440538,
+          "mean_pred": 0.2549740716665983,
+          "mean_true": 0.31239421020820735,
+          "mse": 0.05350841462038317,
+          "n_eval": 500,
+          "pearson": 0.18739249430418575,
+          "r2": -0.028812877200991016,
+          "rmse": 0.23131885919739267,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b",
+          "spearman": 0.1955291322032578,
+          "std_pred": 0.0480140821922135,
+          "std_true": 0.2280567054165478
+        }
+      ],
+      "run_summary": {
+        "best_eval_loss": 0.053502232532296946,
+        "bin_count": 21,
+        "bin_value_order": "descending",
+        "delta_mae": 0.24245817064866423,
+        "has_costs": false,
+        "n_eval": 500,
+        "parse_failure_rate": 0.0,
+        "pearson_delta": 0.36744995010974196,
+        "ranking_accuracy_sign": 0.83,
+        "roc_auc": 0.7304039688164422,
+        "route_count": 2,
+        "route_labels": [
+          "primary_model",
+          "expert_0:openai/gpt-oss-120b"
+        ],
+        "run_dir": "/mnt/llmd/results/exps/aristides/reason/offline_router_swe_smith_id_bin_reverse_20bucket_train_only_1776321063/train_text_lora_bin_expectation_reverse_20bucket_random",
+        "run_name": "bin20_reverse",
+        "spearman_delta": 0.3385661673268776,
+        "supervision_mode": "text_reward_bin",
+        "target_grid_count": null,
+        "target_precision": 2,
+        "train_loss": 2.921974697645055
+      }
+    },
+    "scalar20": {
+      "collapse_stats": [
+        {
+          "bias": 0.05737088653743267,
+          "mean_ratio_pred_over_true": 1.0943710134404763,
+          "n_eval": 500,
+          "pred_exact_zero_count": 53,
+          "pred_exact_zero_rate": 0.106,
+          "pred_near_zero_count": 53,
+          "pred_near_zero_rate": 0.106,
+          "route_idx": 0,
+          "route_label": "primary_model",
+          "top_rounded_pred": [
+            {
+              "count": 127,
+              "value": 0.85
+            },
+            {
+              "count": 105,
+              "value": 0.6
+            },
+            {
+              "count": 63,
+              "value": 0.7
+            },
+            {
+              "count": 63,
+              "value": 0.8
+            },
+            {
+              "count": 53,
+              "value": 0.0
+            },
+            {
+              "count": 32,
+              "value": 0.95
+            },
+            {
+              "count": 21,
+              "value": 0.75
+            },
+            {
+              "count": 11,
+              "value": 0.9
+            },
+            {
+              "count": 11,
+              "value": 0.5
+            },
+            {
+              "count": 4,
+              "value": 0.4
+            }
+          ],
+          "top_rounded_true": [
+            {
+              "count": 40,
+              "value": 0.0
+            },
+            {
+              "count": 30,
+              "value": 1.0
+            },
+            {
+              "count": 14,
+              "value": 0.64
+            },
+            {
+              "count": 13,
+              "value": 0.99
+            },
+            {
+              "count": 12,
+              "value": 0.71
+            },
+            {
+              "count": 11,
+              "value": 0.76
+            },
+            {
+              "count": 11,
+              "value": 0.92
+            },
+            {
+              "count": 10,
+              "value": 0.61
+            },
+            {
+              "count": 10,
+              "value": 0.72
+            },
+            {
+              "count": 10,
+              "value": 0.96
+            }
+          ],
+          "true_exact_zero_count": 40,
+          "true_exact_zero_rate": 0.08,
+          "true_near_zero_count": 40,
+          "true_near_zero_rate": 0.08
+        },
+        {
+          "bias": -0.11919421020820738,
+          "mean_ratio_pred_over_true": 0.6184493620135735,
+          "n_eval": 500,
+          "pred_exact_zero_count": 176,
+          "pred_exact_zero_rate": 0.352,
+          "pred_near_zero_count": 176,
+          "pred_near_zero_rate": 0.352,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b",
+          "top_rounded_pred": [
+            {
+              "count": 176,
+              "value": 0.0
+            },
+            {
+              "count": 87,
+              "value": 0.4
+            },
+            {
+              "count": 84,
+              "value": 0.2
+            },
+            {
+              "count": 73,
+              "value": 0.3
+            },
+            {
+              "count": 64,
+              "value": 0.25
+            },
+            {
+              "count": 7,
+              "value": 0.45
+            },
+            {
+              "count": 5,
+              "value": 0.6
+            },
+            {
+              "count": 3,
+              "value": 0.15
+            },
+            {
+              "count": 1,
+              "value": 0.5
+            }
+          ],
+          "top_rounded_true": [
+            {
+              "count": 90,
+              "value": 0.0
+            },
+            {
+              "count": 15,
+              "value": 0.25
+            },
+            {
+              "count": 13,
+              "value": 0.26
+            },
+            {
+              "count": 12,
+              "value": 0.27
+            },
+            {
+              "count": 12,
+              "value": 0.41
+            },
+            {
+              "count": 12,
+              "value": 0.14
+            },
+            {
+              "count": 11,
+              "value": 0.18
+            },
+            {
+              "count": 11,
+              "value": 0.23
+            },
+            {
+              "count": 10,
+              "value": 0.36
+            },
+            {
+              "count": 10,
+              "value": 0.35
+            }
+          ],
+          "true_exact_zero_count": 90,
+          "true_exact_zero_rate": 0.18,
+          "true_near_zero_count": 92,
+          "true_near_zero_rate": 0.184
+        }
+      ],
+      "decisions": [
+        {
+          "always_route_0_label": "primary_model",
+          "always_route_0_mean_true_reward": 0.6079291134625673,
+          "always_route_1_label": "expert_0:openai/gpt-oss-120b",
+          "always_route_1_mean_true_reward": 0.31239421020820735,
+          "chosen_mean_true_reward": 0.6079291134625673,
+          "chosen_mean_true_utility": 0.6079291134625673,
+          "has_costs": false,
+          "lambda": 0.0,
+          "n_eval": 500,
+          "oracle_capture": 0.9416723886801532,
+          "oracle_match_rate": 0.84,
+          "oracle_mean_true_utility": 0.6455845161974431,
+          "oracle_regret": 0.03765540273487568,
+          "select_rate_route_0": 1.0,
+          "select_rate_route_1": 0.0
+        }
+      ],
+      "pairwise_metrics": [
+        {
+          "delta_mae": 0.2908182684637605,
+          "left_idx": 0,
+          "left_label": "primary_model",
+          "n_eval": 500,
+          "pearson_delta": 0.394144106283496,
+          "ranking_accuracy_sign": 0.804,
+          "right_idx": 1,
+          "right_label": "expert_0:openai/gpt-oss-120b",
+          "roc_auc": 0.710545712260808,
+          "spearman_delta": 0.2531307570863918
+        }
+      ],
+      "reliability": [
+        {
+          "bias": -0.12808122612395376,
+          "bucket_high": 0.05,
+          "bucket_idx": 0,
+          "bucket_low": 0.0,
+          "mae": 0.12808122612395376,
+          "mean_pred": 0.0,
+          "mean_true": 0.12808122612395376,
+          "n": 53,
+          "rmse": 0.2462439477420469,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.1,
+          "bucket_idx": 1,
+          "bucket_low": 0.05,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.15000000000000002,
+          "bucket_idx": 2,
+          "bucket_low": 0.1,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.2,
+          "bucket_idx": 3,
+          "bucket_low": 0.15000000000000002,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": -0.559899377822876,
+          "bucket_high": 0.25,
+          "bucket_idx": 4,
+          "bucket_low": 0.2,
+          "mae": 0.559899377822876,
+          "mean_pred": 0.2,
+          "mean_true": 0.759899377822876,
+          "n": 1,
+          "rmse": 0.559899377822876,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": -0.2553094610571861,
+          "bucket_high": 0.30000000000000004,
+          "bucket_idx": 5,
+          "bucket_low": 0.25,
+          "mae": 0.2553094610571861,
+          "mean_pred": 0.275,
+          "mean_true": 0.5303094610571861,
+          "n": 4,
+          "rmse": 0.310099131943003,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.35000000000000003,
+          "bucket_idx": 6,
+          "bucket_low": 0.30000000000000004,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.4,
+          "bucket_idx": 7,
+          "bucket_low": 0.35000000000000003,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": -0.056100497394800164,
+          "bucket_high": 0.45,
+          "bucket_idx": 8,
+          "bucket_low": 0.4,
+          "mae": 0.14855390712618827,
+          "mean_pred": 0.4,
+          "mean_true": 0.4561004973948002,
+          "n": 4,
+          "rmse": 0.17885530405311634,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": -0.2418644607067108,
+          "bucket_high": 0.5,
+          "bucket_idx": 9,
+          "bucket_low": 0.45,
+          "mae": 0.2418644607067108,
+          "mean_pred": 0.45,
+          "mean_true": 0.6918644607067108,
+          "n": 2,
+          "rmse": 0.29554358328661895,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": 0.2789222171360796,
+          "bucket_high": 0.55,
+          "bucket_idx": 10,
+          "bucket_low": 0.5,
+          "mae": 0.2789222171360796,
+          "mean_pred": 0.5,
+          "mean_true": 0.22107778286392038,
+          "n": 11,
+          "rmse": 0.3202444685832603,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": 0.049828893199281854,
+          "bucket_high": 0.6000000000000001,
+          "bucket_idx": 11,
+          "bucket_low": 0.55,
+          "mae": 0.19219479709863663,
+          "mean_pred": 0.5995283018867923,
+          "mean_true": 0.5496994086875105,
+          "n": 106,
+          "rmse": 0.22885184456688976,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.65,
+          "bucket_idx": 12,
+          "bucket_low": 0.6000000000000001,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": 0.12160963567403643,
+          "bucket_high": 0.7000000000000001,
+          "bucket_idx": 13,
+          "bucket_low": 0.65,
+          "mae": 0.19885925765220933,
+          "mean_pred": 0.6984615384615386,
+          "mean_true": 0.576851902787502,
+          "n": 65,
+          "rmse": 0.2567372709953426,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.75,
+          "bucket_idx": 14,
+          "bucket_low": 0.7000000000000001,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": 0.11565469205379486,
+          "bucket_high": 0.8,
+          "bucket_idx": 15,
+          "bucket_low": 0.75,
+          "mae": 0.2305839139790762,
+          "mean_pred": 0.75,
+          "mean_true": 0.6343453079462051,
+          "n": 21,
+          "rmse": 0.29646712388690555,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": 0.08372589705806029,
+          "bucket_high": 0.8500000000000001,
+          "bucket_idx": 16,
+          "bucket_low": 0.8,
+          "mae": 0.16963850201744785,
+          "mean_pred": 0.8334210526315787,
+          "mean_true": 0.7496951555735186,
+          "n": 190,
+          "rmse": 0.21665444096907807,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.9,
+          "bucket_idx": 17,
+          "bucket_low": 0.8500000000000001,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": 0.07376079129618263,
+          "bucket_high": 0.9500000000000001,
+          "bucket_idx": 18,
+          "bucket_low": 0.9,
+          "mae": 0.12164363098698992,
+          "mean_pred": 0.9372093023255815,
+          "mean_true": 0.8634485110293987,
+          "n": 43,
+          "rmse": 0.20189074407791488,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": null,
+          "bucket_high": 1.0,
+          "bucket_idx": 19,
+          "bucket_low": 0.9500000000000001,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": -0.2657891900850121,
+          "bucket_high": 0.05,
+          "bucket_idx": 0,
+          "bucket_low": 0.0,
+          "mae": 0.2657891900850121,
+          "mean_pred": 0.0,
+          "mean_true": 0.2657891900850121,
+          "n": 176,
+          "rmse": 0.32982001656735355,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.1,
+          "bucket_idx": 1,
+          "bucket_low": 0.05,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": -0.2052814722061157,
+          "bucket_high": 0.15000000000000002,
+          "bucket_idx": 2,
+          "bucket_low": 0.1,
+          "mae": 0.2052814722061157,
+          "mean_pred": 0.15,
+          "mean_true": 0.3552814722061157,
+          "n": 3,
+          "rmse": 0.2471440600557803,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.2,
+          "bucket_idx": 3,
+          "bucket_low": 0.15000000000000002,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": -0.105771746229203,
+          "bucket_high": 0.25,
+          "bucket_idx": 4,
+          "bucket_low": 0.2,
+          "mae": 0.19724399845692372,
+          "mean_pred": 0.19999999999999996,
+          "mean_true": 0.305771746229203,
+          "n": 84,
+          "rmse": 0.24585731873327143,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": -0.06336736052575773,
+          "bucket_high": 0.30000000000000004,
+          "bucket_idx": 5,
+          "bucket_low": 0.25,
+          "mae": 0.2029328776972137,
+          "mean_pred": 0.27664233576642333,
+          "mean_true": 0.3400096962921811,
+          "n": 137,
+          "rmse": 0.247981409757437,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.35000000000000003,
+          "bucket_idx": 6,
+          "bucket_low": 0.30000000000000004,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.4,
+          "bucket_idx": 7,
+          "bucket_low": 0.35000000000000003,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": 0.05314722754831975,
+          "bucket_high": 0.45,
+          "bucket_idx": 8,
+          "bucket_low": 0.4,
+          "mae": 0.21833409065830292,
+          "mean_pred": 0.3999999999999999,
+          "mean_true": 0.3468527724516803,
+          "n": 87,
+          "rmse": 0.26551532239031317,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": -0.04444053854261124,
+          "bucket_high": 0.5,
+          "bucket_idx": 9,
+          "bucket_low": 0.45,
+          "mae": 0.20924548080989291,
+          "mean_pred": 0.45000000000000007,
+          "mean_true": 0.4944405385426113,
+          "n": 7,
+          "rmse": 0.23611232836275228,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": 0.03797468543052673,
+          "bucket_high": 0.55,
+          "bucket_idx": 10,
+          "bucket_low": 0.5,
+          "mae": 0.03797468543052673,
+          "mean_pred": 0.5,
+          "mean_true": 0.46202531456947327,
+          "n": 1,
+          "rmse": 0.03797468543052673,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": 0.20261842608451844,
+          "bucket_high": 0.6000000000000001,
+          "bucket_idx": 11,
+          "bucket_low": 0.55,
+          "mae": 0.22578444838523862,
+          "mean_pred": 0.6,
+          "mean_true": 0.39738157391548157,
+          "n": 5,
+          "rmse": 0.25829982921932854,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.65,
+          "bucket_idx": 12,
+          "bucket_low": 0.6000000000000001,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.7000000000000001,
+          "bucket_idx": 13,
+          "bucket_low": 0.65,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.75,
+          "bucket_idx": 14,
+          "bucket_low": 0.7000000000000001,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.8,
+          "bucket_idx": 15,
+          "bucket_low": 0.75,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.8500000000000001,
+          "bucket_idx": 16,
+          "bucket_low": 0.8,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.9,
+          "bucket_idx": 17,
+          "bucket_low": 0.8500000000000001,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.9500000000000001,
+          "bucket_idx": 18,
+          "bucket_low": 0.9,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 1.0,
+          "bucket_idx": 19,
+          "bucket_low": 0.9500000000000001,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        }
+      ],
+      "route_metrics": [
+        {
+          "mae": 0.17623657018840316,
+          "mean_pred": 0.6653,
+          "mean_true": 0.6079291134625673,
+          "mse": 0.05539088762703804,
+          "n_eval": 500,
+          "pearson": 0.6705772987420566,
+          "r2": 0.3650672594281109,
+          "rmse": 0.2353526877412664,
+          "route_idx": 0,
+          "route_label": "primary_model",
+          "spearman": 0.6197497362779096,
+          "std_pred": 0.2620131866910519,
+          "std_true": 0.2953624632195908
+        },
+        {
+          "mae": 0.22678344633355738,
+          "mean_pred": 0.19319999999999998,
+          "mean_true": 0.31239421020820735,
+          "mse": 0.07937922418533788,
+          "n_eval": 500,
+          "pearson": 0.16880816844161076,
+          "r2": -0.5262341185677826,
+          "rmse": 0.2817431883565917,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b",
+          "spearman": 0.16072917156806515,
+          "std_pred": 0.15951100275529587,
+          "std_true": 0.2280567054165478
+        }
+      ],
+      "run_summary": {
+        "best_eval_loss": 0.06738505590618794,
+        "bin_count": null,
+        "bin_value_order": null,
+        "delta_mae": 0.2908182684637605,
+        "has_costs": false,
+        "n_eval": 500,
+        "parse_failure_rate": 0.0,
+        "pearson_delta": 0.394144106283496,
+        "ranking_accuracy_sign": 0.804,
+        "roc_auc": 0.710545712260808,
+        "route_count": 2,
+        "route_labels": [
+          "primary_model",
+          "expert_0:openai/gpt-oss-120b"
+        ],
+        "run_dir": "/mnt/llmd/results/exps/aristides/reason/offline_router_swe_smith_id_scalar_20bucket_train_only_1776320712/train_text_lora_scalar_20bucket_random",
+        "run_name": "scalar20",
+        "spearman_delta": 0.2531307570863918,
+        "supervision_mode": "text_reward_scalar",
+        "target_grid_count": 21,
+        "target_precision": 2,
+        "train_loss": 0.7312630889064167
+      }
+    },
+    "vector20": {
+      "collapse_stats": [
+        {
+          "bias": 0.005370886537432668,
+          "mean_ratio_pred_over_true": 1.0088347250008176,
+          "n_eval": 500,
+          "pred_exact_zero_count": 68,
+          "pred_exact_zero_rate": 0.136,
+          "pred_near_zero_count": 68,
+          "pred_near_zero_rate": 0.136,
+          "route_idx": 0,
+          "route_label": "primary_model",
+          "top_rounded_pred": [
+            {
+              "count": 169,
+              "value": 0.6
+            },
+            {
+              "count": 114,
+              "value": 0.8
+            },
+            {
+              "count": 68,
+              "value": 0.0
+            },
+            {
+              "count": 47,
+              "value": 0.7
+            },
+            {
+              "count": 24,
+              "value": 0.75
+            },
+            {
+              "count": 21,
+              "value": 0.9
+            },
+            {
+              "count": 20,
+              "value": 0.95
+            },
+            {
+              "count": 20,
+              "value": 0.85
+            },
+            {
+              "count": 8,
+              "value": 0.4
+            },
+            {
+              "count": 4,
+              "value": 0.65
+            }
+          ],
+          "top_rounded_true": [
+            {
+              "count": 40,
+              "value": 0.0
+            },
+            {
+              "count": 30,
+              "value": 1.0
+            },
+            {
+              "count": 14,
+              "value": 0.64
+            },
+            {
+              "count": 13,
+              "value": 0.99
+            },
+            {
+              "count": 12,
+              "value": 0.71
+            },
+            {
+              "count": 11,
+              "value": 0.92
+            },
+            {
+              "count": 11,
+              "value": 0.76
+            },
+            {
+              "count": 10,
+              "value": 0.72
+            },
+            {
+              "count": 10,
+              "value": 0.61
+            },
+            {
+              "count": 10,
+              "value": 0.96
+            }
+          ],
+          "true_exact_zero_count": 40,
+          "true_exact_zero_rate": 0.08,
+          "true_near_zero_count": 40,
+          "true_near_zero_rate": 0.08
+        },
+        {
+          "bias": -0.16779421020820734,
+          "mean_ratio_pred_over_true": 0.46287669641388585,
+          "n_eval": 500,
+          "pred_exact_zero_count": 266,
+          "pred_exact_zero_rate": 0.532,
+          "pred_near_zero_count": 266,
+          "pred_near_zero_rate": 0.532,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b",
+          "top_rounded_pred": [
+            {
+              "count": 266,
+              "value": 0.0
+            },
+            {
+              "count": 83,
+              "value": 0.2
+            },
+            {
+              "count": 73,
+              "value": 0.4
+            },
+            {
+              "count": 50,
+              "value": 0.3
+            },
+            {
+              "count": 14,
+              "value": 0.45
+            },
+            {
+              "count": 7,
+              "value": 0.25
+            },
+            {
+              "count": 3,
+              "value": 0.5
+            },
+            {
+              "count": 2,
+              "value": 0.35
+            },
+            {
+              "count": 1,
+              "value": 0.65
+            },
+            {
+              "count": 1,
+              "value": 0.6
+            }
+          ],
+          "top_rounded_true": [
+            {
+              "count": 90,
+              "value": 0.0
+            },
+            {
+              "count": 15,
+              "value": 0.25
+            },
+            {
+              "count": 13,
+              "value": 0.26
+            },
+            {
+              "count": 12,
+              "value": 0.41
+            },
+            {
+              "count": 12,
+              "value": 0.27
+            },
+            {
+              "count": 12,
+              "value": 0.14
+            },
+            {
+              "count": 11,
+              "value": 0.18
+            },
+            {
+              "count": 11,
+              "value": 0.23
+            },
+            {
+              "count": 10,
+              "value": 0.36
+            },
+            {
+              "count": 10,
+              "value": 0.35
+            }
+          ],
+          "true_exact_zero_count": 90,
+          "true_exact_zero_rate": 0.18,
+          "true_near_zero_count": 92,
+          "true_near_zero_rate": 0.184
+        }
+      ],
+      "decisions": [
+        {
+          "always_route_0_label": "primary_model",
+          "always_route_0_mean_true_reward": 0.6079291134625673,
+          "always_route_1_label": "expert_0:openai/gpt-oss-120b",
+          "always_route_1_mean_true_reward": 0.31239421020820735,
+          "chosen_mean_true_reward": 0.6079291134625673,
+          "chosen_mean_true_utility": 0.6079291134625673,
+          "has_costs": false,
+          "lambda": 0.0,
+          "n_eval": 500,
+          "oracle_capture": 0.9416723886801532,
+          "oracle_match_rate": 0.84,
+          "oracle_mean_true_utility": 0.6455845161974431,
+          "oracle_regret": 0.03765540273487568,
+          "select_rate_route_0": 1.0,
+          "select_rate_route_1": 0.0
+        }
+      ],
+      "pairwise_metrics": [
+        {
+          "delta_mae": 0.3124027480579913,
+          "left_idx": 0,
+          "left_label": "primary_model",
+          "n_eval": 500,
+          "pearson_delta": 0.3167819762088737,
+          "ranking_accuracy_sign": 0.776,
+          "right_idx": 1,
+          "right_label": "expert_0:openai/gpt-oss-120b",
+          "roc_auc": 0.7079518072289157,
+          "spearman_delta": 0.23939687705591284
+        }
+      ],
+      "reliability": [
+        {
+          "bias": -0.21589012706980987,
+          "bucket_high": 0.05,
+          "bucket_idx": 0,
+          "bucket_low": 0.0,
+          "mae": 0.21589012706980987,
+          "mean_pred": 0.0,
+          "mean_true": 0.21589012706980987,
+          "n": 68,
+          "rmse": 0.3377646281681811,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.1,
+          "bucket_idx": 1,
+          "bucket_low": 0.05,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.15000000000000002,
+          "bucket_idx": 2,
+          "bucket_low": 0.1,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.2,
+          "bucket_idx": 3,
+          "bucket_low": 0.15000000000000002,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.25,
+          "bucket_idx": 4,
+          "bucket_low": 0.2,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.30000000000000004,
+          "bucket_idx": 5,
+          "bucket_low": 0.25,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.35000000000000003,
+          "bucket_idx": 6,
+          "bucket_low": 0.30000000000000004,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.4,
+          "bucket_idx": 7,
+          "bucket_low": 0.35000000000000003,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": -0.1687658870592713,
+          "bucket_high": 0.45,
+          "bucket_idx": 8,
+          "bucket_low": 0.4,
+          "mae": 0.24275763686746357,
+          "mean_pred": 0.4,
+          "mean_true": 0.5687658870592713,
+          "n": 8,
+          "rmse": 0.28351395040579,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": 0.128805410861969,
+          "bucket_high": 0.5,
+          "bucket_idx": 9,
+          "bucket_low": 0.45,
+          "mae": 0.321194589138031,
+          "mean_pred": 0.45,
+          "mean_true": 0.321194589138031,
+          "n": 2,
+          "rmse": 0.34605895156587,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": 0.08481399714946747,
+          "bucket_high": 0.55,
+          "bucket_idx": 10,
+          "bucket_low": 0.5,
+          "mae": 0.08481399714946747,
+          "mean_pred": 0.5,
+          "mean_true": 0.41518600285053253,
+          "n": 2,
+          "rmse": 0.09941405306963276,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": -0.0018141907102921608,
+          "bucket_high": 0.6000000000000001,
+          "bucket_idx": 11,
+          "bucket_low": 0.55,
+          "mae": 0.2077476562471951,
+          "mean_pred": 0.5997058823529411,
+          "mean_true": 0.6015200730632333,
+          "n": 170,
+          "rmse": 0.2497331690759835,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.65,
+          "bucket_idx": 12,
+          "bucket_low": 0.6000000000000001,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": 0.02542596646383693,
+          "bucket_high": 0.7000000000000001,
+          "bucket_idx": 13,
+          "bucket_low": 0.65,
+          "mae": 0.18758029365072065,
+          "mean_pred": 0.6960784313725493,
+          "mean_true": 0.670652464908712,
+          "n": 51,
+          "rmse": 0.2315073842947531,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.75,
+          "bucket_idx": 14,
+          "bucket_low": 0.7000000000000001,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": 0.08745364658534527,
+          "bucket_high": 0.8,
+          "bucket_idx": 15,
+          "bucket_low": 0.75,
+          "mae": 0.18804711910585561,
+          "mean_pred": 0.75,
+          "mean_true": 0.6625463534146547,
+          "n": 24,
+          "rmse": 0.24656514477609884,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": 0.05278653949499134,
+          "bucket_high": 0.8500000000000001,
+          "bucket_idx": 16,
+          "bucket_low": 0.8,
+          "mae": 0.19301542517409395,
+          "mean_pred": 0.807462686567164,
+          "mean_true": 0.7546761470721729,
+          "n": 134,
+          "rmse": 0.23873977817835118,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.9,
+          "bucket_idx": 17,
+          "bucket_low": 0.8500000000000001,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": 0.19825035391784296,
+          "bucket_high": 0.9500000000000001,
+          "bucket_idx": 18,
+          "bucket_low": 0.9,
+          "mae": 0.23383857069945915,
+          "mean_pred": 0.9243902439024392,
+          "mean_true": 0.7261398899845961,
+          "n": 41,
+          "rmse": 0.31456654716384463,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": null,
+          "bucket_high": 1.0,
+          "bucket_idx": 19,
+          "bucket_low": 0.9500000000000001,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 0,
+          "route_label": "primary_model"
+        },
+        {
+          "bias": -0.3066522473175275,
+          "bucket_high": 0.05,
+          "bucket_idx": 0,
+          "bucket_low": 0.0,
+          "mae": 0.3066522473175275,
+          "mean_pred": 0.0,
+          "mean_true": 0.3066522473175275,
+          "n": 266,
+          "rmse": 0.3876911813205212,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.1,
+          "bucket_idx": 1,
+          "bucket_low": 0.05,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.15000000000000002,
+          "bucket_idx": 2,
+          "bucket_low": 0.1,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.2,
+          "bucket_idx": 3,
+          "bucket_low": 0.15000000000000002,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": -0.07530739977058157,
+          "bucket_high": 0.25,
+          "bucket_idx": 4,
+          "bucket_low": 0.2,
+          "mae": 0.17905042061963716,
+          "mean_pred": 0.19999999999999998,
+          "mean_true": 0.27530739977058155,
+          "n": 83,
+          "rmse": 0.2219503205388081,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": -0.026084805168865015,
+          "bucket_high": 0.30000000000000004,
+          "bucket_idx": 5,
+          "bucket_low": 0.25,
+          "mae": 0.16428354685113097,
+          "mean_pred": 0.29385964912280704,
+          "mean_true": 0.31994445429167206,
+          "n": 57,
+          "rmse": 0.207516158669775,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": 0.35,
+          "bucket_high": 0.35000000000000003,
+          "bucket_idx": 6,
+          "bucket_low": 0.30000000000000004,
+          "mae": 0.35,
+          "mean_pred": 0.35,
+          "mean_true": 0.0,
+          "n": 2,
+          "rmse": 0.35,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.4,
+          "bucket_idx": 7,
+          "bucket_low": 0.35000000000000003,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": 0.043408777166719315,
+          "bucket_high": 0.45,
+          "bucket_idx": 8,
+          "bucket_low": 0.4,
+          "mae": 0.17647636822641713,
+          "mean_pred": 0.39999999999999997,
+          "mean_true": 0.3565912228332807,
+          "n": 73,
+          "rmse": 0.2269270016693099,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": 0.05423012609992707,
+          "bucket_high": 0.5,
+          "bucket_idx": 9,
+          "bucket_low": 0.45,
+          "mae": 0.16799101893390928,
+          "mean_pred": 0.45000000000000007,
+          "mean_true": 0.3957698739000729,
+          "n": 14,
+          "rmse": 0.20897947082418297,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": 0.2124768296877543,
+          "bucket_high": 0.55,
+          "bucket_idx": 10,
+          "bucket_low": 0.5,
+          "mae": 0.23801447947820029,
+          "mean_pred": 0.5,
+          "mean_true": 0.28752317031224567,
+          "n": 3,
+          "rmse": 0.3067848683961543,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": -0.041658425331115745,
+          "bucket_high": 0.6000000000000001,
+          "bucket_idx": 11,
+          "bucket_low": 0.55,
+          "mae": 0.041658425331115745,
+          "mean_pred": 0.6,
+          "mean_true": 0.6416584253311157,
+          "n": 1,
+          "rmse": 0.041658425331115745,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.65,
+          "bucket_idx": 12,
+          "bucket_low": 0.6000000000000001,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": 0.185906195640564,
+          "bucket_high": 0.7000000000000001,
+          "bucket_idx": 13,
+          "bucket_low": 0.65,
+          "mae": 0.185906195640564,
+          "mean_pred": 0.65,
+          "mean_true": 0.46409380435943604,
+          "n": 1,
+          "rmse": 0.185906195640564,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.75,
+          "bucket_idx": 14,
+          "bucket_low": 0.7000000000000001,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.8,
+          "bucket_idx": 15,
+          "bucket_low": 0.75,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.8500000000000001,
+          "bucket_idx": 16,
+          "bucket_low": 0.8,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.9,
+          "bucket_idx": 17,
+          "bucket_low": 0.8500000000000001,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 0.9500000000000001,
+          "bucket_idx": 18,
+          "bucket_low": 0.9,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        },
+        {
+          "bias": null,
+          "bucket_high": 1.0,
+          "bucket_idx": 19,
+          "bucket_low": 0.9500000000000001,
+          "mae": null,
+          "mean_pred": null,
+          "mean_true": null,
+          "n": 0,
+          "rmse": null,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b"
+        }
+      ],
+      "route_metrics": [
+        {
+          "mae": 0.2045657653540373,
+          "mean_pred": 0.6133,
+          "mean_true": 0.6079291134625673,
+          "mse": 0.07029892965916065,
+          "n_eval": 500,
+          "pearson": 0.5610435079205603,
+          "r2": 0.1941798736228677,
+          "rmse": 0.26513945323010807,
+          "route_idx": 0,
+          "route_label": "primary_model",
+          "spearman": 0.45789024487411745,
+          "std_pred": 0.2681382292773636,
+          "std_true": 0.2953624632195908
+        },
+        {
+          "mae": 0.24534220414683222,
+          "mean_pred": 0.14460000000000003,
+          "mean_true": 0.31239421020820735,
+          "mse": 0.10291714703812227,
+          "n_eval": 500,
+          "pearson": 0.07101471623544686,
+          "r2": -0.9788006598362904,
+          "rmse": 0.3208070246084432,
+          "route_idx": 1,
+          "route_label": "expert_0:openai/gpt-oss-120b",
+          "spearman": 0.07759165522218098,
+          "std_pred": 0.16790128051923844,
+          "std_true": 0.2280567054165478
+        }
+      ],
+      "run_summary": {
+        "best_eval_loss": 0.08660803834864146,
+        "bin_count": null,
+        "bin_value_order": null,
+        "delta_mae": 0.3124027480579913,
+        "has_costs": false,
+        "n_eval": 500,
+        "parse_failure_rate": 0.0,
+        "pearson_delta": 0.3167819762088737,
+        "ranking_accuracy_sign": 0.776,
+        "roc_auc": 0.7079518072289157,
+        "route_count": 2,
+        "route_labels": [
+          "primary_model",
+          "expert_0:openai/gpt-oss-120b"
+        ],
+        "run_dir": "/mnt/llmd/results/exps/aristides/reason/offline_router_swe_smith_id_vector_20bucket_train_only_1776320712/train_text_lora_vector_20bucket_random",
+        "run_name": "vector20",
+        "spearman_delta": 0.23939687705591284,
+        "supervision_mode": "text_reward_vector",
+        "target_grid_count": 21,
+        "target_precision": 2,
+        "train_loss": 0.8333960722920892
+      }
+    }
+  },
+  "top_rounded_values": {
+    "bin20::route_0": {
+      "route_idx": 0,
+      "route_label": "primary_model",
+      "run_name": "bin20",
+      "top_rounded_pred": [
+        {
+          "count": 44,
+          "value": 0.71
+        },
+        {
+          "count": 31,
+          "value": 0.65
+        },
+        {
+          "count": 26,
+          "value": 0.72
+        },
+        {
+          "count": 25,
+          "value": 0.69
+        },
+        {
+          "count": 24,
+          "value": 0.67
+        },
+        {
+          "count": 21,
+          "value": 0.7
+        },
+        {
+          "count": 19,
+          "value": 0.66
+        },
+        {
+          "count": 18,
+          "value": 0.61
+        },
+        {
+          "count": 18,
+          "value": 0.74
+        },
+        {
+          "count": 18,
+          "value": 0.73
+        }
+      ],
+      "top_rounded_true": [
+        {
+          "count": 40,
+          "value": 0.0
+        },
+        {
+          "count": 30,
+          "value": 1.0
+        },
+        {
+          "count": 14,
+          "value": 0.64
+        },
+        {
+          "count": 13,
+          "value": 0.99
+        },
+        {
+          "count": 12,
+          "value": 0.71
+        },
+        {
+          "count": 11,
+          "value": 0.76
+        },
+        {
+          "count": 11,
+          "value": 0.92
+        },
+        {
+          "count": 10,
+          "value": 0.61
+        },
+        {
+          "count": 10,
+          "value": 0.72
+        },
+        {
+          "count": 10,
+          "value": 0.96
+        }
+      ]
+    },
+    "bin20::route_1": {
+      "route_idx": 1,
+      "route_label": "expert_0:openai/gpt-oss-120b",
+      "run_name": "bin20",
+      "top_rounded_pred": [
+        {
+          "count": 34,
+          "value": 0.32
+        },
+        {
+          "count": 33,
+          "value": 0.31
+        },
+        {
+          "count": 26,
+          "value": 0.36
+        },
+        {
+          "count": 26,
+          "value": 0.28
+        },
+        {
+          "count": 25,
+          "value": 0.29
+        },
+        {
+          "count": 25,
+          "value": 0.27
+        },
+        {
+          "count": 23,
+          "value": 0.3
+        },
+        {
+          "count": 22,
+          "value": 0.4
+        },
+        {
+          "count": 21,
+          "value": 0.34
+        },
+        {
+          "count": 20,
+          "value": 0.26
+        }
+      ],
+      "top_rounded_true": [
+        {
+          "count": 90,
+          "value": 0.0
+        },
+        {
+          "count": 15,
+          "value": 0.25
+        },
+        {
+          "count": 13,
+          "value": 0.26
+        },
+        {
+          "count": 12,
+          "value": 0.27
+        },
+        {
+          "count": 12,
+          "value": 0.41
+        },
+        {
+          "count": 12,
+          "value": 0.14
+        },
+        {
+          "count": 11,
+          "value": 0.18
+        },
+        {
+          "count": 11,
+          "value": 0.23
+        },
+        {
+          "count": 10,
+          "value": 0.36
+        },
+        {
+          "count": 10,
+          "value": 0.35
+        }
+      ]
+    },
+    "bin20_reverse::route_0": {
+      "route_idx": 0,
+      "route_label": "primary_model",
+      "run_name": "bin20_reverse",
+      "top_rounded_pred": [
+        {
+          "count": 24,
+          "value": 0.74
+        },
+        {
+          "count": 18,
+          "value": 0.71
+        },
+        {
+          "count": 17,
+          "value": 0.6
+        },
+        {
+          "count": 17,
+          "value": 0.67
+        },
+        {
+          "count": 16,
+          "value": 0.65
+        },
+        {
+          "count": 16,
+          "value": 0.73
+        },
+        {
+          "count": 15,
+          "value": 0.58
+        },
+        {
+          "count": 15,
+          "value": 0.69
+        },
+        {
+          "count": 15,
+          "value": 0.78
+        },
+        {
+          "count": 14,
+          "value": 0.66
+        }
+      ],
+      "top_rounded_true": [
+        {
+          "count": 40,
+          "value": 0.0
+        },
+        {
+          "count": 30,
+          "value": 1.0
+        },
+        {
+          "count": 14,
+          "value": 0.64
+        },
+        {
+          "count": 13,
+          "value": 0.99
+        },
+        {
+          "count": 12,
+          "value": 0.71
+        },
+        {
+          "count": 11,
+          "value": 0.76
+        },
+        {
+          "count": 11,
+          "value": 0.92
+        },
+        {
+          "count": 10,
+          "value": 0.61
+        },
+        {
+          "count": 10,
+          "value": 0.72
+        },
+        {
+          "count": 10,
+          "value": 0.96
+        }
+      ]
+    },
+    "bin20_reverse::route_1": {
+      "route_idx": 1,
+      "route_label": "expert_0:openai/gpt-oss-120b",
+      "run_name": "bin20_reverse",
+      "top_rounded_pred": [
+        {
+          "count": 52,
+          "value": 0.25
+        },
+        {
+          "count": 47,
+          "value": 0.23
+        },
+        {
+          "count": 46,
+          "value": 0.24
+        },
+        {
+          "count": 40,
+          "value": 0.27
+        },
+        {
+          "count": 38,
+          "value": 0.26
+        },
+        {
+          "count": 38,
+          "value": 0.22
+        },
+        {
+          "count": 33,
+          "value": 0.29
+        },
+        {
+          "count": 23,
+          "value": 0.3
+        },
+        {
+          "count": 23,
+          "value": 0.28
+        },
+        {
+          "count": 22,
+          "value": 0.2
+        }
+      ],
+      "top_rounded_true": [
+        {
+          "count": 90,
+          "value": 0.0
+        },
+        {
+          "count": 15,
+          "value": 0.25
+        },
+        {
+          "count": 13,
+          "value": 0.26
+        },
+        {
+          "count": 12,
+          "value": 0.27
+        },
+        {
+          "count": 12,
+          "value": 0.41
+        },
+        {
+          "count": 12,
+          "value": 0.14
+        },
+        {
+          "count": 11,
+          "value": 0.18
+        },
+        {
+          "count": 11,
+          "value": 0.23
+        },
+        {
+          "count": 10,
+          "value": 0.36
+        },
+        {
+          "count": 10,
+          "value": 0.35
+        }
+      ]
+    },
+    "scalar20::route_0": {
+      "route_idx": 0,
+      "route_label": "primary_model",
+      "run_name": "scalar20",
+      "top_rounded_pred": [
+        {
+          "count": 127,
+          "value": 0.85
+        },
+        {
+          "count": 105,
+          "value": 0.6
+        },
+        {
+          "count": 63,
+          "value": 0.7
+        },
+        {
+          "count": 63,
+          "value": 0.8
+        },
+        {
+          "count": 53,
+          "value": 0.0
+        },
+        {
+          "count": 32,
+          "value": 0.95
+        },
+        {
+          "count": 21,
+          "value": 0.75
+        },
+        {
+          "count": 11,
+          "value": 0.9
+        },
+        {
+          "count": 11,
+          "value": 0.5
+        },
+        {
+          "count": 4,
+          "value": 0.4
+        }
+      ],
+      "top_rounded_true": [
+        {
+          "count": 40,
+          "value": 0.0
+        },
+        {
+          "count": 30,
+          "value": 1.0
+        },
+        {
+          "count": 14,
+          "value": 0.64
+        },
+        {
+          "count": 13,
+          "value": 0.99
+        },
+        {
+          "count": 12,
+          "value": 0.71
+        },
+        {
+          "count": 11,
+          "value": 0.76
+        },
+        {
+          "count": 11,
+          "value": 0.92
+        },
+        {
+          "count": 10,
+          "value": 0.61
+        },
+        {
+          "count": 10,
+          "value": 0.72
+        },
+        {
+          "count": 10,
+          "value": 0.96
+        }
+      ]
+    },
+    "scalar20::route_1": {
+      "route_idx": 1,
+      "route_label": "expert_0:openai/gpt-oss-120b",
+      "run_name": "scalar20",
+      "top_rounded_pred": [
+        {
+          "count": 176,
+          "value": 0.0
+        },
+        {
+          "count": 87,
+          "value": 0.4
+        },
+        {
+          "count": 84,
+          "value": 0.2
+        },
+        {
+          "count": 73,
+          "value": 0.3
+        },
+        {
+          "count": 64,
+          "value": 0.25
+        },
+        {
+          "count": 7,
+          "value": 0.45
+        },
+        {
+          "count": 5,
+          "value": 0.6
+        },
+        {
+          "count": 3,
+          "value": 0.15
+        },
+        {
+          "count": 1,
+          "value": 0.5
+        }
+      ],
+      "top_rounded_true": [
+        {
+          "count": 90,
+          "value": 0.0
+        },
+        {
+          "count": 15,
+          "value": 0.25
+        },
+        {
+          "count": 13,
+          "value": 0.26
+        },
+        {
+          "count": 12,
+          "value": 0.27
+        },
+        {
+          "count": 12,
+          "value": 0.41
+        },
+        {
+          "count": 12,
+          "value": 0.14
+        },
+        {
+          "count": 11,
+          "value": 0.18
+        },
+        {
+          "count": 11,
+          "value": 0.23
+        },
+        {
+          "count": 10,
+          "value": 0.36
+        },
+        {
+          "count": 10,
+          "value": 0.35
+        }
+      ]
+    },
+    "vector20::route_0": {
+      "route_idx": 0,
+      "route_label": "primary_model",
+      "run_name": "vector20",
+      "top_rounded_pred": [
+        {
+          "count": 169,
+          "value": 0.6
+        },
+        {
+          "count": 114,
+          "value": 0.8
+        },
+        {
+          "count": 68,
+          "value": 0.0
+        },
+        {
+          "count": 47,
+          "value": 0.7
+        },
+        {
+          "count": 24,
+          "value": 0.75
+        },
+        {
+          "count": 21,
+          "value": 0.9
+        },
+        {
+          "count": 20,
+          "value": 0.95
+        },
+        {
+          "count": 20,
+          "value": 0.85
+        },
+        {
+          "count": 8,
+          "value": 0.4
+        },
+        {
+          "count": 4,
+          "value": 0.65
+        }
+      ],
+      "top_rounded_true": [
+        {
+          "count": 40,
+          "value": 0.0
+        },
+        {
+          "count": 30,
+          "value": 1.0
+        },
+        {
+          "count": 14,
+          "value": 0.64
+        },
+        {
+          "count": 13,
+          "value": 0.99
+        },
+        {
+          "count": 12,
+          "value": 0.71
+        },
+        {
+          "count": 11,
+          "value": 0.92
+        },
+        {
+          "count": 11,
+          "value": 0.76
+        },
+        {
+          "count": 10,
+          "value": 0.72
+        },
+        {
+          "count": 10,
+          "value": 0.61
+        },
+        {
+          "count": 10,
+          "value": 0.96
+        }
+      ]
+    },
+    "vector20::route_1": {
+      "route_idx": 1,
+      "route_label": "expert_0:openai/gpt-oss-120b",
+      "run_name": "vector20",
+      "top_rounded_pred": [
+        {
+          "count": 266,
+          "value": 0.0
+        },
+        {
+          "count": 83,
+          "value": 0.2
+        },
+        {
+          "count": 73,
+          "value": 0.4
+        },
+        {
+          "count": 50,
+          "value": 0.3
+        },
+        {
+          "count": 14,
+          "value": 0.45
+        },
+        {
+          "count": 7,
+          "value": 0.25
+        },
+        {
+          "count": 3,
+          "value": 0.5
+        },
+        {
+          "count": 2,
+          "value": 0.35
+        },
+        {
+          "count": 1,
+          "value": 0.65
+        },
+        {
+          "count": 1,
+          "value": 0.6
+        }
+      ],
+      "top_rounded_true": [
+        {
+          "count": 90,
+          "value": 0.0
+        },
+        {
+          "count": 15,
+          "value": 0.25
+        },
+        {
+          "count": 13,
+          "value": 0.26
+        },
+        {
+          "count": 12,
+          "value": 0.41
+        },
+        {
+          "count": 12,
+          "value": 0.27
+        },
+        {
+          "count": 12,
+          "value": 0.14
+        },
+        {
+          "count": 11,
+          "value": 0.18
+        },
+        {
+          "count": 11,
+          "value": 0.23
+        },
+        {
+          "count": 10,
+          "value": 0.36
+        },
+        {
+          "count": 10,
+          "value": 0.35
+        }
+      ]
+    }
+  }
+}

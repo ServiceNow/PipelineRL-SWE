@@ -1,0 +1,22 @@
+{
+  "bins": 6,
+  "lambdas": [
+    0.0,
+    1.0,
+    2.0,
+    5.0,
+    10.0,
+    20.0
+  ],
+  "n_attempts": 1783,
+  "n_complete_ids": 148,
+  "output_dir": "router_analysis/swe_smith_multirollout_marginal_value_bins_proxyinit_eval150",
+  "report_root": "router_analysis/uploaded_eval_full_20260617/swe_smith_multirollout_eval150_1781382734/logs/run_evaluation",
+  "route_cost_weights": [
+    2.78e-07,
+    1.299e-06,
+    4.64e-06,
+    1.113e-05
+  ],
+  "score_jsonl": "/mnt/llmd/results/exps/aristides/reason/score_swe_smith_multirollout_eval150_proxy_init_random128_verifier_1781857392/scores/eval_verifier_scores.jsonl"
+}

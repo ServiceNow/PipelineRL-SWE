@@ -1,0 +1,13 @@
+{
+  "counts_any_scout": {
+    "gemini_win": 21,
+    "oss_win": 33
+  },
+  "counts_scout_fails": {
+    "gemini_win": 20,
+    "oss_win": 30
+  },
+  "interpretation": "Positive label means Gemini passes and OSS fails. Negative label means OSS passes and Gemini fails.",
+  "n_disagree_any_scout": 54,
+  "n_disagree_scout_fails": 50
+}

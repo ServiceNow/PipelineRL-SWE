@@ -1,0 +1,28 @@
+{
+  "cost_predictions": "/mnt/llmd/results/exps/aristides/reason/offline_router_swe_smith_train1500_real_eval286_cost_score_r64_qkvo_mlp_input_only_1781281700/eval286_cost_score/eval_predictions.jsonl",
+  "dataset_dir": "/mnt/llmd/results/exps/aristides/reason/offline_router_swe_smith_train1500_real_labels_4route_1780639659/collect",
+  "decision_cost_mode": "predicted",
+  "n_examples": 286,
+  "reward_predictions": "/mnt/llmd/results/exps/aristides/reason/offline_router_swe_smith_train1500_real_2route_oss20_vs_oss120_qwen3_embedding_8b_lora_reward_bce_r32_qkvo_mlp_semantic_late_fusion_input_only_10epoch_1781243064/train_qwen3_embedding_8b_lora_reward_bce_oss20_vs_oss120_r32_qkvo_mlp_semantic_late_fusion_input_only_10epoch/eval_predictions.jsonl",
+  "run_name": "bce_semantic_late_input",
+  "skipped": {
+    "invalid": 0,
+    "missing_cost": 0,
+    "missing_eval": 0
+  },
+  "summary": {
+    "best_same_cost_cost": 0.008740008,
+    "best_same_cost_gain": 0.015314450124989831,
+    "best_same_cost_lambda": 4.0,
+    "best_same_cost_random_reward": 0.4322379974274577,
+    "best_same_cost_reward": 0.44755244755244755,
+    "best_utility": 0.3655964568111888,
+    "best_utility_gain_vs_always": 0.0015698454825174846,
+    "best_utility_lambda": 8.0,
+    "mean_positive_same_cost_gain": 0.0054541598795924545,
+    "n_examples": 286,
+    "positive_same_cost_gain_lambdas": 4,
+    "route_labels": "[\"solver:openai/gpt-oss-20b\", \"solver:openai/gpt-oss-120b\"]",
+    "skipped": "{\"invalid\": 0, \"missing_cost\": 0, \"missing_eval\": 0}"
+  }
+}

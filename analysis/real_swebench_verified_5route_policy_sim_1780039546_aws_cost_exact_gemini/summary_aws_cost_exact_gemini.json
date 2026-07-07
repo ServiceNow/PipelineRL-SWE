@@ -1,0 +1,50 @@
+{
+  "gemini_cost_per_m_input_tokens_usd": 0.5,
+  "gemini_cost_per_m_output_tokens_usd": 3.0,
+  "gemini_mean_eval_prompt_tokens_used_for_cost": 8088.306233062331,
+  "input_skipped": {
+    "invalid": 0,
+    "missing_cost": 0,
+    "missing_pass": 0,
+    "missing_reward": 0
+  },
+  "lambdas_dollar": [
+    0.0,
+    5.0,
+    10.0,
+    15.0,
+    20.0,
+    25.0,
+    30.0,
+    35.0,
+    40.0,
+    50.0,
+    75.0,
+    100.0,
+    150.0,
+    200.0
+  ],
+  "local_cost_per_m_output_tokens_usd": {
+    "scout:Qwen/Qwen3-4B-Instruct-2507": 0.278,
+    "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct": 4.64,
+    "solver:openai/gpt-oss-120b": 11.13,
+    "solver:openai/gpt-oss-20b": 1.299
+  },
+  "n_input_examples": 347,
+  "n_post_examples": 347,
+  "paths": {
+    "collection_summary": "/mnt/llmd/results/exps/aristides/reason/offline_router_swe_bench_train_all_16k_verified_eval_collect_5route_4b_scout_oss20_qwen30_oss120_gemini/collect/route_distribution_summary.json",
+    "cost_input": "/mnt/llmd/results/exps/aristides/reason/offline_router_swe_bench_train_all_16k_verified_eval_5route_4b_scout_qwen3_embedding_8b_lora_expert_cost_only_input_only_5epoch_1780039630/train_qwen3_embedding_8b_lora_expert_cost_only_5epoch/eval_predictions.jsonl",
+    "cost_post": "/mnt/llmd/results/exps/aristides/reason/offline_router_swe_bench_train_all_16k_verified_eval_5route_4b_scout_qwen3_embedding_8b_lora_expert_cost_only_5epoch_1780039546/train_qwen3_embedding_8b_lora_expert_cost_only_5epoch/eval_predictions.jsonl",
+    "pass_matrix": "router_analysis/real_swebench_verified_model_discovery_loose_1779855015/gemini_overlap/gemini_overlap_pass_matrix.json",
+    "reward_input": "/mnt/llmd/results/exps/aristides/reason/offline_router_swe_bench_train_all_16k_verified_eval_5route_4b_scout_qwen3_embedding_8b_lora_reward_mse_delta_input_only_5epoch_1780039630/train_qwen3_embedding_8b_lora_reward_mse_delta_5epoch/eval_predictions.jsonl",
+    "reward_post": "/mnt/llmd/results/exps/aristides/reason/offline_router_swe_bench_train_all_16k_verified_eval_5route_4b_scout_qwen3_embedding_8b_lora_reward_mse_delta_5epoch_1780039546/train_qwen3_embedding_8b_lora_reward_mse_delta_5epoch/eval_predictions.jsonl"
+  },
+  "post_skipped": {
+    "invalid": 0,
+    "missing_cost": 0,
+    "missing_pass": 0,
+    "missing_reward": 0
+  },
+  "scout_mean_eval_output_tokens_used_for_post_scout_cost": 1132.79945799458
+}

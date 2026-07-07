@@ -1,0 +1,4 @@
+run_name,left_idx,right_idx,left_label,right_label,n_eval,pearson_delta,spearman_delta,delta_mae,ranking_accuracy_sign,roc_auc
+vector,0,1,primary_model,expert_0:openai/gpt-oss-120b,500,0.4422922583757617,0.33802951986478347,0.3780431625194848,0.802,0.7347980155917789
+scalar,0,1,primary_model,expert_0:openai/gpt-oss-120b,500,0.3803848816349477,0.2875520159271784,0.3165244387252628,0.808,0.6784691708008505
+bin,0,1,primary_model,expert_0:openai/gpt-oss-120b,500,0.4054109341345444,0.3266305537930949,0.24054293875023722,0.83,0.7482919914953934

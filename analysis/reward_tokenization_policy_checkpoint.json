@@ -1,0 +1,1988 @@
+{
+  "model_path": "/mnt/llmd/results/exps/aristides/reason/swe_smith_policy_conditioned_no_devstral_1773812579/finetune/current",
+  "patterns": [
+    {
+      "first_one_token_values": [],
+      "n_values": 101,
+      "one_token_count": 0,
+      "one_token_rate": 0.0,
+      "pattern": "reward_plain_0.xx",
+      "split_examples": [
+        {
+          "pieces": [
+            "0",
+            ".",
+            "0",
+            "0"
+          ],
+          "text": "0.00",
+          "token_ids": [
+            15,
+            13,
+            15,
+            15
+          ],
+          "value": "0.00"
+        },
+        {
+          "pieces": [
+            "0",
+            ".",
+            "0",
+            "1"
+          ],
+          "text": "0.01",
+          "token_ids": [
+            15,
+            13,
+            15,
+            16
+          ],
+          "value": "0.01"
+        },
+        {
+          "pieces": [
+            "0",
+            ".",
+            "0",
+            "2"
+          ],
+          "text": "0.02",
+          "token_ids": [
+            15,
+            13,
+            15,
+            17
+          ],
+          "value": "0.02"
+        },
+        {
+          "pieces": [
+            "0",
+            ".",
+            "0",
+            "3"
+          ],
+          "text": "0.03",
+          "token_ids": [
+            15,
+            13,
+            15,
+            18
+          ],
+          "value": "0.03"
+        },
+        {
+          "pieces": [
+            "0",
+            ".",
+            "0",
+            "4"
+          ],
+          "text": "0.04",
+          "token_ids": [
+            15,
+            13,
+            15,
+            19
+          ],
+          "value": "0.04"
+        },
+        {
+          "pieces": [
+            "0",
+            ".",
+            "0",
+            "5"
+          ],
+          "text": "0.05",
+          "token_ids": [
+            15,
+            13,
+            15,
+            20
+          ],
+          "value": "0.05"
+        }
+      ],
+      "token_len_counts": {
+        "4": 101
+      }
+    },
+    {
+      "first_one_token_values": [],
+      "n_values": 101,
+      "one_token_count": 0,
+      "one_token_rate": 0.0,
+      "pattern": "reward_leading_space_0.xx",
+      "split_examples": [
+        {
+          "pieces": [
+            " ",
+            "0",
+            ".",
+            "0",
+            "0"
+          ],
+          "text": " 0.00",
+          "token_ids": [
+            220,
+            15,
+            13,
+            15,
+            15
+          ],
+          "value": "0.00"
+        },
+        {
+          "pieces": [
+            " ",
+            "0",
+            ".",
+            "0",
+            "1"
+          ],
+          "text": " 0.01",
+          "token_ids": [
+            220,
+            15,
+            13,
+            15,
+            16
+          ],
+          "value": "0.01"
+        },
+        {
+          "pieces": [
+            " ",
+            "0",
+            ".",
+            "0",
+            "2"
+          ],
+          "text": " 0.02",
+          "token_ids": [
+            220,
+            15,
+            13,
+            15,
+            17
+          ],
+          "value": "0.02"
+        },
+        {
+          "pieces": [
+            " ",
+            "0",
+            ".",
+            "0",
+            "3"
+          ],
+          "text": " 0.03",
+          "token_ids": [
+            220,
+            15,
+            13,
+            15,
+            18
+          ],
+          "value": "0.03"
+        },
+        {
+          "pieces": [
+            " ",
+            "0",
+            ".",
+            "0",
+            "4"
+          ],
+          "text": " 0.04",
+          "token_ids": [
+            220,
+            15,
+            13,
+            15,
+            19
+          ],
+          "value": "0.04"
+        },
+        {
+          "pieces": [
+            " ",
+            "0",
+            ".",
+            "0",
+            "5"
+          ],
+          "text": " 0.05",
+          "token_ids": [
+            220,
+            15,
+            13,
+            15,
+            20
+          ],
+          "value": "0.05"
+        }
+      ],
+      "token_len_counts": {
+        "5": 101
+      }
+    },
+    {
+      "first_one_token_values": [],
+      "n_values": 101,
+      "one_token_count": 0,
+      "one_token_rate": 0.0,
+      "pattern": "reward_leading_newline_0.xx",
+      "split_examples": [
+        {
+          "pieces": [
+            "\n",
+            "0",
+            ".",
+            "0",
+            "0"
+          ],
+          "text": "\n0.00",
+          "token_ids": [
+            198,
+            15,
+            13,
+            15,
+            15
+          ],
+          "value": "0.00"
+        },
+        {
+          "pieces": [
+            "\n",
+            "0",
+            ".",
+            "0",
+            "1"
+          ],
+          "text": "\n0.01",
+          "token_ids": [
+            198,
+            15,
+            13,
+            15,
+            16
+          ],
+          "value": "0.01"
+        },
+        {
+          "pieces": [
+            "\n",
+            "0",
+            ".",
+            "0",
+            "2"
+          ],
+          "text": "\n0.02",
+          "token_ids": [
+            198,
+            15,
+            13,
+            15,
+            17
+          ],
+          "value": "0.02"
+        },
+        {
+          "pieces": [
+            "\n",
+            "0",
+            ".",
+            "0",
+            "3"
+          ],
+          "text": "\n0.03",
+          "token_ids": [
+            198,
+            15,
+            13,
+            15,
+            18
+          ],
+          "value": "0.03"
+        },
+        {
+          "pieces": [
+            "\n",
+            "0",
+            ".",
+            "0",
+            "4"
+          ],
+          "text": "\n0.04",
+          "token_ids": [
+            198,
+            15,
+            13,
+            15,
+            19
+          ],
+          "value": "0.04"
+        },
+        {
+          "pieces": [
+            "\n",
+            "0",
+            ".",
+            "0",
+            "5"
+          ],
+          "text": "\n0.05",
+          "token_ids": [
+            198,
+            15,
+            13,
+            15,
+            20
+          ],
+          "value": "0.05"
+        }
+      ],
+      "token_len_counts": {
+        "5": 101
+      }
+    },
+    {
+      "first_one_token_values": [],
+      "n_values": 101,
+      "one_token_count": 0,
+      "one_token_rate": 0.0,
+      "pattern": "reward_json_after_comma_0.xx",
+      "split_examples": [
+        {
+          "pieces": [
+            ",",
+            "0",
+            ".",
+            "0",
+            "0"
+          ],
+          "text": ",0.00",
+          "token_ids": [
+            11,
+            15,
+            13,
+            15,
+            15
+          ],
+          "value": "0.00"
+        },
+        {
+          "pieces": [
+            ",",
+            "0",
+            ".",
+            "0",
+            "1"
+          ],
+          "text": ",0.01",
+          "token_ids": [
+            11,
+            15,
+            13,
+            15,
+            16
+          ],
+          "value": "0.01"
+        },
+        {
+          "pieces": [
+            ",",
+            "0",
+            ".",
+            "0",
+            "2"
+          ],
+          "text": ",0.02",
+          "token_ids": [
+            11,
+            15,
+            13,
+            15,
+            17
+          ],
+          "value": "0.02"
+        },
+        {
+          "pieces": [
+            ",",
+            "0",
+            ".",
+            "0",
+            "3"
+          ],
+          "text": ",0.03",
+          "token_ids": [
+            11,
+            15,
+            13,
+            15,
+            18
+          ],
+          "value": "0.03"
+        },
+        {
+          "pieces": [
+            ",",
+            "0",
+            ".",
+            "0",
+            "4"
+          ],
+          "text": ",0.04",
+          "token_ids": [
+            11,
+            15,
+            13,
+            15,
+            19
+          ],
+          "value": "0.04"
+        },
+        {
+          "pieces": [
+            ",",
+            "0",
+            ".",
+            "0",
+            "5"
+          ],
+          "text": ",0.05",
+          "token_ids": [
+            11,
+            15,
+            13,
+            15,
+            20
+          ],
+          "value": "0.05"
+        }
+      ],
+      "token_len_counts": {
+        "5": 101
+      }
+    },
+    {
+      "first_one_token_values": [],
+      "n_values": 101,
+      "one_token_count": 0,
+      "one_token_rate": 0.0,
+      "pattern": "reward_json_after_colon_0.xx",
+      "split_examples": [
+        {
+          "pieces": [
+            ":",
+            "0",
+            ".",
+            "0",
+            "0"
+          ],
+          "text": ":0.00",
+          "token_ids": [
+            25,
+            15,
+            13,
+            15,
+            15
+          ],
+          "value": "0.00"
+        },
+        {
+          "pieces": [
+            ":",
+            "0",
+            ".",
+            "0",
+            "1"
+          ],
+          "text": ":0.01",
+          "token_ids": [
+            25,
+            15,
+            13,
+            15,
+            16
+          ],
+          "value": "0.01"
+        },
+        {
+          "pieces": [
+            ":",
+            "0",
+            ".",
+            "0",
+            "2"
+          ],
+          "text": ":0.02",
+          "token_ids": [
+            25,
+            15,
+            13,
+            15,
+            17
+          ],
+          "value": "0.02"
+        },
+        {
+          "pieces": [
+            ":",
+            "0",
+            ".",
+            "0",
+            "3"
+          ],
+          "text": ":0.03",
+          "token_ids": [
+            25,
+            15,
+            13,
+            15,
+            18
+          ],
+          "value": "0.03"
+        },
+        {
+          "pieces": [
+            ":",
+            "0",
+            ".",
+            "0",
+            "4"
+          ],
+          "text": ":0.04",
+          "token_ids": [
+            25,
+            15,
+            13,
+            15,
+            19
+          ],
+          "value": "0.04"
+        },
+        {
+          "pieces": [
+            ":",
+            "0",
+            ".",
+            "0",
+            "5"
+          ],
+          "text": ":0.05",
+          "token_ids": [
+            25,
+            15,
+            13,
+            15,
+            20
+          ],
+          "value": "0.05"
+        }
+      ],
+      "token_len_counts": {
+        "5": 101
+      }
+    },
+    {
+      "first_one_token_values": [],
+      "n_values": 100,
+      "one_token_count": 0,
+      "one_token_rate": 0.0,
+      "pattern": "decimal_suffix_.xx",
+      "split_examples": [
+        {
+          "pieces": [
+            ".",
+            "0",
+            "0"
+          ],
+          "text": ".00",
+          "token_ids": [
+            13,
+            15,
+            15
+          ],
+          "value": ".00"
+        },
+        {
+          "pieces": [
+            ".",
+            "0",
+            "1"
+          ],
+          "text": ".01",
+          "token_ids": [
+            13,
+            15,
+            16
+          ],
+          "value": ".01"
+        },
+        {
+          "pieces": [
+            ".",
+            "0",
+            "2"
+          ],
+          "text": ".02",
+          "token_ids": [
+            13,
+            15,
+            17
+          ],
+          "value": ".02"
+        },
+        {
+          "pieces": [
+            ".",
+            "0",
+            "3"
+          ],
+          "text": ".03",
+          "token_ids": [
+            13,
+            15,
+            18
+          ],
+          "value": ".03"
+        },
+        {
+          "pieces": [
+            ".",
+            "0",
+            "4"
+          ],
+          "text": ".04",
+          "token_ids": [
+            13,
+            15,
+            19
+          ],
+          "value": ".04"
+        },
+        {
+          "pieces": [
+            ".",
+            "0",
+            "5"
+          ],
+          "text": ".05",
+          "token_ids": [
+            13,
+            15,
+            20
+          ],
+          "value": ".05"
+        }
+      ],
+      "token_len_counts": {
+        "3": 100
+      }
+    },
+    {
+      "first_one_token_values": [],
+      "n_values": 100,
+      "one_token_count": 0,
+      "one_token_rate": 0.0,
+      "pattern": "decimal_suffix_leading_space_.xx",
+      "split_examples": [
+        {
+          "pieces": [
+            " .",
+            "0",
+            "0"
+          ],
+          "text": " .00",
+          "token_ids": [
+            659,
+            15,
+            15
+          ],
+          "value": ".00"
+        },
+        {
+          "pieces": [
+            " .",
+            "0",
+            "1"
+          ],
+          "text": " .01",
+          "token_ids": [
+            659,
+            15,
+            16
+          ],
+          "value": ".01"
+        },
+        {
+          "pieces": [
+            " .",
+            "0",
+            "2"
+          ],
+          "text": " .02",
+          "token_ids": [
+            659,
+            15,
+            17
+          ],
+          "value": ".02"
+        },
+        {
+          "pieces": [
+            " .",
+            "0",
+            "3"
+          ],
+          "text": " .03",
+          "token_ids": [
+            659,
+            15,
+            18
+          ],
+          "value": ".03"
+        },
+        {
+          "pieces": [
+            " .",
+            "0",
+            "4"
+          ],
+          "text": " .04",
+          "token_ids": [
+            659,
+            15,
+            19
+          ],
+          "value": ".04"
+        },
+        {
+          "pieces": [
+            " .",
+            "0",
+            "5"
+          ],
+          "text": " .05",
+          "token_ids": [
+            659,
+            15,
+            20
+          ],
+          "value": ".05"
+        }
+      ],
+      "token_len_counts": {
+        "3": 100
+      }
+    },
+    {
+      "first_one_token_values": [],
+      "n_values": 100,
+      "one_token_count": 0,
+      "one_token_rate": 0.0,
+      "pattern": "two_digit_suffix_xx",
+      "split_examples": [
+        {
+          "pieces": [
+            "0",
+            "0"
+          ],
+          "text": "00",
+          "token_ids": [
+            15,
+            15
+          ],
+          "value": "00"
+        },
+        {
+          "pieces": [
+            "0",
+            "1"
+          ],
+          "text": "01",
+          "token_ids": [
+            15,
+            16
+          ],
+          "value": "01"
+        },
+        {
+          "pieces": [
+            "0",
+            "2"
+          ],
+          "text": "02",
+          "token_ids": [
+            15,
+            17
+          ],
+          "value": "02"
+        },
+        {
+          "pieces": [
+            "0",
+            "3"
+          ],
+          "text": "03",
+          "token_ids": [
+            15,
+            18
+          ],
+          "value": "03"
+        },
+        {
+          "pieces": [
+            "0",
+            "4"
+          ],
+          "text": "04",
+          "token_ids": [
+            15,
+            19
+          ],
+          "value": "04"
+        },
+        {
+          "pieces": [
+            "0",
+            "5"
+          ],
+          "text": "05",
+          "token_ids": [
+            15,
+            20
+          ],
+          "value": "05"
+        }
+      ],
+      "token_len_counts": {
+        "2": 100
+      }
+    },
+    {
+      "first_one_token_values": [],
+      "n_values": 100,
+      "one_token_count": 0,
+      "one_token_rate": 0.0,
+      "pattern": "two_digit_suffix_leading_space_xx",
+      "split_examples": [
+        {
+          "pieces": [
+            " ",
+            "0",
+            "0"
+          ],
+          "text": " 00",
+          "token_ids": [
+            220,
+            15,
+            15
+          ],
+          "value": "00"
+        },
+        {
+          "pieces": [
+            " ",
+            "0",
+            "1"
+          ],
+          "text": " 01",
+          "token_ids": [
+            220,
+            15,
+            16
+          ],
+          "value": "01"
+        },
+        {
+          "pieces": [
+            " ",
+            "0",
+            "2"
+          ],
+          "text": " 02",
+          "token_ids": [
+            220,
+            15,
+            17
+          ],
+          "value": "02"
+        },
+        {
+          "pieces": [
+            " ",
+            "0",
+            "3"
+          ],
+          "text": " 03",
+          "token_ids": [
+            220,
+            15,
+            18
+          ],
+          "value": "03"
+        },
+        {
+          "pieces": [
+            " ",
+            "0",
+            "4"
+          ],
+          "text": " 04",
+          "token_ids": [
+            220,
+            15,
+            19
+          ],
+          "value": "04"
+        },
+        {
+          "pieces": [
+            " ",
+            "0",
+            "5"
+          ],
+          "text": " 05",
+          "token_ids": [
+            220,
+            15,
+            20
+          ],
+          "value": "05"
+        }
+      ],
+      "token_len_counts": {
+        "3": 100
+      }
+    },
+    {
+      "first_one_token_values": [],
+      "n_values": 21,
+      "one_token_count": 0,
+      "one_token_rate": 0.0,
+      "pattern": "five_point_grid_plain",
+      "split_examples": [
+        {
+          "pieces": [
+            "0",
+            ".",
+            "0",
+            "0"
+          ],
+          "text": "0.00",
+          "token_ids": [
+            15,
+            13,
+            15,
+            15
+          ],
+          "value": "0.00"
+        },
+        {
+          "pieces": [
+            "0",
+            ".",
+            "0",
+            "5"
+          ],
+          "text": "0.05",
+          "token_ids": [
+            15,
+            13,
+            15,
+            20
+          ],
+          "value": "0.05"
+        },
+        {
+          "pieces": [
+            "0",
+            ".",
+            "1",
+            "0"
+          ],
+          "text": "0.10",
+          "token_ids": [
+            15,
+            13,
+            16,
+            15
+          ],
+          "value": "0.10"
+        },
+        {
+          "pieces": [
+            "0",
+            ".",
+            "1",
+            "5"
+          ],
+          "text": "0.15",
+          "token_ids": [
+            15,
+            13,
+            16,
+            20
+          ],
+          "value": "0.15"
+        },
+        {
+          "pieces": [
+            "0",
+            ".",
+            "2",
+            "0"
+          ],
+          "text": "0.20",
+          "token_ids": [
+            15,
+            13,
+            17,
+            15
+          ],
+          "value": "0.20"
+        },
+        {
+          "pieces": [
+            "0",
+            ".",
+            "2",
+            "5"
+          ],
+          "text": "0.25",
+          "token_ids": [
+            15,
+            13,
+            17,
+            20
+          ],
+          "value": "0.25"
+        }
+      ],
+      "token_len_counts": {
+        "4": 21
+      }
+    },
+    {
+      "first_one_token_values": [],
+      "n_values": 21,
+      "one_token_count": 0,
+      "one_token_rate": 0.0,
+      "pattern": "five_point_grid_leading_space",
+      "split_examples": [
+        {
+          "pieces": [
+            " ",
+            "0",
+            ".",
+            "0",
+            "0"
+          ],
+          "text": " 0.00",
+          "token_ids": [
+            220,
+            15,
+            13,
+            15,
+            15
+          ],
+          "value": "0.00"
+        },
+        {
+          "pieces": [
+            " ",
+            "0",
+            ".",
+            "0",
+            "5"
+          ],
+          "text": " 0.05",
+          "token_ids": [
+            220,
+            15,
+            13,
+            15,
+            20
+          ],
+          "value": "0.05"
+        },
+        {
+          "pieces": [
+            " ",
+            "0",
+            ".",
+            "1",
+            "0"
+          ],
+          "text": " 0.10",
+          "token_ids": [
+            220,
+            15,
+            13,
+            16,
+            15
+          ],
+          "value": "0.10"
+        },
+        {
+          "pieces": [
+            " ",
+            "0",
+            ".",
+            "1",
+            "5"
+          ],
+          "text": " 0.15",
+          "token_ids": [
+            220,
+            15,
+            13,
+            16,
+            20
+          ],
+          "value": "0.15"
+        },
+        {
+          "pieces": [
+            " ",
+            "0",
+            ".",
+            "2",
+            "0"
+          ],
+          "text": " 0.20",
+          "token_ids": [
+            220,
+            15,
+            13,
+            17,
+            15
+          ],
+          "value": "0.20"
+        },
+        {
+          "pieces": [
+            " ",
+            "0",
+            ".",
+            "2",
+            "5"
+          ],
+          "text": " 0.25",
+          "token_ids": [
+            220,
+            15,
+            13,
+            17,
+            20
+          ],
+          "value": "0.25"
+        }
+      ],
+      "token_len_counts": {
+        "5": 21
+      }
+    }
+  ],
+  "selected_values": [
+    {
+      "value": "0.00",
+      "variants": [
+        {
+          "name": "plain",
+          "pieces": [
+            "0",
+            ".",
+            "0",
+            "0"
+          ],
+          "text": "0.00",
+          "token_ids": [
+            15,
+            13,
+            15,
+            15
+          ]
+        },
+        {
+          "name": "leading_space",
+          "pieces": [
+            " ",
+            "0",
+            ".",
+            "0",
+            "0"
+          ],
+          "text": " 0.00",
+          "token_ids": [
+            220,
+            15,
+            13,
+            15,
+            15
+          ]
+        },
+        {
+          "name": "leading_newline",
+          "pieces": [
+            "\n",
+            "0",
+            ".",
+            "0",
+            "0"
+          ],
+          "text": "\n0.00",
+          "token_ids": [
+            198,
+            15,
+            13,
+            15,
+            15
+          ]
+        },
+        {
+          "name": "answer_newline",
+          "pieces": [
+            "Answer",
+            ":\n",
+            "0",
+            ".",
+            "0",
+            "0"
+          ],
+          "text": "Answer:\n0.00",
+          "token_ids": [
+            16141,
+            510,
+            15,
+            13,
+            15,
+            15
+          ]
+        },
+        {
+          "name": "json_after_comma",
+          "pieces": [
+            ",",
+            "0",
+            ".",
+            "0",
+            "0"
+          ],
+          "text": ",0.00",
+          "token_ids": [
+            11,
+            15,
+            13,
+            15,
+            15
+          ]
+        },
+        {
+          "name": "json_after_colon",
+          "pieces": [
+            ":",
+            "0",
+            ".",
+            "0",
+            "0"
+          ],
+          "text": ":0.00",
+          "token_ids": [
+            25,
+            15,
+            13,
+            15,
+            15
+          ]
+        }
+      ]
+    },
+    {
+      "value": "0.05",
+      "variants": [
+        {
+          "name": "plain",
+          "pieces": [
+            "0",
+            ".",
+            "0",
+            "5"
+          ],
+          "text": "0.05",
+          "token_ids": [
+            15,
+            13,
+            15,
+            20
+          ]
+        },
+        {
+          "name": "leading_space",
+          "pieces": [
+            " ",
+            "0",
+            ".",
+            "0",
+            "5"
+          ],
+          "text": " 0.05",
+          "token_ids": [
+            220,
+            15,
+            13,
+            15,
+            20
+          ]
+        },
+        {
+          "name": "leading_newline",
+          "pieces": [
+            "\n",
+            "0",
+            ".",
+            "0",
+            "5"
+          ],
+          "text": "\n0.05",
+          "token_ids": [
+            198,
+            15,
+            13,
+            15,
+            20
+          ]
+        },
+        {
+          "name": "answer_newline",
+          "pieces": [
+            "Answer",
+            ":\n",
+            "0",
+            ".",
+            "0",
+            "5"
+          ],
+          "text": "Answer:\n0.05",
+          "token_ids": [
+            16141,
+            510,
+            15,
+            13,
+            15,
+            20
+          ]
+        },
+        {
+          "name": "json_after_comma",
+          "pieces": [
+            ",",
+            "0",
+            ".",
+            "0",
+            "5"
+          ],
+          "text": ",0.05",
+          "token_ids": [
+            11,
+            15,
+            13,
+            15,
+            20
+          ]
+        },
+        {
+          "name": "json_after_colon",
+          "pieces": [
+            ":",
+            "0",
+            ".",
+            "0",
+            "5"
+          ],
+          "text": ":0.05",
+          "token_ids": [
+            25,
+            15,
+            13,
+            15,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "value": "0.10",
+      "variants": [
+        {
+          "name": "plain",
+          "pieces": [
+            "0",
+            ".",
+            "1",
+            "0"
+          ],
+          "text": "0.10",
+          "token_ids": [
+            15,
+            13,
+            16,
+            15
+          ]
+        },
+        {
+          "name": "leading_space",
+          "pieces": [
+            " ",
+            "0",
+            ".",
+            "1",
+            "0"
+          ],
+          "text": " 0.10",
+          "token_ids": [
+            220,
+            15,
+            13,
+            16,
+            15
+          ]
+        },
+        {
+          "name": "leading_newline",
+          "pieces": [
+            "\n",
+            "0",
+            ".",
+            "1",
+            "0"
+          ],
+          "text": "\n0.10",
+          "token_ids": [
+            198,
+            15,
+            13,
+            16,
+            15
+          ]
+        },
+        {
+          "name": "answer_newline",
+          "pieces": [
+            "Answer",
+            ":\n",
+            "0",
+            ".",
+            "1",
+            "0"
+          ],
+          "text": "Answer:\n0.10",
+          "token_ids": [
+            16141,
+            510,
+            15,
+            13,
+            16,
+            15
+          ]
+        },
+        {
+          "name": "json_after_comma",
+          "pieces": [
+            ",",
+            "0",
+            ".",
+            "1",
+            "0"
+          ],
+          "text": ",0.10",
+          "token_ids": [
+            11,
+            15,
+            13,
+            16,
+            15
+          ]
+        },
+        {
+          "name": "json_after_colon",
+          "pieces": [
+            ":",
+            "0",
+            ".",
+            "1",
+            "0"
+          ],
+          "text": ":0.10",
+          "token_ids": [
+            25,
+            15,
+            13,
+            16,
+            15
+          ]
+        }
+      ]
+    },
+    {
+      "value": "0.37",
+      "variants": [
+        {
+          "name": "plain",
+          "pieces": [
+            "0",
+            ".",
+            "3",
+            "7"
+          ],
+          "text": "0.37",
+          "token_ids": [
+            15,
+            13,
+            18,
+            22
+          ]
+        },
+        {
+          "name": "leading_space",
+          "pieces": [
+            " ",
+            "0",
+            ".",
+            "3",
+            "7"
+          ],
+          "text": " 0.37",
+          "token_ids": [
+            220,
+            15,
+            13,
+            18,
+            22
+          ]
+        },
+        {
+          "name": "leading_newline",
+          "pieces": [
+            "\n",
+            "0",
+            ".",
+            "3",
+            "7"
+          ],
+          "text": "\n0.37",
+          "token_ids": [
+            198,
+            15,
+            13,
+            18,
+            22
+          ]
+        },
+        {
+          "name": "answer_newline",
+          "pieces": [
+            "Answer",
+            ":\n",
+            "0",
+            ".",
+            "3",
+            "7"
+          ],
+          "text": "Answer:\n0.37",
+          "token_ids": [
+            16141,
+            510,
+            15,
+            13,
+            18,
+            22
+          ]
+        },
+        {
+          "name": "json_after_comma",
+          "pieces": [
+            ",",
+            "0",
+            ".",
+            "3",
+            "7"
+          ],
+          "text": ",0.37",
+          "token_ids": [
+            11,
+            15,
+            13,
+            18,
+            22
+          ]
+        },
+        {
+          "name": "json_after_colon",
+          "pieces": [
+            ":",
+            "0",
+            ".",
+            "3",
+            "7"
+          ],
+          "text": ":0.37",
+          "token_ids": [
+            25,
+            15,
+            13,
+            18,
+            22
+          ]
+        }
+      ]
+    },
+    {
+      "value": "0.50",
+      "variants": [
+        {
+          "name": "plain",
+          "pieces": [
+            "0",
+            ".",
+            "5",
+            "0"
+          ],
+          "text": "0.50",
+          "token_ids": [
+            15,
+            13,
+            20,
+            15
+          ]
+        },
+        {
+          "name": "leading_space",
+          "pieces": [
+            " ",
+            "0",
+            ".",
+            "5",
+            "0"
+          ],
+          "text": " 0.50",
+          "token_ids": [
+            220,
+            15,
+            13,
+            20,
+            15
+          ]
+        },
+        {
+          "name": "leading_newline",
+          "pieces": [
+            "\n",
+            "0",
+            ".",
+            "5",
+            "0"
+          ],
+          "text": "\n0.50",
+          "token_ids": [
+            198,
+            15,
+            13,
+            20,
+            15
+          ]
+        },
+        {
+          "name": "answer_newline",
+          "pieces": [
+            "Answer",
+            ":\n",
+            "0",
+            ".",
+            "5",
+            "0"
+          ],
+          "text": "Answer:\n0.50",
+          "token_ids": [
+            16141,
+            510,
+            15,
+            13,
+            20,
+            15
+          ]
+        },
+        {
+          "name": "json_after_comma",
+          "pieces": [
+            ",",
+            "0",
+            ".",
+            "5",
+            "0"
+          ],
+          "text": ",0.50",
+          "token_ids": [
+            11,
+            15,
+            13,
+            20,
+            15
+          ]
+        },
+        {
+          "name": "json_after_colon",
+          "pieces": [
+            ":",
+            "0",
+            ".",
+            "5",
+            "0"
+          ],
+          "text": ":0.50",
+          "token_ids": [
+            25,
+            15,
+            13,
+            20,
+            15
+          ]
+        }
+      ]
+    },
+    {
+      "value": "0.95",
+      "variants": [
+        {
+          "name": "plain",
+          "pieces": [
+            "0",
+            ".",
+            "9",
+            "5"
+          ],
+          "text": "0.95",
+          "token_ids": [
+            15,
+            13,
+            24,
+            20
+          ]
+        },
+        {
+          "name": "leading_space",
+          "pieces": [
+            " ",
+            "0",
+            ".",
+            "9",
+            "5"
+          ],
+          "text": " 0.95",
+          "token_ids": [
+            220,
+            15,
+            13,
+            24,
+            20
+          ]
+        },
+        {
+          "name": "leading_newline",
+          "pieces": [
+            "\n",
+            "0",
+            ".",
+            "9",
+            "5"
+          ],
+          "text": "\n0.95",
+          "token_ids": [
+            198,
+            15,
+            13,
+            24,
+            20
+          ]
+        },
+        {
+          "name": "answer_newline",
+          "pieces": [
+            "Answer",
+            ":\n",
+            "0",
+            ".",
+            "9",
+            "5"
+          ],
+          "text": "Answer:\n0.95",
+          "token_ids": [
+            16141,
+            510,
+            15,
+            13,
+            24,
+            20
+          ]
+        },
+        {
+          "name": "json_after_comma",
+          "pieces": [
+            ",",
+            "0",
+            ".",
+            "9",
+            "5"
+          ],
+          "text": ",0.95",
+          "token_ids": [
+            11,
+            15,
+            13,
+            24,
+            20
+          ]
+        },
+        {
+          "name": "json_after_colon",
+          "pieces": [
+            ":",
+            "0",
+            ".",
+            "9",
+            "5"
+          ],
+          "text": ":0.95",
+          "token_ids": [
+            25,
+            15,
+            13,
+            24,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "value": "1.00",
+      "variants": [
+        {
+          "name": "plain",
+          "pieces": [
+            "1",
+            ".",
+            "0",
+            "0"
+          ],
+          "text": "1.00",
+          "token_ids": [
+            16,
+            13,
+            15,
+            15
+          ]
+        },
+        {
+          "name": "leading_space",
+          "pieces": [
+            " ",
+            "1",
+            ".",
+            "0",
+            "0"
+          ],
+          "text": " 1.00",
+          "token_ids": [
+            220,
+            16,
+            13,
+            15,
+            15
+          ]
+        },
+        {
+          "name": "leading_newline",
+          "pieces": [
+            "\n",
+            "1",
+            ".",
+            "0",
+            "0"
+          ],
+          "text": "\n1.00",
+          "token_ids": [
+            198,
+            16,
+            13,
+            15,
+            15
+          ]
+        },
+        {
+          "name": "answer_newline",
+          "pieces": [
+            "Answer",
+            ":\n",
+            "1",
+            ".",
+            "0",
+            "0"
+          ],
+          "text": "Answer:\n1.00",
+          "token_ids": [
+            16141,
+            510,
+            16,
+            13,
+            15,
+            15
+          ]
+        },
+        {
+          "name": "json_after_comma",
+          "pieces": [
+            ",",
+            "1",
+            ".",
+            "0",
+            "0"
+          ],
+          "text": ",1.00",
+          "token_ids": [
+            11,
+            16,
+            13,
+            15,
+            15
+          ]
+        },
+        {
+          "name": "json_after_colon",
+          "pieces": [
+            ":",
+            "1",
+            ".",
+            "0",
+            "0"
+          ],
+          "text": ":1.00",
+          "token_ids": [
+            25,
+            16,
+            13,
+            15,
+            15
+          ]
+        }
+      ]
+    }
+  ],
+  "tokenizer_class": "Qwen2TokenizerFast",
+  "vocab_size": 151665
+}

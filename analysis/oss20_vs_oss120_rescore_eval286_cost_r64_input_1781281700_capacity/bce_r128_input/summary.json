@@ -1,0 +1,26 @@
+{
+  "cost_predictions": "/mnt/llmd/results/exps/aristides/reason/offline_router_swe_smith_train1500_real_eval286_cost_score_r64_qkvo_mlp_input_only_1781281700/eval286_cost_score/eval_predictions.jsonl",
+  "n_examples": 286,
+  "reward_predictions": "/mnt/llmd/results/exps/aristides/reason/offline_router_swe_smith_train1500_real_2route_oss20_vs_oss120_qwen3_embedding_8b_lora_reward_bce_r128_qkvo_mlp_input_only_10epoch_1781280696/train_qwen3_embedding_8b_lora_reward_bce_oss20_vs_oss120_r128_qkvo_mlp_input_only_10epoch/eval_predictions.jsonl",
+  "run_name": "bce_r128_input",
+  "skipped": {
+    "invalid": 0,
+    "missing_cost": 0,
+    "missing_eval": 0
+  },
+  "summary": {
+    "best_same_cost_cost": 0.0056534724440559445,
+    "best_same_cost_gain": 0.011114201383233269,
+    "best_same_cost_lambda": 5.0,
+    "best_same_cost_random_reward": 0.4084662181971863,
+    "best_same_cost_reward": 0.4195804195804196,
+    "best_utility": 0.3538824298513986,
+    "best_utility_gain_vs_always": 0.0034037867132867272,
+    "best_utility_lambda": 12.5,
+    "mean_positive_same_cost_gain": 0.004459863626762658,
+    "n_examples": 286,
+    "positive_same_cost_gain_lambdas": 7,
+    "route_labels": "[\"solver:openai/gpt-oss-20b\", \"solver:openai/gpt-oss-120b\"]",
+    "skipped": "{\"invalid\": 0, \"missing_cost\": 0, \"missing_eval\": 0}"
+  }
+}

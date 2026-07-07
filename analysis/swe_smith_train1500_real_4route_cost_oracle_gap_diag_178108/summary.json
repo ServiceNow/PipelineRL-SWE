@@ -1,0 +1,43 @@
+{
+  "cost_run": "/mnt/llmd/results/exps/aristides/reason/offline_router_swe_smith_trace_4route_qwen3_embedding_8b_lora_expert_cost_only_normalized_10epoch_1780967656/train_qwen3_embedding_8b_lora_expert_cost_only_normalized_10epoch",
+  "dataset_dir": "/mnt/llmd/results/exps/aristides/reason/offline_router_swe_smith_train1500_real_labels_4route_1780639659/collect",
+  "fixed_train_costs": [
+    0.0002770223909249568,
+    0.0027746141256544486,
+    0.0043178074694589855,
+    0.014061715811518336
+  ],
+  "lambdas": [
+    0.0,
+    5.0,
+    10.0,
+    15.0,
+    20.0,
+    25.0,
+    30.0,
+    35.0,
+    40.0,
+    45.0,
+    50.0,
+    55.0,
+    60.0,
+    75.0,
+    100.0,
+    150.0,
+    200.0
+  ],
+  "missing_train_cost_prediction_dump": true,
+  "q_run": "/mnt/llmd/results/exps/aristides/reason/offline_router_swe_smith_train1500_real_4route_qwen3_embedding_8b_lora_state_policy_allsubsets_5epoch_1780909738/train_qwen3_embedding_8b_lora_state_policy_5epoch",
+  "route_labels": [
+    "scout:Qwen/Qwen3-4B-Instruct-2507",
+    "solver:openai/gpt-oss-20b",
+    "solver:Qwen/Qwen3-Coder-30B-A3B-Instruct",
+    "solver:openai/gpt-oss-120b"
+  ],
+  "route_output_cost_weights": [
+    2.78e-07,
+    1.299e-06,
+    4.64e-06,
+    1.113e-05
+  ]
+}

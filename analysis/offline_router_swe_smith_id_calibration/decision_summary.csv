@@ -1,0 +1,4 @@
+run_name,lambda,has_costs,n_eval,chosen_mean_true_reward,chosen_mean_true_utility,oracle_mean_true_utility,oracle_capture,oracle_regret,oracle_match_rate,select_rate_route_0,always_route_0_mean_true_reward,always_route_0_label,select_rate_route_1,always_route_1_mean_true_reward,always_route_1_label
+vector,0.0,False,500,0.6056987410336733,0.6056987410336733,0.6455845161974431,0.9382175777716898,0.039885775163769725,0.832,0.988,0.6079291134625673,primary_model,0.012,0.31239421020820735,expert_0:openai/gpt-oss-120b
+scalar,0.0,False,500,0.6079291134625673,0.6079291134625673,0.6455845161974431,0.9416723886801532,0.03765540273487568,0.84,1.0,0.6079291134625673,primary_model,0.0,0.31239421020820735,expert_0:openai/gpt-oss-120b
+bin,0.0,False,500,0.6079291134625673,0.6079291134625673,0.6455845161974431,0.9416723886801532,0.03765540273487568,0.84,1.0,0.6079291134625673,primary_model,0.0,0.31239421020820735,expert_0:openai/gpt-oss-120b

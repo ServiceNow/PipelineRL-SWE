@@ -1,0 +1,66 @@
+{
+  "calibrator_models": [
+    "route_prior",
+    "route_scalar",
+    "route_vector"
+  ],
+  "instance_mode": "intersection",
+  "l2": 1.0,
+  "lambda_values": [
+    0.0,
+    1e-05,
+    2e-05,
+    5e-05,
+    0.0001,
+    0.0002
+  ],
+  "n_examples": 276,
+  "n_export_instances": 369,
+  "n_folds": 5,
+  "n_reported_intersection": 276,
+  "n_reported_union": 361,
+  "notes": [
+    "All calibrated scores are out-of-fold by instance.",
+    "post_* policies use post-scout accounting and include scout cost.",
+    "input_*_direct_accounting policies route from the original input and do not pay scout cost unless scout is selected.",
+    "input_*_hidden_scout_accounting policies are information-state ablations: they pay scout cost but hide the scout attempt from the router."
+  ],
+  "output_dir": "router_analysis/real_swebench_verified_3route_1779753111/calibration_cv",
+  "report_summary": {
+    "gemini": {
+      "reported_total": 347,
+      "resolved": 182,
+      "score": 0.5244956772334294,
+      "unresolved": 165
+    },
+    "oss": {
+      "reported_total": 319,
+      "resolved": 180,
+      "score": 0.5642633228840125,
+      "unresolved": 139
+    },
+    "scout": {
+      "reported_total": 314,
+      "resolved": 25,
+      "score": 0.07961783439490445,
+      "unresolved": 289
+    }
+  },
+  "route_cost_weights": {
+    "gemini": 20.0,
+    "oss": 3.0,
+    "scout": 1.0
+  },
+  "route_labels": [
+    "primary_model",
+    "expert_0:openai/gpt-oss-120b",
+    "expert_0:google/gemini-3-flash-preview"
+  ],
+  "route_names": [
+    "scout",
+    "oss",
+    "gemini"
+  ],
+  "seed": 17,
+  "skipped": {}
+}

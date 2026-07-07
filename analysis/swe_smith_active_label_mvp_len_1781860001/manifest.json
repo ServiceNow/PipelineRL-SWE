@@ -1,0 +1,61 @@
+{
+  "budgets": [
+    0,
+    16,
+    32,
+    64,
+    128
+  ],
+  "calibrations": [
+    "global",
+    "global_len",
+    "route_intercept",
+    "route_intercept_len"
+  ],
+  "n_attempts": 1783,
+  "n_splits": 30,
+  "portfolios": {
+    "20b_120b_x3": {
+      "candidates_per_id": 6,
+      "n_complete_ids": 148,
+      "routes": [
+        "OSS-20B",
+        "OSS-120B"
+      ]
+    },
+    "20b_x3": {
+      "candidates_per_id": 3,
+      "n_complete_ids": 148,
+      "routes": [
+        "OSS-20B"
+      ]
+    },
+    "all_4route_x3": {
+      "candidates_per_id": 12,
+      "n_complete_ids": 148,
+      "routes": [
+        "Qwen3-4B",
+        "OSS-20B",
+        "Qwen3-Coder-30B-A3B",
+        "OSS-120B"
+      ]
+    }
+  },
+  "report_root": "router_analysis/uploaded_eval_full_20260617/swe_smith_multirollout_eval150_1781382734/logs/run_evaluation",
+  "route_cost_weights": [
+    2.78e-07,
+    1.299e-06,
+    4.64e-06,
+    1.113e-05
+  ],
+  "scores_jsonl": "/mnt/llmd/results/exps/aristides/reason/score_swe_smith_multirollout_eval150_proxy_verifier_soft_bce_1781735614/scores/eval_verifier_scores.jsonl",
+  "seed": 29,
+  "strategies": [
+    "random",
+    "uncertainty",
+    "top2_margin",
+    "route_balanced_random",
+    "high_score"
+  ],
+  "train_frac": 0.5
+}

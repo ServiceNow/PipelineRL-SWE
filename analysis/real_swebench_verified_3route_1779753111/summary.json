@@ -1,0 +1,104 @@
+{
+  "lambda_values": [
+    0.0,
+    1e-05,
+    2e-05,
+    5e-05,
+    0.0001,
+    0.0002
+  ],
+  "missing_from_reports_by_route": {
+    "gemini": 22,
+    "oss": 50,
+    "scout": 55
+  },
+  "n_export_instances": 369,
+  "n_joined_intersection": 276,
+  "n_reported_intersection": 276,
+  "n_reported_union": 361,
+  "notes": [
+    "All routed-policy metrics in real_policy_utility_on_intersection.csv use the 276-instance intersection across scout, OSS, and Gemini harness reports.",
+    "Always policies use direct cost accounting. Router/oracle after-scout policies include scout cost. Cascade policies include every called route in the fixed order.",
+    "Real reward is binary pass/fail from SWE-Bench harness reports."
+  ],
+  "outcome_pattern_counts": [
+    {
+      "count": 92,
+      "fraction": 0.3333333333333333,
+      "real_pass_pattern_scout_oss_gemini": "000"
+    },
+    {
+      "count": 20,
+      "fraction": 0.07246376811594203,
+      "real_pass_pattern_scout_oss_gemini": "001"
+    },
+    {
+      "count": 30,
+      "fraction": 0.10869565217391304,
+      "real_pass_pattern_scout_oss_gemini": "010"
+    },
+    {
+      "count": 112,
+      "fraction": 0.4057971014492754,
+      "real_pass_pattern_scout_oss_gemini": "011"
+    },
+    {
+      "count": 2,
+      "fraction": 0.007246376811594203,
+      "real_pass_pattern_scout_oss_gemini": "100"
+    },
+    {
+      "count": 1,
+      "fraction": 0.0036231884057971015,
+      "real_pass_pattern_scout_oss_gemini": "101"
+    },
+    {
+      "count": 3,
+      "fraction": 0.010869565217391304,
+      "real_pass_pattern_scout_oss_gemini": "110"
+    },
+    {
+      "count": 16,
+      "fraction": 0.057971014492753624,
+      "real_pass_pattern_scout_oss_gemini": "111"
+    }
+  ],
+  "report_summary": [
+    {
+      "reported_score": 0.07961783439490445,
+      "reported_total": 314,
+      "resolved": 25,
+      "route": "scout",
+      "unresolved": 289
+    },
+    {
+      "reported_score": 0.5642633228840125,
+      "reported_total": 319,
+      "resolved": 180,
+      "route": "oss",
+      "unresolved": 139
+    },
+    {
+      "reported_score": 0.5244956772334294,
+      "reported_total": 347,
+      "resolved": 182,
+      "route": "gemini",
+      "unresolved": 165
+    }
+  ],
+  "route_cost_weights": {
+    "gemini": 20.0,
+    "oss": 3.0,
+    "scout": 1.0
+  },
+  "route_labels": [
+    "primary_model",
+    "expert_0:openai/gpt-oss-120b",
+    "expert_0:google/gemini-3-flash-preview"
+  ],
+  "route_names": [
+    "scout",
+    "oss",
+    "gemini"
+  ]
+}

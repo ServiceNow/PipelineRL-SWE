@@ -1,0 +1,9 @@
+k,models,oracle_rate,oracle_pass,best_single_rate
+1,Qwen3-8B,0.194,97,0.194
+2,Qwen3-8B + Qwen3-4B,0.27,135,0.198
+3,Qwen3-8B + Qwen3-4B + Qwen3-Coder-Next,0.366,183,0.242
+4,Qwen3-8B + Qwen3-4B + Qwen3-Coder-Next + Qwen3-14B,0.422,211,0.276
+5,Qwen3-8B + Qwen3-4B + Qwen3-Coder-Next + Qwen3-14B + Qwen3-32B,0.482,241,0.334
+6,Qwen3-8B + Qwen3-4B + Qwen3-Coder-Next + Qwen3-14B + Qwen3-32B + OSS-20B,0.526,263,0.344
+7,Qwen3-8B + Qwen3-4B + Qwen3-Coder-Next + Qwen3-14B + Qwen3-32B + OSS-20B + Qwen3-Coder-30B,0.552,276,0.358
+8,Qwen3-8B + Qwen3-4B + Qwen3-Coder-Next + Qwen3-14B + Qwen3-32B + OSS-20B + Qwen3-Coder-30B + OSS-120B,0.586,293,0.422

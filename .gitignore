@@ -187,7 +187,7 @@ data/
 cache/
 dump.rdb
 
-router_analysis
+router_analysis/
 eval_exports
 overleaf
 res

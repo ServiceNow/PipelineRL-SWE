@@ -1,0 +1,4 @@
+route,resolved,unresolved,reported_total,reported_score
+scout,25,289,314,0.07961783439490445
+oss,180,139,319,0.5642633228840125
+gemini,182,165,347,0.5244956772334294
