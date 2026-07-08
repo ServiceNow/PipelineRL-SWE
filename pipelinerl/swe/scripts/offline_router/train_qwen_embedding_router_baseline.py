@@ -1322,6 +1322,22 @@ def _compute_predicted_cost_utility_report(
     }
 
 
+def _ranking_loss(probs: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+    """Bradley-Terry pairwise ranking: for each pair (i,j) where route i succeeds and j fails,
+    push -log σ(prob[i] - prob[j]). Averaged over all ordered pairs and batch."""
+    total = torch.zeros(1, device=probs.device, dtype=probs.dtype)
+    n_pairs = 0
+    for i in range(probs.shape[1]):
+        for j in range(probs.shape[1]):
+            if i == j:
+                continue
+            mask = (targets[:, i] > 0.5) & (targets[:, j] < 0.5)
+            if mask.any():
+                total = total + (-torch.log(torch.sigmoid(probs[mask, i] - probs[mask, j]) + 1e-8)).mean()
+                n_pairs += 1
+    return total / max(n_pairs, 1)
+
+
 def _delta_loss(preds: torch.Tensor, targets: torch.Tensor, huber_delta: float) -> torch.Tensor:
     if preds.shape[1] < 2:
         raise ValueError("Delta auxiliary loss expects at least two routes")
@@ -1404,6 +1420,8 @@ def _compute_train_loss(
     cost_delta_aux_weight: float,
     predict_zero_reward_failure: bool,
     zero_reward_bce_weight: float,
+    ranking_aux_weight: float = 0.0,
+    discrim_upweight: float = 1.0,
 ) -> torch.Tensor:
     if objective == "cost_mse":
         if not predict_costs or cost_logits is None:
@@ -1430,11 +1448,22 @@ def _compute_train_loss(
             route_weight=float(hierarchical_route_weight),
             reduction="mean",
         )
-    elif objective in {"reward_bce", "reward_bce_delta_aux"}:
-        reward_loss = (
-            F.binary_cross_entropy_with_logits(reward_logits, targets.float())
-            * float(reward_bce_weight)
-        )
+    elif objective in {"reward_bce", "reward_bce_delta_aux", "reward_bce_ranking"}:
+        if float(discrim_upweight) > 1.0:
+            # Per-sample weighted BCE: upweight tasks where routing matters
+            # (at least one route succeeds but not all routes succeed)
+            is_discrim = targets.bool().any(dim=1) & ~targets.bool().all(dim=1)
+            w = torch.ones(targets.shape[0], device=targets.device, dtype=targets.dtype)
+            w[is_discrim] = float(discrim_upweight)
+            per_sample = F.binary_cross_entropy_with_logits(
+                reward_logits, targets.float(), reduction="none"
+            ).mean(dim=1)
+            reward_loss = (per_sample * w).sum() / w.sum() * float(reward_bce_weight)
+        else:
+            reward_loss = (
+                F.binary_cross_entropy_with_logits(reward_logits, targets.float())
+                * float(reward_bce_weight)
+            )
     else:
         reward_loss = F.mse_loss(reward_logits, targets.float()) * float(reward_mse_weight)
     if objective == "reward_mse_delta_aux":
@@ -1446,6 +1475,9 @@ def _compute_train_loss(
         reward_loss = reward_loss + (
             float(delta_aux_weight) * _delta_loss(reward_probs, targets.float(), float(delta_aux_huber_delta))
         )
+    if objective == "reward_bce_ranking" or float(ranking_aux_weight) > 0.0:
+        reward_probs = torch.sigmoid(reward_logits)
+        reward_loss = reward_loss + float(ranking_aux_weight) * _ranking_loss(reward_probs, targets.float())
     if predict_costs:
         if cost_logits is None:
             raise ValueError("predict_costs=true but model did not return cost logits")
@@ -1892,6 +1924,8 @@ def main() -> None:
     parser.add_argument("--reward-bce-weight", type=float, default=1.0)
     parser.add_argument("--delta-aux-weight", type=float, default=1.0)
     parser.add_argument("--delta-aux-huber-delta", type=float, default=0.0)
+    parser.add_argument("--ranking-aux-weight", type=float, default=0.0)
+    parser.add_argument("--discrim-upweight", type=float, default=1.0)
     parser.add_argument("--predict-costs", action="store_true")
     parser.add_argument(
         "--cost-route-idx",
@@ -2447,6 +2481,8 @@ def main() -> None:
                         cost_delta_aux_weight=float(args.cost_delta_aux_weight),
                         predict_zero_reward_failure=bool(args.predict_zero_reward_failure),
                         zero_reward_bce_weight=float(args.zero_reward_bce_weight),
+                        ranking_aux_weight=float(args.ranking_aux_weight),
+                        discrim_upweight=float(args.discrim_upweight),
                     )
                     accelerator.backward(loss)
                     optimizer.step()

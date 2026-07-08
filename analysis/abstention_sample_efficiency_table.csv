@@ -1,0 +1,11 @@
+Method,AUC,@30%,@50%,@70%
+Random,0.402,47.0,47.2,47.9
+Input-only (real N=1500),0.483,54.3,59.9,65.1
+"Post-scout (proxy only, no real FT)",0.0,,,
+Cascade verifier (real N=1500),0.537,57.8,64.1,72.1
+Post-scout proxy+real (N=50),0.512,54.8,61.3,70.9
+Post-scout proxy+real (N=100),0.508,55.3,61.3,69.8
+Post-scout proxy+real (N=200),0.512,55.3,61.3,68.6
+Post-scout proxy+real (N=500),0.518,54.8,61.3,72.1
+Post-scout proxy+real (N=1000),0.522,55.3,63.4,74.4
+Post-scout (real N=1500),0.528,54.3,64.8,75.6
