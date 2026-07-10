@@ -1675,7 +1675,7 @@ def _evaluate(
             )
             preds = torch.softmax(logits, dim=-1)
             class_pred_scores = preds
-        elif objective in {"reward_bce", "reward_bce_delta_aux"}:
+        elif objective in {"reward_bce", "reward_bce_delta_aux", "reward_bce_ranking"}:
             loss = F.binary_cross_entropy_with_logits(logits, targets, reduction="sum")
             preds = torch.sigmoid(logits)
             class_pred_scores = preds
@@ -1823,6 +1823,7 @@ def main() -> None:
             "reward_mse_delta_aux",
             "reward_bce",
             "reward_bce_delta_aux",
+            "reward_bce_ranking",
             "route_classifier",
             "route_classifier_hierarchical",
             "joint_outcome_2route",
@@ -2013,7 +2014,7 @@ def main() -> None:
             raise ValueError("objective=joint_outcome_2route requires --class-target-mode=joint_success_2route")
         joint_outcome_class_labels = _joint_outcome_class_labels(route_labels)
         model_output_dim = len(joint_outcome_class_labels)
-    if args.objective in {"reward_mse_delta_aux", "reward_bce_delta_aux"} and target_dim < 2:
+    if args.objective in {"reward_mse_delta_aux", "reward_bce_delta_aux", "reward_bce_ranking"} and target_dim < 2:
         raise ValueError(f"{args.objective} expects at least two routes")
     if args.objective == "cost_mse" and not args.predict_costs:
         raise ValueError("objective=cost_mse requires --predict-costs")
