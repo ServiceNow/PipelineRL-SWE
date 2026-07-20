@@ -1877,7 +1877,7 @@ def main() -> None:
         help="Loss weight for the conditional route CE term in objective=route_classifier_hierarchical.",
     )
     parser.add_argument("--max-seq-length", type=int, default=24000)
-    parser.add_argument("--input-mode", choices=["post_primary", "input_only"], default="post_primary")
+    parser.add_argument("--input-mode", choices=["post_primary", "input_only", "post_120b", "post_120b_no_think"], default="post_primary")
     parser.add_argument(
         "--embedding-input-layout",
         choices=["single", "late_fusion", "late_fusion_prompt_only", "late_fusion_scout_only", "semantic_late_fusion", "semantic_problem_only", "semantic_code_only"],

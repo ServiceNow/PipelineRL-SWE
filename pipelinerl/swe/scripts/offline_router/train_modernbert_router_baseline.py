@@ -6,6 +6,7 @@ import json
 import math
 import os
 import random
+import re
 from pathlib import Path
 from typing import Any
 
@@ -46,6 +47,18 @@ def _get_primary_output_text(row: dict[str, Any]) -> str | None:
     return primary_output_text if isinstance(primary_output_text, str) else None
 
 
+def _get_route_output_text(row: dict[str, Any], route_idx: int, strip_think: bool = False) -> str | None:
+    route_outputs = row.get("route_outputs")
+    if route_outputs is None or len(route_outputs) <= route_idx:
+        return None
+    text = route_outputs[route_idx]
+    if not isinstance(text, str):
+        return None
+    if strip_think:
+        text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+    return text if text else None
+
+
 def _build_input_text(
     row: dict[str, Any],
     route_labels: list[str],
@@ -65,6 +78,22 @@ def _build_input_text(
             f"{route_legend}\n\n"
             "[Original Repair Prompt]\n"
             f"{prompt_text}"
+        )
+    if input_mode in {"post_120b", "post_120b_no_think"}:
+        strip = input_mode == "post_120b_no_think"
+        route_output_text = _get_route_output_text(row, route_idx=3, strip_think=strip)
+        if not isinstance(route_output_text, str):
+            return None
+        return (
+            "Predict the realized proxy rewards for each model route.\n"
+            "The proxy reward is computed after the repair run by comparing the route's patch against the gold patch.\n"
+            "The 120B model attempt is shown as context for all route predictions.\n\n"
+            "[Route Order]\n"
+            f"{route_legend}\n\n"
+            "[Original Repair Prompt]\n"
+            f"{prompt_text}\n\n"
+            "[120B Model Attempt]\n"
+            f"{route_output_text}"
         )
     if input_mode != "post_primary":
         raise ValueError(f"Unsupported input_mode={input_mode!r}")
