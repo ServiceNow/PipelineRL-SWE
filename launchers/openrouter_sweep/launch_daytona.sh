@@ -60,6 +60,7 @@ python ${REPO_ROOT}/pipelinerl/swe/scripts/offline_router/run_swesmith_eval_dayt
   --predictions_path ${jsonl_file} \
   --run_id ${run_id} \
   --concurrency ${CONCURRENCY} \
+  --redo_existing \
   2>&1 | tee ${FILTERED_DIR}/${slug}_daytona.log
 SCRIPT_EOF
 done
