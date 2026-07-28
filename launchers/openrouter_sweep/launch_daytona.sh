@@ -22,7 +22,7 @@ TIMESTAMP=$(date +%s)
 PREDICTIONS_DIR=${PREDICTIONS_DIR:?Need PREDICTIONS_DIR set to the collect output dir}
 FILTERED_DIR="${PREDICTIONS_DIR}/filtered"
 
-CONCURRENCY=${CONCURRENCY:-15}
+CONCURRENCY=${CONCURRENCY:-8}
 RUN_ID_PREFIX="or_sweep"
 
 # Load DAYTONA_API_KEY from .env if not already set
@@ -40,6 +40,12 @@ echo "=== Filtering predictions to common intersection ==="
   --predictions-dir "${PREDICTIONS_DIR}" \
   --output-dir "${FILTERED_DIR}" \
   --exclude laguna
+echo ""
+
+# --- Step 1b: convert raw text outputs to proper git diffs ---
+echo "=== Converting search/replace text to git diffs ==="
+"${PYTHON}" "${REPO_ROOT}/pipelinerl/swe/scripts/openrouter_sweep/convert_text_to_patches.py" \
+  --predictions-dir "${FILTERED_DIR}"
 echo ""
 
 # --- Step 2: write a runner script into the filtered dir ---

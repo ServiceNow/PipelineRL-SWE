@@ -30,6 +30,7 @@ from pipelinerl.swe.scripts.repair_eval_utils import (
     chat_completion,
     extract_search_replace_edits,
 )
+from pipelinerl.swe.utils.repair_utils import apply_edits_to_files, generate_unified_diff
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -131,6 +132,30 @@ def load_existing_predictions(out_path: Path) -> set[str]:
     return done
 
 
+def _edits_to_git_diff(file_contents: dict[str, str], edits: list[dict]) -> str:
+    if not edits:
+        return ""
+    try:
+        new_contents = apply_edits_to_files(file_contents, edits, silent=True)
+    except Exception:
+        return ""
+    parts = []
+    for path, new_code in new_contents.items():
+        old_code = file_contents.get(path, "")
+        if old_code == new_code:
+            continue
+        hunks = generate_unified_diff(old_code, new_code)
+        if not hunks:
+            continue
+        parts.append(
+            f"diff --git a/{path} b/{path}\n"
+            f"--- a/{path}\n"
+            f"+++ b/{path}\n"
+            f"{hunks}"
+        )
+    return "\n".join(parts)
+
+
 async def _infer_one(
     session: aiohttp.ClientSession,
     model_id: str,
@@ -160,9 +185,10 @@ async def _infer_one(
             logger.warning("model=%s problem=%s error=%s", model_id, problem_id, exc)
             return None
         edits = extract_search_replace_edits(text or "")
+        patch = _edits_to_git_diff(file_contents, edits)
         return {
             "instance_id": problem_id,
-            "model_patch": text or "",
+            "model_patch": patch,
             "model_name_or_path": model_id,
             "prompt_tokens": usage.get("prompt_tokens", 0),
             "completion_tokens": usage.get("completion_tokens", 0),
