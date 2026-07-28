@@ -1,0 +1,41 @@
+{
+  "n": 217,
+  "signals": {
+    "mean_token_logprob (\u2191 = confident)": {
+      "spearman_120b": -0.09207558354858911,
+      "auc_120b": 0.44677227048203033,
+      "spearman_claude": -0.19895025284110188,
+      "auc_claude": 0.3846944016435542
+    },
+    "neg_mean_entropy (\u2191 = confident)": {
+      "spearman_120b": -0.0654104945529177,
+      "auc_120b": 0.4621870209504343,
+      "spearman_claude": -0.1704443888482788,
+      "auc_claude": 0.4012155452833419
+    },
+    "neg_early_entropy (\u2191 = confident)": {
+      "spearman_120b": 0.17811100881639078,
+      "auc_120b": 0.6029637199795606,
+      "spearman_claude": 0.11121717920515939,
+      "auc_claude": 0.5644581407293272
+    },
+    "neg_output_length (\u2191 = confident)": {
+      "spearman_120b": 0.277407028482431,
+      "auc_120b": 0.660364503491739,
+      "spearman_claude": 0.20958585700930915,
+      "auc_claude": 0.6214689265536723
+    },
+    "PS trained head": {
+      "spearman_120b": 0.3739055879422079,
+      "auc_120b": 0.7161045818429569,
+      "spearman_claude": 0.2388053492272583,
+      "auc_claude": 0.6383752782057867
+    },
+    "IO trained head": {
+      "spearman_120b": 0.23181854145500194,
+      "auc_120b": 0.6340061318344404,
+      "spearman_claude": 0.2122514310203164,
+      "auc_claude": 0.6230097586029789
+    }
+  }
+}
