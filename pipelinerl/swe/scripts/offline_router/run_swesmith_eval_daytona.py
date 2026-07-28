@@ -169,10 +169,35 @@ def load_rows(path: str) -> list[dict[str, Any]]:
     raise ValueError(f"Expected .json or .jsonl, got {path}")
 
 
+ALL_LANGUAGE_DATASETS = [
+    "SWE-bench/SWE-smith-py",
+    "SWE-bench/SWE-smith-rs",
+    "SWE-bench/SWE-smith-java",
+    "SWE-bench/SWE-smith-go",
+]
+
+
 def load_dataset_hf(dataset_name: str, split: str) -> list[dict[str, Any]]:
     from datasets import load_dataset
     ds = load_dataset(dataset_name, split=split)
     return list(ds)
+
+
+def load_datasets_hf(dataset_names: list[str], split: str) -> dict[str, Any]:
+    from datasets import load_dataset
+    merged: dict[str, Any] = {}
+    for name in dataset_names:
+        print(f"Loading HuggingFace dataset: {name} / {split}")
+        try:
+            ds = load_dataset(name, split=split)
+            for row in ds:
+                iid = row.get(KEY_INSTANCE_ID)
+                if iid and iid not in merged:
+                    merged[iid] = row
+            print(f"  → {len(ds)} instances (total merged so far: {len(merged)})")
+        except Exception as exc:
+            print(f"  [warn] failed to load {name}: {exc}")
+    return merged
 
 
 def enrich_with_file_contents(dataset: dict[str, Any], bugged_context_path: str) -> None:
@@ -355,7 +380,9 @@ def main() -> None:
     parser.add_argument("--predictions_path", required=True)
     parser.add_argument("--run_id", required=True)
     parser.add_argument("--dataset_path", default=None, help="Local .json/.jsonl or omit to fetch from HF")
-    parser.add_argument("--hf_dataset", default="SWE-bench/SWE-smith-py", help="HuggingFace dataset name")
+    parser.add_argument("--hf_dataset", default=None, help="Single HuggingFace dataset (legacy; prefer --hf_datasets)")
+    parser.add_argument("--hf_datasets", nargs="+", default=None,
+                        help="HuggingFace dataset names to load in sequence and merge (default: all language splits)")
     parser.add_argument("--hf_split", default="train")
     parser.add_argument("--concurrency", type=int, default=50)
     parser.add_argument("--f2p_only", action="store_true", default=True)
@@ -372,10 +399,14 @@ def main() -> None:
 
     if args.dataset_path:
         dataset_rows = load_rows(args.dataset_path)
-    else:
+        dataset = {row[KEY_INSTANCE_ID]: row for row in dataset_rows}
+    elif args.hf_dataset:
         print(f"Fetching dataset from HuggingFace: {args.hf_dataset} / {args.hf_split}")
         dataset_rows = load_dataset_hf(args.hf_dataset, args.hf_split)
-    dataset = {row[KEY_INSTANCE_ID]: row for row in dataset_rows}
+        dataset = {row[KEY_INSTANCE_ID]: row for row in dataset_rows}
+    else:
+        names = args.hf_datasets or ALL_LANGUAGE_DATASETS
+        dataset = load_datasets_hf(names, args.hf_split)
 
     missing = [iid for iid in predictions if iid not in dataset]
     if missing:

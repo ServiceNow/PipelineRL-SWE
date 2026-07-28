@@ -2,6 +2,9 @@
 # Launch Daytona eval jobs for all model JSONL files produced by launch_collect.sh.
 # Submits one EAI job per model; they run in parallel.
 #
+# Before submitting, filters all prediction files to the common instance-ID
+# intersection (excluding laguna), so every model is evaluated on the same set.
+#
 # Daytona writes to logs/run_evaluation/<run_id>/report.json (relative to REPO_ROOT).
 # This script uses deterministic run_ids (or_sweep_<slug>) so the analysis script
 # can find them without a manifest file.
@@ -12,21 +15,32 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "${SCRIPT_DIR}/../.." && pwd)
+PYTHON=/home/toolkit/.conda/envs/pipeline-rl/bin/python3
 
 TIMESTAMP=$(date +%s)
 
 # Directory containing per-model *.jsonl prediction files from launch_collect.sh
 PREDICTIONS_DIR=${PREDICTIONS_DIR:?Need PREDICTIONS_DIR set to the collect output dir}
+FILTERED_DIR="${PREDICTIONS_DIR}/filtered"
 
-# SWE-smith HuggingFace dataset name (used by Daytona for test sandboxes)
-HF_DATASET=${HF_DATASET:-SWE-bench/SWE-smith-py}
 CONCURRENCY=${CONCURRENCY:-50}
 
 # Daytona reports land at: logs/run_evaluation/<run_id>/ (relative to REPO_ROOT)
 # We use deterministic run_ids so the analysis script can find them.
 RUN_ID_PREFIX="or_sweep"
 
-for jsonl_file in "${PREDICTIONS_DIR}"/*.jsonl; do
+# --- Step 1: filter to common intersection (runs locally, not as a job) ---
+echo "=== Filtering predictions to common intersection ==="
+"${PYTHON}" "${REPO_ROOT}/pipelinerl/swe/scripts/openrouter_sweep/filter_to_intersection.py" \
+  --predictions-dir "${PREDICTIONS_DIR}" \
+  --output-dir "${FILTERED_DIR}" \
+  --exclude laguna
+
+echo ""
+
+# --- Step 2: submit one Daytona job per filtered model JSONL ---
+echo "=== Submitting Daytona eval jobs ==="
+for jsonl_file in "${FILTERED_DIR}"/*.jsonl; do
   [[ -f "${jsonl_file}" ]] || continue
   slug=$(basename "${jsonl_file}" .jsonl)
   run_id="${RUN_ID_PREFIX}_${slug}"
@@ -48,9 +62,8 @@ for jsonl_file in "${PREDICTIONS_DIR}"/*.jsonl; do
       python pipelinerl/swe/scripts/offline_router/run_swesmith_eval_daytona.py \
         --predictions_path ${jsonl_file} \
         --run_id ${run_id} \
-        --hf_dataset ${HF_DATASET} \
         --concurrency ${CONCURRENCY} \
-      2>&1 | tee ${PREDICTIONS_DIR}/${slug}_daytona.log"
+      2>&1 | tee ${FILTERED_DIR}/${slug}_daytona.log"
 
   sleep 2  # Stagger submissions slightly
 done
@@ -64,4 +77,4 @@ echo "  python pipelinerl/swe/scripts/openrouter_sweep/analyze_openrouter_sweep.
 echo "    --daytona-log-dir ${REPO_ROOT}/logs/run_evaluation \\"
 echo "    --run-id-prefix or_sweep \\"
 echo "    --existing-parquet-dir <eval parquet dir> \\"
-echo "    --output-dir ${PREDICTIONS_DIR}/analysis"
+echo "    --output-dir ${FILTERED_DIR}/analysis"
