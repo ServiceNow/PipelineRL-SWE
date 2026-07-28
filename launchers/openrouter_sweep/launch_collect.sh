@@ -38,6 +38,7 @@ make -C "${REPO_ROOT}" job \
   SNAPSHOT=1 \
   NPROC=1 \
   GPU=0 \
+  GPU_MEM=0 \
   CPU=8 \
   CPU_MEM=32 \
   COMMAND="cd ${REPO_ROOT}; mkdir -p ${OUTPUT_DIR}; \

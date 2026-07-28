@@ -41,6 +41,7 @@ for jsonl_file in "${PREDICTIONS_DIR}"/*.jsonl; do
     SNAPSHOT=1 \
     NPROC=1 \
     GPU=0 \
+    GPU_MEM=0 \
     CPU=8 \
     CPU_MEM=32 \
     COMMAND="cd ${REPO_ROOT}; \
