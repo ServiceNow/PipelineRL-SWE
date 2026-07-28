@@ -22,7 +22,7 @@ TIMESTAMP=$(date +%s)
 PREDICTIONS_DIR=${PREDICTIONS_DIR:?Need PREDICTIONS_DIR set to the collect output dir}
 FILTERED_DIR="${PREDICTIONS_DIR}/filtered"
 
-CONCURRENCY=${CONCURRENCY:-50}
+CONCURRENCY=${CONCURRENCY:-15}
 RUN_ID_PREFIX="or_sweep"
 
 # Load DAYTONA_API_KEY from .env if not already set
