@@ -33,27 +33,33 @@ echo "=== Filtering predictions to common intersection ==="
   --exclude laguna
 echo ""
 
-# --- Step 2: build sequential eval command for all models ---
-EVAL_CMDS=""
+# --- Step 2: write a runner script into the filtered dir ---
+RUNNER="${FILTERED_DIR}/run_daytona_eval.sh"
+cat > "${RUNNER}" << 'SCRIPT_EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")"
+SCRIPT_EOF
+
 for jsonl_file in "${FILTERED_DIR}"/*.jsonl; do
   [[ -f "${jsonl_file}" ]] || continue
   slug=$(basename "${jsonl_file}" .jsonl)
   run_id="${RUN_ID_PREFIX}_${slug}"
-  EVAL_CMDS="${EVAL_CMDS}
-echo '=== Evaluating ${slug} ==='; \
-python pipelinerl/swe/scripts/offline_router/run_swesmith_eval_daytona.py \
+  cat >> "${RUNNER}" << SCRIPT_EOF
+echo "=== Evaluating ${slug} ==="
+python ${REPO_ROOT}/pipelinerl/swe/scripts/offline_router/run_swesmith_eval_daytona.py \
   --predictions_path ${jsonl_file} \
   --run_id ${run_id} \
   --concurrency ${CONCURRENCY} \
-  2>&1 | tee ${FILTERED_DIR}/${slug}_daytona.log;"
+  2>&1 | tee ${FILTERED_DIR}/${slug}_daytona.log
+SCRIPT_EOF
 done
 
-if [[ -z "${EVAL_CMDS}" ]]; then
-  echo "No filtered JSONL files found in ${FILTERED_DIR}. Did filtering succeed?"
-  exit 1
-fi
+chmod +x "${RUNNER}"
+echo "Runner script written to: ${RUNNER}"
+echo ""
 
-# --- Step 3: submit single EAI job ---
+# --- Step 3: submit single EAI job that runs the script ---
 JOB_NAME="or_sweep_daytona_${TIMESTAMP}"
 echo "=== Submitting Daytona eval job: ${JOB_NAME} ==="
 
@@ -67,7 +73,7 @@ make -C "${REPO_ROOT}" job \
   GPU_MEM=0 \
   CPU=8 \
   CPU_MEM=64 \
-  COMMAND="cd ${REPO_ROOT}; ${EVAL_CMDS}"
+  COMMAND="bash ${RUNNER}"
 
 echo ""
 echo "Daytona job submitted: ${JOB_NAME}"
