@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
-# Launch Daytona eval jobs for all model JSONL files produced by launch_collect.sh.
-# Submits one EAI job per model; they run in parallel.
-#
-# Before submitting, filters all prediction files to the common instance-ID
-# intersection (excluding laguna), so every model is evaluated on the same set.
+# Launch a single EAI job that runs Daytona eval for all filtered model predictions.
+# Filters to the common instance-ID intersection first (locally), then submits
+# one job that evaluates each model sequentially (Daytona handles per-instance
+# parallelism internally via async sandboxes).
 #
 # Daytona writes to logs/run_evaluation/<run_id>/report.json (relative to REPO_ROOT).
 # This script uses deterministic run_ids (or_sweep_<slug>) so the analysis script
@@ -24,9 +23,6 @@ PREDICTIONS_DIR=${PREDICTIONS_DIR:?Need PREDICTIONS_DIR set to the collect outpu
 FILTERED_DIR="${PREDICTIONS_DIR}/filtered"
 
 CONCURRENCY=${CONCURRENCY:-50}
-
-# Daytona reports land at: logs/run_evaluation/<run_id>/ (relative to REPO_ROOT)
-# We use deterministic run_ids so the analysis script can find them.
 RUN_ID_PREFIX="or_sweep"
 
 # --- Step 1: filter to common intersection (runs locally, not as a job) ---
@@ -35,44 +31,50 @@ echo "=== Filtering predictions to common intersection ==="
   --predictions-dir "${PREDICTIONS_DIR}" \
   --output-dir "${FILTERED_DIR}" \
   --exclude laguna
-
 echo ""
 
-# --- Step 2: submit one Daytona job per filtered model JSONL ---
-echo "=== Submitting Daytona eval jobs ==="
+# --- Step 2: build sequential eval command for all models ---
+EVAL_CMDS=""
 for jsonl_file in "${FILTERED_DIR}"/*.jsonl; do
   [[ -f "${jsonl_file}" ]] || continue
   slug=$(basename "${jsonl_file}" .jsonl)
   run_id="${RUN_ID_PREFIX}_${slug}"
-  job_name="or_daytona_${slug:0:35}_${TIMESTAMP}"
-
-  echo "[submit] slug=${slug}  run_id=${run_id}"
-
-  make -C "${REPO_ROOT}" job \
-    JOB_NAME="${job_name}" \
-    ENV=pipeline-rl \
-    CONDA_EXE=/opt/conda/bin/conda \
-    SNAPSHOT=1 \
-    NPROC=1 \
-    GPU=0 \
-    GPU_MEM=0 \
-    CPU=8 \
-    CPU_MEM=32 \
-    COMMAND="cd ${REPO_ROOT}; \
-      python pipelinerl/swe/scripts/offline_router/run_swesmith_eval_daytona.py \
-        --predictions_path ${jsonl_file} \
-        --run_id ${run_id} \
-        --concurrency ${CONCURRENCY} \
-      2>&1 | tee ${FILTERED_DIR}/${slug}_daytona.log"
-
-  sleep 2  # Stagger submissions slightly
+  EVAL_CMDS="${EVAL_CMDS}
+echo '=== Evaluating ${slug} ==='; \
+python pipelinerl/swe/scripts/offline_router/run_swesmith_eval_daytona.py \
+  --predictions_path ${jsonl_file} \
+  --run_id ${run_id} \
+  --concurrency ${CONCURRENCY} \
+  2>&1 | tee ${FILTERED_DIR}/${slug}_daytona.log;"
 done
 
+if [[ -z "${EVAL_CMDS}" ]]; then
+  echo "No filtered JSONL files found in ${FILTERED_DIR}. Did filtering succeed?"
+  exit 1
+fi
+
+# --- Step 3: submit single EAI job ---
+JOB_NAME="or_sweep_daytona_${TIMESTAMP}"
+echo "=== Submitting Daytona eval job: ${JOB_NAME} ==="
+
+make -C "${REPO_ROOT}" job \
+  JOB_NAME="${JOB_NAME}" \
+  ENV=pipeline-rl \
+  CONDA_EXE=/opt/conda/bin/conda \
+  SNAPSHOT=1 \
+  NPROC=1 \
+  GPU=0 \
+  GPU_MEM=0 \
+  CPU=8 \
+  CPU_MEM=64 \
+  COMMAND="cd ${REPO_ROOT}; ${EVAL_CMDS}"
+
 echo ""
-echo "Daytona jobs submitted. Reports land at:"
+echo "Daytona job submitted: ${JOB_NAME}"
+echo "Reports land at:"
 echo "  ${REPO_ROOT}/logs/run_evaluation/or_sweep_<slug>/report.json"
 echo ""
-echo "Once all jobs finish, run the analysis:"
+echo "Once the job finishes, run the analysis:"
 echo "  python pipelinerl/swe/scripts/openrouter_sweep/analyze_openrouter_sweep.py \\"
 echo "    --daytona-log-dir ${REPO_ROOT}/logs/run_evaluation \\"
 echo "    --run-id-prefix or_sweep \\"
