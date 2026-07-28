@@ -45,7 +45,8 @@ echo ""
 # --- Step 1b: convert raw text outputs to proper git diffs ---
 echo "=== Converting search/replace text to git diffs ==="
 "${PYTHON}" "${REPO_ROOT}/pipelinerl/swe/scripts/openrouter_sweep/convert_text_to_patches.py" \
-  --predictions-dir "${FILTERED_DIR}"
+  --predictions-dir "${FILTERED_DIR}" \
+  --dataset-path "${DATASET_PATH:-/mnt/llmd/data/swe_smith_bugged_context/ds_train}"
 echo ""
 
 # --- Step 2: write a runner script into the filtered dir ---

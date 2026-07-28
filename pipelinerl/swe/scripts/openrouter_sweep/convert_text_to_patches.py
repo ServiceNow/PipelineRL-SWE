@@ -21,31 +21,25 @@ from pathlib import Path
 from pipelinerl.swe.scripts.repair_eval_utils import extract_search_replace_edits
 from pipelinerl.swe.utils.repair_utils import apply_edits_to_files, generate_unified_diff
 
-HF_LANGUAGE_DATASETS = [
-    "SWE-bench/SWE-smith-py",
-    "SWE-bench/SWE-smith-rs",
-    "SWE-bench/SWE-smith-java",
-    "SWE-bench/SWE-smith-go",
-]
+DEFAULT_DATASET_PATH = "/mnt/llmd/data/swe_smith_bugged_context/ds_train"
 
 
-def load_file_contents_lookup(dataset_names: list[str]) -> dict[str, dict[str, str]]:
-    from datasets import load_dataset
+def load_file_contents_lookup(dataset_path: str) -> dict[str, dict[str, str]]:
+    from datasets import load_from_disk
+    print(f"Loading file_contents from {dataset_path}...")
+    ds = load_from_disk(dataset_path)
     lookup: dict[str, dict[str, str]] = {}
-    for name in dataset_names:
-        print(f"Loading {name}...")
-        ds = load_dataset(name, split="train")
-        for row in ds:
-            iid = row.get("instance_id")
-            fc = row.get("gold_file_contents") or row.get("file_contents")
-            if iid and fc:
-                if isinstance(fc, str):
-                    try:
-                        fc = json.loads(fc)
-                    except Exception:
-                        continue
-                lookup[iid] = fc
-        print(f"  → {len(lookup)} instances with file_contents so far")
+    for row in ds:
+        iid = row.get("instance_id") or row.get("id")
+        fc = row.get("gold_file_contents") or row.get("file_contents")
+        if iid and fc:
+            if isinstance(fc, str):
+                try:
+                    fc = json.loads(fc)
+                except Exception:
+                    continue
+            lookup[iid] = fc
+    print(f"  → {len(lookup)} instances with file_contents")
     return lookup
 
 
@@ -108,6 +102,8 @@ def convert_jsonl(jsonl_path: Path, lookup: dict[str, dict[str, str]]) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--predictions-dir", required=True)
+    parser.add_argument("--dataset-path", default=DEFAULT_DATASET_PATH,
+                        help="Local HF dataset dir with gold_file_contents")
     args = parser.parse_args()
 
     pdir = Path(args.predictions_dir)
@@ -115,8 +111,7 @@ def main() -> None:
     if not jsonl_files:
         sys.exit(f"No JSONL files found in {pdir}")
 
-    print("Loading HuggingFace file_contents...")
-    lookup = load_file_contents_lookup(HF_LANGUAGE_DATASETS)
+    lookup = load_file_contents_lookup(args.dataset_path)
     print(f"Total instances with file_contents: {len(lookup)}\n")
 
     for f in jsonl_files:
