@@ -25,6 +25,15 @@ FILTERED_DIR="${PREDICTIONS_DIR}/filtered"
 CONCURRENCY=${CONCURRENCY:-50}
 RUN_ID_PREFIX="or_sweep"
 
+# Load DAYTONA_API_KEY from .env if not already set
+if [[ -z "${DAYTONA_API_KEY:-}" ]]; then
+  ENV_FILE="${REPO_ROOT}/.env"
+  if [[ -f "${ENV_FILE}" ]]; then
+    DAYTONA_API_KEY=$(grep -E '^DAYTONA_API_KEY=' "${ENV_FILE}" | cut -d'=' -f2- | tr -d '"'"'" )
+  fi
+fi
+: "${DAYTONA_API_KEY:?Need DAYTONA_API_KEY — set it in .env or the environment}"
+
 # --- Step 1: filter to common intersection (runs locally, not as a job) ---
 echo "=== Filtering predictions to common intersection ==="
 "${PYTHON}" "${REPO_ROOT}/pipelinerl/swe/scripts/openrouter_sweep/filter_to_intersection.py" \
@@ -73,7 +82,7 @@ make -C "${REPO_ROOT}" job \
   GPU_MEM=0 \
   CPU=8 \
   CPU_MEM=64 \
-  COMMAND="bash ${RUNNER}"
+  COMMAND="DAYTONA_API_KEY=${DAYTONA_API_KEY} bash ${RUNNER}"
 
 echo ""
 echo "Daytona job submitted: ${JOB_NAME}"
