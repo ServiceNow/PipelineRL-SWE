@@ -102,10 +102,6 @@ make -C "${REPO_ROOT}" job \
   CONDA_EXE=/opt/conda/bin/conda \
   SNAPSHOT=1 \
   NPROC=${NPROC} \
-  GPU=${NPROC} \
-  GPU_MEM=80 \
-  CPU=16 \
-  CPU_MEM=128 \
   COMMAND="bash ${RUNNER}"
 
 echo ""
