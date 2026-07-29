@@ -49,7 +49,7 @@ THINK_RE = re.compile(r"<think>(.*?)</think>", re.DOTALL)
 
 DEFAULT_PARAMS: dict[str, Any] = {
     "temperature": 0.6,  # Qwen3 thinking recommended temperature
-    "max_tokens": 32768,
+    "max_tokens": 16384,  # must leave room for prompt within 32k context
     "top_p": 0.95,
 }
 
