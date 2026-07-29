@@ -72,6 +72,7 @@ def load_dataset_problems(
     max_samples: int | None,
     shuffle: bool = True,
     seed: int = 42,
+    instance_ids: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     ds = load_from_disk(dataset_path)
     import random
@@ -81,6 +82,8 @@ def load_dataset_problems(
             item.get("issue_id") or item.get("instance_id") or item.get("id") or ""
         ).strip()
         if not pid:
+            continue
+        if instance_ids is not None and pid not in instance_ids:
             continue
         fc = _parse_file_contents(item.get("gold_file_contents", "{}"))
         stmt = str(item.get("problem_statement") or "").strip()
@@ -92,11 +95,12 @@ def load_dataset_problems(
             "file_contents": fc,
             "oracle_patch": str(item.get("patch") or ""),
         })
-    if shuffle:
-        random.seed(seed)
-        random.shuffle(items)
-    if max_samples and len(items) > max_samples:
-        items = items[:max_samples]
+    if instance_ids is None:
+        if shuffle:
+            random.seed(seed)
+            random.shuffle(items)
+        if max_samples and len(items) > max_samples:
+            items = items[:max_samples]
     logger.info("Loaded %d problems from %s", len(items), dataset_path)
     return items
 
@@ -228,9 +232,13 @@ def main() -> None:
     parser.add_argument("--output-dir", required=True,
                         help="Directory to write prediction and trajectory JSONL files")
     parser.add_argument("--train-max-samples", type=int, default=2000,
-                        help="Max train problems to collect (default: 2000)")
+                        help="Max train problems (ignored if --train-instance-ids-file is set)")
     parser.add_argument("--eval-max-samples", type=int, default=500,
-                        help="Max eval problems to collect (default: 500)")
+                        help="Max eval problems (ignored if --eval-instance-ids-file is set)")
+    parser.add_argument("--train-instance-ids-file", default="",
+                        help="JSON file with list of train problem_ids to collect (overrides random sampling)")
+    parser.add_argument("--eval-instance-ids-file", default="",
+                        help="JSON file with list of eval problem_ids to collect (overrides random sampling)")
     parser.add_argument("--concurrency", type=int, default=16,
                         help="Max concurrent requests to vLLM (default: 16)")
     parser.add_argument("--seed", type=int, default=42)
@@ -239,15 +247,25 @@ def main() -> None:
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    splits: list[tuple[str, str, int]] = []
-    splits.append(("train", args.train_dataset_path, args.train_max_samples))
-    if args.eval_dataset_path:
-        splits.append(("eval", args.eval_dataset_path, args.eval_max_samples))
+    def _load_ids(path: str) -> set[str] | None:
+        if not path:
+            return None
+        with open(path) as f:
+            return set(json.load(f))
 
-    for split_name, dataset_path, max_samples in splits:
+    train_ids = _load_ids(args.train_instance_ids_file)
+    eval_ids = _load_ids(args.eval_instance_ids_file)
+
+    splits: list[tuple[str, str, int, set[str] | None]] = []
+    splits.append(("train", args.train_dataset_path, args.train_max_samples, train_ids))
+    if args.eval_dataset_path:
+        splits.append(("eval", args.eval_dataset_path, args.eval_max_samples, eval_ids))
+
+    for split_name, dataset_path, max_samples, instance_ids in splits:
         logger.info("=== Split: %s ===", split_name)
         problems = load_dataset_problems(
-            dataset_path, max_samples=max_samples, seed=args.seed
+            dataset_path, max_samples=max_samples, seed=args.seed,
+            instance_ids=instance_ids,
         )
         pred_path = out_dir / f"predictions_{split_name}.jsonl"
         traj_path = out_dir / f"trajectories_{split_name}.jsonl"
