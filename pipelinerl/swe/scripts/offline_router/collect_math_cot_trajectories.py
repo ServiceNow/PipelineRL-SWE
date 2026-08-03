@@ -63,6 +63,13 @@ MATH_TEST_PATH = (
 THINK_RE = re.compile(r"<think>(.*?)</think>", re.DOTALL)
 BOXED_RE = re.compile(r"\\boxed\{((?:[^{}]|\{[^{}]*\})*)\}")
 
+try:
+    from math_verify import verify as _mv_verify, parse as _mv_parse
+    _MATH_VERIFY_AVAILABLE = True
+except ImportError:
+    _MATH_VERIFY_AVAILABLE = False
+    logger.warning("math_verify not available; falling back to string normalisation")
+
 SCOUT_PARAMS: dict[str, Any] = {
     "temperature": 0.6,
     "max_tokens": 8192,
@@ -143,6 +150,12 @@ def _normalise_answer(s: str) -> str:
 
 
 def check_correct(model_output: str, gt_answer: str) -> bool:
+    if _MATH_VERIFY_AVAILABLE:
+        try:
+            return bool(_mv_verify(_mv_parse(model_output), _mv_parse(gt_answer)))
+        except Exception:
+            pass
+    # fallback: boxed extraction + string normalisation
     pred = _extract_boxed(model_output)
     if not pred:
         return False
