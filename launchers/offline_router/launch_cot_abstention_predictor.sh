@@ -27,6 +27,7 @@ TRAIN_PARQUET_DIR=${TRAIN_PARQUET_DIR:-${REAL_LABEL_DATASET_DIR}/train}
 EVAL_PARQUET_DIR=${EVAL_PARQUET_DIR:-${REAL_LABEL_DATASET_DIR}/eval}
 
 INCLUDE_THINKING=${INCLUDE_THINKING:-true}
+LABEL_ROUTE_IDX=${LABEL_ROUTE_IDX:-3}
 NUM_EPOCHS=${NUM_EPOCHS:-10}
 LORA_R=${LORA_R:-32}
 LORA_ALPHA=${LORA_ALPHA:-64}
@@ -47,7 +48,7 @@ else
   THINKING_ARG="--no-include-thinking"
 fi
 
-JOB_NAME=cot_abstention_qwen3_emb8b_lora_r${LORA_R}_${THINKING_SUFFIX}_${NUM_EPOCHS}epoch_${TIMESTAMP}
+JOB_NAME=cot_abstention_qwen3_emb8b_lora_r${LORA_R}_${THINKING_SUFFIX}_route${LABEL_ROUTE_IDX}_${NUM_EPOCHS}epoch_${TIMESTAMP}
 OUTPUT_DIR=/mnt/llmd/results/exps/aristides/reason/${JOB_NAME}
 
 RUNNER="${OUTPUT_DIR}/run_train.sh"
@@ -76,7 +77,7 @@ ${TRAIN_CMD} \\
   --train-parquet-dir  ${TRAIN_PARQUET_DIR} \\
   --eval-parquet-dir   ${EVAL_PARQUET_DIR} \\
   --output-dir         ${OUTPUT_DIR} \\
-  --label-route-idx    3 \\
+  --label-route-idx    ${LABEL_ROUTE_IDX} \\
   ${THINKING_ARG} \\
   --max-seq-length     ${MAX_SEQ_LENGTH} \\
   --num-epochs         ${NUM_EPOCHS} \\
