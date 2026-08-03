@@ -264,9 +264,13 @@ def print_summary_table(methods: list[dict[str, Any]], labels: np.ndarray) -> No
 def main() -> None:
     parser = argparse.ArgumentParser(description="CoT verifier abstention analysis")
     parser.add_argument("--cot-scores-path", default="",
-                        help="JSONL from score_autoregressive_verifier.py (instance_id, p_yes, resolved)")
+                        help="JSONL from score_autoreg_verifier.py (problem_id, p_yes, resolved)")
     parser.add_argument("--cot-embedding-preds-path", default="",
-                        help="eval_predictions.jsonl from train_cot_abstention_predictor.py (problem_id, p_yes)")
+                        help="eval_predictions.jsonl from train_cot_abstention_predictor.py with CoT (problem_id, p_yes)")
+    parser.add_argument("--no-cot-embedding-preds-path", default="",
+                        help="eval_predictions.jsonl from train_cot_abstention_predictor.py without CoT")
+    parser.add_argument("--self-assessment-path", default="",
+                        help="JSONL from collect_self_assessment.py (problem_id, p_yes)")
     parser.add_argument("--parquet-dir", required=True,
                         help="Eval parquet dir with route_successes (for labels + prompt tokens)")
     parser.add_argument("--label-route-idx", type=int, default=3,
@@ -285,16 +289,20 @@ def main() -> None:
     # --- Load all data ---
     cot_scores = load_cot_scores(args.cot_scores_path) if args.cot_scores_path else {}
     cot_emb_preds = load_cot_scores(args.cot_embedding_preds_path) if args.cot_embedding_preds_path else {}
+    no_cot_emb_preds = load_cot_scores(args.no_cot_embedding_preds_path) if args.no_cot_embedding_preds_path else {}
+    self_assess_preds = load_cot_scores(args.self_assessment_path) if args.self_assessment_path else {}
     post_scout_preds = load_embedding_preds(args.post_scout_preds_path)
     input_only_preds = load_embedding_preds(args.input_only_preds_path)
     label_df = load_parquet_labels(args.parquet_dir, args.label_route_idx)
 
-    if not cot_scores and not cot_emb_preds:
-        logger.error("Must provide at least one of --cot-scores-path or --cot-embedding-preds-path")
+    if not any([cot_scores, cot_emb_preds, no_cot_emb_preds, self_assess_preds,
+                post_scout_preds, input_only_preds]):
+        logger.error("Must provide at least one prediction source")
         return
 
     # --- Align on common instances ---
-    all_preds = [d for d in [cot_scores, cot_emb_preds, post_scout_preds, input_only_preds] if d]
+    all_preds = [d for d in [cot_scores, cot_emb_preds, no_cot_emb_preds,
+                              self_assess_preds, post_scout_preds, input_only_preds] if d]
     common = set(label_df.index)
     for d in all_preds:
         common &= set(d.keys())
@@ -318,6 +326,15 @@ def main() -> None:
             "signal": np.array([cot_emb_preds[pid] for pid in common]),
             "color": "#1f77b4",
             "lw": 2.5,
+        })
+
+    if no_cot_emb_preds:
+        methods.append({
+            "label": "Embedding verifier, no CoT (ablation)",
+            "signal": np.array([no_cot_emb_preds[pid] for pid in common]),
+            "color": "#aec7e8",
+            "lw": 2,
+            "ls": "--",
         })
 
     if cot_scores:
@@ -345,6 +362,15 @@ def main() -> None:
             "color": "#2ca02c",
             "lw": 2,
             "ls": "--",
+        })
+
+    if self_assess_preds:
+        methods.append({
+            "label": "Strong-model self-assessment",
+            "signal": np.array([self_assess_preds[pid] for pid in common]),
+            "color": "#d62728",
+            "lw": 1.5,
+            "ls": ":",
         })
 
     methods.append({

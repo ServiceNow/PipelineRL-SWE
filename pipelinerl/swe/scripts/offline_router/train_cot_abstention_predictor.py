@@ -108,8 +108,10 @@ class CoTAbstentionDataset(Dataset):
         tokenizer: Any,
         max_seq_length: int,
         include_thinking: bool,
+        multi_task_scout: bool = False,
     ) -> None:
         self.rows: list[dict[str, Any]] = []
+        self.multi_task_scout = multi_task_scout
         skipped = 0
         for traj in trajectories:
             pid = str(traj.get("problem_id") or traj.get("instance_id") or "").strip()
@@ -129,10 +131,16 @@ class CoTAbstentionDataset(Dataset):
             if not input_ids or not attention_mask:
                 skipped += 1
                 continue
+            if multi_task_scout:
+                # [scout_correct, strong_correct] — scout label is free from the trajectory
+                scout_correct = float(bool(traj.get("scout_correct", False)))
+                target = [scout_correct, float(labels[pid])]
+            else:
+                target = [float(labels[pid])]
             self.rows.append({
                 "row_idx": len(self.rows),
                 "problem_id": pid,
-                "target": float(labels[pid]),
+                "target": target,
                 "input_ids": [int(x) for x in input_ids],
                 "attention_mask": [int(x) for x in attention_mask],
             })
@@ -147,16 +155,17 @@ class CoTAbstentionDataset(Dataset):
 
 def _collate(batch: list[dict[str, Any]], pad_token_id: int) -> dict[str, Any]:
     max_len = max(len(row["input_ids"]) for row in batch)
+    target_dim = len(batch[0]["target"])
     input_ids = torch.full((len(batch), max_len), int(pad_token_id), dtype=torch.long)
     attention_mask = torch.zeros((len(batch), max_len), dtype=torch.long)
-    targets = torch.zeros((len(batch), 1), dtype=torch.float32)
+    targets = torch.zeros((len(batch), target_dim), dtype=torch.float32)
     row_indices = torch.zeros((len(batch),), dtype=torch.long)
     for i, row in enumerate(batch):
         seq_len = len(row["input_ids"])
         start = max_len - seq_len  # left-pad to match Qwen embedding convention
         input_ids[i, start:] = torch.tensor(row["input_ids"], dtype=torch.long)
         attention_mask[i, start:] = torch.tensor(row["attention_mask"], dtype=torch.long)
-        targets[i, 0] = float(row["target"])
+        targets[i] = torch.tensor(row["target"], dtype=torch.float32)
         row_indices[i] = int(row["row_idx"])
     return {"input_ids": input_ids, "attention_mask": attention_mask, "targets": targets, "row_indices": row_indices}
 
@@ -189,10 +198,13 @@ def _evaluate(
             total_n += int(g_targets.shape[0])
             for i in range(g_preds.shape[0]):
                 meta = dataset.rows[int(g_indices[i])]
+                # last head = strong-model head (works for both 1-task and 2-task)
+                p_yes = float(g_preds[i, -1].item())
+                strong_target = float(meta["target"][-1])
                 rows.append({
                     "problem_id": meta["problem_id"],
-                    "p_yes": float(g_preds[i, 0].item()),
-                    "resolved": bool(meta["target"] > 0.5),
+                    "p_yes": p_yes,
+                    "resolved": bool(strong_target > 0.5),
                 })
     if not accelerator.is_main_process:
         return math.nan, math.nan, []
@@ -200,7 +212,7 @@ def _evaluate(
     auc = math.nan
     if len(rows) >= 2:
         y_true = np.array([int(r["resolved"]) for r in rows])
-        y_pred = np.array([r["p_yes"] for r in rows])
+        y_pred = np.array([r["p_yes"] for r in rows])  # strong-model head only
         try:
             auc = float(roc_auc_score(y_true, y_pred))
         except Exception:
@@ -226,6 +238,8 @@ def main() -> None:
     parser.add_argument("--model-name", default="Qwen/Qwen3-Embedding-8B")
     parser.add_argument("--include-thinking", action="store_true", default=True)
     parser.add_argument("--no-include-thinking", dest="include_thinking", action="store_false")
+    parser.add_argument("--multi-task-scout", action="store_true", default=False,
+                        help="Add scout success (route 0) as a free auxiliary task alongside the strong-model target")
     parser.add_argument("--max-seq-length", type=int, default=24000)
     parser.add_argument("--num-epochs", type=int, default=10)
     parser.add_argument("--batch-size", type=int, default=1)
@@ -277,10 +291,12 @@ def main() -> None:
     lora_target_modules = [m.strip() for m in args.lora_target_modules.split(",") if m.strip()]
 
     train_dataset = CoTAbstentionDataset(
-        train_trajs, train_labels, tokenizer, int(args.max_seq_length), bool(args.include_thinking)
+        train_trajs, train_labels, tokenizer, int(args.max_seq_length),
+        bool(args.include_thinking), multi_task_scout=bool(args.multi_task_scout),
     )
     eval_dataset = CoTAbstentionDataset(
-        eval_trajs, eval_labels, tokenizer, int(args.max_seq_length), bool(args.include_thinking)
+        eval_trajs, eval_labels, tokenizer, int(args.max_seq_length),
+        bool(args.include_thinking), multi_task_scout=bool(args.multi_task_scout),
     )
 
     if len(train_dataset) == 0 or len(eval_dataset) == 0:
@@ -294,9 +310,10 @@ def main() -> None:
     train_report_loader = DataLoader(train_dataset, batch_size=int(args.eval_batch_size), shuffle=False,
                                      collate_fn=collate_fn, num_workers=0)
 
+    target_dim = 2 if args.multi_task_scout else 1
     model = QwenEmbeddingRouter(
         model_name=args.model_name,
-        target_dim=1,
+        target_dim=target_dim,
         dropout=float(args.dropout),
         mlp_hidden_size=int(args.mlp_hidden_size),
         torch_dtype=_dtype_from_name(str(args.torch_dtype)),
@@ -335,6 +352,7 @@ def main() -> None:
         "eval_parquet_dir": args.eval_parquet_dir,
         "label_route_idx": int(args.label_route_idx),
         "include_thinking": bool(args.include_thinking),
+        "multi_task_scout": bool(args.multi_task_scout),
         "max_seq_length": int(args.max_seq_length),
         "num_epochs": int(args.num_epochs),
         "lr": float(args.lr),
