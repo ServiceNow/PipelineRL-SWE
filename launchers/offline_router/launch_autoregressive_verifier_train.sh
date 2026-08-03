@@ -33,11 +33,12 @@ MODEL_NAME=${MODEL_NAME:-Qwen/Qwen3-4B-Thinking-2507}
 LORA_RANK=${LORA_RANK:-16}
 LORA_ALPHA=${LORA_ALPHA:-32}
 NUM_EPOCHS=${NUM_EPOCHS:-3}
-BATCH_SIZE=${BATCH_SIZE:-4}
+BATCH_SIZE=${BATCH_SIZE:-1}
+GRADIENT_ACCUMULATION_STEPS=${GRADIENT_ACCUMULATION_STEPS:-4}
 LEARNING_RATE=${LEARNING_RATE:-2e-5}
 MAX_SEQ_LENGTH=${MAX_SEQ_LENGTH:-16384}
 
-NPROC=${NPROC:-1}
+NPROC=${NPROC:-2}
 MIXED_PRECISION=${MIXED_PRECISION:-bf16}
 
 # --- Write runner script (avoids make $ expansion issues) ---
@@ -75,6 +76,8 @@ ${TRAIN_CMD} \\
   --lora-alpha ${LORA_ALPHA} \\
   --num-epochs ${NUM_EPOCHS} \\
   --batch-size ${BATCH_SIZE} \\
+  --gradient-accumulation-steps ${GRADIENT_ACCUMULATION_STEPS} \\
+  --gradient-checkpointing \\
   --learning-rate ${LEARNING_RATE} \\
   --max-seq-length ${MAX_SEQ_LENGTH} \\
   --include-thinking \\

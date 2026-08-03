@@ -263,8 +263,10 @@ def print_summary_table(methods: list[dict[str, Any]], labels: np.ndarray) -> No
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="CoT verifier abstention analysis")
-    parser.add_argument("--cot-scores-path", required=True,
+    parser.add_argument("--cot-scores-path", default="",
                         help="JSONL from score_autoregressive_verifier.py (instance_id, p_yes, resolved)")
+    parser.add_argument("--cot-embedding-preds-path", default="",
+                        help="eval_predictions.jsonl from train_cot_abstention_predictor.py (problem_id, p_yes)")
     parser.add_argument("--parquet-dir", required=True,
                         help="Eval parquet dir with route_successes (for labels + prompt tokens)")
     parser.add_argument("--label-route-idx", type=int, default=3,
@@ -281,43 +283,55 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # --- Load all data ---
-    cot_scores = load_cot_scores(args.cot_scores_path)
+    cot_scores = load_cot_scores(args.cot_scores_path) if args.cot_scores_path else {}
+    cot_emb_preds = load_cot_scores(args.cot_embedding_preds_path) if args.cot_embedding_preds_path else {}
     post_scout_preds = load_embedding_preds(args.post_scout_preds_path)
     input_only_preds = load_embedding_preds(args.input_only_preds_path)
     label_df = load_parquet_labels(args.parquet_dir, args.label_route_idx)
 
-    # --- Align on common instances ---
-    common = set(cot_scores.keys()) & set(label_df.index)
-    if not common:
-        logger.error("No overlap between CoT scores and parquet labels. Check instance ID format.")
+    if not cot_scores and not cot_emb_preds:
+        logger.error("Must provide at least one of --cot-scores-path or --cot-embedding-preds-path")
         return
 
-    if post_scout_preds:
-        common &= set(post_scout_preds.keys())
-    if input_only_preds:
-        common &= set(input_only_preds.keys())
+    # --- Align on common instances ---
+    all_preds = [d for d in [cot_scores, cot_emb_preds, post_scout_preds, input_only_preds] if d]
+    common = set(label_df.index)
+    for d in all_preds:
+        common &= set(d.keys())
+
+    if not common:
+        logger.error("No overlap between predictions and parquet labels. Check instance ID format.")
+        return
 
     common = sorted(common)
     logger.info("Aligned on %d common instances", len(common))
 
     labels = label_df.loc[common, "resolved"].values.astype(int)
-    cot_sig = np.array([cot_scores[pid] for pid in common])
     prompt_tokens = label_df.loc[common, "prompt_tokens"].values.astype(float)
-    prompt_sig = -prompt_tokens  # shorter = lower score → abstain shorter prompts first? inverted
+    prompt_sig = -prompt_tokens
 
-    methods: list[dict[str, Any]] = [
-        {
-            "label": "CoT verifier (ours)",
-            "signal": cot_sig,
+    methods: list[dict[str, Any]] = []
+
+    if cot_emb_preds:
+        methods.append({
+            "label": "CoT embedding verifier (ours)",
+            "signal": np.array([cot_emb_preds[pid] for pid in common]),
             "color": "#1f77b4",
             "lw": 2.5,
-        },
-    ]
+        })
+
+    if cot_scores:
+        methods.append({
+            "label": "CoT autoregressive verifier",
+            "signal": np.array([cot_scores[pid] for pid in common]),
+            "color": "#17becf",
+            "lw": 2,
+        })
 
     if post_scout_preds:
         ps_sig = np.array([post_scout_preds[pid] for pid in common])
         methods.append({
-            "label": "Post-scout embedding verifier",
+            "label": "Post-scout embedding (patch only)",
             "signal": ps_sig,
             "color": "#ff7f0e",
             "lw": 2,
@@ -353,7 +367,7 @@ def main() -> None:
     plot_abstention_curves(
         methods, labels,
         out_dir / "cot_verifier_abstention.png",
-        title=f"Abstention analysis: CoT autoregressive verifier vs. baselines\n"
+        title=f"Abstention analysis: CoT verifier vs. baselines\n"
               f"(n={len(labels)} eval instances, target=gpt-oss-120b route_idx={args.label_route_idx})",
     )
 

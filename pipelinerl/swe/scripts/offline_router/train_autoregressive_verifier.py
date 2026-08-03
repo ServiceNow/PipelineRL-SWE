@@ -275,7 +275,8 @@ def train(
         weight_decay=0.01,
     )
 
-    total_steps = len(train_loader) * args.num_epochs
+    grad_accum = max(1, args.gradient_accumulation_steps)
+    total_steps = (len(train_loader) // grad_accum) * args.num_epochs
     warmup_steps = max(1, total_steps // 10)
     scheduler = get_linear_schedule_with_warmup(optimizer, warmup_steps, total_steps)
 
@@ -294,7 +295,8 @@ def train(
         model.train()
         epoch_loss = 0.0
         n_batches = 0
-        for batch in train_loader:
+        optimizer.zero_grad()
+        for micro_step, batch in enumerate(train_loader):
             if accelerator is None:
                 batch = {k: v.to(device) for k, v in batch.items()}
             outputs = model(
@@ -302,20 +304,21 @@ def train(
                 attention_mask=batch["attention_mask"],
                 labels=batch["labels"],
             )
-            loss = outputs.loss
+            loss = outputs.loss / grad_accum
             if accelerator is not None:
                 accelerator.backward(loss)
             else:
                 loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            optimizer.step()
-            scheduler.step()
-            optimizer.zero_grad()
-            epoch_loss += loss.item()
+            epoch_loss += loss.item() * grad_accum
             n_batches += 1
-            global_step += 1
-            if global_step % 50 == 0:
-                logger.info("epoch=%d step=%d loss=%.4f", epoch + 1, global_step, loss.item())
+            if (micro_step + 1) % grad_accum == 0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                optimizer.step()
+                scheduler.step()
+                optimizer.zero_grad()
+                global_step += 1
+                if global_step % 50 == 0:
+                    logger.info("epoch=%d step=%d loss=%.4f", epoch + 1, global_step, loss.item() * grad_accum)
 
         avg_loss = epoch_loss / max(n_batches, 1)
         logger.info("=== Epoch %d complete. avg_loss=%.4f ===", epoch + 1, avg_loss)
@@ -354,6 +357,8 @@ def main() -> None:
     parser.add_argument("--lora-dropout", type=float, default=0.05)
     parser.add_argument("--num-epochs", type=int, default=3)
     parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument("--gradient-accumulation-steps", type=int, default=1)
+    parser.add_argument("--gradient-checkpointing", action="store_true", default=False)
     parser.add_argument("--learning-rate", type=float, default=2e-5)
     parser.add_argument("--max-seq-length", type=int, default=16384)
     parser.add_argument("--include-thinking", action="store_true", default=True,
@@ -394,6 +399,9 @@ def main() -> None:
         bias="none",
     )
     model = get_peft_model(base_model, lora_config)
+    if args.gradient_checkpointing:
+        model.enable_input_require_grads()
+        model.gradient_checkpointing_enable()
     if is_main:
         model.print_trainable_parameters()
 
