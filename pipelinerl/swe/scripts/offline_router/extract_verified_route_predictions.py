@@ -49,7 +49,7 @@ def _text_to_patch(output_text: str, file_contents: dict[str, str]) -> str:
             return ""
         parts = []
         for path, hunk in patch_dict.items():
-            parts.append(f"--- a/{path}\n+++ b/{path}\n{hunk}")
+            parts.append(f"diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n{hunk}")
         return "\n".join(parts)
     except Exception:
         return ""
