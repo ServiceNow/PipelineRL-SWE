@@ -73,18 +73,22 @@ async def _eval_one(
 
             patch = pred.get(KEY_PREDICTION, "").strip()
             if patch:
-                await sandbox.fs.upload_file(patch.encode(), "/tmp/patch.diff")
+                patch_bytes = (patch if patch.endswith("\n") else patch + "\n").encode()
+                await sandbox.fs.upload_file(patch_bytes, "/tmp/patch.diff")
                 applied = False
+                apply_errors: list[str] = []
                 for cmd in GIT_APPLY_CMDS:
                     r = await sandbox.process.exec(
-                        f"cd /testbed && {cmd} /tmp/patch.diff", timeout=30
+                        f"cd /testbed && {cmd} /tmp/patch.diff 2>&1", timeout=30
                     )
                     if r.exit_code == 0:
                         applied = True
                         break
+                    apply_errors.append(f"[{cmd}] exit={r.exit_code}: {(r.result or '').strip()[:300]}")
                 if not applied:
                     (log_dir / LOG_REPORT).write_text(
-                        json.dumps({"resolved": False, "patch_failed": True}, indent=2)
+                        json.dumps({"resolved": False, "patch_failed": True,
+                                    "apply_errors": apply_errors}, indent=2)
                     )
                     return {"status": "patch_failed", "resolved": False, "instance_id": instance_id}
 
@@ -106,7 +110,7 @@ async def _eval_one(
             report = get_eval_report(
                 test_spec=test_spec,
                 prediction=pred,
-                log_path=test_log_path,
+                test_log_path=str(test_log_path),
                 include_tests_status=True,
             )
             report[KEY_MODEL] = pred.get(KEY_MODEL, "unknown")
