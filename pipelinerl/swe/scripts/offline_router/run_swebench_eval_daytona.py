@@ -71,8 +71,8 @@ async def _eval_one(
                 timeout=120,
             )
 
-            patch = pred.get(KEY_PREDICTION, "").strip()
-            if patch:
+            patch = pred.get(KEY_PREDICTION, "")
+            if patch.strip():
                 patch_bytes = (patch if patch.endswith("\n") else patch + "\n").encode()
                 await sandbox.fs.upload_file(patch_bytes, "/tmp/patch.diff")
                 applied = False
