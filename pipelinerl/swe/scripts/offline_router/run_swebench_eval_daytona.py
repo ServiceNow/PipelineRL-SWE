@@ -89,7 +89,7 @@ async def _eval_one(
                     return {"status": "patch_failed", "resolved": False, "instance_id": instance_id}
 
                 # Revert test files in case the patch accidentally modified them
-                test_files = list(test_spec.fail_to_pass) + list(test_spec.pass_to_pass)
+                test_files = list(test_spec.FAIL_TO_PASS) + list(test_spec.PASS_TO_PASS)
                 if test_files:
                     # test files are test function names, not paths — skip revert
                     pass

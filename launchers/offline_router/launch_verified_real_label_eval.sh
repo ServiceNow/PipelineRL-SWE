@@ -30,7 +30,7 @@ OUTPUT_DIR=${OUTPUT_DIR:-/mnt/llmd/results/exps/aristides/reason/${JOB_NAME}}
 SOURCE_PARQUET_DIR=${SOURCE_PARQUET_DIR:-/mnt/llmd/results/exps/aristides/reason/offline_router_swe_bench_train_all_16k_verified_eval_collect_5route_4b_scout_oss20_qwen30_oss120_gemini/collect/eval}
 VERIFIED_DATASET_PATH=${VERIFIED_DATASET_PATH:-/mnt/llmd/data/swebench_verified/all_16k/ds}
 ROUTES=${ROUTES:-1,2,3}  # oss-20b, qwen30, oss-120b (skip 4b-scout and gemini)
-CONCURRENCY=${CONCURRENCY:-32}
+CONCURRENCY=${CONCURRENCY:-8}
 
 # Load DAYTONA_API_KEY from .env if not already set
 if [[ -z "${DAYTONA_API_KEY:-}" ]]; then
