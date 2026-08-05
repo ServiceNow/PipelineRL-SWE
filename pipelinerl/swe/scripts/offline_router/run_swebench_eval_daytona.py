@@ -46,7 +46,7 @@ ARCH = "x86_64"
 
 
 def _image_name(instance_id: str) -> str:
-    return f"swebench/sweb.eval.{ARCH}.{instance_id.lower()}:latest"
+    return f"ghcr.io/epoch-research/swe-bench.eval.{ARCH}.{instance_id.lower()}:latest"
 
 
 async def _eval_one(
