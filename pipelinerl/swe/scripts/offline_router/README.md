@@ -264,7 +264,7 @@ Hypothesis: a Thinking-capable small model (4B) can learn to predict patch succe
 
 ```bash
 # Step 1: collect CoT trajectories with Qwen3-4B-Thinking-2507
-bash launchers/offline_router/launch_cot_collection.sh
+bash launchers/abstention/launch_cot_collection.sh
 
 # Step 2: run Daytona eval on predictions_train.jsonl
 # (standard Daytona job — see run_swesmith_eval_daytona.py)
@@ -272,7 +272,7 @@ bash launchers/offline_router/launch_cot_collection.sh
 # Step 3: train the verifier
 TRAJECTORIES_DIR=/mnt/.../cot_trajectories_XYZ \
 TRAIN_DAYTONA_REPORT=logs/run_evaluation/<run_id>/report.json \
-bash launchers/offline_router/launch_autoregressive_verifier_train.sh
+bash launchers/offline_router/analysis/launch_autoregressive_verifier_train.sh
 ```
 
 Key scripts:
@@ -283,6 +283,46 @@ Key scripts:
 
 ---
 
+## 6) CoT Abstention Predictor (Set 3 — current main track)
+
+Predicts whether the **scout model** (Qwen3-4B) will solve a task, by reading its thinking trace
+and/or patch. A high-confidence "will fail" prediction triggers abstention → call a stronger model.
+
+Two input modes:
+- **Post-primary (PS)**: input = problem + scout thinking trace + scout patch. Learns "did the scout get it right?", not pure task difficulty.
+- **Input-only (IO)**: input = problem statement only. Isolates task-difficulty signal; harder but more robust baseline.
+
+```bash
+# Step 1: collect scout CoT trajectories on SWE-Smith
+bash launchers/abstention/launch_cot_collection.sh
+
+# Step 2: eval those trajectories to get real pass/fail labels
+bash launchers/abstention/launch_verified_real_label_eval.sh  # for SWE-bench Verified
+# or use the existing SWE-Smith real-label collection at:
+# /mnt/llmd/results/exps/aristides/reason/offline_router_swe_smith_train1500_real_labels_4route_*/
+
+# Step 3: train the predictor
+bash launchers/abstention/launch_cot_abstention_predictor.sh         # post-primary (uses scout trace)
+INPUT_ONLY=true bash launchers/abstention/launch_cot_abstention_predictor.sh  # input-only
+
+# MATH domain input-only baseline:
+MATH_OUTPUT_DIR=/mnt/... bash launchers/abstention/launch_math_input_only_abstention_predictor.sh
+
+# Step 4: score predictions
+python -m pipelinerl.swe.scripts.offline_router.score_cot_abstention_predictor \
+  --model-dir /mnt/.../cot_abstention_*/
+
+# Step 5: analyze abstention curves
+python -m pipelinerl.swe.scripts.offline_router.analyze_cot_verifier_abstention \
+  --scores-jsonl /mnt/.../scores.jsonl
+```
+
+MATH results (Qwen3-Embedding-8B, LoRA r32, 10 epochs):
+- Post-primary AUC: **0.953** (learns whether scout got it right from trace)
+- Input-only AUC: **~0.885** (task-difficulty signal only)
+
+---
+
 ## Script Reference
 
 ### Data Collection
@@ -290,6 +330,10 @@ Key scripts:
 |---|---|
 | `run_collection_job.py` | Hydra launcher — main entry point for collection runs |
 | `collect_router_dataset.py` | Core collection loop: runs models via HTTP, writes sharded parquet |
+| `collect_cot_trajectories.py` | Collect scout CoT thinking traces + patches from SWE-Smith via local vLLM |
+| `collect_math_cot_trajectories.py` | Same but for MATH domain trajectories |
+| `collect_verified_cot_trajectories.py` | Collect scout traces on SWE-bench Verified instances |
+| `collect_self_assessment.py` | Collect scout self-assessments (does the model think it succeeded?) |
 | `collect_model_discovery_candidates.py` | Collect outputs for model-discovery (deciding which models to include) |
 | `collect_openrouter_expert_from_existing.py` | Re-run an OpenRouter expert on already-collected instances |
 | `recompute_openrouter_expert_rewards.py` | Recompute rewards for OpenRouter outputs after reward fn change |
@@ -316,22 +360,31 @@ Key scripts:
 | `sample_instance_ids_from_pool.py` | Sample N instance IDs from a pool |
 | `sample_real_label_instance_ids.py` | Sample from instances that have real eval labels |
 | `summarize_collected_dataset.py` | Print summary statistics for a collected dataset directory |
+| `export_parquet_ids.py` | Export instance IDs from a parquet dataset to a text file |
+| `extract_instruct_patches_as_trajectories.py` | Extract patches from instruct-mode outputs and format as trajectories |
+| `extract_verified_route_predictions.py` | Extract route predictions from SWE-bench Verified evaluation outputs |
 
 ### Evaluation
 | Script | Purpose |
 |---|---|
-| `run_swesmith_eval_daytona.py` | **Current eval runner.** Daytona sandboxes, ~7¢/200 instances. See `router_analysis/DAYTONA_EVAL_NOTES.md`. |
+| `run_swesmith_eval_daytona.py` | **SWE-Smith eval runner.** Daytona sandboxes, ~7¢/200 instances. |
+| `run_swebench_eval_daytona.py` | **SWE-bench Verified eval runner.** Images from `ghcr.io/epoch-research/swe-bench.eval.x86_64.*`. |
 | `run_claude_api_eval.py` | Run Claude API (Haiku/Sonnet/Opus) inference on eval set. Resume-safe. |
 | `score_qwen_embedding_cascade_verifier.py` | Run a trained Qwen embedding verifier, save per-instance scores |
+| `score_cot_abstention_predictor.py` | Score a trained CoT abstention predictor on held-out instances |
+| `score_autoregressive_verifier.py` | Score a trained autoregressive verifier (causal LM) |
+| `score_autoreg_verifier.py` | Alternate scoring entrypoint for autoregressive verifier |
 
 ### Training
 | Script | Purpose |
 |---|---|
-| `train_qwen_embedding_cascade_baseline.py` | **Main training script.** LoRA fine-tune of Qwen3-Embedding-8B, BCE reward head. Supports `post_primary` (PS) and `input_only` (IO) modes. |
+| `train_cot_abstention_predictor.py` | **Abstention predictor training.** Qwen3-Embedding-8B + LoRA, BCE head. `--input-only` flag for problem-only mode, `--include-thinking` for scout trace. |
+| `train_qwen_embedding_cascade_baseline.py` | Multi-route router training. LoRA fine-tune, BCE reward head. Supports `post_primary` (PS) and `input_only` (IO) modes. |
 | `train_qwen_embedding_router_baseline.py` | Frozen-encoder variant (trained head only, no LoRA) |
 | `train_qwen_embedding_state_policy.py` | State-policy encoder (value-function framing) |
 | `train_qwen_embedding_listwise_verifier.py` | Listwise ranking loss variant |
 | `train_modernbert_router_baseline.py` | ModernBERT baseline (comparison model) |
+| `train_autoregressive_verifier.py` | SFT fine-tune a causal LM on (problem + thinking + patch) → Yes/No |
 | `train_router_offline.py` | Older offline router training script (pre-Qwen embedding era) |
 
 ### Reporting & Analysis
@@ -351,3 +404,4 @@ Key scripts:
 | `analyze_multirollout_marginal_value_bins.py` | Marginal value of additional rollouts by difficulty band |
 | `analyze_multirollout_verifier_scores.py` | Verifier score distributions across routes |
 | `analyze_verifier_calibration_diagnostics.py` | Detailed calibration diagnostics for trained verifier |
+| `analyze_cot_verifier_abstention.py` | Abstention curves for CoT predictor: precision/recall vs. threshold, cost vs. quality trade-off |
