@@ -98,7 +98,13 @@ def main() -> None:
             continue
         gc = row.get("gold_file_contents")
         if gc:
-            file_contents_by_id[iid] = dict(gc) if isinstance(gc, dict) else {}
+            if isinstance(gc, dict):
+                file_contents_by_id[iid] = gc
+            elif isinstance(gc, str):
+                try:
+                    file_contents_by_id[iid] = json.loads(gc)
+                except json.JSONDecodeError:
+                    pass
     logger.info("Loaded file contents for %d instances", len(file_contents_by_id))
 
     for route_idx in route_indices:

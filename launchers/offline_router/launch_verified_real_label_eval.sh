@@ -58,6 +58,17 @@ RUNNER="${OUTPUT_DIR}/run_daytona_eval.sh"
 cat > "${RUNNER}" << SCRIPT_EOF
 #!/usr/bin/env bash
 set -euo pipefail
+# Load DAYTONA_API_KEY from .env (avoids exposing it in the job command line)
+if [[ -z "\${DAYTONA_API_KEY:-}" ]]; then
+  for _env_file in /home/toolkit/PipelineRL-SWE/.env /home/toolkit/.env; do
+    if [[ -f "\${_env_file}" ]]; then
+      DAYTONA_API_KEY=\$(grep -E '^DAYTONA_API_KEY=' "\${_env_file}" | head -1 | cut -d'=' -f2- | tr -d '"'"'"')
+      break
+    fi
+  done
+fi
+export DAYTONA_API_KEY
+: "\${DAYTONA_API_KEY:?Need DAYTONA_API_KEY in .env}"
 cd "${REPO_ROOT}"
 SCRIPT_EOF
 
@@ -88,9 +99,8 @@ make -C "${REPO_ROOT}" job \
   GPU_MEM=0 \
   CPU=8 \
   CPU_MEM=32 \
-  COMMAND="DAYTONA_API_KEY=${DAYTONA_API_KEY} bash ${RUNNER}"
+  COMMAND="bash ${RUNNER}"
 
 echo ""
-echo "Results will land under: ${RUN_EVALUATION_LOG_DIR}/<run_id>/"
 echo "Summary JSONLs: ${OUTPUT_DIR}/*.results.jsonl"
 echo "Logs: ${OUTPUT_DIR}/"
