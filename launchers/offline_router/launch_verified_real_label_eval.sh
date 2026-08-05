@@ -62,7 +62,7 @@ set -euo pipefail
 if [[ -z "\${DAYTONA_API_KEY:-}" ]]; then
   for _env_file in /home/toolkit/PipelineRL-SWE/.env /home/toolkit/.env; do
     if [[ -f "\${_env_file}" ]]; then
-      DAYTONA_API_KEY=\$(grep -E '^DAYTONA_API_KEY=' "\${_env_file}" | head -1 | cut -d'=' -f2- | tr -d '"'"'"')
+      DAYTONA_API_KEY=\$(grep -E '^DAYTONA_API_KEY=' "\${_env_file}" | head -1 | cut -d'=' -f2- | tr -d '"' | tr -d "'")
       break
     fi
   done

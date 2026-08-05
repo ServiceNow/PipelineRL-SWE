@@ -82,7 +82,16 @@ def _build_input_text(
     thinking_text: str,
     patch_text: str,
     include_thinking: bool,
+    input_only: bool = False,
 ) -> str:
+    if input_only:
+        return "\n".join([
+            "Predict whether a strong model will successfully resolve this task.",
+            "Use only the problem description.",
+            "",
+            "[Problem Statement]",
+            problem_statement.strip(),
+        ])
     parts = [
         "Predict whether a strong model will successfully resolve this software repair task.",
         "Use the problem description and the scout model's repair attempt.",
@@ -109,6 +118,7 @@ class CoTAbstentionDataset(Dataset):
         max_seq_length: int,
         include_thinking: bool,
         multi_task_scout: bool = False,
+        input_only: bool = False,
     ) -> None:
         self.rows: list[dict[str, Any]] = []
         self.multi_task_scout = multi_task_scout
@@ -121,10 +131,10 @@ class CoTAbstentionDataset(Dataset):
             problem_statement = str(traj.get("problem_statement") or "").strip()
             thinking_text = str(traj.get("thinking_text") or "").strip()
             patch_text = str(traj.get("patch_text") or "").strip()
-            if not problem_statement or not patch_text:
+            if not problem_statement or (not input_only and not patch_text):
                 skipped += 1
                 continue
-            text = _build_input_text(problem_statement, thinking_text, patch_text, include_thinking)
+            text = _build_input_text(problem_statement, thinking_text, patch_text, include_thinking, input_only=input_only)
             encoded = tokenizer(text, add_special_tokens=True, truncation=True, max_length=max_seq_length)
             input_ids = encoded.get("input_ids")
             attention_mask = encoded.get("attention_mask")
@@ -238,6 +248,8 @@ def main() -> None:
     parser.add_argument("--model-name", default="Qwen/Qwen3-Embedding-8B")
     parser.add_argument("--include-thinking", action="store_true", default=True)
     parser.add_argument("--no-include-thinking", dest="include_thinking", action="store_false")
+    parser.add_argument("--input-only", action="store_true", default=False,
+                        help="Use only the problem statement (no scout trace or patch)")
     parser.add_argument("--multi-task-scout", action="store_true", default=False,
                         help="Add scout success (route 0) as a free auxiliary task alongside the strong-model target")
     parser.add_argument("--max-seq-length", type=int, default=24000)
@@ -293,10 +305,12 @@ def main() -> None:
     train_dataset = CoTAbstentionDataset(
         train_trajs, train_labels, tokenizer, int(args.max_seq_length),
         bool(args.include_thinking), multi_task_scout=bool(args.multi_task_scout),
+        input_only=bool(args.input_only),
     )
     eval_dataset = CoTAbstentionDataset(
         eval_trajs, eval_labels, tokenizer, int(args.max_seq_length),
         bool(args.include_thinking), multi_task_scout=bool(args.multi_task_scout),
+        input_only=bool(args.input_only),
     )
 
     if len(train_dataset) == 0 or len(eval_dataset) == 0:
