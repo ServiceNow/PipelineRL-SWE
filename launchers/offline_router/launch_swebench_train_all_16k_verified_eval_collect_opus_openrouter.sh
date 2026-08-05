@@ -18,7 +18,7 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "${SCRIPT_DIR}/../.." && pwd)
 
 TIMESTAMP=${TIMESTAMP:-$(date +%s)}
-OPENROUTER_MODEL=${OPENROUTER_MODEL:-anthropic/claude-opus-4-7}
+OPENROUTER_MODEL=${OPENROUTER_MODEL:-anthropic/claude-opus-5}
 # Sanitize model name for use in job/dir names
 MODEL_SLUG=$(echo "${OPENROUTER_MODEL}" | tr '/' '_' | tr '.' '_')
 
