@@ -97,7 +97,7 @@ async def _eval_one(
             eval_sh = test_spec.eval_script
             await sandbox.fs.upload_file(eval_sh.encode(), "/tmp/eval.sh")
             r = await sandbox.process.exec(
-                "/bin/bash /tmp/eval.sh", timeout=test_spec.timeout + 60
+                "/bin/bash /tmp/eval.sh", timeout=300
             )
             test_output = r.result or ""
             test_log_path = log_dir / LOG_TEST_OUTPUT
