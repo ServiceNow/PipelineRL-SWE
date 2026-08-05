@@ -47,7 +47,10 @@ def _text_to_patch(output_text: str, file_contents: dict[str, str]) -> str:
         patch_dict = get_normalized_patch(file_contents, modified_contents)
         if not patch_dict:
             return ""
-        return "\n".join(patch_dict.values())
+        parts = []
+        for path, hunk in patch_dict.items():
+            parts.append(f"--- a/{path}\n+++ b/{path}\n{hunk}")
+        return "\n".join(parts)
     except Exception:
         return ""
 
