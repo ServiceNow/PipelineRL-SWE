@@ -29,7 +29,7 @@ from datasets import load_from_disk
 from tqdm import tqdm
 
 from pipelinerl.swe.scripts.repair_eval_utils import extract_search_replace_edits
-from pipelinerl.swe.utils.repair_utils import get_normalized_patch, reconstruct_modified_file
+from pipelinerl.swe.utils.repair_utils import apply_edits_to_files, get_normalized_patch
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -43,10 +43,7 @@ def _text_to_patch(output_text: str, file_contents: dict[str, str]) -> str:
     if not edits:
         return ""
     try:
-        modified_contents: dict[str, str] = {}
-        for path, search, replace in edits:
-            base = modified_contents.get(path, file_contents.get(path, ""))
-            modified_contents[path] = reconstruct_modified_file(base, search, replace)
+        modified_contents = apply_edits_to_files(file_contents, edits, silent=True)
         patch_dict = get_normalized_patch(file_contents, modified_contents)
         if not patch_dict:
             return ""
