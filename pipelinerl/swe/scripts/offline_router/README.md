@@ -345,11 +345,19 @@ have not yet been trained on them.
 
 ## 6) CoT Abstention Predictor (Set 3 — current main track)
 
-Predicts whether the **scout model** (Qwen3-4B) will solve a task, by reading its thinking trace
-and/or patch. A high-confidence "will fail" prediction triggers abstention → call a stronger model.
+### Operating mode
+
+The **4B scout output is never submitted as a final answer**. The router makes a binary decision for each instance:
+
+- **Call oss-120b** — if P(oss-120b succeeds) is above threshold → pay for the strong model, submit its patch
+- **Abstain completely** — if P(oss-120b succeeds) is below threshold → submit nothing (empty patch)
+
+The 4B scout runs cheaply first; its output is used only as input features for the routing decision. The predictor label is always **oss-120b success** (route 3), not scout success.
+
+### Predictor inputs
 
 Two input modes:
-- **Post-primary (PS)**: input = problem + scout thinking trace + scout patch. Learns "did the scout get it right?", not pure task difficulty.
+- **Post-primary (PS)**: input = problem + scout patch (+ thinking trace if CoT scout). Gives the model's attempt as a signal for task tractability.
 - **Input-only (IO)**: input = problem statement only. Isolates task-difficulty signal; harder but more robust baseline.
 
 ```bash
@@ -368,9 +376,18 @@ INPUT_ONLY=true bash launchers/abstention/launch_cot_abstention_predictor.sh  # 
 # MATH domain input-only baseline:
 MATH_OUTPUT_DIR=/mnt/... bash launchers/abstention/launch_math_input_only_abstention_predictor.sh
 
-# Step 4: score predictions
-python -m pipelinerl.swe.scripts.offline_router.score_cot_abstention_predictor \
-  --model-dir /mnt/.../cot_abstention_*/
+# Transfer experiment (train on SWE-Smith 4B-Instruct, score zero-shot on Verified):
+# Traces already collected; no vLLM needed.
+bash launchers/abstention/launch_swe_smith_instruct_abstention_transfer.sh
+
+# Step 4: score predictions (zero-shot on a held-out domain)
+# --parquet-dir for proxy/parquet labels; --real-labels-jsonl for Daytona .results.jsonl
+python pipelinerl/swe/scripts/offline_router/score_cot_abstention_predictor.py \
+  --checkpoint-dir /mnt/.../checkpoints/epoch_NNNN \
+  --train-config   /mnt/.../train_config.json \
+  --trajectories   /mnt/.../trajectories.jsonl \
+  --real-labels-jsonl /mnt/.../predictions_route_3.results.jsonl \
+  --output-path    /mnt/.../predictions.jsonl
 
 # Step 5: analyze abstention curves
 python -m pipelinerl.swe.scripts.offline_router.analyze_cot_verifier_abstention \
