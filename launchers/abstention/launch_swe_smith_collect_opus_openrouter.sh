@@ -123,6 +123,7 @@ make -C "${REPO_ROOT}" job \
   DRY_RUN="${DRY_RUN}" \
   JOB_NAME="${JOB_NAME}_${TIMESTAMP}" \
   COMMAND="cd ${REPO_ROOT}; mkdir -p ${OUTPUT_ROOT}; set -o pipefail; { python pipelinerl/swe/scripts/offline_router/collect_openrouter_expert_from_existing.py \
+    --source-collection-dir '${EVAL_SOURCE_COLLECTION_DIR}' \
     --train-source-collection-dir '${TRAIN_SOURCE_COLLECTION_DIR}' \
     --eval-source-collection-dir '${EVAL_SOURCE_COLLECTION_DIR}' \
     --output-dir '${COLLECT_OUTPUT_DIR}' \
