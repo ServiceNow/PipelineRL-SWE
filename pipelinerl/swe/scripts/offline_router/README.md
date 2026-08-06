@@ -283,6 +283,66 @@ Key scripts:
 
 ---
 
+## 7) Dataset & Label Reference
+
+> **Rule**: proxy labels must be avoided or explicitly flagged. To detect: check `route_rewards`
+> unique values — binary `{0.0, 1.0}` means real Daytona pass/fail; continuous floats mean proxy
+> reward-model scores. The column name alone is NOT reliable.
+
+### SWE-Smith traces
+
+| Dataset | Scout model | CoT? | Label type | Success rates (per route) | Path |
+|---------|-------------|------|------------|--------------------------|------|
+| `instruct_patches_trajectories_1785884242` | Qwen3-4B-**Instruct**-2507 | No | **REAL** (join with 4-route parquet, route 0) | — (trace only) | `.../instruct_patches_trajectories_1785884242/` |
+| `cot_trajectories_1785341592` (and siblings) | Qwen3-4B-**Thinking** | Yes | No labels embedded — join with 4-route parquet | — (trace only) | `.../cot_trajectories_1785341592/` |
+| **4-route real-label parquet** | Routes 0–3 (see below) | — | **REAL** (Daytona binary 0/1) | [25%, 40%, 40%, 46%] | `.../offline_router_swe_smith_train1500_real_labels_4route_1780639659/collect/{train,eval}/` |
+
+4-route parquet route index → model:
+- Route 0: `Qwen/Qwen3-4B-Instruct-2507` (scout/instruct)
+- Route 1: `openai/gpt-oss-20b`
+- Route 2: `Qwen/Qwen3-Coder-30B-A3B-Instruct`
+- Route 3: `openai/gpt-oss-120b`
+
+### SWE-bench Verified traces
+
+| Dataset | Scout model | CoT? | Label type | Notes | Path |
+|---------|-------------|------|------------|-------|------|
+| `verified_zeroshot_nocot` | Qwen3-4B-**Instruct**-2507 | No | **PROXY** (~10%) in `labels_verified.parquet` | Real labels pending (Daytona route-0 job) | `.../verified_zeroshot_nocot/` |
+| 5-route collection parquet | Routes 0–4 (see below) | — | **PROXY** (continuous reward model) | Rates ~10–32% vs real 41–53% — do not use as ground truth | `.../offline_router_swe_bench_...5route_.../collect/eval/` |
+| **Verified Daytona eval** (`verified_real_label_eval_1785965509`) | Routes 1–3 | — | **REAL** | Route 0 (instruct) pending | `logs/run_evaluation/predictions_route_{1,2,3}_1785965509/` |
+
+5-route Verified parquet route index → model:
+- Route 0: `Qwen/Qwen3-4B-Instruct-2507`
+- Route 1: `openai/gpt-oss-20b`
+- Route 2: `Qwen/Qwen3-Coder-30B-A3B-Instruct`
+- Route 3: `openai/gpt-oss-120b`
+- Route 4: `google/gemini-3-flash-preview`
+
+Real Daytona results (routes 1–3): 151 / 153 / 194 resolved out of 369.
+
+### MATH traces
+
+| Dataset | Model | CoT? | Label type | Notes | Path |
+|---------|-------|------|------------|-------|------|
+| `math_cot_trajectories_1785795546` | Qwen3-4B-**Thinking** | Yes | **REAL** (`scout_correct`, deterministic grading) | 65.6% correct on eval (328/500) | `.../math_cot_trajectories_1785795546/` |
+
+### Trained abstention predictors
+
+| Run | Train domain | Scout traces | Label | Best AUC |
+|-----|-------------|-------------|-------|----------|
+| `cot_route0_1785909531` | MATH | 4B-Thinking CoT | `scout_correct` (real) | **0.9533** |
+| `no_cot_input_only_route0_1785944036` | MATH | 4B-Thinking CoT | `scout_correct` (real) | **0.8855** |
+| `cot_1785364718` | SWE-Smith | 4B-Instruct (route_outputs[0]) | route-3 real | 0.7246 |
+| `no_cot_1785518862` | SWE-Smith | 4B-Instruct (route_outputs[0]) | route-3 real | 0.7135 |
+| `no_cot_route3_1785884243` | SWE-Smith | 4B-Instruct (route_outputs[0]) | route-3 real | 0.6970 |
+
+High AUCs (~0.95) are on MATH, not SWE-Smith. SWE-Smith peaks at ~0.72. Do not conflate.
+The SWE-Smith predictors labelled "cot" use Instruct-4B traces (from route_outputs[0] in the parquet),
+not Thinking/CoT traces — the CoT traces exist in `cot_trajectories_*` but abstention predictors
+have not yet been trained on them.
+
+---
+
 ## 6) CoT Abstention Predictor (Set 3 — current main track)
 
 Predicts whether the **scout model** (Qwen3-4B) will solve a task, by reading its thinking trace
