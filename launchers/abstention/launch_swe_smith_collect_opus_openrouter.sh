@@ -18,7 +18,7 @@ REPO_ROOT=$(cd "${SCRIPT_DIR}/../.." && pwd)
 
 TIMESTAMP=${TIMESTAMP:-$(date +%s)}
 OPENROUTER_MODEL=${OPENROUTER_MODEL:-anthropic/claude-opus-5}
-MODEL_SLUG=$(echo "${OPENROUTER_MODEL}" | tr '/' '_' | tr '.' '_')
+MODEL_SLUG=$(echo "${OPENROUTER_MODEL}" | tr '/.-' '___')
 
 JOB_NAME=${JOB_NAME:-swe_smith_collect_${MODEL_SLUG}_openrouter}
 OUTPUT_ROOT=${OUTPUT_ROOT:-/mnt/llmd/results/exps/aristides/reason/${JOB_NAME}_${TIMESTAMP}}
