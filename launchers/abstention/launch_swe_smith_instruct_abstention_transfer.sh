@@ -1,16 +1,19 @@
 #!/usr/bin/env bash
 # Transfer experiment: train abstention predictor on SWE-Smith 4B-Instruct traces
-# (real route-0 labels from the 4-route parquet), then score zero-shot on SWE-bench
-# Verified 4B-Instruct traces (real Daytona route-0 labels).
+# (real route-3 oss-120b labels from the 4-route parquet), then score zero-shot on
+# SWE-bench Verified 4B-Instruct traces (real Daytona route-3 oss-120b labels).
+#
+# Label = did oss-120b succeed? — the predictor learns to route based on whether
+# the strong model (not the 4B scout itself) can handle the instance.
 #
 # No vLLM needed — traces are already collected on both sides.
 #
 # Optional env vars:
 #   TRAIN_TRAJECTORIES_DIR      -- SWE-Smith instruct trajectories (default below)
 #   EVAL_TRAJECTORIES_JSONL     -- Verified instruct trajectories JSONL (default below)
-#   VERIFIED_REAL_LABELS_JSONL  -- Daytona results for Verified route 0 (default below)
+#   VERIFIED_REAL_LABELS_JSONL  -- Daytona results for Verified route 3 oss-120b (default below)
 #   REAL_LABEL_DATASET_DIR      -- SWE-Smith 4-route real-label parquet dir
-#   LABEL_ROUTE_IDX             -- route index for train labels (default: 0 = 4B-Instruct)
+#   LABEL_ROUTE_IDX             -- route index for train labels (default: 3 = oss-120b)
 #   INPUT_ONLY                  -- "true" to ablate patch text (default: false)
 #   NUM_EPOCHS / LORA_R / NPROC
 set -euo pipefail
@@ -22,12 +25,13 @@ TIMESTAMP=$(date +%s)
 
 TRAIN_TRAJECTORIES_DIR=${TRAIN_TRAJECTORIES_DIR:-/mnt/llmd/results/exps/aristides/reason/instruct_patches_trajectories_1785884242}
 EVAL_TRAJECTORIES_JSONL=${EVAL_TRAJECTORIES_JSONL:-/mnt/llmd/results/exps/aristides/reason/verified_zeroshot_nocot/trajectories_verified.jsonl}
-VERIFIED_REAL_LABELS_JSONL=${VERIFIED_REAL_LABELS_JSONL:-/mnt/llmd/results/exps/aristides/reason/verified_real_label_eval_1786046449/predictions/predictions_route_0.results.jsonl}
+# Route 3 = oss-120b real Daytona labels on Verified (194/369 resolved)
+VERIFIED_REAL_LABELS_JSONL=${VERIFIED_REAL_LABELS_JSONL:-/mnt/llmd/results/exps/aristides/reason/verified_real_label_eval_1785965509/predictions/predictions_route_3.results.jsonl}
 
 REAL_LABEL_DATASET_DIR=${REAL_LABEL_DATASET_DIR:-/mnt/llmd/results/exps/aristides/reason/offline_router_swe_smith_train1500_real_labels_4route_1780639659/collect}
 TRAIN_PARQUET_DIR=${TRAIN_PARQUET_DIR:-${REAL_LABEL_DATASET_DIR}/train}
 EVAL_PARQUET_DIR=${EVAL_PARQUET_DIR:-${REAL_LABEL_DATASET_DIR}/eval}
-LABEL_ROUTE_IDX=${LABEL_ROUTE_IDX:-0}
+LABEL_ROUTE_IDX=${LABEL_ROUTE_IDX:-3}  # route 3 = oss-120b
 
 INPUT_ONLY=${INPUT_ONLY:-false}
 NUM_EPOCHS=${NUM_EPOCHS:-10}
