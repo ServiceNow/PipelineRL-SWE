@@ -5,6 +5,10 @@ per-instance P(Yes) scores. Used for zero-shot generalization evaluation.
 
 Output JSONL: {problem_id, p_yes, resolved}
 
+Labels can be provided in two ways (exactly one required):
+  --parquet-dir + --label-route-idx  (proxy/real parquet with route_successes)
+  --real-labels-jsonl                (Daytona .results.jsonl: {instance_id, resolved})
+
 Usage:
   python score_cot_abstention_predictor.py \
     --checkpoint-dir /mnt/.../checkpoints/epoch_0006 \
@@ -12,6 +16,14 @@ Usage:
     --trajectories   /mnt/.../trajectories_verified.jsonl \
     --parquet-dir    /mnt/.../labels_verified_dir \
     --label-route-idx 0 \
+    --output-path    /mnt/.../verified_predictions.jsonl
+
+  # or with real Daytona labels:
+  python score_cot_abstention_predictor.py \
+    --checkpoint-dir /mnt/.../checkpoints/epoch_0006 \
+    --train-config   /mnt/.../train_config.json \
+    --trajectories   /mnt/.../trajectories_verified.jsonl \
+    --real-labels-jsonl /mnt/.../predictions_route_0.results.jsonl \
     --output-path    /mnt/.../verified_predictions.jsonl
 """
 import argparse
@@ -56,13 +68,18 @@ def main() -> None:
                         help="train_config.json from the training run")
     parser.add_argument("--trajectories", required=True,
                         help="JSONL with problem_id, thinking_text, patch_text")
-    parser.add_argument("--parquet-dir", required=True,
+    parser.add_argument("--parquet-dir", default=None,
                         help="Dir with parquet files containing route_successes labels")
     parser.add_argument("--label-route-idx", type=int, default=0,
                         help="Index into route_successes for the label (default 0)")
+    parser.add_argument("--real-labels-jsonl", default=None,
+                        help="Daytona .results.jsonl with {instance_id, resolved} rows")
     parser.add_argument("--output-path", required=True)
     parser.add_argument("--batch-size", type=int, default=1)
     args = parser.parse_args()
+
+    if args.real_labels_jsonl is None and args.parquet_dir is None:
+        parser.error("Provide either --parquet-dir or --real-labels-jsonl")
 
     # Load training config
     with open(args.train_config) as f:
@@ -82,18 +99,30 @@ def main() -> None:
     logger.info("Model: %s  include_thinking=%s", model_name, include_thinking)
 
     # Load labels
-    parquet_paths = sorted(Path(args.parquet_dir).glob("*.parquet"))
-    if not parquet_paths:
-        # single file fallback
-        parquet_paths = [Path(args.parquet_dir)]
-    df = pd.concat([pd.read_parquet(p) for p in parquet_paths])
     labels: dict[str, bool] = {}
-    for _, row in df.iterrows():
-        pid = str(row.get("problem_id") or "").strip()
-        rs = row.get("route_successes")
-        if pid and rs is not None and len(rs) > args.label_route_idx:
-            labels[pid] = bool(rs[args.label_route_idx])
-    logger.info("Loaded %d labels (%d positive)", len(labels), sum(labels.values()))
+    if args.real_labels_jsonl:
+        with open(args.real_labels_jsonl) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                row = json.loads(line)
+                iid = str(row.get("instance_id") or "").strip()
+                if iid:
+                    labels[iid] = bool(row.get("resolved", False))
+        logger.info("Loaded %d real labels from %s (%d positive)",
+                    len(labels), args.real_labels_jsonl, sum(labels.values()))
+    else:
+        parquet_paths = sorted(Path(args.parquet_dir).glob("*.parquet"))
+        if not parquet_paths:
+            parquet_paths = [Path(args.parquet_dir)]
+        df = pd.concat([pd.read_parquet(p) for p in parquet_paths])
+        for _, row in df.iterrows():
+            pid = str(row.get("problem_id") or "").strip()
+            rs = row.get("route_successes")
+            if pid and rs is not None and len(rs) > args.label_route_idx:
+                labels[pid] = bool(rs[args.label_route_idx])
+        logger.info("Loaded %d labels from parquet (%d positive)", len(labels), sum(labels.values()))
 
     # Load trajectories
     trajs: list[dict] = []
