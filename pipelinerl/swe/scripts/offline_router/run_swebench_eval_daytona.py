@@ -115,7 +115,9 @@ async def _eval_one(
             )
             report[KEY_MODEL] = pred.get(KEY_MODEL, "unknown")
             (log_dir / LOG_REPORT).write_text(json.dumps(report, indent=2))
-            resolved = bool(report.get("resolved", False))
+            # get_eval_report returns {instance_id: {resolved: bool, ...}, ...}
+            instance_report = report.get(instance_id, report)
+            resolved = bool(instance_report.get("resolved", False))
             return {"status": "completed", "resolved": resolved, "instance_id": instance_id}
 
         except asyncio.TimeoutError:
