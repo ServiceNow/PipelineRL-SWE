@@ -36,8 +36,9 @@ OPENROUTER_REFERER=${OPENROUTER_REFERER:-}
 
 TRAIN_DATASET_NAMES=${TRAIN_DATASET_NAMES:-swe_smith_train_bugged_context}
 TRAIN_DATASET_PATH=${TRAIN_DATASET_PATH:-/mnt/llmd/data/swe_smith_bugged_context/ds_train}
-EVAL_DATASET_NAMES=${EVAL_DATASET_NAMES:-swe_smith_test_bugged_context}
-EVAL_DATASET_PATH=${EVAL_DATASET_PATH:-/mnt/llmd/data/swe_smith_bugged_context/ds_test}
+# The 4-route source collection's eval split was sampled from ds_train, not ds_test
+EVAL_DATASET_NAMES=${EVAL_DATASET_NAMES:-swe_smith_train_bugged_context}
+EVAL_DATASET_PATH=${EVAL_DATASET_PATH:-/mnt/llmd/data/swe_smith_bugged_context/ds_train}
 
 COLLECT_TRAIN=${COLLECT_TRAIN:-false}
 COLLECT_EVAL=${COLLECT_EVAL:-true}
