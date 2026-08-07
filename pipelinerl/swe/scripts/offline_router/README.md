@@ -307,9 +307,10 @@ Key scripts:
 
 | Dataset | Scout model | CoT? | Label type | Notes | Path |
 |---------|-------------|------|------------|-------|------|
-| `verified_zeroshot_nocot` | Qwen3-4B-**Instruct**-2507 | No | **PROXY** (~10%) in `labels_verified.parquet` | Real labels pending (Daytona route-0 job) | `.../verified_zeroshot_nocot/` |
+| `verified_zeroshot_nocot` | Qwen3-4B-**Instruct**-2507 | No | **PROXY** (~10%) in `labels_verified.parquet` | Use real Daytona labels instead | `.../verified_zeroshot_nocot/` |
 | 5-route collection parquet | Routes 0–4 (see below) | — | **PROXY** (continuous reward model) | Rates ~10–32% vs real 41–53% — do not use as ground truth | `.../offline_router_swe_bench_...5route_.../collect/eval/` |
-| **Verified Daytona eval** (`verified_real_label_eval_1785965509`) | Routes 1–3 | — | **REAL** | Route 0 (instruct) pending | `logs/run_evaluation/predictions_route_{1,2,3}_1785965509/` |
+| **Verified Daytona eval** (`verified_real_label_eval_1785965509`) | Routes 1–3 | — | **REAL** | Summary JSONLs reconstructed from per-instance log reports (old summaries were 0/369 due to pre-fix bug) | `.../verified_real_label_eval_1785965509/predictions/predictions_route_{1,2,3}.results.jsonl` |
+| **Verified Daytona eval** (`verified_real_label_eval_1786046449`) | Route 0 (instruct) | — | **REAL** | 89/369 resolved | `.../verified_real_label_eval_1786046449/predictions/predictions_route_0.results.jsonl` |
 
 5-route Verified parquet route index → model:
 - Route 0: `Qwen/Qwen3-4B-Instruct-2507`
@@ -318,7 +319,7 @@ Key scripts:
 - Route 3: `openai/gpt-oss-120b`
 - Route 4: `google/gemini-3-flash-preview`
 
-Real Daytona results (routes 1–3): 151 / 153 / 194 resolved out of 369.
+Real Daytona results: route 0 = 89/369 (24%), routes 1/2/3 = 151/153/194 resolved out of 369.
 
 ### MATH traces
 
@@ -328,18 +329,93 @@ Real Daytona results (routes 1–3): 151 / 153 / 194 resolved out of 369.
 
 ### Trained abstention predictors
 
-| Run | Train domain | Scout traces | Label | Best AUC |
-|-----|-------------|-------------|-------|----------|
-| `cot_route0_1785909531` | MATH | 4B-Thinking CoT | `scout_correct` (real) | **0.9533** |
-| `no_cot_input_only_route0_1785944036` | MATH | 4B-Thinking CoT | `scout_correct` (real) | **0.8855** |
-| `cot_1785364718` | SWE-Smith | 4B-Instruct (route_outputs[0]) | route-3 real | 0.7246 |
-| `no_cot_1785518862` | SWE-Smith | 4B-Instruct (route_outputs[0]) | route-3 real | 0.7135 |
-| `no_cot_route3_1785884243` | SWE-Smith | 4B-Instruct (route_outputs[0]) | route-3 real | 0.6970 |
+| Run | Train domain | Scout traces | Label | In-dist AUC | Cross-domain AUC (→Verified, route-3) |
+|-----|-------------|-------------|-------|-------------|---------------------------------------|
+| `cot_route0_1785909531` | MATH | 4B-Thinking CoT | `scout_correct` (real) | **0.9533** | 0.553 |
+| `no_cot_input_only_route0_1785944036` | MATH | 4B-Thinking IO | `scout_correct` (real) | **0.8855** | 0.547 |
+| `cot_1785364718` | SWE-Smith | 4B-Instruct, post-primary | route-3 real | 0.7246 | 0.550 |
+| `no_cot_1785518862` | SWE-Smith | 4B-Instruct, post-primary | route-3 real | 0.7135 | 0.523 |
+| `no_cot_route3_1785884243` | SWE-Smith | 4B-Instruct, post-primary | route-3 real | 0.6970 | **0.637** |
+| `swe_smith_instruct_to_verified_transfer_..._1786049784` | SWE-Smith | 4B-Instruct, post-primary | route-3 real | — | **0.636** |
+| `swe_smith_instruct_to_verified_transfer_..._input_only_1786126252` | SWE-Smith | 4B-Instruct, IO | route-3 real | — | 0.578 |
 
-High AUCs (~0.95) are on MATH, not SWE-Smith. SWE-Smith peaks at ~0.72. Do not conflate.
-The SWE-Smith predictors labelled "cot" use Instruct-4B traces (from route_outputs[0] in the parquet),
-not Thinking/CoT traces — the CoT traces exist in `cot_trajectories_*` but abstention predictors
-have not yet been trained on them.
+Baselines on Verified (route-3 labels, for context):
+- Scout patch length (negative, post-scout): **0.614** — shorter scout patch → oss-120b more likely to succeed
+- Issue description length (inverted, pre-routing): **0.548** — shorter issue desc → oss-120b more likely to succeed (raw AUC 0.452, inverted sign)
+- Gold patch length (inverted, oracle/informational only): **0.686** — longer gold patch → oss-120b more likely to succeed (raw 0.314; gold not available pre-routing)
+- Random: ~0.500
+
+Notes:
+- High in-dist AUC (~0.95) is MATH-only; SWE-Smith peaks at ~0.72. Do not conflate.
+- Cross-domain transfer (SWE-Smith → Verified) peaks at ~0.637 — barely above the scout patch-length heuristic (0.614), which itself supports the value of scouting.
+- IO predictor (0.578) is below post-primary (0.637), confirming the scout's patch content adds signal beyond problem statement alone.
+- The SWE-Smith predictors labelled "cot" use Instruct-4B traces (from route_outputs[0] in the parquet), not Thinking/CoT traces.
+
+### Opus 5 SWE-Smith collection
+
+Claude Opus 5 outputs on 286 SWE-Smith eval instances collected via OpenRouter:
+- **Path**: `.../swe_smith_collect_anthropic_claude_opus_5_openrouter_1786126553/collect/eval/`
+- **Proxy success rate**: 85.3% (reward-model score, not real Daytona — inflate substantially)
+- **Real resolve rate (Daytona)**: **165/286 = 57.7%** (`opus_swe_smith_daytona_eval_1786133340`, concurrency=8)
+- **Launcher**: `bash launchers/abstention/launch_opus_swe_smith_daytona_eval.sh`
+
+Model comparison on 286 SWE-Smith eval instances:
+| Model | Resolve rate |
+|-------|-------------|
+| Qwen3-4B-Instruct (scout) | ~25% |
+| openai/gpt-oss-120b | ~47.2% |
+| Claude Opus 5 | **57.7%** |
+
+The collection eval split uses `ds_train` as the dataset path (the 286 source eval problems were sampled from `ds_train`, not `ds_test`).
+
+---
+
+## Research Direction & Framing
+
+### Core abstention problem
+
+The router makes a binary **abstain vs. call oracle** decision per instance. The oracle (`openai/gpt-oss-120b`) is expensive; the 4B scout runs cheaply first. The predictor label is always **oracle success**, not scout success. The scout's output is a feature, never a submitted answer.
+
+### Why the scout should help
+
+The scout's attempt encodes information about task difficulty that isn't available from the problem statement alone:
+- What approach the model took
+- Where it got stuck or fell back on heuristics
+- Whether it produced a coherent partial solution
+
+This is a richer difficulty signal than, e.g., issue description length. The challenge is extracting it with a predictor that generalises.
+
+### Two experimental domains
+
+**SWE-Smith / SWE-bench Verified (agentic)**
+- Scout generates a patch; no way to verify it cheaply at decision time
+- Predictor sees: problem + scout patch + optional thinking trace
+- Scout failure is implicit (we never know if the patch is correct before running Daytona)
+- Current best: 0.637 cross-domain AUC (SWE-Smith train → Verified eval), barely above patch-length heuristic (0.614)
+
+**LiveCodeBench (code generation, see Section 8)**
+- Scout generates Python code and **executes it locally** against test cases
+- Scout pass/fail is a hard binary signal — no ambiguity
+- Abstention is **conditional**: the cascade already handles `scout passes → done`; the predictor operates only on scout-failed instances, asking "can the oracle succeed where the scout failed?"
+- Features: scout code, failure mode (wrong answer / TLE / runtime error / empty), thinking trace about why it failed
+- This is a strictly cleaner version of the abstention problem: better features, cleaner labels, explicit failure signal
+
+### Unifying story
+
+Scout reasoning traces are an approximation of execution feedback when you cannot run the code (SWE agentic tasks). LCB proves the concept with clean execution signals; SWE tests how well reasoning traces substitute for them. If the predictor works in both regimes, that validates the reasoning-as-signal hypothesis.
+
+### CoT trace extraction bug (fixed Aug 2026)
+
+`Qwen3-4B-Thinking-2507` was collected with the opening `<think>` tag stripped during collection. The full output (thinking + solution) was stored in `patch_text`. Fixed dataset at `cot_trajectories_1785341592_fixed/` — extraction:
+
+```python
+if "</think>" in full:
+    thinking, answer = full.split("</think>", 1)
+    row["thinking_text"] = thinking.strip()
+    row["patch_text"] = answer.strip()
+```
+
+All prior CoT predictors labelled "cot" used Instruct traces (route_outputs[0] from the 4-route parquet), not Thinking traces. The first real CoT predictor using properly extracted thinking is `cot_abstention_qwen3_emb8b_lora_r32_cot_fixed_route3_10epoch_1786133032` (in progress).
 
 ---
 
@@ -397,6 +473,63 @@ python -m pipelinerl.swe.scripts.offline_router.analyze_cot_verifier_abstention 
 MATH results (Qwen3-Embedding-8B, LoRA r32, 10 epochs):
 - Post-primary AUC: **0.953** (learns whether scout got it right from trace)
 - Input-only AUC: **~0.885** (task-difficulty signal only)
+
+---
+
+## 8) LiveCodeBench Domain (Set 4 — in progress)
+
+### Motivation
+
+LCB allows us to prove the scout abstention framing with clean execution signals, before (or alongside) the harder SWE case where we lack execution feedback at decision time. Multiple domains strengthen the argument that the predictor is learning genuine difficulty signal rather than overfitting to SWE-specific artefacts.
+
+### Problem formulation
+
+**Stage 1 — cascade filter**: scout (4B) generates Python code and executes it against private test cases. If it passes → done, no oracle needed. This handles the easy problems cheaply.
+
+**Stage 2 — conditional abstention**: for scout-failed instances, apply the abstention predictor: given the problem, the scout's code, and its failure mode, predict P(oracle succeeds). If above threshold → call oracle. If below → abstain. This avoids wasting oracle tokens on problems that are genuinely unsolvable.
+
+The predictor's job is therefore narrow: **discriminate between "oracle can fix this" and "oracle will also fail"** among the hardest instances.
+
+### Why failure mode matters
+
+The nature of the scout's failure is highly predictive:
+- **Wrong answer**: model understood the problem, got logic wrong — oracle likely fixes it
+- **Runtime error** (IndexError, etc.): probably a small bug — oracle likely fixes it
+- **TLE**: wrong complexity class — oracle may or may not have a better algorithm
+- **Empty output / syntax error**: model was lost — uncertain; depends on problem difficulty
+
+### Dataset
+
+HuggingFace: `livecodebench/code_generation_lite`. Problems from competitive programming contests (LeetCode, AtCoder, Codeforces) with dates from 2023-09-01 onwards. Each problem includes pre-written test cases (stdin/stdout format, `testtype="stdin"`). Private test cases are base64+zlib compressed JSON. No live environment needed during generation or evaluation.
+
+### Collection pipeline
+
+```bash
+# Phase 1+2: collect scout + oracle trajectories (500 problems, scout=4B, oracle=120B)
+bash launchers/abstention/launch_lcb_collection.sh
+
+# Phase 3: train abstention predictor on scout-failed subset
+LCB_COLLECTION_DIR=/mnt/.../lcb_collect_openai_gpt_oss_4b_TIMESTAMP \
+  bash launchers/abstention/launch_lcb_abstention_train.sh
+```
+
+The collection script runs both scout and oracle via OpenRouter, evaluates locally using `subprocess.run(python_code, input=stdin)`, and outputs:
+- `trajectories_train.jsonl`, `trajectories_eval.jsonl` — scout outputs with thinking traces
+- `train/labels.parquet`, `eval/labels.parquet` — oracle success labels at route index 3
+
+Active run: `lcb_collect_openai_gpt_oss_4b_1786134110` (scout done, oracle in progress)
+
+### Key scripts
+
+| Script | Purpose |
+|---|---|
+| `pipelinerl/swe/scripts/livecodebench/collect_lcb_trajectories.py` | Two-phase async collection: scout + oracle via OpenRouter, local code execution eval |
+| `launchers/abstention/launch_lcb_collection.sh` | EAI job: 500 problems, scout=gpt-oss-4b, oracle=gpt-oss-120b, concurrency=16 |
+| `launchers/abstention/launch_lcb_abstention_train.sh` | Train abstention predictor on LCB output; mirrors SWE-Smith setup |
+
+### Assumption
+
+This experiment assumes access to unit tests at decision time. For the purposes of this project, we treat this as given and note it explicitly. The LCB finding validates the approach under the best-case signal condition; SWE tests the approach when only reasoning traces are available (worst-case signal).
 
 ---
 
