@@ -338,6 +338,7 @@ Real Daytona results: route 0 = 89/369 (24%), routes 1/2/3 = 151/153/194 resolve
 | `no_cot_route3_1785884243` | SWE-Smith | 4B-Instruct, post-primary | route-3 real | 0.6970 | **0.637** |
 | `swe_smith_instruct_to_verified_transfer_..._1786049784` | SWE-Smith | 4B-Instruct, post-primary | route-3 real | — | **0.636** |
 | `swe_smith_instruct_to_verified_transfer_..._input_only_1786126252` | SWE-Smith | 4B-Instruct, IO | route-3 real | — | 0.578 |
+| `cot_abstention_..._cot_fixed_route3_1786133032` | SWE-Smith | 4B-**Thinking** CoT, post-primary | route-3 real | **0.749** | *not yet scored* |
 
 Baselines on Verified (route-3 labels, for context):
 - Scout patch length (negative, post-scout): **0.614** — shorter scout patch → oss-120b more likely to succeed
@@ -399,6 +400,64 @@ This is a richer difficulty signal than, e.g., issue description length. The cha
 - Abstention is **conditional**: the cascade already handles `scout passes → done`; the predictor operates only on scout-failed instances, asking "can the oracle succeed where the scout failed?"
 - Features: scout code, failure mode (wrong answer / TLE / runtime error / empty), thinking trace about why it failed
 - This is a strictly cleaner version of the abstention problem: better features, cleaner labels, explicit failure signal
+
+### Target ablation (2×2 × 2 domains)
+
+Two binary factors crossed across two domains:
+
+| | No test feedback | Test feedback |
+|---|---|---|
+| **No CoT** | problem + patch only | problem + patch + test failure signal |
+| **CoT** | problem + patch + thinking trace | problem + patch + thinking trace + test failure signal |
+
+Applied to: **LCB** (in-domain) and **SWE-Smith → SWE-Bench Verified** (cross-domain transfer).
+
+- Factor A (CoT) isolates whether the scout's reasoning trace adds signal beyond the raw attempt
+- Factor B (test feedback) isolates whether knowing which tests failed adds signal beyond the patch text
+- Cross-domain comparison shows whether each signal transfers across repos/domains
+
+### Experiment status tracker
+
+#### Currently running / queued
+
+| Job ID | Purpose | Unblocks |
+|--------|---------|---------|
+| `scout_daytona_eval_rerun_1786136775` | Daytona eval on Instruct-4B scout patches (1146 train + 286 eval) | All SWE test-feedback cells |
+| `lcb_collect_qwen_qwen3_4b_thinking_2507_1786213696` | LCB collection with Thinking-4B scout + oracle | All LCB cells |
+| `verified_abstention_eval_1786214481` | Cross-domain scoring: CoT predictor (epoch 7) on SWE-bench Verified | CoT predictor cross-domain AUC |
+
+#### SWE-Smith → Verified (6 cells)
+
+| Cell | Scout | CoT | Test FB | Run ID | In-dist AUC | Cross-domain AUC |
+|------|-------|-----|---------|--------|-------------|-----------------|
+| Instruct-4B, no-CoT, no tests | Instruct-2507 | ✗ | ✗ | `no_cot_route3_1785884243` | 0.697 | **0.637** |
+| Thinking-4B, CoT, no tests | Thinking-2507 | ✓ | ✗ | `cot_abstention_..._cot_fixed_route3_1786133032` | **0.749** | *scoring now* |
+| Thinking-4B, no-CoT stripped, no tests | Thinking-2507 | ✗ | ✗ | — pending training — | — | — |
+| Instruct-4B, no-CoT, with tests | Instruct-2507 | ✗ | ✓ | — blocked on scout Daytona — | — | — |
+| Thinking-4B, CoT, with tests | Thinking-2507 | ✓ | ✓ | — blocked on scout Daytona — | — | — |
+| Thinking-4B, no-CoT stripped, with tests | Thinking-2507 | ✗ | ✓ | — blocked on scout Daytona — | — | — |
+
+The "Thinking-4B, no-CoT stripped" cell uses the **same** `cot_trajectories_1785341592_fixed` trajectories as the CoT cell but excludes `--include-thinking` from the training command. This is the cleanest ablation for the CoT signal (same model, same patches, only predictor input differs).
+
+The "Instruct-4B" cells are a separate condition (different model, different patch quality) that isolates model quality independent of the predictor. They share the `instruct_patches_trajectories_1785884242` trajectory dataset.
+
+#### LCB (4 core cells + 1 optional reference)
+
+| Cell | Scout | CoT | Test FB | Status |
+|------|-------|-----|---------|--------|
+| Thinking-4B, no-CoT stripped, no tests | Thinking-2507 | ✗ | ✗ | — blocked on LCB collection — |
+| Thinking-4B, CoT, no tests | Thinking-2507 | ✓ | ✗ | — blocked on LCB collection — |
+| Thinking-4B, no-CoT stripped, with tests | Thinking-2507 | ✗ | ✓ | — blocked on LCB collection — |
+| Thinking-4B, CoT, with tests | Thinking-2507 | ✓ | ✓ | — blocked on LCB collection — |
+| Instruct-4B, no-CoT, no tests *(model quality ref)* | Instruct-2507 | ✗ | ✗ | needs separate LCB collection |
+
+The stripped / CoT split reuses the same `lcb_collect_qwen_qwen3_4b_thinking_2507_1786213696` collection — the only difference is `--include-thinking` in the training command. Test-feedback cells add the execution failure signal (error type + failing test output) to the predictor input.
+
+#### Infrastructure still needed
+
+1. **`augment_trajectories_with_test_feedback.py`** — joins per-instance Daytona `report.json` into trajectory JSONL as a `test_feedback` field (FAIL_TO_PASS names, pass/fail counts, error type, message excerpt)
+2. **`--include-test-feedback` flag in `train_cot_abstention_predictor.py`** — appends test feedback text to predictor input prompt
+3. **Launcher for SWE test-feedback training runs** — wraps augmentation + training for all three test-feedback cells above
 
 ### Unifying story
 
@@ -517,7 +576,7 @@ The collection script runs both scout and oracle via OpenRouter, evaluates local
 - `trajectories_train.jsonl`, `trajectories_eval.jsonl` — scout outputs with thinking traces
 - `train/labels.parquet`, `eval/labels.parquet` — oracle success labels at route index 3
 
-Active run: `lcb_collect_openai_gpt_oss_4b_1786134110` (scout done, oracle in progress)
+Active run: `lcb_collect_qwen_qwen3_4b_thinking_2507_1786213696` (Thinking-4B scout, oracle in progress). Note: earlier run `lcb_collect_openai_gpt_oss_4b_1786134110` used a non-existent model ID (`openai/gpt-oss-4b`) and produced empty scout trajectories — discard it.
 
 ### Key scripts
 
