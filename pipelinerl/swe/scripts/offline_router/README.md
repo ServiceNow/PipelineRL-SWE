@@ -454,7 +454,7 @@ The "Instruct-4B" cells are a separate condition (different model, different pat
 
 The stripped / CoT split reuses the same `lcb_collect_qwen_qwen3_4b_thinking_2507_1786213696` collection — the only difference is `--include-thinking` in the training command. Test-feedback cells add the execution failure signal (error type + failing test output) to the predictor input.
 
-Instruct-4B is a **first-class LCB condition**, not just a reference. On SWE-B, Thinking-4B outperforms Instruct-4B for agentic patch generation; on competitive programming (LCB), this ordering may reverse — instruct models can be more reliable at direct code synthesis without the overhead of a thinking scratchpad. Comparing the two on LCB directly tests this hypothesis and may reveal a different optimal scout for each domain.
+Instruct-4B is a **first-class LCB condition**, not just a reference. On SWE-B, Instruct-4B outperforms Thinking-4B at actual patch generation — the thinking model is worse on agentic coding despite its reasoning capability. On competitive programming (LCB), instruct may again be the stronger scout: direct code synthesis without a thinking scratchpad can be more reliable for well-specified algorithmic problems. Comparing the two on LCB directly tests this and may reveal a different optimal scout for each domain.
 
 #### Other model pairs (future)
 
