@@ -41,12 +41,10 @@ OUTPUT_DIR=${OUTPUT_DIR:-/mnt/llmd/results/exps/aristides/reason/${JOB_NAME}}
 if [[ -n "${CHECKPOINT_EPOCH:-}" ]]; then
   EPOCH_STR=$(printf "%04d" "${CHECKPOINT_EPOCH}")
 else
-  # Find epoch with highest eval_auc
+  # Find epoch with highest eval_auc — parse epoch + auc from the same line (mawk-compatible)
   EPOCH_STR=$(grep "eval_auc" "${PREDICTOR_DIR}/train.log" \
-    | awk -F'eval_auc=' '{print $2, NR}' \
-    | sort -rn | head -1 | awk '{print $2}' \
-    | xargs -I{} sed -n "{}p" "${PREDICTOR_DIR}/train.log" \
-    | grep -oP 'Epoch \K[0-9]+' | xargs printf "%04d")
+    | sed 's/Epoch \([0-9]*\):.*eval_auc=\([0-9.]*\).*/\1 \2/' \
+    | awk 'BEGIN{best=-1;best_e=0} {if($2+0>best+0){best=$2+0;best_e=$1+0}} END{printf "%04d\n",best_e}')
 fi
 CHECKPOINT_DIR="${PREDICTOR_DIR}/checkpoints/epoch_${EPOCH_STR}"
 echo "Using checkpoint: ${CHECKPOINT_DIR}"
