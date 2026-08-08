@@ -103,7 +103,7 @@ export DAYTONA_API_KEY
 cd "${REPO_ROOT}"
 
 for split in train eval; do
-  preds_file="${PREDS_DIR}/predictions_\${split}_patched.jsonl"
+  preds_file="${PREDS_DIR}/predictions_\${split}.jsonl"
   if [[ ! -f "\${preds_file}" ]]; then
     echo "[skip] \${preds_file} not found"
     continue

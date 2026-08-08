@@ -25,7 +25,7 @@ MIN_DATE=${MIN_DATE:-2023-09-01}
 CONCURRENCY=${CONCURRENCY:-16}
 PHASE=${PHASE:-all}
 
-SCOUT_SLUG=$(echo "${SCOUT_MODEL}" | tr '/.-' '___')
+SCOUT_SLUG=$(echo "${SCOUT_MODEL}" | tr '/.-' '___' | tr '[:upper:]' '[:lower:]')
 JOB_NAME=${JOB_NAME:-lcb_collect_${SCOUT_SLUG}_${TIMESTAMP}}
 OUTPUT_DIR=${OUTPUT_DIR:-/mnt/llmd/results/exps/aristides/reason/${JOB_NAME}}
 
