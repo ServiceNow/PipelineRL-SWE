@@ -141,25 +141,35 @@ Instruct-4B performs better on SWE-B agentic tasks despite lacking reasoning tra
 
 Verified by inspecting `train_config.json` and `run_train.sh` for each run.
 
-| Predictor | Scout model | Patch in input | CoT trace | Test FB | AUC (in-domain) | AUC (→ Verified) | Run ID |
-|-----------|------------|----------------|-----------|---------|-----------------|------------------|--------|
-| Input-only | Instruct-2507 | ✗ | ✗ | ✗ | 0.682 | 0.578 | `nocot_input_only_1786126252` |
-| Post-primary, no-CoT | **Instruct-2507** | ✓ | ✗ | ✗ | 0.694 | **0.637** | `no_cot_route3_1785884243` |
-| Post-primary, CoT stripped | **Thinking-2507** | ✓ | ✗ | ✗ | — | — | *pending* |
-| Post-primary, CoT | **Thinking-2507** | ✓ | ✓ | ✗ | **0.749** | *pending* | `cot_fixed_route3_1786133032` |
-| Post-primary, no-CoT + tests | Instruct-2507 | ✓ | ✗ | ✓ | — | — | *blocked on scout Daytona* |
-| Post-primary, CoT + tests | Thinking-2507 | ✓ | ✓ | ✓ | — | — | *blocked on scout Daytona* |
+| Predictor | Scout model | CoT | Test FB format | AUC (in-domain) | AUC (→ Verified) | Run ID |
+|-----------|------------|-----|----------------|-----------------|------------------|--------|
+| Input-only | Instruct-2507 | ✗ | — | 0.682 | 0.578 | `nocot_input_only_1786126252` |
+| No-CoT | **Instruct-2507** | ✗ | — | 0.697 | **0.637** | `no_cot_route3_1785884243` |
+| CoT stripped | **Thinking-2507** | ✗ | — | **0.717** | *pending* | `no_cot_route3_1786218095` |
+| CoT | **Thinking-2507** | ✓ | — | **0.749** | *pending* | `cot_fixed_route3_1786133032` |
+| No-CoT + tests (old format, 8 names) | Instruct-2507 | ✗ | 8 fail names + count | **0.779** *(avg of 2 runs)* | — | `no_cot_testfb_route3_1786221930/1786223095` |
+| No-CoT + tests (count only) | Instruct-2507 | ✗ | N/M fraction | *running* | — | launched 2026-08-08 |
+| No-CoT + tests (names only, no labels) | Instruct-2507 | ✗ | all names, no labels | *running* | — | launched 2026-08-08 |
+| No-CoT + tests (full labeled list) | Instruct-2507 | ✗ | FAILED/PASSED per test | *running* | — | launched 2026-08-08 |
+| CoT + tests | Thinking-2507 | ✓ | full | *blocked* | — | needs Thinking-2507 Daytona eval |
 
-**Note on "CoT stripped"**: uses the same Thinking-2507 trajectories as the CoT row, but `include_thinking=False` — same patches, only predictor input differs. This is the cleanest isolation of the CoT signal.
+**Key result (2026-08-08)**: Test feedback (even old 8-name format) beats CoT predictor by +3pp: 0.779 vs 0.749. This is Instruct-2507 with no thinking traces at all — pure execution feedback outperforms reasoning traces on SWE-Smith in-domain.
 
-**Note on "no-CoT" rows**: the Instruct-2507 scout (`instruct_patches_trajectories_1785884242`) generates no thinking text — `thinking_text` is empty in every row. The Thinking-2507 scout (`cot_trajectories_1785341592_fixed`) has full `<think>...</think>` blocks extracted and stored separately.
+**Test feedback format ablation** (3 cells running): isolates whether the signal is (a) which tests failed by name, (b) the pass/fail ratio, or (c) just the structure of the test suite. Results pending.
 
-**Test feedback for SWE**: FAIL_TO_PASS test names, pass/fail counts, and error type from Daytona `report.json` run on scout patches. Scout Daytona eval (`scout_daytona_eval_rerun_1786136775`) covers 1146 train + 286 eval instances and is currently running.
+**Thinking-2507 on LCB (2026-08-08)**: Only 22% of LCB trajectories have thinking traces. The model outputs natural-language reasoning without `<think>` tags for 78% of problems — thinking traces only appear when the model explicitly chooses to use them. This significantly limits the CoT signal for LCB.
+
+**LCB oracle resolution rates (gpt-oss-120b)**:
+- Instruct-2507 collection: 44.8% train, 39.0% eval
+- Thinking-2507 collection: 42.0% train, 37.0% eval
+(Higher than SWE-Smith ~22%; LCB problems are more tractable for oss-120b)
 
 Key takeaways:
-- Scout patch adds signal over problem alone: +0.012 AUC in-domain, +0.059 cross-domain
-- CoT trace adds signal over no-CoT patch: +0.055 in-domain (Thinking vs Instruct confounds this — CoT stripped will isolate it)
-- Cross-domain transfer holds: no-CoT predictor trained on SWE-Smith generalises to Verified without fine-tuning
+- Scout patch adds signal over problem alone: +0.015 AUC in-domain, +0.059 cross-domain
+- CoT stripped (Thinking-2507, no traces) outperforms Instruct-2507 no-CoT: 0.717 vs 0.697 (patch quality effect)
+- CoT trace adds +0.032 over CoT-stripped: 0.749 vs 0.717 (cleanest isolation of trace signal)
+- **Test feedback dominates CoT**: 0.779 vs 0.749 — execution beats reasoning on SWE in-domain
+- Cross-domain transfer holds for no-CoT predictor (SWE-Smith → Verified: 0.637)
 
 ### Routing policy — 285 SWE-Smith eval instances
 
@@ -206,19 +216,19 @@ The 2×2 table shows CoT traces and execution feedback are both informative, and
 
 ## What Still Needs to Run
 
-| Experiment | Scout model | CoT | Test FB | Status | Blocker |
-|-----------|------------|-----|---------|--------|---------|
-| CoT predictor cross-domain AUC (→ Verified) | Thinking-2507 | ✓ | ✗ | scoring | job `verified_abstention_eval_1786214481` |
-| SWE-Smith: CoT stripped (clean CoT ablation) | Thinking-2507 | ✗ | ✗ | pending — can start now | none (data exists) |
-| SWE-Smith: no-CoT + test feedback | Instruct-2507 | ✗ | ✓ | pending | scout Daytona `scout_daytona_eval_rerun_1786136775` |
-| SWE-Smith: CoT + test feedback | Thinking-2507 | ✓ | ✓ | pending | same |
-| SWE-Smith: CoT stripped + test feedback | Thinking-2507 | ✗ | ✓ | pending | same |
-| LCB: Thinking-2507, no-CoT stripped, no tests | Thinking-2507 | ✗ | ✗ | pending | collection `lcb_collect_qwen_qwen3_4b_thinking_2507_1786213696` |
-| LCB: Thinking-2507, CoT, no tests | Thinking-2507 | ✓ | ✗ | pending | same |
-| LCB: Thinking-2507, no-CoT stripped, with tests | Thinking-2507 | ✗ | ✓ | pending | same |
-| LCB: Thinking-2507, CoT, with tests | Thinking-2507 | ✓ | ✓ | pending | same |
-| LCB: Instruct-2507, no-CoT, no tests | Instruct-2507 | ✗ | ✗ | pending | separate LCB collection |
-| LCB: Instruct-2507, no-CoT, with tests | Instruct-2507 | ✗ | ✓ | pending | same |
+| Experiment | Scout model | CoT | Test FB | Status |
+|-----------|------------|-----|---------|--------|
+| CoT predictor → Verified cross-domain AUC | Thinking-2507 | ✓ | ✗ | ❌ vLLM crash (persistent — needs investigation) |
+| SWE-Smith: no-CoT + tests (count only) | Instruct-2507 | ✗ | count | 🔄 running |
+| SWE-Smith: no-CoT + tests (names only) | Instruct-2507 | ✗ | names | 🔄 running |
+| SWE-Smith: no-CoT + tests (full labeled) | Instruct-2507 | ✗ | full | 🔄 running |
+| SWE-Smith: CoT + tests | Thinking-2507 | ✓ | full | 🔲 blocked — needs Thinking-2507 Daytona eval |
+| SWE-Smith: CoT stripped + tests | Thinking-2507 | ✗ | full | 🔲 same blocker |
+| LCB: Thinking-2507, no-CoT stripped, no tests | Thinking-2507 | ✗ | ✗ | 🔲 needs LCB abstention training |
+| LCB: Thinking-2507, CoT, no tests | Thinking-2507 | ✓ | ✗ | 🔲 same |
+| LCB: Instruct-2507, no-CoT, no tests | Instruct-2507 | ✗ | ✗ | 🔲 same |
+
+**Verified eval blocker (as of 2026-08-08)**: 4 attempts, all failing. Attempts 1-2: vLLM crash (Session is closed). Attempt 3: context length (16384 → fixed to 32768). Attempt 4: vLLM crash again (1/369 succeeded). Likely a GPU memory issue with long Verified instances + 32768 context. Consider reducing max_tokens for collection or investigating vLLM server stability.
 
 ---
 
