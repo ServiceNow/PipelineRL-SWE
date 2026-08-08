@@ -125,7 +125,8 @@ async def collect(args: argparse.Namespace) -> None:
             m = re.search(r"<\|im_start\|>user\n(.*?)(?:<\|im_end\|>|$)", problem, re.DOTALL)
             if m:
                 problem = m.group(1).strip()
-        async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
+        async with aiohttp.ClientSession(timeout=timeout, connector=connector,
+                                         connector_owner=False) as session:
             text, usage = await _call_vllm(session, args.vllm_base_url, args.scout_model,
                                            problem, sem)
         if text is None:
@@ -145,8 +146,8 @@ async def collect(args: argparse.Namespace) -> None:
                        if str(row.get("problem_id") or "").strip() not in done]
 
     n_ok = n_err = 0
-    async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
-        tasks = [process(row) for row in rows_to_process]
+    tasks = [process(row) for row in rows_to_process]
+    try:
         with traj_path.open("a") as fh:
             for coro in asyncio.as_completed(tasks):
                 result = await coro
@@ -158,6 +159,8 @@ async def collect(args: argparse.Namespace) -> None:
                 fh.flush()
                 if n_ok % 50 == 0:
                     logger.info("processed=%d errors=%d", n_ok, n_err)
+    finally:
+        await connector.close()
 
     logger.info("Scout done: ok=%d errors=%d", n_ok, n_err)
     logger.info("Trajectories: %s", traj_path)
