@@ -411,6 +411,12 @@ def main() -> None:
     ap.add_argument("--api-key-env", default="OPENROUTER_API_KEY")
     ap.add_argument("--api-key-file", default="/home/toolkit/.secrets/openrouter_api_key")
     ap.add_argument("--base-url", default="https://openrouter.ai/api")
+    ap.add_argument("--scout-base-url", default="",
+                    help="Base URL for scout model (overrides --base-url for scout phase). "
+                         "Use to point scout at a local vLLM server: http://localhost:8000")
+    ap.add_argument("--scout-api-key", default="",
+                    help="API key for scout base URL (if different from OpenRouter key). "
+                         "For local vLLM: any non-empty string, e.g. 'local'")
     ap.add_argument("--title", default="PipelineRL-LCB")
     ap.add_argument("--max-samples", type=int, default=0,
                     help="Max problems to use (0 = all)")
@@ -432,12 +438,18 @@ def main() -> None:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load API key
+    # Load API key (used for oracle and scout when no --scout-base-url given)
     api_key = os.environ.get(args.api_key_env, "")
     if not api_key and Path(args.api_key_file).exists():
         api_key = Path(args.api_key_file).read_text().strip()
-    if not api_key and args.phase in ("scout", "oracle", "all"):
+    if not api_key and args.phase in ("oracle", "all"):
         raise ValueError(f"No API key found in {args.api_key_env} or {args.api_key_file}")
+
+    # Scout can use a separate endpoint (local vLLM)
+    scout_base_url = args.scout_base_url or args.base_url
+    scout_api_key = args.scout_api_key or api_key
+    if not scout_api_key and args.phase in ("scout", "all"):
+        raise ValueError(f"No API key for scout — pass --scout-api-key or ensure {args.api_key_file} exists")
 
     # Load dataset
     all_rows = load_lcb(
@@ -470,8 +482,8 @@ def main() -> None:
             asyncio.run(collect_scout(
                 split_rows, scout_path,
                 model=args.scout_model,
-                api_key=api_key,
-                base_url=args.base_url,
+                api_key=scout_api_key,
+                base_url=scout_base_url,
                 max_tokens=args.scout_max_tokens,
                 temperature=args.temperature,
                 concurrency=args.concurrency,
