@@ -369,6 +369,27 @@ Model comparison on 286 SWE-Smith eval instances:
 
 The collection eval split uses `ds_train` as the dataset path (the 286 source eval problems were sampled from `ds_train`, not `ds_test`).
 
+#### Opus as the fallback oracle
+
+The abstention predictor is trained normally on `gpt-oss-120b` success labels. At inference time, the "abstain" branch can be replaced with a call to Opus 5 instead of submitting nothing. This turns the binary abstain/call-120b policy into a three-tier cascade:
+
+```
+scout passes → done (stage 1 filter)
+P(oss-120b succeeds) ≥ threshold → call oss-120b
+P(oss-120b succeeds) < threshold → call Opus 5  (instead of abstaining)
+```
+
+The 286-instance Opus eval collection provides the labels needed to evaluate this policy: for instances the predictor would have abstained on, how many does Opus actually resolve? This lets us compare operating points on a cost-vs-resolve-rate curve:
+
+| Policy | Cost | Resolve rate |
+|--------|------|-------------|
+| Always oss-120b | medium | ~47.2% |
+| Abstain below threshold | low | < 47.2% (fewer calls) |
+| Route low-confidence → Opus | high | potentially > 47.2% |
+| Always Opus | highest | 57.7% |
+
+No Opus training labels are needed — the predictor trains on oss-120b labels only. The Opus eval labels are used only to measure the value of the fallback.
+
 ---
 
 ## Research Direction & Framing
