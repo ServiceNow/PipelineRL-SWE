@@ -77,13 +77,64 @@ def load_parquet_labels(parquet_dir: str, route_idx: int = 3) -> dict[str, bool]
 
 # ── input text ────────────────────────────────────────────────────────────────
 
+_TF_FORMATS = ("full", "names_only", "count_only")
+
+
+def _build_test_feedback_text(traj: dict[str, Any], fmt: str) -> str:
+    """Build test-feedback text from raw _tf_* fields stored by augmentation script.
+
+    fmt choices:
+      full       — labeled FAILED/PASSED list, totals (default, richest)
+      names_only — all test names, no pass/fail labels (tests structure only)
+      count_only — just the fraction N/M failing (execution ratio only)
+    """
+    if fmt not in _TF_FORMATS:
+        raise ValueError(f"Unknown test-feedback format {fmt!r}; choose from {_TF_FORMATS}")
+
+    failing: list = traj.get("_tf_failing") or []
+    passing: list = traj.get("_tf_passing") or []
+    resolved: bool = bool(traj.get("_tf_resolved", False))
+    patch_exists: bool = bool(traj.get("_tf_patch_exists", True))
+    n_fail, n_pass = len(failing), len(passing)
+    total = n_fail + n_pass
+
+    # Fall back to pre-formatted string for legacy trajectories without raw fields
+    if not failing and not passing and not resolved:
+        return traj.get("test_feedback", "")
+
+    if not patch_exists:
+        return "Scout test execution: NO PATCH"
+
+    if fmt == "count_only":
+        if resolved:
+            return f"Scout test execution: PASSED ({n_pass}/{total} tests)"
+        if total == 0:
+            return "Scout test execution: FAILED (no test output available)"
+        return f"Scout test execution: FAILED ({n_fail}/{total} tests failing)"
+
+    if fmt == "names_only":
+        all_names = failing + passing
+        if not all_names:
+            return "Scout test execution: no test names available"
+        parts = [f"Scout test execution: {total} tests in suite"]
+        for name in all_names[:200]:
+            parts.append(name)
+        overflow = total - min(total, 200)
+        if overflow:
+            parts.append(f"(+{overflow} more)")
+        return "\n".join(parts)
+
+    # fmt == "full" — use pre-formatted string (already in rich format from augmentation)
+    return traj.get("test_feedback", "")
+
+
 def _build_input_text(
     problem_statement: str,
     thinking_text: str,
     patch_text: str,
     include_thinking: bool,
     input_only: bool = False,
-    test_feedback: str = "",
+    test_feedback_text: str = "",
     include_test_feedback: bool = False,
 ) -> str:
     if input_only:
@@ -106,8 +157,8 @@ def _build_input_text(
     if include_thinking and thinking_text:
         parts += ["<think>", thinking_text.strip(), "</think>"]
     parts.append(patch_text.strip())
-    if include_test_feedback and test_feedback:
-        parts += ["", "[Scout Test Execution Feedback]", test_feedback.strip()]
+    if include_test_feedback and test_feedback_text:
+        parts += ["", "[Scout Test Execution Feedback]", test_feedback_text.strip()]
     return "\n".join(parts)
 
 
@@ -124,6 +175,7 @@ class CoTAbstentionDataset(Dataset):
         multi_task_scout: bool = False,
         input_only: bool = False,
         include_test_feedback: bool = False,
+        test_feedback_format: str = "full",
     ) -> None:
         self.rows: list[dict[str, Any]] = []
         self.multi_task_scout = multi_task_scout
@@ -136,14 +188,14 @@ class CoTAbstentionDataset(Dataset):
             problem_statement = str(traj.get("problem_statement") or "").strip()
             thinking_text = str(traj.get("thinking_text") or "").strip()
             patch_text = str(traj.get("patch_text") or "").strip()
-            test_feedback = str(traj.get("test_feedback") or "").strip()
+            test_feedback_text = _build_test_feedback_text(traj, test_feedback_format) if include_test_feedback else ""
             if not problem_statement or (not input_only and not patch_text):
                 skipped += 1
                 continue
             text = _build_input_text(
                 problem_statement, thinking_text, patch_text, include_thinking,
                 input_only=input_only,
-                test_feedback=test_feedback,
+                test_feedback_text=test_feedback_text,
                 include_test_feedback=include_test_feedback,
             )
             encoded = tokenizer(text, add_special_tokens=True, truncation=True, max_length=max_seq_length)
@@ -262,8 +314,13 @@ def main() -> None:
     parser.add_argument("--input-only", action="store_true", default=False,
                         help="Use only the problem statement (no scout trace or patch)")
     parser.add_argument("--include-test-feedback", action="store_true", default=False,
-                        help="Append test execution feedback from 'test_feedback' trajectory field to predictor input")
+                        help="Append test execution feedback from trajectory fields to predictor input")
     parser.add_argument("--no-include-test-feedback", dest="include_test_feedback", action="store_false")
+    parser.add_argument("--test-feedback-format", choices=list(_TF_FORMATS), default="full",
+                        help="Format for test feedback block (default: full). "
+                             "full=labeled FAILED/PASSED list; "
+                             "names_only=all test names no labels; "
+                             "count_only=just N/M failing fraction")
     parser.add_argument("--multi-task-scout", action="store_true", default=False,
                         help="Add scout success (route 0) as a free auxiliary task alongside the strong-model target")
     parser.add_argument("--max-seq-length", type=int, default=24000)
@@ -321,12 +378,14 @@ def main() -> None:
         bool(args.include_thinking), multi_task_scout=bool(args.multi_task_scout),
         input_only=bool(args.input_only),
         include_test_feedback=bool(args.include_test_feedback),
+        test_feedback_format=str(args.test_feedback_format),
     )
     eval_dataset = CoTAbstentionDataset(
         eval_trajs, eval_labels, tokenizer, int(args.max_seq_length),
         bool(args.include_thinking), multi_task_scout=bool(args.multi_task_scout),
         input_only=bool(args.input_only),
         include_test_feedback=bool(args.include_test_feedback),
+        test_feedback_format=str(args.test_feedback_format),
     )
 
     if len(train_dataset) == 0 or len(eval_dataset) == 0:
@@ -383,6 +442,7 @@ def main() -> None:
         "label_route_idx": int(args.label_route_idx),
         "include_thinking": bool(args.include_thinking),
         "include_test_feedback": bool(args.include_test_feedback),
+        "test_feedback_format": str(args.test_feedback_format),
         "multi_task_scout": bool(args.multi_task_scout),
         "max_seq_length": int(args.max_seq_length),
         "num_epochs": int(args.num_epochs),

@@ -29,6 +29,7 @@ EVAL_PARQUET_DIR=${EVAL_PARQUET_DIR:-${REAL_LABEL_DATASET_DIR}/eval}
 INCLUDE_THINKING=${INCLUDE_THINKING:-true}
 INPUT_ONLY=${INPUT_ONLY:-false}
 INCLUDE_TEST_FEEDBACK=${INCLUDE_TEST_FEEDBACK:-false}
+TEST_FEEDBACK_FORMAT=${TEST_FEEDBACK_FORMAT:-full}  # full | names_only | count_only
 MULTI_TASK_SCOUT=${MULTI_TASK_SCOUT:-false}
 LABEL_ROUTE_IDX=${LABEL_ROUTE_IDX:-3}
 NUM_EPOCHS=${NUM_EPOCHS:-10}
@@ -68,8 +69,8 @@ else
 fi
 
 if [[ "${INCLUDE_TEST_FEEDBACK}" == "true" ]]; then
-  TEST_FB_SUFFIX="_testfb"
-  TEST_FB_ARG="--include-test-feedback"
+  TEST_FB_SUFFIX="_testfb_${TEST_FEEDBACK_FORMAT}"
+  TEST_FB_ARG="--include-test-feedback --test-feedback-format ${TEST_FEEDBACK_FORMAT}"
 else
   TEST_FB_SUFFIX=""
   TEST_FB_ARG="--no-include-test-feedback"

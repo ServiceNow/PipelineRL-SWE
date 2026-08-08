@@ -70,43 +70,69 @@ def parse_test_output(test_output: str) -> dict:
     }
 
 
-def format_test_feedback(resolved: bool, patch_exists: bool, parsed: dict | None) -> str:
-    """Render test execution info as a plain-text block for predictor input."""
+MAX_TEST_NAMES_DEFAULT = 200
+
+
+def format_test_feedback(
+    resolved: bool,
+    patch_exists: bool,
+    parsed: dict | None,
+    max_test_names: int = MAX_TEST_NAMES_DEFAULT,
+) -> str:
+    """Render test execution info as a labeled list for predictor input.
+
+    Format (all ablation modes are derived in the training script from the
+    raw _tf_* fields; this function produces the canonical 'full' format):
+      Scout test execution: FAILED (8/576 tests failing)
+      FAILED: test_foo
+      FAILED: test_bar
+      PASSED: test_baz
+      ...
+      (+N more PASSED, +M more FAILED — see totals above)
+      Total: 568 passed, 8 failed
+    """
     if not patch_exists:
         return "Scout test execution: NO PATCH (patch generation failed or empty)"
 
+    failing = parsed["failing"] if parsed else []
+    passing = parsed["passing"] if parsed else []
+    n_fail = len(failing)
+    n_pass = len(passing)
+    total = n_fail + n_pass
+
     if resolved:
-        n_pass = len(parsed["passing"]) if parsed else 0
-        return f"Scout test execution: PASSED ({n_pass} tests passing)"
-
-    if parsed is None:
+        header = f"Scout test execution: PASSED ({n_pass} tests passing)"
+    elif total == 0:
         return "Scout test execution: FAILED (no test output available)"
+    else:
+        header = f"Scout test execution: FAILED ({n_fail}/{total} tests failing)"
 
-    failing = parsed["failing"]
-    passing = parsed["passing"]
-    summary = parsed["summary_lines"]
+    parts = [header]
 
-    parts = [f"Scout test execution: FAILED ({len(failing)} test(s) still failing)"]
+    # Prioritise showing all failing names, fill remainder with passing
+    fail_slots = min(n_fail, max_test_names)
+    pass_slots = min(n_pass, max(0, max_test_names - fail_slots))
 
-    if failing:
-        names = ", ".join(f.split("::")[-1] for f in failing[:8])
-        if len(failing) > 8:
-            names += f", ... (+{len(failing)-8} more)"
-        parts.append(f"Failing tests: {names}")
+    for name in failing[:fail_slots]:
+        parts.append(f"FAILED: {name}")
+    for name in passing[:pass_slots]:
+        parts.append(f"PASSED: {name}")
 
-    if passing:
-        parts.append(f"Passing tests: {len(passing)}")
+    overflow_fail = n_fail - fail_slots
+    overflow_pass = n_pass - pass_slots
+    overflow_parts = []
+    if overflow_fail > 0:
+        overflow_parts.append(f"+{overflow_fail} more FAILED")
+    if overflow_pass > 0:
+        overflow_parts.append(f"+{overflow_pass} more PASSED")
+    if overflow_parts:
+        parts.append(f"({', '.join(overflow_parts)} — see totals above)")
 
-    if summary:
-        parts.append("Failure summary:")
-        for line in summary:
-            # Truncate very long lines
-            parts.append(f"  {line[:200]}")
-
+    parts.append(f"Total: {n_pass} passed, {n_fail} failed")
     return "\n".join(parts)
 
 
-def load_daytona_feedback(log_dir: Path) -> dict[str, str]:
+def load_daytona_feedback(log_dir: Path, max_test_names: int = MAX_TEST_NAMES_DEFAULT) -> dict[str, str]:
     """
     Walk a Daytona eval log directory, return {instance_id: test_feedback_text}.
     Expects structure: log_dir/{instance_id}/report.json + test_output.txt
@@ -151,7 +177,13 @@ def load_daytona_feedback(log_dir: Path) -> dict[str, str]:
         else:
             parsed = None
 
-        feedback[iid] = format_test_feedback(resolved, patch_exists, parsed)
+        feedback[iid] = {
+            "text": format_test_feedback(resolved, patch_exists, parsed, max_test_names=max_test_names),
+            "failing": (parsed["failing"] if parsed else []),
+            "passing": (parsed["passing"] if parsed else []),
+            "resolved": resolved,
+            "patch_exists": patch_exists,
+        }
 
     return feedback
 
@@ -170,10 +202,19 @@ def augment_split(traj_path: Path, feedback: dict[str, str], output_path: Path) 
             iid = str(row.get("problem_id") or row.get("instance_id") or "").strip()
             n_total += 1
             if iid in feedback:
-                row["test_feedback"] = feedback[iid]
+                fb = feedback[iid]
+                row["test_feedback"] = fb["text"]
+                row["_tf_failing"] = fb["failing"]
+                row["_tf_passing"] = fb["passing"]
+                row["_tf_resolved"] = fb["resolved"]
+                row["_tf_patch_exists"] = fb["patch_exists"]
                 n_matched += 1
             else:
                 row["test_feedback"] = ""
+                row["_tf_failing"] = []
+                row["_tf_passing"] = []
+                row["_tf_resolved"] = False
+                row["_tf_patch_exists"] = True
                 n_missing += 1
             fout.write(json.dumps(row) + "\n")
 
@@ -193,6 +234,9 @@ def main() -> None:
     parser.add_argument("--output-dir", required=True,
                         help="Output dir for augmented trajectories_{train,eval}.jsonl")
     parser.add_argument("--split", choices=["train", "eval", "both"], default="both")
+    parser.add_argument("--max-test-names", type=int, default=MAX_TEST_NAMES_DEFAULT,
+                        help="Max total test names in the full-format block (default 200). "
+                             "Failing names are shown first; remaining slots go to passing.")
     args = parser.parse_args()
 
     traj_dir = Path(args.trajectories_dir)
@@ -209,7 +253,7 @@ def main() -> None:
         else:
             log_dir = Path(log_dir_arg)
             print(f"[{split}] Loading Daytona feedback from {log_dir}")
-            feedback = load_daytona_feedback(log_dir)
+            feedback = load_daytona_feedback(log_dir, max_test_names=args.max_test_names)
             print(f"  → {len(feedback)} instances with feedback")
 
         traj_path = traj_dir / f"trajectories_{split}.jsonl"
