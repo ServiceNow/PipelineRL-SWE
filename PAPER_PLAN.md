@@ -171,7 +171,7 @@ Key finding: **test names alone add zero signal** — AUC identical to no-test-f
 **LCB oracle resolution rates (gpt-oss-120b)**:
 - Instruct-2507 collection: 44.8% train, 39.0% eval
 - Thinking-2507 collection: 42.0% train, 37.0% eval
-(Higher than SWE-Smith ~22%; LCB problems are more tractable for oss-120b)
+(Comparable to SWE-Smith ~47%; LCB problems are similarly tractable for oss-120b)
 
 Key takeaways:
 - Scout patch adds signal over problem alone: +0.015 AUC in-domain, +0.059 cross-domain
