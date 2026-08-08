@@ -390,6 +390,27 @@ The 286-instance Opus eval collection provides the labels needed to evaluate thi
 
 No Opus training labels are needed — the predictor trains on oss-120b labels only. The Opus eval labels are used only to measure the value of the fallback.
 
+#### Policy evaluation results (285 SWE-Smith eval instances)
+
+Graph: `router_analysis/opus_fallback_policy_cot_vs_inputonly.png`
+
+Baselines: always oss-120b = 47.4%, always Opus 5 = 57.9%.
+
+**Peak combined performance (CoT predictor, AUC 0.749):**
+- **62.1% resolve rate** — routing 57% of instances to Opus, 43% to oss-120b
+- **+4.2pp above always-Opus** — the predictor beats running Opus on everything by correctly routing easy instances to oss-120b and hard ones to Opus
+
+**Pure abstain (no Opus) — where the CoT predictor beats input-only (AUC 0.682):**
+
+| % abstained | CoT | Input-only | Gap |
+|-------------|-----|------------|-----|
+| 20% | 43.2% | 42.8% | +0.4pp |
+| 30% | 41.4% | 38.6% | +2.8pp |
+| 40% | 38.2% | 35.1% | +3.2pp |
+| 50% | 34.7% | 30.5% | **+4.2pp** |
+
+The CoT predictor's advantage concentrates in the **high-abstention regime** — at low abstention both predictors behave similarly. Seeing the scout's actual reasoning trace lets the predictor correctly identify *which* instances are hard, not just that a problem description looks hard.
+
 ---
 
 ## Research Direction & Framing
