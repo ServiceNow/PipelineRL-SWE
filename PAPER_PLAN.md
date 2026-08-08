@@ -90,7 +90,7 @@ This is the gold-standard signal. Our hypothesis: CoT traces approximate this wh
 - **Oracle**: `gpt-oss-120b`
 - **Label**: does the oracle's patch pass Daytona sandbox eval?
 - **Train/eval**: 1146 SWE-Smith training instances → transfer eval on 369 SWE-Bench Verified instances (cross-domain)
-- **No execution feedback available** at routing time — the scout's patch is unverified
+- **Execution feedback**: available via Daytona sandbox eval on scout patches — FAIL_TO_PASS test names, pass/fail counts, error types per instance. This is an additional feature source on top of the patch text, unlike LCB where execution feedback replaces it as the primary signal.
 
 Resolve rates: scout ~25%, oss-120b ~47%, Opus 5 ~58%
 
@@ -139,15 +139,27 @@ Instruct-4B performs better on SWE-B agentic tasks despite lacking reasoning tra
 
 ### Predictor AUC — SWE-Smith in-domain
 
-| Predictor | Scout | AUC (in-domain) | AUC (→ Verified) |
-|-----------|-------|-----------------|------------------|
-| Input-only | Instruct-2507 | 0.682 | 0.578 |
-| No-CoT (post-primary) | Instruct-2507 | 0.694 | **0.637** |
-| CoT (post-primary) | Thinking-2507 | **0.749** | *pending* |
+Verified by inspecting `train_config.json` and `run_train.sh` for each run.
 
-- The scout patch adds signal over problem statement alone (+0.012 AUC in-domain, +0.059 cross-domain)
-- CoT traces add substantial signal over no-CoT (+0.055 in-domain)
-- Cross-domain transfer holds: the no-CoT predictor trained on SWE-Smith generalises to Verified without fine-tuning
+| Predictor | Scout model | Patch in input | CoT trace | Test FB | AUC (in-domain) | AUC (→ Verified) | Run ID |
+|-----------|------------|----------------|-----------|---------|-----------------|------------------|--------|
+| Input-only | Instruct-2507 | ✗ | ✗ | ✗ | 0.682 | 0.578 | `nocot_input_only_1786126252` |
+| Post-primary, no-CoT | **Instruct-2507** | ✓ | ✗ | ✗ | 0.694 | **0.637** | `no_cot_route3_1785884243` |
+| Post-primary, CoT stripped | **Thinking-2507** | ✓ | ✗ | ✗ | — | — | *pending* |
+| Post-primary, CoT | **Thinking-2507** | ✓ | ✓ | ✗ | **0.749** | *pending* | `cot_fixed_route3_1786133032` |
+| Post-primary, no-CoT + tests | Instruct-2507 | ✓ | ✗ | ✓ | — | — | *blocked on scout Daytona* |
+| Post-primary, CoT + tests | Thinking-2507 | ✓ | ✓ | ✓ | — | — | *blocked on scout Daytona* |
+
+**Note on "CoT stripped"**: uses the same Thinking-2507 trajectories as the CoT row, but `include_thinking=False` — same patches, only predictor input differs. This is the cleanest isolation of the CoT signal.
+
+**Note on "no-CoT" rows**: the Instruct-2507 scout (`instruct_patches_trajectories_1785884242`) generates no thinking text — `thinking_text` is empty in every row. The Thinking-2507 scout (`cot_trajectories_1785341592_fixed`) has full `<think>...</think>` blocks extracted and stored separately.
+
+**Test feedback for SWE**: FAIL_TO_PASS test names, pass/fail counts, and error type from Daytona `report.json` run on scout patches. Scout Daytona eval (`scout_daytona_eval_rerun_1786136775`) covers 1146 train + 286 eval instances and is currently running.
+
+Key takeaways:
+- Scout patch adds signal over problem alone: +0.012 AUC in-domain, +0.059 cross-domain
+- CoT trace adds signal over no-CoT patch: +0.055 in-domain (Thinking vs Instruct confounds this — CoT stripped will isolate it)
+- Cross-domain transfer holds: no-CoT predictor trained on SWE-Smith generalises to Verified without fine-tuning
 
 ### Routing policy — 285 SWE-Smith eval instances
 
@@ -178,9 +190,9 @@ A thinking model's attempt is not just a (possibly wrong) answer. It's a structu
 
 In LiveCodeBench, execution feedback is clean and verifiable. Wrong answer vs. TLE vs. runtime error are meaningful difficulty signals. We show a predictor trained on these signals can correctly route hard instances to the oracle, validating the approach under ideal conditions.
 
-### 4. The harder case: SWE-B agentic tasks
+### 4. SWE-B agentic tasks — with and without execution feedback
 
-No execution feedback is available. The only signal is the scout's patch and its reasoning about what it tried. We show CoT traces substitute for execution feedback, giving a 0.749 AUC predictor that transfers cross-domain (SWE-Smith → SWE-Bench Verified, 0.637 AUC).
+On SWE-B we have two signal regimes. With Daytona eval on scout patches, we get structured test execution feedback (which tests failed, error types) — comparable in spirit to LCB. Without it, the only signal is the scout's patch and reasoning trace. The 2×2 ablation tests both regimes, letting us measure how much execution feedback adds over CoT traces on SWE-B, and how the signals compare to their LCB counterparts.
 
 ### 5. The ceiling-breaking result
 
@@ -194,14 +206,19 @@ The 2×2 table shows CoT traces and execution feedback are both informative, and
 
 ## What Still Needs to Run
 
-| Experiment | Status | Blocker |
-|-----------|--------|---------|
-| CoT predictor cross-domain AUC (→ Verified) | scoring | job `verified_abstention_eval_1786214481` |
-| Thinking-4B stripped (no-CoT clean ablation) | pending | can start now |
-| SWE-Smith: no-CoT + test feedback | pending | scout Daytona `scout_daytona_eval_rerun_1786136775` |
-| SWE-Smith: CoT + test feedback | pending | same |
-| LCB: all 4 cells (no-CoT, CoT, ±tests) | pending | collection `lcb_collect_qwen_qwen3_4b_thinking_2507_1786213696` |
-| LCB: Instruct-4B no-CoT ±tests | pending | separate collection |
+| Experiment | Scout model | CoT | Test FB | Status | Blocker |
+|-----------|------------|-----|---------|--------|---------|
+| CoT predictor cross-domain AUC (→ Verified) | Thinking-2507 | ✓ | ✗ | scoring | job `verified_abstention_eval_1786214481` |
+| SWE-Smith: CoT stripped (clean CoT ablation) | Thinking-2507 | ✗ | ✗ | pending — can start now | none (data exists) |
+| SWE-Smith: no-CoT + test feedback | Instruct-2507 | ✗ | ✓ | pending | scout Daytona `scout_daytona_eval_rerun_1786136775` |
+| SWE-Smith: CoT + test feedback | Thinking-2507 | ✓ | ✓ | pending | same |
+| SWE-Smith: CoT stripped + test feedback | Thinking-2507 | ✗ | ✓ | pending | same |
+| LCB: Thinking-2507, no-CoT stripped, no tests | Thinking-2507 | ✗ | ✗ | pending | collection `lcb_collect_qwen_qwen3_4b_thinking_2507_1786213696` |
+| LCB: Thinking-2507, CoT, no tests | Thinking-2507 | ✓ | ✗ | pending | same |
+| LCB: Thinking-2507, no-CoT stripped, with tests | Thinking-2507 | ✗ | ✓ | pending | same |
+| LCB: Thinking-2507, CoT, with tests | Thinking-2507 | ✓ | ✓ | pending | same |
+| LCB: Instruct-2507, no-CoT, no tests | Instruct-2507 | ✗ | ✗ | pending | separate LCB collection |
+| LCB: Instruct-2507, no-CoT, with tests | Instruct-2507 | ✗ | ✓ | pending | same |
 
 ---
 
