@@ -237,13 +237,14 @@ async def collect_scout(
     concurrency: int,
     title: str,
 ) -> list[dict]:
-    # Resume from existing
+    # Resume from existing — only count rows with actual output as done
     done: dict[str, dict] = {}
     if output_path.exists():
         with open(output_path) as f:
             for line in f:
                 r = json.loads(line)
-                done[r["problem_id"]] = r
+                if r.get("full_output", "").strip():
+                    done[r["problem_id"]] = r
         logger.info("Resuming: %d already collected", len(done))
 
     todo = [r for r in rows if problem_id(r) not in done]
