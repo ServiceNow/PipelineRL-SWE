@@ -83,6 +83,8 @@ def _build_input_text(
     patch_text: str,
     include_thinking: bool,
     input_only: bool = False,
+    test_feedback: str = "",
+    include_test_feedback: bool = False,
 ) -> str:
     if input_only:
         return "\n".join([
@@ -104,6 +106,8 @@ def _build_input_text(
     if include_thinking and thinking_text:
         parts += ["<think>", thinking_text.strip(), "</think>"]
     parts.append(patch_text.strip())
+    if include_test_feedback and test_feedback:
+        parts += ["", "[Scout Test Execution Feedback]", test_feedback.strip()]
     return "\n".join(parts)
 
 
@@ -119,6 +123,7 @@ class CoTAbstentionDataset(Dataset):
         include_thinking: bool,
         multi_task_scout: bool = False,
         input_only: bool = False,
+        include_test_feedback: bool = False,
     ) -> None:
         self.rows: list[dict[str, Any]] = []
         self.multi_task_scout = multi_task_scout
@@ -131,10 +136,16 @@ class CoTAbstentionDataset(Dataset):
             problem_statement = str(traj.get("problem_statement") or "").strip()
             thinking_text = str(traj.get("thinking_text") or "").strip()
             patch_text = str(traj.get("patch_text") or "").strip()
+            test_feedback = str(traj.get("test_feedback") or "").strip()
             if not problem_statement or (not input_only and not patch_text):
                 skipped += 1
                 continue
-            text = _build_input_text(problem_statement, thinking_text, patch_text, include_thinking, input_only=input_only)
+            text = _build_input_text(
+                problem_statement, thinking_text, patch_text, include_thinking,
+                input_only=input_only,
+                test_feedback=test_feedback,
+                include_test_feedback=include_test_feedback,
+            )
             encoded = tokenizer(text, add_special_tokens=True, truncation=True, max_length=max_seq_length)
             input_ids = encoded.get("input_ids")
             attention_mask = encoded.get("attention_mask")
@@ -250,6 +261,9 @@ def main() -> None:
     parser.add_argument("--no-include-thinking", dest="include_thinking", action="store_false")
     parser.add_argument("--input-only", action="store_true", default=False,
                         help="Use only the problem statement (no scout trace or patch)")
+    parser.add_argument("--include-test-feedback", action="store_true", default=False,
+                        help="Append test execution feedback from 'test_feedback' trajectory field to predictor input")
+    parser.add_argument("--no-include-test-feedback", dest="include_test_feedback", action="store_false")
     parser.add_argument("--multi-task-scout", action="store_true", default=False,
                         help="Add scout success (route 0) as a free auxiliary task alongside the strong-model target")
     parser.add_argument("--max-seq-length", type=int, default=24000)
@@ -306,11 +320,13 @@ def main() -> None:
         train_trajs, train_labels, tokenizer, int(args.max_seq_length),
         bool(args.include_thinking), multi_task_scout=bool(args.multi_task_scout),
         input_only=bool(args.input_only),
+        include_test_feedback=bool(args.include_test_feedback),
     )
     eval_dataset = CoTAbstentionDataset(
         eval_trajs, eval_labels, tokenizer, int(args.max_seq_length),
         bool(args.include_thinking), multi_task_scout=bool(args.multi_task_scout),
         input_only=bool(args.input_only),
+        include_test_feedback=bool(args.include_test_feedback),
     )
 
     if len(train_dataset) == 0 or len(eval_dataset) == 0:
@@ -366,6 +382,7 @@ def main() -> None:
         "eval_parquet_dir": args.eval_parquet_dir,
         "label_route_idx": int(args.label_route_idx),
         "include_thinking": bool(args.include_thinking),
+        "include_test_feedback": bool(args.include_test_feedback),
         "multi_task_scout": bool(args.multi_task_scout),
         "max_seq_length": int(args.max_seq_length),
         "num_epochs": int(args.num_epochs),

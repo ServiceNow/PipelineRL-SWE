@@ -28,6 +28,7 @@ EVAL_PARQUET_DIR=${EVAL_PARQUET_DIR:-${REAL_LABEL_DATASET_DIR}/eval}
 
 INCLUDE_THINKING=${INCLUDE_THINKING:-true}
 INPUT_ONLY=${INPUT_ONLY:-false}
+INCLUDE_TEST_FEEDBACK=${INCLUDE_TEST_FEEDBACK:-false}
 MULTI_TASK_SCOUT=${MULTI_TASK_SCOUT:-false}
 LABEL_ROUTE_IDX=${LABEL_ROUTE_IDX:-3}
 NUM_EPOCHS=${NUM_EPOCHS:-10}
@@ -66,7 +67,15 @@ else
   INPUT_ONLY_ARG=""
 fi
 
-JOB_NAME=cot_abstention_qwen3_emb8b_lora_r${LORA_R}_${THINKING_SUFFIX}${MULTITASK_SUFFIX}${INPUT_ONLY_SUFFIX}_route${LABEL_ROUTE_IDX}_${NUM_EPOCHS}epoch_${TIMESTAMP}
+if [[ "${INCLUDE_TEST_FEEDBACK}" == "true" ]]; then
+  TEST_FB_SUFFIX="_testfb"
+  TEST_FB_ARG="--include-test-feedback"
+else
+  TEST_FB_SUFFIX=""
+  TEST_FB_ARG="--no-include-test-feedback"
+fi
+
+JOB_NAME=cot_abstention_qwen3_emb8b_lora_r${LORA_R}_${THINKING_SUFFIX}${MULTITASK_SUFFIX}${INPUT_ONLY_SUFFIX}${TEST_FB_SUFFIX}_route${LABEL_ROUTE_IDX}_${NUM_EPOCHS}epoch_${TIMESTAMP}
 OUTPUT_DIR=/mnt/llmd/results/exps/aristides/reason/${JOB_NAME}
 
 RUNNER="${OUTPUT_DIR}/run_train.sh"
@@ -99,6 +108,7 @@ ${TRAIN_CMD} \\
   ${THINKING_ARG} \\
   ${MULTITASK_ARG} \\
   ${INPUT_ONLY_ARG} \\
+  ${TEST_FB_ARG} \\
   --max-seq-length     ${MAX_SEQ_LENGTH} \\
   --num-epochs         ${NUM_EPOCHS} \\
   --batch-size         ${BATCH_SIZE} \\
