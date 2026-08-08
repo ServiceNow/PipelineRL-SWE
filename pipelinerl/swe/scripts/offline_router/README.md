@@ -449,9 +449,23 @@ The "Instruct-4B" cells are a separate condition (different model, different pat
 | Thinking-4B, CoT, no tests | Thinking-2507 | ✓ | ✗ | — blocked on LCB collection — |
 | Thinking-4B, no-CoT stripped, with tests | Thinking-2507 | ✗ | ✓ | — blocked on LCB collection — |
 | Thinking-4B, CoT, with tests | Thinking-2507 | ✓ | ✓ | — blocked on LCB collection — |
-| Instruct-4B, no-CoT, no tests *(model quality ref)* | Instruct-2507 | ✗ | ✗ | needs separate LCB collection |
+| Instruct-4B, no-CoT, no tests | Instruct-2507 | ✗ | ✗ | needs separate LCB collection |
+| Instruct-4B, no-CoT, with tests | Instruct-2507 | ✗ | ✓ | needs separate LCB collection |
 
 The stripped / CoT split reuses the same `lcb_collect_qwen_qwen3_4b_thinking_2507_1786213696` collection — the only difference is `--include-thinking` in the training command. Test-feedback cells add the execution failure signal (error type + failing test output) to the predictor input.
+
+Instruct-4B is a **first-class LCB condition**, not just a reference. On SWE-B, Thinking-4B outperforms Instruct-4B for agentic patch generation; on competitive programming (LCB), this ordering may reverse — instruct models can be more reliable at direct code synthesis without the overhead of a thinking scratchpad. Comparing the two on LCB directly tests this hypothesis and may reveal a different optimal scout for each domain.
+
+#### Other model pairs (future)
+
+The current setup fixes the scout/oracle pair at `Qwen3-4B / gpt-oss-120b`. The abstention predictor framing is model-agnostic, so other pairs are worth trying:
+
+- **Different scout sizes**: 7B, 14B scouts — larger scouts produce better patches but cost more; the predictor needs to recalibrate to each scout's error distribution
+- **Different oracle models**: Claude Opus 5 (57.7% on SWE-Smith eval), stronger future models — the label distribution and difficulty cutoff shift per oracle
+- **Different scout families**: a non-Qwen scout (e.g. a fine-tuned code model) may produce qualitatively different failure signals, testing generality of the predictor architecture
+- **Asymmetric pairs**: small instruct scout → large thinking oracle; or small thinking scout → large instruct oracle
+
+These are out of scope for the current ablation but are the natural next step once the 2×2 grid is complete.
 
 #### Infrastructure still needed
 
