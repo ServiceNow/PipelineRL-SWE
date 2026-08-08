@@ -179,7 +179,8 @@ async def collect(args: argparse.Namespace) -> None:
         pid = str(row.get("problem_id") or "").strip()
         if pid not in traj_ids:
             continue
-        rs = list(row.get("route_successes") or [])
+        rs_val = row.get("route_successes")
+        rs = list(rs_val) if rs_val is not None and hasattr(rs_val, '__len__') and len(rs_val) > 0 else []
         if len(rs) <= label_idx:
             continue
         rows_out.append({
