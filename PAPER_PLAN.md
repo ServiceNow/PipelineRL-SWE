@@ -145,17 +145,26 @@ Verified by inspecting `train_config.json` and `run_train.sh` for each run.
 |-----------|------------|-----|----------------|-----------------|------------------|--------|
 | Input-only | Instruct-2507 | ✗ | — | 0.682 | 0.578 | `nocot_input_only_1786126252` |
 | No-CoT | **Instruct-2507** | ✗ | — | 0.697 | **0.637** | `no_cot_route3_1785884243` |
+| No-CoT + tests (names only, no labels) | Instruct-2507 | ✗ | all names, no labels | **0.697** | — | `no_cot_testfb_names_only_route3_1786226829` |
 | CoT stripped | **Thinking-2507** | ✗ | — | **0.717** | *pending* | `no_cot_route3_1786218095` |
 | CoT | **Thinking-2507** | ✓ | — | **0.749** | *pending* | `cot_fixed_route3_1786133032` |
+| No-CoT + tests (count only) | Instruct-2507 | ✗ | N/M fraction | **0.762** | — | `no_cot_testfb_count_only_route3_1786226851` |
 | No-CoT + tests (old format, 8 names) | Instruct-2507 | ✗ | 8 fail names + count | **0.779** *(avg of 2 runs)* | — | `no_cot_testfb_route3_1786221930/1786223095` |
-| No-CoT + tests (count only) | Instruct-2507 | ✗ | N/M fraction | *running* | — | launched 2026-08-08 |
-| No-CoT + tests (names only, no labels) | Instruct-2507 | ✗ | all names, no labels | *running* | — | launched 2026-08-08 |
-| No-CoT + tests (full labeled list) | Instruct-2507 | ✗ | FAILED/PASSED per test | *running* | — | launched 2026-08-08 |
+| No-CoT + tests (full labeled list) | Instruct-2507 | ✗ | FAILED/PASSED per test | **0.780** | — | `no_cot_testfb_full_route3_1786226769` |
 | CoT + tests | Thinking-2507 | ✓ | full | *blocked* | — | needs Thinking-2507 Daytona eval |
 
 **Key result (2026-08-08)**: Test feedback (even old 8-name format) beats CoT predictor by +3pp: 0.779 vs 0.749. This is Instruct-2507 with no thinking traces at all — pure execution feedback outperforms reasoning traces on SWE-Smith in-domain.
 
-**Test feedback format ablation** (3 cells running): isolates whether the signal is (a) which tests failed by name, (b) the pass/fail ratio, or (c) just the structure of the test suite. Results pending.
+**Test feedback format ablation — completed (2026-08-08)**:
+
+| Format | AUC | Δ vs. no-testfb |
+|--------|-----|-----------------|
+| Full labeled list (FAILED/PASSED per test + totals) | **0.780** | +0.083 |
+| Count only (N/M fraction) | 0.762 | +0.065 |
+| Names only (all names, no labels) | 0.697 | **+0.000** |
+| No test feedback (baseline) | 0.697 | — |
+
+Key finding: **test names alone add zero signal** — AUC identical to no-test-feedback baseline. The entire gain comes from the PASS/FAIL labels. The count (N/M) captures 78% of that gain; the full per-test labels add another +0.018 on top. This strongly suggests the signal is "how many tests did the scout break?" rather than "which specific tests broke?"
 
 **Thinking-2507 on LCB (2026-08-08)**: Only 22% of LCB trajectories have thinking traces. The model outputs natural-language reasoning without `<think>` tags for 78% of problems — thinking traces only appear when the model explicitly chooses to use them. This significantly limits the CoT signal for LCB.
 
@@ -168,7 +177,8 @@ Key takeaways:
 - Scout patch adds signal over problem alone: +0.015 AUC in-domain, +0.059 cross-domain
 - CoT stripped (Thinking-2507, no traces) outperforms Instruct-2507 no-CoT: 0.717 vs 0.697 (patch quality effect)
 - CoT trace adds +0.032 over CoT-stripped: 0.749 vs 0.717 (cleanest isolation of trace signal)
-- **Test feedback dominates CoT**: 0.779 vs 0.749 — execution beats reasoning on SWE in-domain
+- **Test feedback dominates CoT**: 0.780 vs 0.749 — execution beats reasoning on SWE in-domain
+- **The signal is pass/fail counts, not test identity**: names-only = 0.697 (no gain); count-only = 0.762; full labels = 0.780
 - Cross-domain transfer holds for no-CoT predictor (SWE-Smith → Verified: 0.637)
 
 ### Routing policy — 285 SWE-Smith eval instances
@@ -218,17 +228,17 @@ The 2×2 table shows CoT traces and execution feedback are both informative, and
 
 | Experiment | Scout model | CoT | Test FB | Status |
 |-----------|------------|-----|---------|--------|
-| CoT predictor → Verified cross-domain AUC | Thinking-2507 | ✓ | ✗ | ❌ vLLM crash (persistent — needs investigation) |
-| SWE-Smith: no-CoT + tests (count only) | Instruct-2507 | ✗ | count | 🔄 running |
-| SWE-Smith: no-CoT + tests (names only) | Instruct-2507 | ✗ | names | 🔄 running |
-| SWE-Smith: no-CoT + tests (full labeled) | Instruct-2507 | ✗ | full | 🔄 running |
+| CoT predictor → Verified cross-domain AUC | Thinking-2507 | ✓ | ✗ | 🔄 running (verified_abstention_eval_1786227495, aiohttp fix applied) |
+| SWE-Smith: no-CoT + tests (count only) | Instruct-2507 | ✗ | count | ✅ AUC 0.762 |
+| SWE-Smith: no-CoT + tests (names only) | Instruct-2507 | ✗ | names | ✅ AUC 0.697 (no gain over baseline) |
+| SWE-Smith: no-CoT + tests (full labeled) | Instruct-2507 | ✗ | full | ✅ AUC 0.780 |
 | SWE-Smith: CoT + tests | Thinking-2507 | ✓ | full | 🔲 blocked — needs Thinking-2507 Daytona eval |
 | SWE-Smith: CoT stripped + tests | Thinking-2507 | ✗ | full | 🔲 same blocker |
-| LCB: Thinking-2507, no-CoT stripped, no tests | Thinking-2507 | ✗ | ✗ | 🔲 needs LCB abstention training |
+| LCB: Thinking-2507, no-CoT stripped, no tests | Thinking-2507 | ✗ | ✗ | 🔲 scouts ready, needs LCB abstention training |
 | LCB: Thinking-2507, CoT, no tests | Thinking-2507 | ✓ | ✗ | 🔲 same |
 | LCB: Instruct-2507, no-CoT, no tests | Instruct-2507 | ✗ | ✗ | 🔲 same |
 
-**Verified eval blocker (as of 2026-08-08)**: 4 attempts, all failing. Attempts 1-2: vLLM crash (Session is closed). Attempt 3: context length (16384 → fixed to 32768). Attempt 4: vLLM crash again (1/369 succeeded). Likely a GPU memory issue with long Verified instances + 32768 context. Consider reducing max_tokens for collection or investigating vLLM server stability.
+**Verified eval fix (2026-08-08)**: Root cause was shared `aiohttp.TCPConnector` between per-call `ClientSession` objects — first task to finish closed the shared connector, killing all 368 in-flight requests simultaneously. Fixed with `connector_owner=False` + explicit `connector.close()` in `finally`. 5th attempt currently running with 0 errors.
 
 ---
 
