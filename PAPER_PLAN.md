@@ -145,15 +145,17 @@ Verified by inspecting `train_config.json` and `run_train.sh` for each run.
 |-----------|------------|-----|----------------|-----------------|------------------|--------|
 | Input-only | Instruct-2507 | ✗ | — | 0.682 | 0.578 | `nocot_input_only_1786126252` |
 | No-CoT | **Instruct-2507** | ✗ | — | 0.697 | **0.637** | `no_cot_route3_1785884243` |
-| No-CoT + tests (names only, no labels) | Instruct-2507 | ✗ | all names, no labels | **0.697** | — | `no_cot_testfb_names_only_route3_1786226829` |
-| CoT stripped | **Thinking-2507** | ✗ | — | **0.717** | *pending* | `no_cot_route3_1786218095` |
-| CoT | **Thinking-2507** | ✓ | — | **0.749** | *pending* | `cot_fixed_route3_1786133032` |
-| No-CoT + tests (count only) | Instruct-2507 | ✗ | N/M fraction | **0.762** | — | `no_cot_testfb_count_only_route3_1786226851` |
-| No-CoT + tests (old format, 8 names) | Instruct-2507 | ✗ | 8 fail names + count | **0.779** *(avg of 2 runs)* | — | `no_cot_testfb_route3_1786221930/1786223095` |
-| No-CoT + tests (full labeled list) | Instruct-2507 | ✗ | FAILED/PASSED per test | **0.780** | — | `no_cot_testfb_full_route3_1786226769` |
+| No-CoT + tests (names only, no labels) | Instruct-2507 | ✗ | all names, no labels | 0.697 | — | `no_cot_testfb_names_only_route3_1786226829` |
+| CoT stripped | **Thinking-2507** | ✗ | — | 0.717 | *not run* | `no_cot_route3_1786218095` |
+| CoT | **Thinking-2507** | ✓ | — | 0.749 | **0.624** | `cot_fixed_route3_1786133032` |
+| No-CoT + tests (count only) | Instruct-2507 | ✗ | N/M fraction | 0.762 | *not run* | `no_cot_testfb_count_only_route3_1786226851` |
+| No-CoT + tests (old format, 8 names) | Instruct-2507 | ✗ | 8 fail names + count | 0.779 *(avg 2 runs)* | *not run* | `no_cot_testfb_route3_1786221930/1786223095` |
+| No-CoT + tests (full labeled list) | Instruct-2507 | ✗ | FAILED/PASSED per test | **0.780** | *not run* | `no_cot_testfb_full_route3_1786226769` |
 | CoT + tests | Thinking-2507 | ✓ | full | *blocked* | — | needs Thinking-2507 Daytona eval |
 
-**Key result (2026-08-08)**: Test feedback (even old 8-name format) beats CoT predictor by +3pp: 0.779 vs 0.749. This is Instruct-2507 with no thinking traces at all — pure execution feedback outperforms reasoning traces on SWE-Smith in-domain.
+**Key result (2026-08-08)**: Test feedback beats CoT by +3pp in-domain (0.780 vs 0.749), using Instruct-2507 with no thinking traces at all.
+
+**Cross-domain finding (2026-08-10)**: CoT predictor *degrades* cross-domain relative to no-CoT: 0.624 vs 0.637. CoT traces appear to overfit to SWE-Smith-specific reasoning patterns that don't transfer to Verified. Test feedback cross-domain transfer is unknown — the key missing experiment. (Needs Daytona eval on Verified scout patches to generate testfb features for scoring.)
 
 **Test feedback format ablation — completed (2026-08-08)**:
 
@@ -164,22 +166,33 @@ Verified by inspecting `train_config.json` and `run_train.sh` for each run.
 | Names only (all names, no labels) | 0.697 | **+0.000** |
 | No test feedback (baseline) | 0.697 | — |
 
-Key finding: **test names alone add zero signal** — AUC identical to no-test-feedback baseline. The entire gain comes from the PASS/FAIL labels. The count (N/M) captures 78% of that gain; the full per-test labels add another +0.018 on top. This strongly suggests the signal is "how many tests did the scout break?" rather than "which specific tests broke?"
+Key finding: **test names alone add zero signal**. The entire gain comes from PASS/FAIL labels. Count-only (N/M) captures 78% of the gain; full per-test labels add another +0.018. The signal is "how many tests did the scout break?" not "which specific tests broke?"
 
-**Thinking-2507 on LCB (2026-08-08)**: Only 22% of LCB trajectories have thinking traces. The model outputs natural-language reasoning without `<think>` tags for 78% of problems — thinking traces only appear when the model explicitly chooses to use them. This significantly limits the CoT signal for LCB.
+**LCB in-domain AUC — completed (2026-08-10)**:
+
+| Predictor | Scout model | CoT | AUC (in-domain) | Run ID |
+|-----------|------------|-----|-----------------|--------|
+| No-CoT | Instruct-2507 | ✗ | **0.973** | `no_cot_route3_1786230371` |
+| No-CoT stripped | Thinking-2507 | ✗ | **0.976** | `no_cot_route3_1786230407` |
+| CoT | Thinking-2507 | ✓ | **0.977** | `cot_route3_1786230500` |
+
+LCB AUCs are dramatically higher than SWE-Smith (0.97 vs 0.70–0.78). CoT adds essentially nothing over no-CoT (0.977 vs 0.976 vs 0.973) — with clean stdin/stdout execution feedback, the pass/fail signal saturates the predictor and leaves no room for reasoning traces to contribute. This is the best-case execution-feedback setting; SWE is the noisy-feedback setting where CoT and testfb matter more.
+
+**Thinking-2507 on LCB**: Only 22% of LCB trajectories have `<think>` tags. Model outputs natural-language reasoning for 78% of problems without structured blocks — limits CoT signal but the near-identical AUC to no-CoT suggests this doesn't matter.
 
 **LCB oracle resolution rates (gpt-oss-120b)**:
 - Instruct-2507 collection: 44.8% train, 39.0% eval
 - Thinking-2507 collection: 42.0% train, 37.0% eval
-(Comparable to SWE-Smith ~47%; LCB problems are similarly tractable for oss-120b)
 
-Key takeaways:
+Key takeaways (updated 2026-08-10):
 - Scout patch adds signal over problem alone: +0.015 AUC in-domain, +0.059 cross-domain
-- CoT stripped (Thinking-2507, no traces) outperforms Instruct-2507 no-CoT: 0.717 vs 0.697 (patch quality effect)
-- CoT trace adds +0.032 over CoT-stripped: 0.749 vs 0.717 (cleanest isolation of trace signal)
-- **Test feedback dominates CoT**: 0.780 vs 0.749 — execution beats reasoning on SWE in-domain
-- **The signal is pass/fail counts, not test identity**: names-only = 0.697 (no gain); count-only = 0.762; full labels = 0.780
-- Cross-domain transfer holds for no-CoT predictor (SWE-Smith → Verified: 0.637)
+- CoT stripped outperforms Instruct no-CoT: 0.717 vs 0.697 (patch quality, not trace signal)
+- CoT trace adds +0.032 over CoT-stripped in-domain: 0.749 vs 0.717
+- **CoT overfits cross-domain**: 0.749 → 0.624 cross-domain (worse than no-CoT 0.637)
+- **Test feedback dominates CoT in-domain**: 0.780 vs 0.749
+- **The signal is pass/fail, not test identity**: names-only = 0.697 (zero gain)
+- **LCB: execution feedback saturates predictor** — CoT adds nothing at 0.97 AUC
+- Test feedback cross-domain transfer: unknown, highest-priority missing experiment
 
 ### Routing policy — 285 SWE-Smith eval instances
 
@@ -228,17 +241,14 @@ The 2×2 table shows CoT traces and execution feedback are both informative, and
 
 | Experiment | Scout model | CoT | Test FB | Status |
 |-----------|------------|-----|---------|--------|
-| CoT predictor → Verified cross-domain AUC | Thinking-2507 | ✓ | ✗ | 🔄 running (verified_abstention_eval_1786227495, aiohttp fix applied) |
-| SWE-Smith: no-CoT + tests (count only) | Instruct-2507 | ✗ | count | ✅ AUC 0.762 |
-| SWE-Smith: no-CoT + tests (names only) | Instruct-2507 | ✗ | names | ✅ AUC 0.697 (no gain over baseline) |
-| SWE-Smith: no-CoT + tests (full labeled) | Instruct-2507 | ✗ | full | ✅ AUC 0.780 |
-| SWE-Smith: CoT + tests | Thinking-2507 | ✓ | full | 🔲 blocked — needs Thinking-2507 Daytona eval |
-| SWE-Smith: CoT stripped + tests | Thinking-2507 | ✗ | full | 🔲 same blocker |
-| LCB: Thinking-2507, no-CoT stripped, no tests | Thinking-2507 | ✗ | ✗ | 🔲 scouts ready, needs LCB abstention training |
-| LCB: Thinking-2507, CoT, no tests | Thinking-2507 | ✓ | ✗ | 🔲 same |
-| LCB: Instruct-2507, no-CoT, no tests | Instruct-2507 | ✗ | ✗ | 🔲 same |
+| SWE-Smith: CoT + tests (in-domain) | Thinking-2507 | ✓ | full | 🔲 blocked — needs Thinking-2507 Daytona eval on SWE-Smith |
+| SWE-Smith: CoT stripped + tests (in-domain) | Thinking-2507 | ✗ | full | 🔲 same blocker |
+| SWE-Smith → Verified: testfb cross-domain AUC | Instruct-2507 | ✗ | full | 🔲 needs Daytona eval on Verified scout patches (already collected) |
+| LCB: input-only baseline | — | ✗ | ✗ | 🔲 **critical sanity check** — does LCB AUC come from problem text alone? |
+| LCB: routing policy analysis | Instruct/Thinking | both | ✗ | 🔲 analysis only, no new compute — reuse trained predictors |
+| SWE-Smith routing: testfb predictor policy curve | Instruct-2507 | ✗ | full | 🔲 analysis only — does 0.780 predictor break ceiling further? |
 
-**Verified eval fix (2026-08-08)**: Root cause was shared `aiohttp.TCPConnector` between per-call `ClientSession` objects — first task to finish closed the shared connector, killing all 368 in-flight requests simultaneously. Fixed with `connector_owner=False` + explicit `connector.close()` in `finally`. 5th attempt currently running with 0 errors.
+**Verified eval fix (2026-08-10)**: Root cause was shared `aiohttp.TCPConnector` between per-call `ClientSession` objects. Fixed with `connector_owner=False`. 5th attempt collected 369/369 with 0 errors.
 
 ---
 
