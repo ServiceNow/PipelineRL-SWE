@@ -157,14 +157,13 @@ def load_daytona_feedback(log_dir: Path, max_test_names: int = MAX_TEST_NAMES_DE
         except Exception:
             continue
 
-        resolved = bool(report.get("resolved", False))
-        patch_exists = bool(report.get("patch_exists", True))
+        # SWE-bench Verified wraps all fields under the instance_id key;
+        # SWE-Smith puts them at the top level.
+        report_data = report.get(iid, report)
 
-        # If the report has tests_status (SWE-bench Verified style), use it directly
-        tests_status = report.get("tests_status") or {}
-        # Handle nested: sometimes keyed by instance_id
-        if iid in tests_status:
-            tests_status = tests_status[iid].get("tests_status", {})
+        resolved = bool(report_data.get("resolved", False))
+        patch_exists = bool(report_data.get("patch_exists", True))
+        tests_status = report_data.get("tests_status") or {}
 
         if tests_status and "FAIL_TO_PASS" in tests_status:
             f2p = tests_status["FAIL_TO_PASS"]
