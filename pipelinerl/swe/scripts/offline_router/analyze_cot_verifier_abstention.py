@@ -39,17 +39,8 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-# Default paths to the existing embedding verifier predictions (from prior experiments)
-DEFAULT_POST_SCOUT_PREDS = (
-    "/mnt/llmd/results/exps/aristides/reason/"
-    "offline_router_swe_smith_train1500_real_4route_qwen3_embedding_8b_lora_reward_bce_r32_qkvo_mlp_10epoch_1781112916/"
-    "train_qwen3_embedding_8b_lora_reward_bce_10epoch/eval_predictions.jsonl"
-)
-DEFAULT_INPUT_ONLY_PREDS = (
-    "/mnt/llmd/results/exps/aristides/reason/"
-    "offline_router_swe_smith_train1500_real_4route_qwen3_embedding_8b_lora_reward_bce_r32_qkvo_mlp_input_only_10epoch_1781112942/"
-    "train_qwen3_embedding_8b_lora_reward_bce_10epoch/eval_predictions.jsonl"
-)
+DEFAULT_POST_SCOUT_PREDS = ""
+DEFAULT_INPUT_ONLY_PREDS = ""
 
 
 def load_cot_scores(path: str) -> dict[str, float]:
