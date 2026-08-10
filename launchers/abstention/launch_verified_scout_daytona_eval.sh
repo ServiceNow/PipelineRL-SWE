@@ -18,6 +18,7 @@ REPO_ROOT=$(cd "${SCRIPT_DIR}/../.." && pwd)
 PYTHON=/home/toolkit/.conda/envs/pipeline-rl/bin/python3
 
 VERIFIED_EVAL_DIR=${VERIFIED_EVAL_DIR:?Need VERIFIED_EVAL_DIR (output of launch_verified_abstention_eval.sh)}
+VERIFIED_DATASET_PATH=${VERIFIED_DATASET_PATH:-/mnt/llmd/data/swebench_verified/all_16k/ds}
 CONCURRENCY=${CONCURRENCY:-16}
 
 TIMESTAMP=$(date +%s)
@@ -38,7 +39,7 @@ PREDS_DIR="${OUTPUT_DIR}/predictions"
 mkdir -p "${PREDS_DIR}"
 PREDS_FILE="${PREDS_DIR}/predictions_verified.jsonl"
 
-# --- Step 1: extract patches from trajectories_verified.jsonl ---
+# --- Step 1: extract patches from trajectories_verified.jsonl (raw SEARCH/REPLACE text) ---
 echo "=== Extracting scout patches from ${VERIFIED_EVAL_DIR}/trajectories_verified.jsonl ==="
 "${PYTHON}" - << PYEOF
 import json
@@ -64,11 +65,18 @@ with open(src) as fin, open(out, "w") as fout:
             "model_patch": patch,
             "model": "qwen3-4b-thinking",
         }) + "\n")
-print(f"  wrote {n_ok} patches, {n_empty} empty → ${PREDS_FILE}")
+print(f"  wrote {n_ok} patches ({n_empty} empty) → ${PREDS_FILE}")
 PYEOF
 echo ""
 
-# --- Step 2: submit Daytona eval job ---
+# --- Step 2: convert SEARCH/REPLACE text → unified git diffs (in-place) ---
+echo "=== Converting search/replace → unified git diffs ==="
+"${PYTHON}" "${REPO_ROOT}/pipelinerl/swe/scripts/openrouter_sweep/convert_text_to_patches.py" \
+  --predictions-dir "${PREDS_DIR}" \
+  --dataset-path    "${VERIFIED_DATASET_PATH}"
+echo ""
+
+# --- Step 3: submit Daytona eval job ---
 RUN_ID="verified_scout_eval_${TIMESTAMP}"
 RUNNER="${OUTPUT_DIR}/run_daytona_eval.sh"
 
