@@ -19,7 +19,6 @@ from pathlib import Path
 from typing import Any
 
 from daytona import AsyncDaytona, CreateSandboxFromImageParams
-from daytona.common.sandbox import Resources
 from swebench.harness.constants import (
     KEY_INSTANCE_ID,
     KEY_MODEL,
@@ -236,7 +235,6 @@ async def run_one(
             params = CreateSandboxFromImageParams(
                 image=instance["image_name"],
                 auto_delete_interval=TTL_MINUTES,
-                resources=Resources(cpu=2),
             )
             sandbox = await daytona.create(params, timeout=120)
 
