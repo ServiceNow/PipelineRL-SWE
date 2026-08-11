@@ -236,7 +236,7 @@ async def run_one(
             params = CreateSandboxFromImageParams(
                 image=instance["image_name"],
                 auto_delete_interval=TTL_MINUTES,
-                resources=Resources(cpu=2, memory=4),
+                resources=Resources(cpu=2),
             )
             sandbox = await daytona.create(params, timeout=120)
 
