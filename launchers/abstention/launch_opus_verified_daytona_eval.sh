@@ -22,7 +22,7 @@ PYTHON=/home/toolkit/.conda/envs/pipeline-rl/bin/python3
 
 SOURCE_COLLECTION_DIR=${SOURCE_COLLECTION_DIR:?Need SOURCE_COLLECTION_DIR — set to the collect/eval dir from launch_verified_collect_opus_openrouter.sh}
 VERIFIED_DATASET_PATH=${VERIFIED_DATASET_PATH:-/mnt/llmd/data/swebench_verified/all_16k/ds}
-CONCURRENCY=${CONCURRENCY:-16}
+CONCURRENCY=${CONCURRENCY:-8}
 ROUTE_IDX=${ROUTE_IDX:-1}
 
 TIMESTAMP=$(date +%s)
