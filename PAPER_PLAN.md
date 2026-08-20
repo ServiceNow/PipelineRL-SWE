@@ -152,12 +152,12 @@ Verified by inspecting `train_config.json` and `run_train.sh` for each run.
 | CoT | **Thinking-2507** | ✓ | — | 0.749 | **0.624** | `cot_fixed_route3_1786133032` |
 | No-CoT + tests (count only) | Instruct-2507 | ✗ | N/M fraction | 0.762 | *not run* | `no_cot_testfb_count_only_route3_1786226851` |
 | No-CoT + tests (old format, 8 names) | Instruct-2507 | ✗ | 8 fail names + count | 0.779 *(avg 2 runs)* | *not run* | `no_cot_testfb_route3_1786221930/1786223095` |
-| No-CoT + tests (full labeled list) | Instruct-2507 | ✗ | FAILED/PASSED per test | **0.780** | *not run* | `no_cot_testfb_full_route3_1786226769` |
-| CoT + tests | Thinking-2507 | ✓ | full | *trained; transfer rescore pending* | — | `cot_testfb_full_route3_1786475425` |
+| No-CoT + tests (full labeled list) | Instruct-2507 | ✗ | FAILED/PASSED per test | **0.780** | **0.683** | `no_cot_testfb_full_route3_1786226769` |
+| CoT + tests | Thinking-2507 | ✓ | full | **0.781** | **0.673** | `cot_testfb_full_route3_1786475425` |
 
 **Key result (2026-08-08)**: Test feedback beats CoT by +3pp in-domain (0.780 vs 0.749), using Instruct-2507 with no thinking traces at all.
 
-**Cross-domain finding (2026-08-10)**: CoT predictor *degrades* cross-domain relative to no-CoT: 0.624 vs 0.637. CoT traces appear to overfit to SWE-Smith-specific reasoning patterns that don't transfer to Verified. Test feedback cross-domain transfer is unknown — the key missing experiment. Verified feedback trajectories exist, but the prior scorer omitted the feedback feature expected by these checkpoints.
+**Corrected cross-domain finding (2026-08-20)**: test feedback transfers. No-CoT + feedback reaches 0.6829 AUC versus 0.637 without feedback (+0.0459); CoT + feedback reaches 0.6728 versus 0.624 (+0.0488). Feedback is the transferable signal, while CoT still does not improve over the matched no-CoT feedback model (0.6728 vs. 0.6829).
 
 **Test feedback format ablation — completed (2026-08-08)**:
 
@@ -185,7 +185,7 @@ The corrected protocol uses official LCB grading for both stdin and function-cal
 Key takeaways that remain supported:
 - Scout patch text improves SWE-Smith in-domain AUC over input-only, but the gain is modest.
 - CoT improves SWE-Smith in-domain prediction but does not transfer as well as the no-CoT predictor.
-- SWE-Smith test-feedback models are strong in-domain, but their prior Verified transfer scores omitted the feedback feature and must be re-run.
+- SWE-Smith test-feedback models are strong in-domain and transfer better when scored with their required feedback feature: 0.6829 no-CoT and 0.6728 CoT on Verified.
 - Difficulty/model success appears much harder to infer for SWE-Bench-style agentic tasks than for short-form code generation.
 - No LCB routing conclusion is considered established until the corrected temporal experiment completes.
 
@@ -238,7 +238,7 @@ The immediate goal is to determine whether there is a defensible paper core befo
 
 ### Round 1 — run in parallel
 
-#### A. Correct SWE test-feedback transfer scoring
+#### A. Correct SWE test-feedback transfer scoring — completed
 
 Re-score the two existing SWE-Smith-trained full-feedback checkpoints on SWE-Bench Verified:
 
@@ -249,7 +249,7 @@ Re-score the two existing SWE-Smith-trained full-feedback checkpoints on SWE-Ben
 
 The scorer must reconstruct the exact training feature schema from `train_config.json` and include the stored test feedback. It must fail rather than silently score when feedback is absent. Compare against the valid no-feedback transfer baselines: 0.637 no-CoT and 0.624 CoT.
 
-**Question answered**: did test feedback fail to transfer, or was the apparent failure entirely caused by scoring test-feedback-trained checkpoints without their test-feedback feature?
+**Result**: the prior failure was a scoring artifact. Correct feature-matched scoring gives 0.6829 AUC for no-CoT + feedback and 0.6728 for CoT + feedback. Both beat their no-feedback transfer baselines; CoT adds no benefit once feedback is present.
 
 #### B. Collect corrected LCB data
 
@@ -295,7 +295,7 @@ For both domains, report more than pooled AUC:
 
 ### Decision gates
 
-1. **SWE feedback transfers**: if corrected test-feedback scoring beats the matched no-feedback transfer baseline, retain SWE as a positive cross-domain result.
+1. **SWE feedback transfers — passed**: corrected test-feedback scoring beats both matched no-feedback transfer baselines. Retain SWE feedback as a positive cross-domain result; do not claim an incremental CoT gain.
 2. **SWE feedback does not transfer, corrected LCB works**: frame the paper as a controlled positive result plus a boundary finding. Execution-grounded routing works in code generation; model-specific success in agentic software repair is much harder to infer and transfer.
 3. **Corrected LCB input-only remains high but post-scout adds little**: the result is benchmark difficulty prediction, not scout-trace routing. Narrow the claim accordingly.
 4. **Corrected LCB also collapses**: stop the multi-tier cascade work and do not pursue the current routing claim without a new signal or task.

@@ -38,6 +38,7 @@ cat > "${RUNNER}" << SCRIPT_EOF
 #!/usr/bin/env bash
 set -euo pipefail
 cd "${REPO_ROOT}"
+export HF_HUB_DISABLE_IMPLICIT_TOKEN=1
 source pipelinerl/swe/scripts/livecodebench/ensure_lcb_runner.sh
 
 python -m vllm.entrypoints.openai.api_server \\
@@ -57,6 +58,11 @@ for _ in \$(seq 1 120); do
   if curl -sf 'http://localhost:${VLLM_PORT}/health' >/dev/null; then
     ready=true
     break
+  fi
+  if ! kill -0 \${VLLM_PID} 2>/dev/null; then
+    echo "vLLM exited during startup; see ${OUTPUT_DIR}/vllm_server.log" >&2
+    tail -100 '${OUTPUT_DIR}/vllm_server.log' >&2 || true
+    exit 1
   fi
   sleep 5
 done

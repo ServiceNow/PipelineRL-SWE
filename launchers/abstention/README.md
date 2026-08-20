@@ -104,9 +104,35 @@ Never invent model IDs — `openai/gpt-oss-4b` does not exist on OpenRouter and 
 ## EAI job gotchas
 
 - **Always commit + push before relaunching** — `SNAPSHOT=1` captures the repo at submission time.
+- **Space submissions**: wait at least a few seconds between `eai job submit` calls. Multi-job suite launchers default to a 5-second delay.
 - **GPU count**: `_GPU = NPROC * GPU`. Set only `NPROC` for multi-GPU DDP. Do NOT set `GPU=N, NPROC=1` (requests N GPUs but uses 1).
 - **Verified predictor context length**: set `MAX_MODEL_LEN=32768` (not 16384 — Verified instances are longer than SWE-Smith; 16384 caused 369/369 scoring failures).
 - **Oracle patch format**: 120b sometimes returns markdown with explanation + \`\`\`diff fence rather than raw git diff. `convert_text_to_patches.py` only handles search/replace blocks — add fence extraction before running Daytona eval.
+- **Public Hugging Face models**: cached login tokens can expire and cause public model downloads to return 401. Set `HF_HUB_DISABLE_IMPLICIT_TOKEN=1`; the corrected LCB launcher does this automatically.
+
+### Monitoring jobs with `eai`
+
+```bash
+# Find a job by name and show its current run state.
+eai job ls -N <job-name> --state all \
+  --fields id,state,runs.exitCode,runs.runTime,stateInfo
+
+# Read current logs, or follow them until completion.
+eai job log <job-id> --tail 100
+eai job log -f <job-id>
+
+# Inspect full job metadata or execute a diagnostic command in a running job.
+eai job info <job-id>
+eai job exec <job-id> -- /bin/bash -lc '<command>'
+
+# Stop a job that is still alive.
+eai job kill <job-id>
+```
+
+Some launchers redirect detailed application output to files under their result directory,
+so an empty `eai job log` does not prove that no work is happening. Check the launcher's
+`collect.log`, `train.log`, `score.log`, or service log and verify that output row counts and
+file modification times are advancing.
 
 ## Security note
 
