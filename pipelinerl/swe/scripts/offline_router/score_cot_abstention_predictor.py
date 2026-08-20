@@ -34,30 +34,18 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import torch
-import torch.nn.functional as F
-from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import AutoTokenizer
 
+from pipelinerl.swe.scripts.offline_router.abstention_features import (
+    TEST_FEEDBACK_FORMATS,
+    build_abstention_input,
+    build_test_feedback_text,
+    has_test_feedback,
+)
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-
-
-def _build_input_text(problem_statement: str, thinking_text: str,
-                      patch_text: str, include_thinking: bool) -> str:
-    parts = [
-        "Predict whether a strong model will successfully resolve this software repair task.",
-        "Use the problem description and the scout model's repair attempt.",
-        "",
-        "[Problem Statement]",
-        problem_statement.strip(),
-        "",
-        "[Scout Repair Attempt]",
-    ]
-    if include_thinking and thinking_text:
-        parts += ["<think>", thinking_text.strip(), "</think>"]
-    parts.append(patch_text.strip())
-    return "\n".join(parts)
 
 
 def main() -> None:
@@ -76,6 +64,14 @@ def main() -> None:
                         help="Daytona .results.jsonl with {instance_id, resolved} rows")
     parser.add_argument("--output-path", required=True)
     parser.add_argument("--batch-size", type=int, default=1)
+    parser.add_argument("--input-only", action=argparse.BooleanOptionalAction, default=None,
+                        help="Override input_only from train_config.json")
+    parser.add_argument("--include-thinking", action=argparse.BooleanOptionalAction, default=None,
+                        help="Override include_thinking from train_config.json")
+    parser.add_argument("--include-test-feedback", action=argparse.BooleanOptionalAction, default=None,
+                        help="Override include_test_feedback from train_config.json")
+    parser.add_argument("--test-feedback-format", choices=TEST_FEEDBACK_FORMATS, default=None,
+                        help="Override test_feedback_format from train_config.json")
     args = parser.parse_args()
 
     if args.real_labels_jsonl is None and args.parquet_dir is None:
@@ -87,7 +83,18 @@ def main() -> None:
 
     model_name = cfg.get("model_name", "Qwen/Qwen3-Embedding-8B")
     max_seq_length = cfg.get("max_seq_length", 24000)
-    include_thinking = cfg.get("include_thinking", True)
+    input_only = bool(cfg.get("input_only", False)) if args.input_only is None else args.input_only
+    include_thinking = (
+        bool(cfg.get("include_thinking", True))
+        if args.include_thinking is None else args.include_thinking
+    )
+    include_test_feedback = (
+        bool(cfg.get("include_test_feedback", False))
+        if args.include_test_feedback is None else args.include_test_feedback
+    )
+    test_feedback_format = str(
+        args.test_feedback_format or cfg.get("test_feedback_format", "full")
+    )
     lora_r = cfg.get("lora_r", 32)
     lora_alpha = cfg.get("lora_alpha", 64)
     lora_target_modules = cfg.get("lora_target_modules",
@@ -96,7 +103,15 @@ def main() -> None:
     mlp_hidden_size = cfg.get("mlp_hidden_size", 1024)
     dropout = cfg.get("dropout", 0.1)
 
-    logger.info("Model: %s  include_thinking=%s", model_name, include_thinking)
+    logger.info(
+        "Model: %s input_only=%s include_thinking=%s include_test_feedback=%s "
+        "test_feedback_format=%s",
+        model_name,
+        input_only,
+        include_thinking,
+        include_test_feedback,
+        test_feedback_format,
+    )
 
     # Load labels
     labels: dict[str, bool] = {}
@@ -125,17 +140,30 @@ def main() -> None:
         logger.info("Loaded %d labels from parquet (%d positive)", len(labels), sum(labels.values()))
 
     # Load trajectories
-    trajs: list[dict] = []
+    trajs_by_id: dict[str, dict] = {}
     with open(args.trajectories) as f:
         for line in f:
             try:
                 r = json.loads(line)
-                pid = str(r.get("problem_id") or "").strip()
+                pid = str(r.get("problem_id") or r.get("instance_id") or "").strip()
                 if pid and pid in labels:
-                    trajs.append(r)
+                    trajs_by_id[pid] = r
             except json.JSONDecodeError:
                 pass
+    trajs = list(trajs_by_id.values())
     logger.info("Loaded %d trajectories with labels", len(trajs))
+    if include_test_feedback:
+        missing_feedback = [
+            str(traj.get("problem_id") or traj.get("instance_id") or "")
+            for traj in trajs
+            if not has_test_feedback(traj)
+        ]
+        if missing_feedback:
+            preview = ", ".join(missing_feedback[:5])
+            raise ValueError(
+                f"Checkpoint expects test feedback, but {len(missing_feedback)}/{len(trajs)} "
+                f"trajectories have none (first: {preview})"
+            )
 
     # Build model
     from pipelinerl.swe.scripts.offline_router.train_qwen_embedding_router_baseline import (
@@ -191,12 +219,25 @@ def main() -> None:
     n_done = 0
     with out_path.open("w") as fh, torch.no_grad():
         for traj in tqdm(trajs, desc="Scoring"):
-            pid = str(traj.get("problem_id") or "").strip()
-            text = _build_input_text(
-                str(traj.get("problem_statement") or "").strip(),
-                str(traj.get("thinking_text") or "").strip(),
-                str(traj.get("patch_text") or "").strip(),
+            pid = str(traj.get("problem_id") or traj.get("instance_id") or "").strip()
+            problem_statement = str(traj.get("problem_statement") or "").strip()
+            thinking_text = str(traj.get("thinking_text") or "").strip()
+            patch_text = str(traj.get("patch_text") or "").strip()
+            if not problem_statement or (not input_only and not patch_text):
+                logger.warning("Skipping %s: required predictor input is empty", pid)
+                continue
+            test_feedback_text = (
+                build_test_feedback_text(traj, test_feedback_format)
+                if include_test_feedback else ""
+            )
+            text = build_abstention_input(
+                problem_statement,
+                thinking_text,
+                patch_text,
                 include_thinking,
+                input_only=input_only,
+                test_feedback_text=test_feedback_text,
+                include_test_feedback=include_test_feedback,
             )
             enc = tokenizer(text, add_special_tokens=True, truncation=True,
                             max_length=max_seq_length, return_tensors="pt")

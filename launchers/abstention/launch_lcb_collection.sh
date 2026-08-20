@@ -44,6 +44,7 @@ cat > "${RUNNER}" << SCRIPT_EOF
 set -euo pipefail
 cd "${REPO_ROOT}"
 mkdir -p "${OUTPUT_DIR}"
+source pipelinerl/swe/scripts/livecodebench/ensure_lcb_runner.sh
 
 echo "=== LCB collection: phase=${PHASE}, scout=${SCOUT_MODEL}, oracle=${ORACLE_MODEL} ==="
 

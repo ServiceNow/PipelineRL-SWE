@@ -53,6 +53,7 @@ cat > "${RUNNER}" << SCRIPT_EOF
 set -euo pipefail
 cd "${REPO_ROOT}"
 mkdir -p "${OUTPUT_DIR}"
+source pipelinerl/swe/scripts/livecodebench/ensure_lcb_runner.sh
 
 echo '[vllm] Starting vLLM server for ${SCOUT_MODEL}...'
 python -m vllm.entrypoints.openai.api_server \

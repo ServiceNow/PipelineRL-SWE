@@ -41,6 +41,12 @@ from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 from transformers import AutoTokenizer, get_linear_schedule_with_warmup
 
+from pipelinerl.swe.scripts.offline_router.abstention_features import (
+    TEST_FEEDBACK_FORMATS,
+    build_abstention_input,
+    build_test_feedback_text,
+    has_test_feedback,
+)
 from pipelinerl.swe.scripts.offline_router.common import write_json
 from pipelinerl.swe.scripts.offline_router.train_qwen_embedding_router_baseline import (
     QwenEmbeddingRouter,
@@ -52,13 +58,19 @@ from pipelinerl.swe.scripts.offline_router.train_qwen_embedding_router_baseline 
 # ── data loading ──────────────────────────────────────────────────────────────
 
 def load_trajectories(path: str) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
+    rows_by_id: dict[str, dict[str, Any]] = {}
+    rows_without_id: list[dict[str, Any]] = []
     with open(path) as f:
         for line in f:
             line = line.strip()
             if line:
-                rows.append(json.loads(line))
-    return rows
+                row = json.loads(line)
+                pid = str(row.get("problem_id") or row.get("instance_id") or "").strip()
+                if pid:
+                    rows_by_id[pid] = row
+                else:
+                    rows_without_id.append(row)
+    return list(rows_by_id.values()) + rows_without_id
 
 
 def load_parquet_labels(parquet_dir: str, route_idx: int = 3) -> dict[str, bool]:
@@ -77,7 +89,7 @@ def load_parquet_labels(parquet_dir: str, route_idx: int = 3) -> dict[str, bool]
 
 # ── input text ────────────────────────────────────────────────────────────────
 
-_TF_FORMATS = ("full", "names_only", "count_only")
+_TF_FORMATS = TEST_FEEDBACK_FORMATS
 
 
 def _build_test_feedback_text(traj: dict[str, Any], fmt: str) -> str:
@@ -88,45 +100,7 @@ def _build_test_feedback_text(traj: dict[str, Any], fmt: str) -> str:
       names_only — all test names, no pass/fail labels (tests structure only)
       count_only — just the fraction N/M failing (execution ratio only)
     """
-    if fmt not in _TF_FORMATS:
-        raise ValueError(f"Unknown test-feedback format {fmt!r}; choose from {_TF_FORMATS}")
-
-    failing: list = traj.get("_tf_failing") or []
-    passing: list = traj.get("_tf_passing") or []
-    resolved: bool = bool(traj.get("_tf_resolved", False))
-    patch_exists: bool = bool(traj.get("_tf_patch_exists", True))
-    n_fail, n_pass = len(failing), len(passing)
-    total = n_fail + n_pass
-
-    # Fall back to pre-formatted string for legacy trajectories without raw fields
-    if not failing and not passing and not resolved:
-        return traj.get("test_feedback", "")
-
-    if not patch_exists:
-        return "Scout test execution: NO PATCH"
-
-    if fmt == "count_only":
-        if resolved:
-            return f"Scout test execution: PASSED ({n_pass}/{total} tests)"
-        if total == 0:
-            return "Scout test execution: FAILED (no test output available)"
-        return f"Scout test execution: FAILED ({n_fail}/{total} tests failing)"
-
-    if fmt == "names_only":
-        all_names = failing + passing
-        if not all_names:
-            return "Scout test execution: no test names available"
-        parts = [f"Scout test execution: {total} tests in suite"]
-        for name in all_names[:200]:
-            parts.append(name)
-        overflow = total - min(total, 200)
-        if overflow:
-            parts.append(f"(+{overflow} more)")
-        return "\n".join(parts)
-
-    # fmt == "full" — use pre-formatted string (already in rich format from augmentation)
-    return traj.get("test_feedback", "")
-
+    return build_test_feedback_text(traj, fmt)
 
 def _build_input_text(
     problem_statement: str,
@@ -137,29 +111,15 @@ def _build_input_text(
     test_feedback_text: str = "",
     include_test_feedback: bool = False,
 ) -> str:
-    if input_only:
-        return "\n".join([
-            "Predict whether a strong model will successfully resolve this task.",
-            "Use only the problem description.",
-            "",
-            "[Problem Statement]",
-            problem_statement.strip(),
-        ])
-    parts = [
-        "Predict whether a strong model will successfully resolve this software repair task.",
-        "Use the problem description and the scout model's repair attempt.",
-        "",
-        "[Problem Statement]",
-        problem_statement.strip(),
-        "",
-        "[Scout Repair Attempt]",
-    ]
-    if include_thinking and thinking_text:
-        parts += ["<think>", thinking_text.strip(), "</think>"]
-    parts.append(patch_text.strip())
-    if include_test_feedback and test_feedback_text:
-        parts += ["", "[Scout Test Execution Feedback]", test_feedback_text.strip()]
-    return "\n".join(parts)
+    return build_abstention_input(
+        problem_statement,
+        thinking_text,
+        patch_text,
+        include_thinking,
+        input_only=input_only,
+        test_feedback_text=test_feedback_text,
+        include_test_feedback=include_test_feedback,
+    )
 
 
 # ── dataset ───────────────────────────────────────────────────────────────────
@@ -185,6 +145,11 @@ class CoTAbstentionDataset(Dataset):
             if not pid or pid not in labels:
                 skipped += 1
                 continue
+            if include_test_feedback and not has_test_feedback(traj):
+                raise ValueError(
+                    f"Test feedback was requested, but trajectory {pid} has no "
+                    "test-execution fields"
+                )
             problem_statement = str(traj.get("problem_statement") or "").strip()
             thinking_text = str(traj.get("thinking_text") or "").strip()
             patch_text = str(traj.get("patch_text") or "").strip()
@@ -441,6 +406,7 @@ def main() -> None:
         "eval_parquet_dir": args.eval_parquet_dir,
         "label_route_idx": int(args.label_route_idx),
         "include_thinking": bool(args.include_thinking),
+        "input_only": bool(args.input_only),
         "include_test_feedback": bool(args.include_test_feedback),
         "test_feedback_format": str(args.test_feedback_format),
         "multi_task_scout": bool(args.multi_task_scout),

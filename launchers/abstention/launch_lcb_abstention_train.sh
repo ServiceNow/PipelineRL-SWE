@@ -5,6 +5,9 @@
 # Optional env vars:
 #   LCB_COLLECTION_DIR  -- output dir from launch_lcb_collection.sh (required)
 #   INPUT_ONLY          -- "true" to train IO variant (no scout output)
+#   INCLUDE_THINKING    -- include scout reasoning (default: false)
+#   INCLUDE_TEST_FEEDBACK -- include official scout test results (default: false)
+#   TEST_FEEDBACK_FORMAT  -- full | names_only | count_only (default: full)
 #   NUM_EPOCHS / NPROC
 set -euo pipefail
 
@@ -13,12 +16,17 @@ REPO_ROOT=$(cd "${SCRIPT_DIR}/../.." && pwd)
 
 : "${LCB_COLLECTION_DIR:?Set LCB_COLLECTION_DIR to the output of launch_lcb_collection.sh}"
 
-TIMESTAMP=$(date +%s)
+TIMESTAMP=${TIMESTAMP:-$(date +%s)}
 INPUT_ONLY=${INPUT_ONLY:-false}
+INCLUDE_THINKING=${INCLUDE_THINKING:-false}
+INCLUDE_TEST_FEEDBACK=${INCLUDE_TEST_FEEDBACK:-false}
+TEST_FEEDBACK_FORMAT=${TEST_FEEDBACK_FORMAT:-full}
 NUM_EPOCHS=${NUM_EPOCHS:-10}
 LORA_R=${LORA_R:-32}
 LORA_ALPHA=${LORA_ALPHA:-64}
 NPROC=${NPROC:-4}
+MAX_SEQ_LENGTH=${MAX_SEQ_LENGTH:-24000}
+SNAPSHOT=${SNAPSHOT:-1}
 LABEL_ROUTE_IDX=3  # oracle = oss-120b
 
 if [[ "${INPUT_ONLY}" == "true" ]]; then
@@ -26,11 +34,32 @@ if [[ "${INPUT_ONLY}" == "true" ]]; then
   IO_SUFFIX="_input_only"
 else
   IO_ARG=""
-  IO_SUFFIX=""
+  IO_SUFFIX="_post_scout"
 fi
 
-JOB_NAME=lcb_abstention_route${LABEL_ROUTE_IDX}_nocot${IO_SUFFIX}_${NUM_EPOCHS}epoch_${TIMESTAMP}
-OUTPUT_DIR=/mnt/llmd/results/exps/aristides/reason/${JOB_NAME}
+if [[ "${INPUT_ONLY}" == "true" && "${INCLUDE_TEST_FEEDBACK}" == "true" ]]; then
+  echo "INPUT_ONLY=true is incompatible with INCLUDE_TEST_FEEDBACK=true" >&2
+  exit 1
+fi
+
+if [[ "${INCLUDE_THINKING}" == "true" ]]; then
+  THINKING_ARG="--include-thinking"
+  THINKING_SUFFIX="_cot"
+else
+  THINKING_ARG="--no-include-thinking"
+  THINKING_SUFFIX="_nocot"
+fi
+
+if [[ "${INCLUDE_TEST_FEEDBACK}" == "true" ]]; then
+  TEST_FEEDBACK_ARG="--include-test-feedback --test-feedback-format ${TEST_FEEDBACK_FORMAT}"
+  TEST_FEEDBACK_SUFFIX="_testfb_${TEST_FEEDBACK_FORMAT}"
+else
+  TEST_FEEDBACK_ARG="--no-include-test-feedback"
+  TEST_FEEDBACK_SUFFIX=""
+fi
+
+JOB_NAME=${JOB_NAME:-lcb_corrected_abstention_route${LABEL_ROUTE_IDX}${THINKING_SUFFIX}${IO_SUFFIX}${TEST_FEEDBACK_SUFFIX}_${NUM_EPOCHS}epoch_${TIMESTAMP}}
+OUTPUT_DIR=${OUTPUT_DIR:-/mnt/llmd/results/exps/aristides/reason/${JOB_NAME}}
 
 mkdir -p "${OUTPUT_DIR}"
 
@@ -60,9 +89,10 @@ ${TRAIN_CMD} \\
   --eval-parquet-dir   ${LCB_COLLECTION_DIR}/eval \\
   --output-dir         ${OUTPUT_DIR} \\
   --label-route-idx    ${LABEL_ROUTE_IDX} \\
-  --no-include-thinking \\
+  ${THINKING_ARG} \\
   ${IO_ARG} \\
-  --max-seq-length     8192 \\
+  ${TEST_FEEDBACK_ARG} \\
+  --max-seq-length     ${MAX_SEQ_LENGTH} \\
   --num-epochs         ${NUM_EPOCHS} \\
   --batch-size         1 \\
   --eval-batch-size    1 \\
@@ -84,7 +114,7 @@ make -C "${REPO_ROOT}" job \
   JOB_NAME="${JOB_NAME}" \
   ENV=pipeline-rl \
   CONDA_EXE=/opt/conda/bin/conda \
-  SNAPSHOT=1 \
+  SNAPSHOT=${SNAPSHOT} \
   NPROC=${NPROC} \
   GPU=1 \
   GPU_MEM=80 \

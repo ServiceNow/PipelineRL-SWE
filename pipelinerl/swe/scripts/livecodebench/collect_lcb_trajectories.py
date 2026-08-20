@@ -31,26 +31,23 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import base64
 import json
 import logging
 import os
 import random
 import re
-import subprocess
-import tempfile
 import time
-import zlib
 from pathlib import Path
 from typing import Any
 
 import aiohttp
+import numpy as np
 import pandas as pd
-import pyarrow as pa
-import pyarrow.parquet as pq
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
+LCB_EVALUATOR_COMMIT = os.environ.get("LCB_RUNNER_COMMIT", "unknown")
 
 THINK_RE = re.compile(r"<think>(.*?)</think>", re.DOTALL)
 CODE_RE = re.compile(r"```(?:python)?\s*\n(.*?)```", re.DOTALL)
@@ -70,23 +67,66 @@ ORACLE_SYSTEM = (
 
 # ── Dataset helpers ──────────────────────────────────────────────────────────
 
-def load_lcb(split: str = "test", max_samples: int = 0,
-             min_date: str = "", max_date: str = "",
-             difficulties: list[str] | None = None,
-             seed: int = 42) -> list[dict]:
-    from datasets import load_dataset
-    ds = load_dataset("livecodebench/code_generation_lite", split=split, trust_remote_code=True)
-    rows = list(ds)
-    if min_date:
-        rows = [r for r in rows if r["contest_date"] >= min_date]
-    if max_date:
-        rows = [r for r in rows if r["contest_date"] <= max_date]
-    if difficulties:
-        rows = [r for r in rows if r["difficulty"] in difficulties]
+def load_lcb(
+    max_samples: int = 0,
+    min_date: str = "",
+    max_date: str = "",
+    difficulties: list[str] | None = None,
+    seed: int = 42,
+    release_version: str = "release_latest",
+) -> list[dict]:
+    try:
+        from datasets import load_dataset
+        from lcb_runner.benchmarks.code_generation import CodeGenerationProblem
+    except ImportError as exc:
+        raise RuntimeError(
+            "Official LiveCodeBench runner unavailable. Source "
+            "pipelinerl/swe/scripts/livecodebench/ensure_lcb_runner.sh first."
+        ) from exc
+
+    # The pinned runner's loader passes `version_tag` and `trust_remote_code`,
+    # which current versions of `datasets` no longer accept. Load the same
+    # official release config directly, then use the runner's canonical schema.
+    dataset = load_dataset(
+        "livecodebench/code_generation_lite",
+        name=release_version,
+        split="test",
+    )
+    problems = [CodeGenerationProblem(**raw) for raw in dataset]
+    rows = []
+    for problem in problems:
+        contest_date = problem.contest_date.date().isoformat()
+        if min_date and contest_date < min_date:
+            continue
+        if max_date and contest_date > max_date:
+            continue
+        difficulty = problem.difficulty.value
+        if difficulties and difficulty not in difficulties:
+            continue
+        rows.append({
+            "question_content": problem.question_content,
+            "question_title": problem.question_title,
+            "question_id": str(problem.question_id),
+            "platform": problem.platform.value,
+            "difficulty": difficulty,
+            "contest_date": contest_date,
+            "starter_code": problem.starter_code,
+            "metadata": problem.metadata,
+            "_public_evaluation_sample": {
+                "input_output": json.dumps({
+                    "inputs": [test.input for test in problem.public_test_cases],
+                    "outputs": [test.output for test in problem.public_test_cases],
+                    "fn_name": problem.metadata.get("func_name"),
+                }),
+            },
+            "_evaluation_sample": problem.get_evaluation_sample(),
+            "_n_public_tests": len(problem.public_test_cases),
+            "_n_private_tests": len(problem.private_test_cases),
+        })
     if max_samples and len(rows) > max_samples:
         rng = random.Random(seed)
         rows = rng.sample(rows, max_samples)
-    logger.info("Loaded %d LCB problems (split=%s)", len(rows), split)
+    logger.info("Loaded %d LCB problems (release=%s)", len(rows), release_version)
     return rows
 
 
@@ -94,26 +134,17 @@ def make_prompt(row: dict) -> str:
     parts = [row["question_content"]]
     if row.get("starter_code"):
         parts.append(f"\nStarter code:\n```python\n{row['starter_code']}\n```")
-    parts.append("\nWrite a complete Python solution. Read from stdin, write to stdout.")
+    if (row.get("metadata") or {}).get("func_name"):
+        parts.append(
+            "\nComplete the requested Python function or class using the starter-code interface."
+        )
+    else:
+        parts.append("\nWrite a complete Python solution. Read from stdin, write to stdout.")
     return "\n".join(parts)
 
 
 def problem_id(row: dict) -> str:
     return f"{row['platform']}_{row['question_id']}"
-
-
-# ── Test case evaluation ─────────────────────────────────────────────────────
-
-def decode_test_cases(encoded: str) -> list[dict]:
-    """Decode base64+zlib compressed LCB test cases."""
-    try:
-        raw = base64.b64decode(encoded + "==")
-        return json.loads(zlib.decompress(raw))
-    except Exception:
-        try:
-            return json.loads(encoded)
-        except Exception:
-            return []
 
 
 def extract_code(output: str) -> str:
@@ -125,45 +156,86 @@ def extract_code(output: str) -> str:
     return output.strip()
 
 
-def run_one_test(code: str, test_case: dict, timeout: float = 10.0) -> bool:
+# ── Official test-case evaluation ───────────────────────────────────────────
+
+_RESULT_NAMES = {
+    -5: "test_runner_error",
+    -4: "runtime_error",
+    -3: "time_limit_exceeded",
+    -2: "wrong_answer",
+    -1: "global_timeout",
+}
+
+
+def evaluate_code(
+    code: str,
+    row: dict,
+    timeout: int = 10,
+    sample_key: str = "_evaluation_sample",
+) -> dict[str, Any]:
+    """Evaluate one generation with the pinned official LiveCodeBench runner."""
     if not code.strip():
-        return False
-    stdin_data = test_case.get("input", "")
-    expected = test_case.get("output", "").strip()
-    testtype = test_case.get("testtype", "stdin")
-    if testtype != "stdin":
-        # func_call style — skip for now (would need different eval)
-        return False
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
-        f.write(code)
-        tmp = f.name
+        return {
+            "resolved": False,
+            "passing": [],
+            "failing": ["NO_CODE"],
+            "result_codes": [],
+            "metadata": {"error_message": "EmptyGeneration"},
+        }
     try:
-        result = subprocess.run(
-            ["python3", tmp],
-            input=stdin_data,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
+        from lcb_runner.evaluation.compute_code_generation_metrics import check_correctness
+
+        results, metadata = check_correctness(
+            row[sample_key], code, timeout=timeout, debug=False
         )
-        actual = result.stdout.strip()
-        return actual == expected
-    except subprocess.TimeoutExpired:
-        return False
-    except Exception:
-        return False
-    finally:
-        os.unlink(tmp)
+    except Exception as exc:
+        logger.warning("Official LCB evaluator failed for %s: %s", problem_id(row), exc)
+        return {
+            "resolved": False,
+            "passing": [],
+            "failing": ["TEST_RUNNER_ERROR"],
+            "result_codes": [],
+            "metadata": {"error_message": repr(exc)},
+        }
+
+    normalized = [
+        bool(value) if isinstance(value, (bool, np.bool_)) else int(value)
+        for value in results
+    ]
+    passing = [f"case_{idx:04d}" for idx, value in enumerate(normalized) if value is True]
+    failing = [
+        f"case_{idx:04d}:{_RESULT_NAMES.get(value, 'wrong_answer')}"
+        for idx, value in enumerate(normalized)
+        if value is not True
+    ]
+    return {
+        "resolved": bool(normalized) and all(value is True for value in normalized),
+        "passing": passing,
+        "failing": failing,
+        "result_codes": normalized,
+        "metadata": json.loads(json.dumps(metadata, default=str)),
+    }
 
 
-def evaluate_code(code: str, public_tc: str, private_tc: str,
-                  use_private: bool = True) -> bool:
-    """Return True if code passes all test cases."""
-    cases = decode_test_cases(public_tc) if public_tc else []
-    if use_private and private_tc:
-        cases = cases + decode_test_cases(private_tc)
-    if not cases:
-        return False
-    return all(run_one_test(code, tc) for tc in cases)
+def format_test_feedback(report: dict[str, Any], suite_size: int) -> str:
+    passing = report["passing"]
+    failing = report["failing"]
+    if report["resolved"]:
+        header = f"Scout test execution: PASSED ({len(passing)}/{suite_size} tests)"
+    else:
+        header = (
+            "Scout test execution: FAILED "
+            f"after {len(passing)} passed tests ({suite_size} tests in suite)"
+        )
+    parts = [header]
+    parts.extend(f"FAILED: {name}" for name in failing[:200])
+    remaining = max(0, 200 - min(len(failing), 200))
+    parts.extend(f"PASSED: {name}" for name in passing[:remaining])
+    parts.append(
+        f"Observed before stop: {len(passing)} passed, {len(failing)} failed; "
+        f"suite size: {suite_size}"
+    )
+    return "\n".join(parts)
 
 
 # ── OpenRouter async call ────────────────────────────────────────────────────
@@ -236,14 +308,22 @@ async def collect_scout(
     temperature: float,
     concurrency: int,
     title: str,
+    eval_timeout: int,
+    feedback_tests: str,
 ) -> list[dict]:
-    # Resume from existing — only count rows with actual output as done
+    # Old rows were graded by the broken local evaluator. Only resume rows that
+    # carry the pinned official-evaluator marker and actual test feedback.
     done: dict[str, dict] = {}
     if output_path.exists():
         with open(output_path) as f:
             for line in f:
                 r = json.loads(line)
-                if r.get("full_output", "").strip():
+                if (
+                    r.get("full_output", "").strip()
+                    and r.get("_lcb_evaluator_commit") == LCB_EVALUATOR_COMMIT
+                    and r.get("_lcb_feedback_tests") == feedback_tests
+                    and str(r.get("test_feedback") or "").strip()
+                ):
                     done[r["problem_id"]] = r
         logger.info("Resuming: %d already collected", len(done))
 
@@ -251,6 +331,7 @@ async def collect_scout(
     logger.info("Scout: %d problems to collect (model=%s)", len(todo), model)
 
     sem = asyncio.Semaphore(concurrency)
+    eval_sem = asyncio.Semaphore(max(1, min(concurrency, (os.cpu_count() or 2) // 2)))
     results = list(done.values())
 
     async with aiohttp.ClientSession() as session:
@@ -282,6 +363,25 @@ async def collect_scout(
                     full = parts[1].strip()
 
             code = extract_code(full)
+            full_suite_size = row["_n_public_tests"] + row["_n_private_tests"]
+            feedback_suite_size = (
+                row["_n_public_tests"] if feedback_tests == "public" else full_suite_size
+            )
+            feedback_sample_key = (
+                "_public_evaluation_sample"
+                if feedback_tests == "public"
+                else "_evaluation_sample"
+            )
+            async with eval_sem:
+                feedback_report = await asyncio.to_thread(
+                    evaluate_code, code, row, eval_timeout, feedback_sample_key
+                )
+                if feedback_tests == "public":
+                    scout_report = await asyncio.to_thread(
+                        evaluate_code, code, row, eval_timeout
+                    )
+                else:
+                    scout_report = feedback_report
             return {
                 "problem_id": pid,
                 "problem_statement": prompt,
@@ -296,9 +396,23 @@ async def collect_scout(
                 "prompt_tokens": out["prompt_tokens"],
                 "completion_tokens": out["completion_tokens"],
                 "latency_s": out["latency_s"],
-                # Store test case strings for eval
-                "_public_tc": row.get("public_test_cases", ""),
-                "_private_tc": row.get("private_test_cases", ""),
+                "scout_correct": scout_report["resolved"],
+                "test_feedback": format_test_feedback(
+                    feedback_report, feedback_suite_size
+                ),
+                "_tf_failing": feedback_report["failing"],
+                "_tf_passing": feedback_report["passing"],
+                "_tf_resolved": feedback_report["resolved"],
+                "_tf_patch_exists": bool(code.strip()),
+                "_tf_total": feedback_suite_size,
+                "_lcb_feedback_result_codes": feedback_report["result_codes"],
+                "_lcb_feedback_eval_metadata": feedback_report["metadata"],
+                "_lcb_result_codes": scout_report["result_codes"],
+                "_lcb_eval_metadata": scout_report["metadata"],
+                "_lcb_evaluator_commit": LCB_EVALUATOR_COMMIT,
+                "_lcb_feedback_tests": feedback_tests,
+                "_lcb_test_count": feedback_suite_size,
+                "_lcb_full_test_count": full_suite_size,
             }
 
         tasks = [process(r) for r in todo]
@@ -326,20 +440,26 @@ async def collect_oracle(
     temperature: float,
     concurrency: int,
     title: str,
-    use_private_tc: bool,
+    eval_timeout: int,
 ) -> list[dict]:
     done: dict[str, dict] = {}
     if output_path.exists():
         with open(output_path) as f:
             for line in f:
                 r = json.loads(line)
-                done[r["problem_id"]] = r
+                if (
+                    r.get("full_output", "").strip()
+                    and r.get("_lcb_evaluator_commit") == LCB_EVALUATOR_COMMIT
+                    and isinstance(r.get("resolved"), bool)
+                ):
+                    done[r["problem_id"]] = r
         logger.info("Resuming oracle: %d already collected", len(done))
 
     todo = [r for r in rows if problem_id(r) not in done]
     logger.info("Oracle: %d problems to collect (model=%s)", len(todo), model)
 
     sem = asyncio.Semaphore(concurrency)
+    eval_sem = asyncio.Semaphore(max(1, min(concurrency, (os.cpu_count() or 2) // 2)))
     results = list(done.values())
 
     async with aiohttp.ClientSession() as session:
@@ -353,16 +473,35 @@ async def collect_oracle(
                     temperature=temperature, title=title, semaphore=sem,
                 )
                 code = extract_code(out["full_output"])
-                resolved = evaluate_code(
-                    code,
-                    row.get("public_test_cases", ""),
-                    row.get("private_test_cases", ""),
-                    use_private=use_private_tc,
-                )
+                async with eval_sem:
+                    report = await asyncio.to_thread(
+                        evaluate_code, code, row, eval_timeout
+                    )
             except Exception as e:
                 logger.warning("Oracle failed for %s: %s", pid, e)
-                resolved = False
-            return {"problem_id": pid, "resolved": resolved, "model": model}
+                out = {"full_output": "", "thinking_text": "", "prompt_tokens": 0,
+                       "completion_tokens": 0, "latency_s": 0.0}
+                code = ""
+                report = {
+                    "resolved": False,
+                    "passing": [],
+                    "failing": ["MODEL_CALL_ERROR"],
+                    "result_codes": [],
+                    "metadata": {"error_message": repr(e)},
+                }
+            return {
+                "problem_id": pid,
+                "resolved": report["resolved"],
+                "model": model,
+                "full_output": out["full_output"],
+                "code": code,
+                "prompt_tokens": out["prompt_tokens"],
+                "completion_tokens": out["completion_tokens"],
+                "latency_s": out["latency_s"],
+                "result_codes": report["result_codes"],
+                "eval_metadata": report["metadata"],
+                "_lcb_evaluator_commit": LCB_EVALUATOR_COMMIT,
+            }
 
         tasks = [process(r) for r in todo]
         for i, coro in enumerate(asyncio.as_completed(tasks)):
@@ -384,8 +523,9 @@ async def collect_oracle(
 
 def build_labels_parquet(oracle_results: list[dict], output_path: Path) -> None:
     """Build labels parquet compatible with train_cot_abstention_predictor.py."""
+    latest_by_id = {r["problem_id"]: r for r in oracle_results}
     rows = []
-    for r in oracle_results:
+    for r in latest_by_id.values():
         # route_successes[3] = oracle (oss-120b) success — mirrors SWE-Smith parquet schema
         route_successes = [False, False, False, r["resolved"]]
         route_rewards = [0.0, 0.0, 0.0, float(r["resolved"])]
@@ -396,7 +536,7 @@ def build_labels_parquet(oracle_results: list[dict], output_path: Path) -> None:
         })
     df = pd.DataFrame(rows)
     df.to_parquet(output_path, index=False)
-    n_pos = sum(r["resolved"] for r in oracle_results)
+    n_pos = sum(r["resolved"] for r in latest_by_id.values())
     logger.info("Wrote labels parquet: %d rows, %d positive (%.1f%%)",
                 len(rows), n_pos, 100 * n_pos / max(1, len(rows)))
 
@@ -421,7 +561,11 @@ def main() -> None:
     ap.add_argument("--title", default="PipelineRL-LCB")
     ap.add_argument("--max-samples", type=int, default=0,
                     help="Max problems to use (0 = all)")
+    ap.add_argument("--release-version", default="release_latest",
+                    help="Official LiveCodeBench release tag")
     ap.add_argument("--train-frac", type=float, default=0.8)
+    ap.add_argument("--temporal-cutoff", default="",
+                    help="If set, train before this date and evaluate on/after it")
     ap.add_argument("--min-date", default="2023-09-01",
                     help="Only use problems on or after this date")
     ap.add_argument("--max-date", default="")
@@ -431,8 +575,13 @@ def main() -> None:
     ap.add_argument("--oracle-max-tokens", type=int, default=4096)
     ap.add_argument("--temperature", type=float, default=0.7)
     ap.add_argument("--concurrency", type=int, default=16)
+    ap.add_argument("--eval-timeout", type=int, default=10,
+                    help="Per-test timeout passed to the official evaluator")
+    ap.add_argument("--scout-feedback-tests", choices=["public", "all"], default="public",
+                    help="Tests exposed as scout feedback. Use public for headline results; "
+                         "all is a diagnostic upper bound only")
     ap.add_argument("--use-private-tc", action="store_true", default=False,
-                    help="Include private test cases for evaluation (slower)")
+                    help="Deprecated compatibility flag; official evaluation always uses public+private tests")
     ap.add_argument("--seed", type=int, default=42)
     args = ap.parse_args()
 
@@ -454,21 +603,29 @@ def main() -> None:
 
     # Load dataset
     all_rows = load_lcb(
-        split="test",
         max_samples=args.max_samples,
         min_date=args.min_date,
         max_date=args.max_date,
         difficulties=args.difficulties,
         seed=args.seed,
+        release_version=args.release_version,
     )
 
-    # Train/eval split
-    rng = random.Random(args.seed)
-    shuffled = list(all_rows)
-    rng.shuffle(shuffled)
-    n_train = int(len(shuffled) * args.train_frac)
-    train_rows = shuffled[:n_train]
-    eval_rows = shuffled[n_train:]
+    if args.temporal_cutoff:
+        train_rows = [r for r in all_rows if r["contest_date"] < args.temporal_cutoff]
+        eval_rows = [r for r in all_rows if r["contest_date"] >= args.temporal_cutoff]
+        if not train_rows or not eval_rows:
+            raise ValueError(
+                f"Temporal cutoff {args.temporal_cutoff} produced an empty split: "
+                f"train={len(train_rows)} eval={len(eval_rows)}"
+            )
+    else:
+        rng = random.Random(args.seed)
+        shuffled = list(all_rows)
+        rng.shuffle(shuffled)
+        n_train = int(len(shuffled) * args.train_frac)
+        train_rows = shuffled[:n_train]
+        eval_rows = shuffled[n_train:]
     logger.info("Split: %d train / %d eval", len(train_rows), len(eval_rows))
 
     for split_name, split_rows in [("train", train_rows), ("eval", eval_rows)]:
@@ -489,6 +646,8 @@ def main() -> None:
                 temperature=args.temperature,
                 concurrency=args.concurrency,
                 title=args.title,
+                eval_timeout=args.eval_timeout,
+                feedback_tests=args.scout_feedback_tests,
             ))
 
         if args.phase in ("oracle", "all"):
@@ -501,7 +660,7 @@ def main() -> None:
                 temperature=args.temperature,
                 concurrency=args.concurrency,
                 title=args.title,
-                use_private_tc=args.use_private_tc,
+                eval_timeout=args.eval_timeout,
             ))
 
         if args.phase in ("oracle", "all", "eval"):
@@ -509,15 +668,17 @@ def main() -> None:
                 oracle_results = [json.loads(l) for l in open(oracle_path)]
                 build_labels_parquet(oracle_results, labels_path)
 
-        # Merge scout → trajectories (strip internal _* fields)
-        if args.phase in ("scout", "all") and scout_path.exists():
+        # Keep raw _tf_* fields: they are required for feedback ablations.
+        if args.phase in ("scout", "all", "eval") and scout_path.exists():
+            latest_scout: dict[str, dict] = {}
+            with open(scout_path) as in_f:
+                for line in in_f:
+                    r = json.loads(line)
+                    if r.get("_lcb_evaluator_commit") == LCB_EVALUATOR_COMMIT:
+                        latest_scout[r["problem_id"]] = r
             with open(traj_path, "w") as out_f:
-                with open(scout_path) as in_f:
-                    for line in in_f:
-                        r = json.loads(line)
-                        r.pop("_public_tc", None)
-                        r.pop("_private_tc", None)
-                        out_f.write(json.dumps(r) + "\n")
+                for r in latest_scout.values():
+                    out_f.write(json.dumps(r) + "\n")
             logger.info("Wrote %s", traj_path)
 
     logger.info("Done. Output: %s", output_dir)
