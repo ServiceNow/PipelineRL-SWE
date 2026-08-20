@@ -11,6 +11,7 @@ TIMESTAMP=${TIMESTAMP:-$(date +%s)}
 SCOUT_MODEL=${SCOUT_MODEL:-Qwen/Qwen3-4B-Instruct-2507}
 ORACLE_MODEL=${ORACLE_MODEL:-openai/gpt-oss-120b}
 RELEASE_VERSION=${RELEASE_VERSION:-release_v6}
+LCB_DATASET_REVISION=${LCB_DATASET_REVISION:-0fe84c3912ea0c4d4a78037083943e8f0c4dd505}
 MIN_DATE=${MIN_DATE:-2023-09-01}
 TEMPORAL_CUTOFF=${TEMPORAL_CUTOFF:-2024-10-01}
 MAX_SAMPLES=${MAX_SAMPLES:-0}
@@ -80,6 +81,7 @@ python pipelinerl/swe/scripts/livecodebench/collect_lcb_trajectories.py \\
   --oracle-model '${ORACLE_MODEL}' \\
   --api-key-file '${OPENROUTER_API_KEY_FILE}' \\
   --release-version '${RELEASE_VERSION}' \\
+  --dataset-revision '${LCB_DATASET_REVISION}' \\
   --min-date '${MIN_DATE}' \\
   --temporal-cutoff '${TEMPORAL_CUTOFF}' \\
   --max-samples ${MAX_SAMPLES} \\

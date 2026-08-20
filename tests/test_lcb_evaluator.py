@@ -2,10 +2,44 @@ import json
 
 import pytest
 
-from pipelinerl.swe.scripts.livecodebench.collect_lcb_trajectories import evaluate_code
+from pipelinerl.swe.scripts.livecodebench.collect_lcb_trajectories import (
+    evaluate_code,
+    lcb_release_files,
+)
 
 
 pytest.importorskip("lcb_runner.evaluation.compute_code_generation_metrics")
+
+
+@pytest.mark.parametrize(
+    ("release", "expected"),
+    [
+        ("release_v1", ["test.jsonl"]),
+        ("release_v3", ["test.jsonl", "test2.jsonl", "test3.jsonl"]),
+        (
+            "release_v6",
+            [
+                "test.jsonl",
+                "test2.jsonl",
+                "test3.jsonl",
+                "test4.jsonl",
+                "test5.jsonl",
+                "test6.jsonl",
+            ],
+        ),
+        ("v3", ["test3.jsonl"]),
+        ("v2_v4", ["test2.jsonl", "test3.jsonl", "test4.jsonl"]),
+    ],
+)
+def test_lcb_release_files_match_official_loader(
+    release: str, expected: list[str]
+) -> None:
+    assert lcb_release_files(release) == expected
+
+
+def test_lcb_release_files_reject_invalid_range() -> None:
+    with pytest.raises(ValueError, match="Unsupported LiveCodeBench release"):
+        lcb_release_files("v4_v2")
 
 
 def _row(input_output: dict) -> dict:

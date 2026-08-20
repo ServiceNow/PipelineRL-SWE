@@ -14,35 +14,62 @@ The surprising result: a predictor trained on scout traces can route instances s
 
 ---
 
-## Problem Setting
+## Experimental Axes
 
-### The cascade routing decision
+The project crosses two independent axes: the **decision regime** and the **dataset**. SWE is not
+synonymous with abstention, and LCB is not synonymous with full routing.
 
-Given a task instance, we have two models available:
-- **Scout** (`Qwen3-4B`, cheap): generates a patch/solution, may or may not succeed
-- **Oracle** (`gpt-oss-120b`, expensive): higher capability, rarely fails on tractable instances
+### Axis 1: decision regime
 
-The router makes a **binary decision per instance**:
-- **Call oracle** → pay for the strong model, submit its output
-- **Abstain** → submit nothing (or escalate to an even stronger model, e.g. Opus 5)
+#### A. Stronger-model success prediction / abstention
 
-The scout's output is **never submitted as a final answer** — it runs solely to generate routing features. The label for predictor training is always oracle success, not scout success.
+Run a cheap scout, then use the problem plus its trajectory, output, and optional test feedback to
+predict whether a particular different, stronger model will succeed:
 
-### Why abstention beats always-oracle
+    P(stronger model succeeds | problem, scout evidence)
 
-At ~47% oracle resolve rate (oss-120b on SWE-Smith), a substantial fraction of oracle calls are wasted — the problem was either unsolvable or unsolvable within that model's capability. An abstention predictor that correctly identifies those cases saves compute without losing resolved instances.
+The target is the stronger model's success, not scout success. The prediction can decide whether
+calling that stronger model is worth its cost, with low scores leading to abstention or a separately
+specified fallback. The scout acts as a probe; this regime does not inherently decide among the
+scout and several model tiers.
 
-### The Opus tier
+#### B. Full routing / cascade shortcutting
 
-When the router would abstain, a third option exists: escalate to Opus 5 (57.9% resolve rate on the same eval set). This turns the binary decision into a **3-tier cascade**:
+Run the scout once, then choose the final model action:
 
-```
-Scout attempt → predictor scores P(oracle succeeds)
-├── P ≥ threshold   → call oss-120b
-└── P < threshold   → call Opus 5   (instead of submitting nothing)
-```
+    Scout attempt -> router
+    |-- keep scout answer
+    |-- jump directly to a mid-tier model
+    +-- jump directly to a high-tier model
 
----
+The purpose is to shortcut a conventional sequential ladder such as
+4B -> 20B -> 30B -> 120B. If the scout evidence indicates that an instance is very hard, route
+directly to the appropriate high tier instead of paying for every intermediate attempt. The
+headline result is the end-to-end frontier of **final correctness versus realized inference cost**,
+not a single success-prediction AUC.
+
+### Axis 2: dataset
+
+Both regimes can be tested on either dataset:
+
+| Dataset | Stronger-model success prediction / abstention | Full routing |
+|---------|------------------------------------------------|--------------|
+| **SWE** | Main completed line: predict gpt-oss-120b success from SWE-Smith scout evidence and test transfer on SWE-Bench Verified | Tried previously on SWE-Bench-style tasks and failed; tier selection appears substantially harder in this domain |
+| **LCB** | Tried first; the old near-perfect AUC motivated the routing hypothesis, but that result is invalid because of the broken evaluator and random split. The corrected temporal rerun is in progress | Main proposed next line: keep the scout or jump directly to a mid/high tier, conditional on corrected LCB evidence passing the validity gate |
+
+### Experimental history and current hypothesis
+
+The order matters. We first applied the abstention-prediction regime to LCB and observed
+near-perfect apparent performance. That suggested LCB might supply the clean difficulty and
+execution signals that were missing when full routing failed on SWE-Bench-style tasks, motivating a
+new full-routing experiment on LCB.
+
+The old LCB result cannot support that conclusion because its evaluator was broken and its split
+leaked benchmark structure. The corrected LCB abstention experiment is therefore a **replication
+and signal-validity gate**. If scout trajectories and public-test feedback still add useful signal
+beyond problem-only features under official grading and a temporal split, proceed to collect
+intermediate-tier outcomes and test full routing on LCB. If they do not, the motivation for that
+routing experiment has not survived correction.
 
 ## The Routing Signal: What the Scout's Trace Reveals
 
@@ -98,14 +125,17 @@ Resolve rates: scout ~25%, oss-120b ~47%, Opus 5 ~58%
 
 - **Task**: competitive programming problems (LeetCode / AtCoder / Codeforces)
 - **Scout**: `Qwen3-4B-Instruct-2507` or `Qwen3-4B-Thinking-2507`
-- **Oracle**: `gpt-oss-120b`
+- **Candidate tiers**: scout plus one or more mid-tier and high-tier models; the corrected initial
+  collection currently includes `gpt-oss-120b` as the first stronger-model label
 - **Execution**: the pinned official LiveCodeBench runner handles both stdin/stdout and function-call problems
-- **Routing feedback**: only public tests are exposed to the predictor in the primary experiment
-- **Final scoring and labels**: scout and oracle correctness use the full public+private suite
-- **Stage 1 — cascade**: if the scout passes the full suite → done, no oracle needed
-- **Stage 2 — conditional abstention**: among scout-failed instances, predict P(oracle succeeds) from deployable features
+- **Router observation**: problem + scout trajectory/code + public-test feedback only
+- **Router action**: keep the scout or jump directly to a selected stronger tier
+- **Final scoring**: execute the selected answer on the full public+private suite
+- **Cost accounting**: charge the scout plus only the selected stronger tier, if any
 
-LCB is a cleaner version of the same problem: better features, harder labels, explicit failure signal. It proves the concept under best-case conditions; SWE tests whether reasoning traces can substitute when execution is unavailable.
+The corrected 4B/120B LCB collection first supports the stronger-model success-prediction cell.
+If that validity gate passes, the same problem IDs and scout evidence become the foundation for the
+separate full-routing cell after intermediate-tier outputs are collected.
 
 ---
 
@@ -256,6 +286,9 @@ The scorer must reconstruct the exact training feature schema from `train_config
 Collect one fresh matched dataset with:
 
 - Dataset: official LiveCodeBench `release_v6`, problems on/after `2023-09-01`
+- Dataset revision: `0fe84c3912ea0c4d4a78037083943e8f0c4dd505`; load the official
+  `test*.jsonl` files directly because `datasets>=4` no longer executes the repository's
+  legacy loading script
 - Split: train before `2024-10-01`, eval on/after `2024-10-01`
 - Scout: `Qwen/Qwen3-4B-Instruct-2507`, local vLLM, temperature 0
 - Oracle: `openai/gpt-oss-120b`, temperature 0
@@ -267,9 +300,9 @@ Collect one fresh matched dataset with:
 
 This collection replaces all old LCB labels and trajectories. Old oracle rows cannot be repaired because they stored only booleans rather than oracle code.
 
-### Round 2 — matched LCB ablations, run in parallel after collection
+### Round 2 — LCB signal-validity gate, run in parallel after collection
 
-Train the same predictor architecture on the same temporal split and oracle labels:
+Train the same predictor architecture on the same temporal split and 120B-success labels:
 
 | Condition | Predictor input | Purpose |
 |-----------|-----------------|---------|
@@ -279,9 +312,30 @@ Train the same predictor architecture on the same temporal split and oracle labe
 
 Run one seed first as a validity gate. If the corrected result is nontrivial, repeat all three conditions with at least three seeds and report mean, standard deviation, and paired bootstrap confidence intervals.
 
+This round does **not** constitute the actual-routing result. It only establishes whether the scout
+trajectory and public-test feedback add information beyond problem-only difficulty prediction. A
+positive gate justifies collecting outcomes from the intermediate tiers needed to evaluate the
+shortcut policy.
+
 A full public+private feedback condition is permitted only as a clearly labeled diagnostic upper bound. It is not a deployable primary result and must not be compared as though private evaluation outcomes were available to the router.
 
-### Round 3 — analysis and paper decision
+### Round 3 — collect tiers and evaluate actual routing
+
+After a positive signal-validity gate, collect outputs and full-suite correctness for the selected
+mid-tier and high-tier models on exactly the same LCB problem IDs. Retain generated code from every
+tier so labels can be regraded. Train or derive a router that selects among `keep scout` and direct
+jumps to the available stronger tiers.
+
+Primary LCB comparisons:
+- Always scout, always each stronger tier, and random routing at matched cost
+- Problem-only routing versus scout-trajectory routing versus scout+public-feedback routing
+- Conventional sequential escalation versus direct scout-to-selected-tier jumps
+- Oracle model selection computed from the collected per-instance tier outcomes as an upper bound
+
+Report the correctness-cost Pareto frontier, expected inference cost at fixed correctness, and
+correctness at fixed budget. AUCs are supporting diagnostics, not the actual-routing headline.
+
+### Round 4 — analysis and paper decision
 
 For both domains, report more than pooled AUC:
 
@@ -299,7 +353,8 @@ For both domains, report more than pooled AUC:
 2. **SWE feedback does not transfer, corrected LCB works**: frame the paper as a controlled positive result plus a boundary finding. Execution-grounded routing works in code generation; model-specific success in agentic software repair is much harder to infer and transfer.
 3. **Corrected LCB input-only remains high but post-scout adds little**: the result is benchmark difficulty prediction, not scout-trace routing. Narrow the claim accordingly.
 4. **Corrected LCB also collapses**: stop the multi-tier cascade work and do not pursue the current routing claim without a new signal or task.
-5. **Only after a positive gate**: run Thinking-4B/CoT ablations, multiple seeds, and then consider the 20B/30B multi-tier cascade.
+5. **Only after a positive gate**: collect the chosen mid/high tiers and evaluate direct-jump routing.
+   Thinking-4B/CoT ablations and multiple seeds follow once the policy definition is stable.
 
 ### Explicitly deferred
 
@@ -329,9 +384,11 @@ These do not answer the immediate validity question and should not run before ro
 
 ---
 
-## Exploratory Track: LCB Scout-First Cascade Routing (2026-08-19)
+## LCB Scout-First Cascade Routing (2026-08-19)
 
-> **Status**: paused pending the corrected LCB validity gate. The old 100-problem solve rates and 0.95+ AUC results came from the broken evaluator and are not evidence for this extension.
+> **Status**: actual-routing track, pending the corrected LCB signal-validity gate. The old
+> 100-problem solve rates and 0.95+ AUC results came from the broken evaluator and are not evidence
+> for this track.
 
 ### The idea
 
@@ -342,7 +399,7 @@ intermediate costs for hard problems, incurring all tiers before reaching the ri
 **jump directly to the correct tier**, skipping all intermediate model calls.
 
 Two bonuses stack:
-1. **Free wins**: if scout passes tests → keep its output, pay nothing extra (~34% of problems)
+1. **Free wins**: if the router keeps a correct scout output, pay nothing beyond the scout
 2. **Rich routing signal**: scout failure mode (which tests failed, error type) is a much
    stronger difficulty signal than problem text alone → can confidently skip intermediate tiers
 
@@ -352,9 +409,10 @@ This is a proper multi-class routing problem, not binary abstention. The predict
 ### Why LCB is ideal
 
 - Test evaluation is instant and free (subprocess, stdin/stdout)
-- Scout (4B) already solves 34% of LCB problems — meaningful free-win rate
-- Remaining 66% have a clear failure signal available immediately
-- Input-only AUC already 0.9508 → predictor has very high information about difficulty tiers
+- Public tests provide immediate, deployable feedback on the scout attempt
+- Competitive-programming tasks offer explicit correctness and relatively cheap per-tier evaluation
+- The old run appeared to show unusually strong difficulty signal, which motivated this experiment;
+  corrected grading must establish whether that signal was real
 
 ### Solve rates and tier overlap (100-problem eval)
 
@@ -380,12 +438,13 @@ Opus deferred from collection (5-problem "Opus-only" tier too thin for training 
 
 First complete the corrected 4B/120B binary experiment above. Do not collect intermediate tiers until the corrected temporal analysis shows routing utility beyond input-only. If that gate passes, collect 20B and 30B outputs on the exact same problem IDs and retain all generated code so every tier can be regraded.
 
-### Relationship to abstention track
+### Position in the experiment matrix
 
-The abstention track (binary: route to 120b vs. fall back to Opus 5) remains the primary
-contribution. The cascade routing exploration either:
-- Strengthens the LCB section with a richer multi-tier result
-- Or becomes a separate contribution showing scout-first routing generalizes the abstention idea
+This is the LCB/full-routing cell. It was proposed because the earlier LCB/abstention cell appeared
+near-perfect, while the SWE/full-routing cell had failed. The corrected 4B/120B LCB predictor is an
+intermediate replication and signal-validity check, not the final policy experiment. Its job is to
+determine whether the observation that motivated LCB full routing survives correct grading and a
+temporal split.
 
 ---
 

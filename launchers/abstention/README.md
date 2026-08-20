@@ -1,17 +1,23 @@
-# Abstention Launchers
+# Scout-Signal Routing Launchers
 
-Scripts for the **abstention/cascade** research track. Two parallel lines of exploration:
+The research design has two independent axes:
 
-### 1. Abstention predictor (main track)
-Predict whether the oracle model (gpt-oss-120b) will succeed on a given task, and either
-route to it (high confidence) or fall back to Opus 5 (low confidence). Scout output is used
-only as a routing signal — never kept as a final answer on SWE tasks. Domains: SWE-Smith
-(in-domain), SWE-Bench Verified (cross-domain), LCB (in-domain, binary abstention).
+- **Decision regime**: stronger-model success prediction/abstention versus full model routing
+- **Dataset**: SWE versus LiveCodeBench
 
-### 2. LCB cascade routing — EXPLORATORY, PAUSED
-The multi-tier scout-first extension is paused until corrected binary LCB routing passes the
-validity gate. Previous LCB AUCs and solve rates used a broken evaluator and are not valid
-evidence for collecting 20B/30B tiers.
+| Dataset | Success prediction / abstention | Full routing |
+|---------|---------------------------------|--------------|
+| **SWE** | Predict gpt-oss-120b success from scout evidence; train on SWE-Smith and transfer to SWE-Bench Verified | Previously attempted and unsuccessful |
+| **LCB** | Old near-perfect result is invalid; corrected official temporal rerun is the current validity gate | Proposed scout-first direct-jump policy, conditional on the corrected gate |
+
+In the prediction regime, the label is the success of another, stronger model, not scout success.
+In the full-routing regime, the policy keeps the scout answer or jumps directly to a selected
+mid/high tier, skipping unnecessary stages of a sequential cascade. Its headline evaluation is
+final correctness versus realized inference cost.
+
+Historically, the apparently near-perfect LCB prediction result motivated retrying full routing on
+LCB after it had failed on SWE-Bench-style tasks. Because the old LCB evaluator and split were
+invalid, the corrected LCB prediction experiment must first re-establish that signal.
 
 ## Label types
 
@@ -75,6 +81,7 @@ eval or from the SWE-Smith real-label dataset at
 ### LCB (LiveCodeBench)
 - **Old collection is invalid for paper results**: the local evaluator forced function-call tasks to fail, decoded private tests incorrectly, and used a random split.
 - **Corrected protocol**: `release_v6`, `2024-10-01` temporal cutoff, official runner commit `28fef95`, public tests for router feedback, full public+private suite for labels.
+- **Pinned dataset source**: `livecodebench/code_generation_lite@0fe84c3912ea0c4d4a78037083943e8f0c4dd505`. The collector downloads the official `test*.jsonl` files directly because `datasets>=4` removed Hub dataset-script execution.
 - **Corrected collection launcher**: `launch_lcb_corrected_collection.sh`
 - **Matched predictor suite**: `launch_lcb_corrected_ablation_suite.sh`
 

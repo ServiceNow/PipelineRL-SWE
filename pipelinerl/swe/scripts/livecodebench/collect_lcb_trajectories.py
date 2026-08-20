@@ -48,6 +48,11 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 LCB_EVALUATOR_COMMIT = os.environ.get("LCB_RUNNER_COMMIT", "unknown")
+LCB_DATASET_REPO = "livecodebench/code_generation_lite"
+LCB_DATASET_REVISION = os.environ.get(
+    "LCB_DATASET_REVISION",
+    "0fe84c3912ea0c4d4a78037083943e8f0c4dd505",
+)
 
 THINK_RE = re.compile(r"<think>(.*?)</think>", re.DOTALL)
 CODE_RE = re.compile(r"```(?:python)?\s*\n(.*?)```", re.DOTALL)
@@ -67,6 +72,29 @@ ORACLE_SYSTEM = (
 
 # ── Dataset helpers ──────────────────────────────────────────────────────────
 
+def lcb_release_files(release_version: str) -> list[str]:
+    """Return the raw files selected by the official LCB dataset script."""
+    if release_version == "release_latest":
+        return ["test.jsonl", *[f"test{i}.jsonl" for i in range(2, 7)]]
+
+    cumulative = re.fullmatch(r"release_v([1-6])", release_version)
+    if cumulative:
+        end = int(cumulative.group(1))
+        return ["test.jsonl", *[f"test{i}.jsonl" for i in range(2, end + 1)]]
+
+    interval = re.fullmatch(r"v([1-6])(?:_v([1-6]))?", release_version)
+    if interval:
+        start = int(interval.group(1))
+        end = int(interval.group(2) or start)
+        if start <= end:
+            return [
+                "test.jsonl" if i == 1 else f"test{i}.jsonl"
+                for i in range(start, end + 1)
+            ]
+
+    raise ValueError(f"Unsupported LiveCodeBench release tag: {release_version}")
+
+
 def load_lcb(
     max_samples: int = 0,
     min_date: str = "",
@@ -74,9 +102,10 @@ def load_lcb(
     difficulties: list[str] | None = None,
     seed: int = 42,
     release_version: str = "release_latest",
+    dataset_revision: str = LCB_DATASET_REVISION,
 ) -> list[dict]:
     try:
-        from datasets import load_dataset
+        from huggingface_hub import hf_hub_download
         from lcb_runner.benchmarks.code_generation import CodeGenerationProblem
     except ImportError as exc:
         raise RuntimeError(
@@ -84,15 +113,31 @@ def load_lcb(
             "pipelinerl/swe/scripts/livecodebench/ensure_lcb_runner.sh first."
         ) from exc
 
-    # The pinned runner's loader passes `version_tag` and `trust_remote_code`,
-    # which current versions of `datasets` no longer accept. Load the same
-    # official release config directly, then use the runner's canonical schema.
-    dataset = load_dataset(
-        "livecodebench/code_generation_lite",
-        name=release_version,
-        split="test",
+    # datasets>=4 cannot execute the repository's legacy loading script. The
+    # script only selects JSONL files, so reproduce that mapping against a
+    # pinned Hub revision and keep the official runner's canonical schema.
+    raw_problems = []
+    release_files = lcb_release_files(release_version)
+    for filename in release_files:
+        dataset_path = hf_hub_download(
+            repo_id=LCB_DATASET_REPO,
+            filename=filename,
+            repo_type="dataset",
+            revision=dataset_revision,
+            token=False,
+        )
+        with open(dataset_path) as in_f:
+            raw_problems.extend(
+                json.loads(line) for line in in_f if line.strip()
+            )
+    logger.info(
+        "Loaded %d LCB problems from %s@%s (%s)",
+        len(raw_problems),
+        LCB_DATASET_REPO,
+        dataset_revision,
+        ", ".join(release_files),
     )
-    problems = [CodeGenerationProblem(**raw) for raw in dataset]
+    problems = [CodeGenerationProblem(**raw) for raw in raw_problems]
     rows = []
     for problem in problems:
         contest_date = problem.contest_date.date().isoformat()
@@ -122,6 +167,7 @@ def load_lcb(
             "_evaluation_sample": problem.get_evaluation_sample(),
             "_n_public_tests": len(problem.public_test_cases),
             "_n_private_tests": len(problem.private_test_cases),
+            "_lcb_dataset_revision": dataset_revision,
         })
     if max_samples and len(rows) > max_samples:
         rng = random.Random(seed)
@@ -310,6 +356,7 @@ async def collect_scout(
     title: str,
     eval_timeout: int,
     feedback_tests: str,
+    dataset_revision: str,
 ) -> list[dict]:
     # Old rows were graded by the broken local evaluator. Only resume rows that
     # carry the pinned official-evaluator marker and actual test feedback.
@@ -321,6 +368,7 @@ async def collect_scout(
                 if (
                     r.get("full_output", "").strip()
                     and r.get("_lcb_evaluator_commit") == LCB_EVALUATOR_COMMIT
+                    and r.get("_lcb_dataset_revision") == dataset_revision
                     and r.get("_lcb_feedback_tests") == feedback_tests
                     and str(r.get("test_feedback") or "").strip()
                 ):
@@ -410,6 +458,7 @@ async def collect_scout(
                 "_lcb_result_codes": scout_report["result_codes"],
                 "_lcb_eval_metadata": scout_report["metadata"],
                 "_lcb_evaluator_commit": LCB_EVALUATOR_COMMIT,
+                "_lcb_dataset_revision": dataset_revision,
                 "_lcb_feedback_tests": feedback_tests,
                 "_lcb_test_count": feedback_suite_size,
                 "_lcb_full_test_count": full_suite_size,
@@ -441,6 +490,7 @@ async def collect_oracle(
     concurrency: int,
     title: str,
     eval_timeout: int,
+    dataset_revision: str,
 ) -> list[dict]:
     done: dict[str, dict] = {}
     if output_path.exists():
@@ -450,6 +500,7 @@ async def collect_oracle(
                 if (
                     r.get("full_output", "").strip()
                     and r.get("_lcb_evaluator_commit") == LCB_EVALUATOR_COMMIT
+                    and r.get("_lcb_dataset_revision") == dataset_revision
                     and isinstance(r.get("resolved"), bool)
                 ):
                     done[r["problem_id"]] = r
@@ -501,6 +552,7 @@ async def collect_oracle(
                 "result_codes": report["result_codes"],
                 "eval_metadata": report["metadata"],
                 "_lcb_evaluator_commit": LCB_EVALUATOR_COMMIT,
+                "_lcb_dataset_revision": dataset_revision,
             }
 
         tasks = [process(r) for r in todo]
@@ -563,6 +615,8 @@ def main() -> None:
                     help="Max problems to use (0 = all)")
     ap.add_argument("--release-version", default="release_latest",
                     help="Official LiveCodeBench release tag")
+    ap.add_argument("--dataset-revision", default=LCB_DATASET_REVISION,
+                    help="Pinned Hugging Face dataset repository revision")
     ap.add_argument("--train-frac", type=float, default=0.8)
     ap.add_argument("--temporal-cutoff", default="",
                     help="If set, train before this date and evaluate on/after it")
@@ -609,6 +663,7 @@ def main() -> None:
         difficulties=args.difficulties,
         seed=args.seed,
         release_version=args.release_version,
+        dataset_revision=args.dataset_revision,
     )
 
     if args.temporal_cutoff:
@@ -648,6 +703,7 @@ def main() -> None:
                 title=args.title,
                 eval_timeout=args.eval_timeout,
                 feedback_tests=args.scout_feedback_tests,
+                dataset_revision=args.dataset_revision,
             ))
 
         if args.phase in ("oracle", "all"):
@@ -661,6 +717,7 @@ def main() -> None:
                 concurrency=args.concurrency,
                 title=args.title,
                 eval_timeout=args.eval_timeout,
+                dataset_revision=args.dataset_revision,
             ))
 
         if args.phase in ("oracle", "all", "eval"):
@@ -674,7 +731,10 @@ def main() -> None:
             with open(scout_path) as in_f:
                 for line in in_f:
                     r = json.loads(line)
-                    if r.get("_lcb_evaluator_commit") == LCB_EVALUATOR_COMMIT:
+                    if (
+                        r.get("_lcb_evaluator_commit") == LCB_EVALUATOR_COMMIT
+                        and r.get("_lcb_dataset_revision") == args.dataset_revision
+                    ):
                         latest_scout[r["problem_id"]] = r
             with open(traj_path, "w") as out_f:
                 for r in latest_scout.values():
