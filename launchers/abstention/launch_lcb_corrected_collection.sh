@@ -90,6 +90,15 @@ python pipelinerl/swe/scripts/livecodebench/collect_lcb_trajectories.py \\
   --eval-timeout ${EVAL_TIMEOUT} \\
   --scout-feedback-tests public \\
   2>&1 | tee '${OUTPUT_DIR}/collect.log'
+python pipelinerl/swe/scripts/livecodebench/repair_lcb_collection.py \\
+  --validate-only \\
+  --output-dir '${OUTPUT_DIR}' \\
+  --release-version '${RELEASE_VERSION}' \\
+  --dataset-revision '${LCB_DATASET_REVISION}' \\
+  --min-date '${MIN_DATE}' \\
+  --temporal-cutoff '${TEMPORAL_CUTOFF}' \\
+  2>&1 | tee -a '${OUTPUT_DIR}/collect.log'
+
 SCRIPT_EOF
 chmod +x "${RUNNER}"
 

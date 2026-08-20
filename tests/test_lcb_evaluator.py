@@ -4,6 +4,7 @@ import pytest
 
 from pipelinerl.swe.scripts.livecodebench.collect_lcb_trajectories import (
     evaluate_code,
+    is_evaluator_infrastructure_error,
     lcb_release_files,
 )
 
@@ -40,6 +41,21 @@ def test_lcb_release_files_match_official_loader(
 def test_lcb_release_files_reject_invalid_range() -> None:
     with pytest.raises(ValueError, match="Unsupported LiveCodeBench release"):
         lcb_release_files("v4_v2")
+
+
+def test_evaluator_infrastructure_error_detection() -> None:
+    assert is_evaluator_infrastructure_error(
+        [], {"error_message": "RuntimeError('os.fork is unsafe')"}
+    )
+    assert is_evaluator_infrastructure_error(
+        [], {"error_message": "anything"}, ["TEST_RUNNER_ERROR"]
+    )
+    assert not is_evaluator_infrastructure_error(
+        [-2], {"error_message": "Wrong Answer"}
+    )
+    assert not is_evaluator_infrastructure_error(
+        [-1], {"error_message": "global timeout"}
+    )
 
 
 def _row(input_output: dict) -> dict:

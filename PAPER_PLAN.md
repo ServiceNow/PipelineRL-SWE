@@ -300,6 +300,13 @@ Collect one fresh matched dataset with:
 
 This collection replaces all old LCB labels and trajectories. Old oracle rows cannot be repaired because they stored only booleans rather than oracle code.
 
+The first complete corrected collection job
+(`lcb_corrected_temporal_qwen_qwen3_4b_instruct_2507_1787205448`) retained all generated code but
+its grading pass was invalid: concurrent calls to the fork-based official evaluator produced
+infrastructure errors that were recorded as failures. Quarantine its labels until the serial
+regrade/retry job completes and strict validation passes. The saved generations can be repaired
+without recollecting the scout or successful oracle outputs.
+
 ### Round 2 — LCB signal-validity gate, run in parallel after collection
 
 Train the same predictor architecture on the same temporal split and 120B-success labels:

@@ -41,6 +41,7 @@ eval or from the SWE-Smith real-label dataset at
 | `launch_swe_smith_collect_opus_openrouter.sh` | Runs Opus 5 (`anthropic/claude-opus-5`) on SWE-Smith eval-286 via OpenRouter; "call stronger model instead of abstaining" baseline | Real (test suite eval) |
 | `launch_daytona_cot_predictions.sh` | Runs a trained CoT model to generate patch predictions via Daytona | — |
 | `launch_lcb_corrected_collection.sh` | Collects a fresh temporal LCB split; public tests become router feedback and the official full suite supplies labels | Real |
+| `launch_lcb_corrected_repair.sh` | Serially regrades saved corrected-LCB outputs, retries only failed oracle calls, and validates the repaired collection | Real |
 
 ### Training
 
@@ -84,6 +85,10 @@ eval or from the SWE-Smith real-label dataset at
 - **Pinned dataset source**: `livecodebench/code_generation_lite@0fe84c3912ea0c4d4a78037083943e8f0c4dd505`. The collector downloads the official `test*.jsonl` files directly because `datasets>=4` removed Hub dataset-script execution.
 - **Corrected collection launcher**: `launch_lcb_corrected_collection.sh`
 - **Matched predictor suite**: `launch_lcb_corrected_ablation_suite.sh`
+- **Current corrected outputs**: `lcb_corrected_temporal_qwen_qwen3_4b_instruct_2507_1787205448`
+  contains all 892 model outputs but is quarantined until `launch_lcb_corrected_repair.sh`
+  finishes and validation passes. Its first grading pass overlapped fork-based official evaluator
+  calls and recorded infrastructure errors as failures.
 
 ### MATH
 - **CoT trajectories**: `/mnt/llmd/results/exps/aristides/reason/math_cot_trajectories_1785795546/` (1462 train + 493 eval)
@@ -116,6 +121,9 @@ Never invent model IDs — `openai/gpt-oss-4b` does not exist on OpenRouter and 
 - **Verified predictor context length**: set `MAX_MODEL_LEN=32768` (not 16384 — Verified instances are longer than SWE-Smith; 16384 caused 369/369 scoring failures).
 - **Oracle patch format**: 120b sometimes returns markdown with explanation + \`\`\`diff fence rather than raw git diff. `convert_text_to_patches.py` only handles search/replace blocks — add fence extraction before running Daytona eval.
 - **Public Hugging Face models**: cached login tokens can expire and cause public model downloads to return 401. Set `HF_HUB_DISABLE_IMPLICIT_TOKEN=1`; the corrected LCB launcher does this automatically.
+- **LCB evaluator concurrency**: the official checker forks a process and creates a
+  `multiprocessing.Manager` per call. Do not overlap checker calls from threads; the corrected
+  collector serializes grading and validates that no runner errors entered the labels.
 
 ### Monitoring jobs with `eai`
 

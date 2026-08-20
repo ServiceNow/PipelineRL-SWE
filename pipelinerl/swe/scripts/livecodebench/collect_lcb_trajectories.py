@@ -47,7 +47,9 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-LCB_EVALUATOR_COMMIT = os.environ.get("LCB_RUNNER_COMMIT", "unknown")
+LCB_EVALUATOR_COMMIT = os.environ.get(
+    "LCB_RUNNER_COMMIT", "28fef95ea8c9f7a547c8329f2cd3d32b92c1fa24"
+)
 LCB_DATASET_REPO = "livecodebench/code_generation_lite"
 LCB_DATASET_REVISION = os.environ.get(
     "LCB_DATASET_REVISION",
@@ -263,6 +265,18 @@ def evaluate_code(
     }
 
 
+def is_evaluator_infrastructure_error(
+    result_codes: list[Any] | None,
+    metadata: dict[str, Any] | None,
+    failing: list[str] | None = None,
+) -> bool:
+    """Return whether grading failed outside the submitted program."""
+    if "TEST_RUNNER_ERROR" in (failing or []):
+        return True
+    message = str((metadata or {}).get("error_message", ""))
+    return "os.fork is unsafe" in message or message == "TestRunnerError"
+
+
 def format_test_feedback(report: dict[str, Any], suite_size: int) -> str:
     passing = report["passing"]
     failing = report["failing"]
@@ -371,6 +385,15 @@ async def collect_scout(
                     and r.get("_lcb_dataset_revision") == dataset_revision
                     and r.get("_lcb_feedback_tests") == feedback_tests
                     and str(r.get("test_feedback") or "").strip()
+                    and not is_evaluator_infrastructure_error(
+                        r.get("_lcb_feedback_result_codes"),
+                        r.get("_lcb_feedback_eval_metadata"),
+                        r.get("_tf_failing"),
+                    )
+                    and not is_evaluator_infrastructure_error(
+                        r.get("_lcb_result_codes"),
+                        r.get("_lcb_eval_metadata"),
+                    )
                 ):
                     done[r["problem_id"]] = r
         logger.info("Resuming: %d already collected", len(done))
@@ -379,7 +402,9 @@ async def collect_scout(
     logger.info("Scout: %d problems to collect (model=%s)", len(todo), model)
 
     sem = asyncio.Semaphore(concurrency)
-    eval_sem = asyncio.Semaphore(max(1, min(concurrency, (os.cpu_count() or 2) // 2)))
+    # The official runner creates a multiprocessing.Manager and child process
+    # per call. Overlapping calls race during fork and corrupt labels.
+    eval_sem = asyncio.Semaphore(1)
     results = list(done.values())
 
     async with aiohttp.ClientSession() as session:
@@ -497,11 +522,21 @@ async def collect_oracle(
         with open(output_path) as f:
             for line in f:
                 r = json.loads(line)
+                error_message = str(
+                    (r.get("eval_metadata") or {}).get("error_message", "")
+                )
+                completed_generation = (
+                    bool(r.get("full_output", "").strip())
+                    or error_message == "EmptyGeneration"
+                )
                 if (
-                    r.get("full_output", "").strip()
+                    completed_generation
                     and r.get("_lcb_evaluator_commit") == LCB_EVALUATOR_COMMIT
                     and r.get("_lcb_dataset_revision") == dataset_revision
                     and isinstance(r.get("resolved"), bool)
+                    and not is_evaluator_infrastructure_error(
+                        r.get("result_codes"), r.get("eval_metadata")
+                    )
                 ):
                     done[r["problem_id"]] = r
         logger.info("Resuming oracle: %d already collected", len(done))
@@ -510,7 +545,9 @@ async def collect_oracle(
     logger.info("Oracle: %d problems to collect (model=%s)", len(todo), model)
 
     sem = asyncio.Semaphore(concurrency)
-    eval_sem = asyncio.Semaphore(max(1, min(concurrency, (os.cpu_count() or 2) // 2)))
+    # The official runner creates a multiprocessing.Manager and child process
+    # per call. Overlapping calls race during fork and corrupt labels.
+    eval_sem = asyncio.Semaphore(1)
     results = list(done.values())
 
     async with aiohttp.ClientSession() as session:
