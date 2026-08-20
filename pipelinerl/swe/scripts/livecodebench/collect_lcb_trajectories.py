@@ -236,6 +236,26 @@ def evaluate_code(
         results, metadata = check_correctness(
             row[sample_key], code, timeout=timeout, debug=False
         )
+    except IndexError as exc:
+        # The pinned runner constructs fallback -1 results after a global timeout
+        # but still indexes an empty metadata list. Preserve its intended result.
+        if str(exc) != "list index out of range":
+            raise
+        inputs = json.loads(row[sample_key]["input_output"]).get("inputs", [])
+        result_codes = [-1 for _ in inputs]
+        return {
+            "resolved": False,
+            "passing": [],
+            "failing": [
+                f"case_{idx:04d}:global_timeout"
+                for idx in range(len(result_codes))
+            ],
+            "result_codes": result_codes,
+            "metadata": {
+                "error_message": "GlobalTimeout",
+                "runner_exception": repr(exc),
+            },
+        }
     except Exception as exc:
         logger.warning("Official LCB evaluator failed for %s: %s", problem_id(row), exc)
         return {
@@ -274,7 +294,9 @@ def is_evaluator_infrastructure_error(
     if "TEST_RUNNER_ERROR" in (failing or []):
         return True
     message = str((metadata or {}).get("error_message", ""))
-    return "os.fork is unsafe" in message or message == "TestRunnerError"
+    if message == "EmptyGeneration":
+        return False
+    return not result_codes and bool(message)
 
 
 def format_test_feedback(report: dict[str, Any], suite_size: int) -> str:

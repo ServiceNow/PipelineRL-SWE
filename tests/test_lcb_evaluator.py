@@ -50,6 +50,12 @@ def test_evaluator_infrastructure_error_detection() -> None:
     assert is_evaluator_infrastructure_error(
         [], {"error_message": "anything"}, ["TEST_RUNNER_ERROR"]
     )
+    assert is_evaluator_infrastructure_error(
+        [], {"error_message": "IndexError('list index out of range')"}
+    )
+    assert not is_evaluator_infrastructure_error(
+        [], {"error_message": "EmptyGeneration"}
+    )
     assert not is_evaluator_infrastructure_error(
         [-2], {"error_message": "Wrong Answer"}
     )
@@ -81,6 +87,33 @@ def test_official_runner_grades_function_call() -> None:
 
     assert report["resolved"] is True
     assert report["result_codes"] == [True]
+
+
+def test_global_timeout_without_metadata_uses_official_fallback(monkeypatch) -> None:
+    from lcb_runner.evaluation import compute_code_generation_metrics
+
+    def raise_missing_metadata(*args, **kwargs):
+        raise IndexError("list index out of range")
+
+    monkeypatch.setattr(
+        compute_code_generation_metrics,
+        "check_correctness",
+        raise_missing_metadata,
+    )
+    row = _row(
+        {"inputs": ["1\n", "2\n"], "outputs": ["1\n", "2\n"], "fn_name": None}
+    )
+
+    report = evaluate_code("print(input())", row)
+
+    assert report["resolved"] is False
+    assert report["result_codes"] == [-1, -1]
+    assert report["failing"] == [
+        "case_0000:global_timeout",
+        "case_0001:global_timeout",
+    ]
+    assert report["metadata"]["error_message"] == "GlobalTimeout"
+
 
 def test_public_feedback_is_separate_from_full_evaluation() -> None:
     row = _row({"inputs": ["2\n3", "10\n20"], "outputs": ["5", "30"], "fn_name": "add"})

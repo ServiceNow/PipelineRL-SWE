@@ -34,6 +34,7 @@ export HF_HUB_DISABLE_IMPLICIT_TOKEN=1
 source pipelinerl/swe/scripts/livecodebench/ensure_lcb_runner.sh
 
 python pipelinerl/swe/scripts/livecodebench/repair_lcb_collection.py \\
+  --errors-only \\
   --output-dir '${LCB_COLLECTION_DIR}' \\
   --release-version '${RELEASE_VERSION}' \\
   --dataset-revision '${LCB_DATASET_REVISION}' \\

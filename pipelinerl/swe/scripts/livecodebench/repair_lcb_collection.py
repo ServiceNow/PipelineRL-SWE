@@ -47,6 +47,7 @@ def regrade_scout(
     timeout: int,
     feedback_tests: str,
     dataset_revision: str,
+    errors_only: bool = False,
 ) -> list[dict[str, Any]]:
     existing = _read_latest(path)
     missing = [problem_id(row) for row in dataset_rows if problem_id(row) not in existing]
@@ -57,6 +58,16 @@ def regrade_scout(
     for index, dataset_row in enumerate(dataset_rows, start=1):
         pid = problem_id(dataset_row)
         row = existing[pid]
+        has_runner_error = is_evaluator_infrastructure_error(
+            row.get("_lcb_feedback_result_codes"),
+            row.get("_lcb_feedback_eval_metadata"),
+            row.get("_tf_failing"),
+        ) or is_evaluator_infrastructure_error(
+            row.get("_lcb_result_codes"), row.get("_lcb_eval_metadata")
+        )
+        if errors_only and not has_runner_error:
+            repaired.append(row)
+            continue
         code = row.get("patch_text") or extract_code(row.get("full_output", ""))
         full_suite_size = (
             dataset_row["_n_public_tests"] + dataset_row["_n_private_tests"]
@@ -115,6 +126,7 @@ def regrade_oracle(
     path: Path,
     timeout: int,
     dataset_revision: str,
+    errors_only: bool = False,
 ) -> list[dict[str, Any]]:
     existing = _read_latest(path)
     missing = [problem_id(row) for row in dataset_rows if problem_id(row) not in existing]
@@ -125,6 +137,12 @@ def regrade_oracle(
     for index, dataset_row in enumerate(dataset_rows, start=1):
         pid = problem_id(dataset_row)
         row = existing[pid]
+        has_runner_error = is_evaluator_infrastructure_error(
+            row.get("result_codes"), row.get("eval_metadata")
+        )
+        if errors_only and not has_runner_error:
+            repaired.append(row)
+            continue
         full_output = row.get("full_output", "")
         if full_output.strip():
             code = row.get("code") or extract_code(full_output)
@@ -238,6 +256,11 @@ def main() -> None:
         "--scout-feedback-tests", choices=["public", "all"], default="public"
     )
     parser.add_argument("--validate-only", action="store_true")
+    parser.add_argument(
+        "--errors-only",
+        action="store_true",
+        help="Regrade only rows marked with evaluator infrastructure failures",
+    )
     args = parser.parse_args()
 
     rows = load_lcb(
@@ -259,12 +282,14 @@ def main() -> None:
                 timeout=args.eval_timeout,
                 feedback_tests=args.scout_feedback_tests,
                 dataset_revision=args.dataset_revision,
+                errors_only=args.errors_only,
             )
             oracle_rows = regrade_oracle(
                 split_rows,
                 output_dir / f"oracle_{split}.jsonl",
                 timeout=args.eval_timeout,
                 dataset_revision=args.dataset_revision,
+                errors_only=args.errors_only,
             )
             build_labels_parquet(
                 oracle_rows, output_dir / split / "labels.parquet"
