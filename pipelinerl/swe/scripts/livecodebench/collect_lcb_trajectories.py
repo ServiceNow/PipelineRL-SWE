@@ -333,6 +333,7 @@ async def openrouter_call(
     temperature: float = 0.7,
     title: str = "PipelineRL-LCB",
     semaphore: asyncio.Semaphore | None = None,
+    gen_timeout: int = 120,
 ) -> dict:
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -355,7 +356,7 @@ async def openrouter_call(
             f"{base_url}/v1/chat/completions",
             headers=headers,
             json=payload,
-            timeout=aiohttp.ClientTimeout(total=120),
+            timeout=aiohttp.ClientTimeout(total=gen_timeout),
         ) as resp:
             resp.raise_for_status()
             data = await resp.json()

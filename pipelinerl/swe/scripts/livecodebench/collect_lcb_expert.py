@@ -81,6 +81,7 @@ async def collect_split(
     title: str,
     eval_timeout: int,
     dataset_revision: str,
+    gen_timeout: int = 120,
 ) -> None:
     latest = _read_latest(output_path)
     done = {pid: row for pid, row in latest.items() if _is_complete(row, dataset_revision)}
@@ -111,6 +112,7 @@ async def collect_split(
                     temperature=temperature,
                     title=title,
                     semaphore=request_sem,
+                    gen_timeout=gen_timeout,
                 )
                 code = extract_code(out["full_output"])
                 async with eval_sem:
@@ -199,6 +201,8 @@ def main() -> None:
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--concurrency", type=int, default=4)
     parser.add_argument("--eval-timeout", type=int, default=10)
+    parser.add_argument("--gen-timeout", type=int, default=120,
+                        help="HTTP timeout in seconds for a single OpenRouter generation")
     parser.add_argument("--title", default="PipelineRL-LCB-routing")
     parser.add_argument("--validate-only", action="store_true")
     args = parser.parse_args()
@@ -250,6 +254,7 @@ def main() -> None:
                 args.title,
                 args.eval_timeout,
                 args.dataset_revision,
+                gen_timeout=args.gen_timeout,
             )
         )
         validate_split(

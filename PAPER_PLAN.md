@@ -473,10 +473,318 @@ temporal split.
 
 ---
 
-## Related Work to Position Against
+## SCOOPED (partially): Resample-or-Reroute covers the sequential execution-grounded MDP (2026-08-21)
+
+**"Resample or Reroute? Budget-Aware Test-Time Model Selection for Large Language Models"**
+(Teng-Ruei Chen, arXiv 2607.08665, posted 2026-07-09) formulates almost exactly the sequential
+policy sketched above:
+
+- Actions `{RESAMPLE(m), REROUTE(m')}` as competing uses of one per-query budget; claims to be
+  first to unify them
+- Online allocation policy (greedy marginal-correctness-per-cost + UCB variant), belief updated
+  from verifier-scored draws
+- Real code verifier: HumanEval+ base tests as deployable signal (~1% false-accept vs full suite)
+- Cost-quality Pareto fronts beating FrugalGPT cascades, budget-aware best-of-K, one-commit
+  routers on an 11-model pool
+- Companion paper proves the "recoverability asymmetry"; public correctness tensors +
+  reproducibility repo
+
+### Their experimental scope
+
+GSM8K, MATH-500, GPQA-Diamond, HumanEval+ — all single-shot. Offline replay of precomputed
+correctness tensors (k=30 draws/cell, T=0.2); no agentic benchmark, no SWE-bench, no sandbox
+economics. Key honest finding: gains are **verifier-gated** — they shrink as verifier quality
+drops and can invert under agreement-based verification.
+
+### Our prior attempt at the weak-verifier version — already failed
+
+We tested the learned-controller variant of this policy on SWE-Smith before RoR appeared
+(`analyze_swe_smith_multirollout_learned_controller_cv_1781899785`, n=100-fold CV): the proxy
+verifier predicted attempt correctness without executing tests, and the learned resample/escalate
+controller's utility was **below the best static baseline at every cost weight λ** (−0.008 to
+−0.078), with unstable oracle-gap capture. Consistent with the introspection-fails trilogy:
+without real execution, patch correctness in agentic repair is not predictable enough to drive
+sequential decisions.
+
+### Remaining open deltas (the honest list)
+
+1. **The abstain/give-up arm.** RoR has no give-up action — every budget unit buys another draw.
+   Integrating calibrated P(no model succeeds) into the allocation (reject-option theory cited,
+   not used) is open.
+2. **Agentic SWE domain.** Multi-turn repair with expensive, slow sandbox evals changes the
+   allocation economics entirely; untested there.
+3. **The weak-verifier regime via traces.** Their verifier-gating ablation is the gap our trace-
+   prediction work targets — but our own SWE-Smith result above suggests learned predictors do
+   not fill it in agentic repair. Whether scout-trace prediction works as a weak verifier on LCB
+   (where the corrected post-scout AUC 0.769 exists) is the open question.
+4. Scout-first direct-jump framing and temporal-split evaluation rigor.
+
+### Consequence for the paper plan
+
+Do NOT claim first formulation of resample-vs-escalate. The full-routing LCB experiment proceeds
+as planned (it answers a different question: direct-jump cascade shortcutting with model-specific
+success targets), but any sequential-policy extension must be positioned explicitly as extending
+RoR to {abstention arm, agentic domain, expensive-verifier economics}. Given the delta is now an
+increment rather than a new problem, the decision gate shifts back toward the signal-science /
+boundary-findings core plus the LCB frontier result.
+
+---
+
+## Early Exit / Early Stopping / Abort Literature for Software Agents (surveyed 2026-08-21)
+
+A fast-growing 2026 cluster predicts agent-trajectory failure mid-run and intervenes. All found
+work stops/aborts/retries **with the same model**; none routes across models based on the signal
+(exceptions noted). This matters for positioning: the "predict failure early" idea is taken, but
+"failure prediction → cross-model routing decision" is not.
+
+| Paper | Venue | Domain | Signal | Action |
+|-------|-------|--------|--------|--------|
+| **FailFast–RestartSmart** (arXiv 2608.03222) | preprint | SWE-bench Verified | 0.6B monitor on observable trajectory text (+ dense F2P replay supervision), no logits/hidden states needed | Abort at FPR budget → fresh same-policy retry with edit-overlay carry-over. Saves 15–20% tokens; restart +5.2pp resolve. **Explicitly notes escalating aborted instances to a larger model as an uninvestigated alternative** |
+| **EET** (arXiv 2601.05777, ACL Findings 2026) | ACL Findings | SWE-bench Verified, 3 agents | LLM confidence scores conditioned on retrieved historical experience, checked at milestones during generation AND selection | Two-sided stop: continue / accept patch early / **halt ("unlikely resolved")** — the lower threshold is effectively intra-agent abstention. −32% cost, ≤0.2pp resolve loss |
+| **Doomed from the Start** (arXiv 2607.06503) | preprint | TextCraft, WebShop | Linear probes on hidden-state activations, round 1 onward | Recall-controlled calibrated abort cascade with distribution-free certification; up to 60% token savings at 90% success-recall. No model switching |
+| **AgentStop** (ACM CAIS 2026, Brave) | CAIS | SWE-bench Verified + QA | Token logprobs, step counts, repetition features → GBT | Terminate unlikely-to-succeed local agents for energy savings; 15–20% waste reduction, <5% utility drop |
+| **Atropos** (arXiv 2604.15075) | preprint | SWE agents + self-consistency | GCN over inference-path graphs, mid-run | Early terminate + **hotswap context to stronger LLM** — the only one crossing models |
+| **AgentDiet** (arXiv 2509.23586) | preprint | coding agents | LLM reflection module | Trajectory token reduction (−21–36% cost); orthogonal efficiency axis |
+
+### Reading for our positioning
+
+1. **The occupied claim**: mid-trajectory failure prediction on SWE-bench is now standard
+   equipment (four independent systems). Do not claim it.
+2. **The open seam**: every system except Atropos treats failure as a reason to *stop or retry
+   the same policy*. None asks "given this predicted-failure evidence, which *other* model should
+   run, or should we give up?" — i.e., the routing/abstention decision layered on top of
+   execution-grounded failure signals. FailFast names this exact extension as future work.
+3. **A subtle distinction that protects our signal-science claims**: these systems predict
+   *their own run's* outcome from *long partial prefixes*. Our negative results concern
+   predicting *a different model's* success from a *completed* short attempt. Both can be true:
+   self-failure prediction from rich trajectories works (their result), cross-model success
+   prediction from scout attempts is what's hard (our result). State this carefully — reviewers
+   will otherwise read FailFast as contradicting our introspection-fails trilogy.
+4. EET's lower confidence threshold ("halt, issue unlikely resolvable by this configuration") is
+   the closest existing thing to deployment-grade abstention in agentic repair — cite it as such,
+   but note it never hands off to another model and its halt decisions are LLM-judged rather than
+   calibrated against measured P(oracle succeeds).
+
+---
+
+## Status Summary of Active Threads (2026-08-21)
+
+1. **LCB full-routing frontier (main methodological bet)**: oss-20B tier collection running;
+   feeds `launch_lcb_full_router_train.sh`. Direct-jump cascade shortcutting vs sequential
+   ladders and fixed policies. Must work for the method-paper framing.
+2. **RoR differentiation**: content-based prediction of model-specific success vs RoR's count-
+   based beliefs over verifier bits; plus abstain arm, agentic economics, temporal-split rigor.
+3. **Signal-science core**: introspection-fails trilogy (self-assessment 0.570 saturated; token
+   entropy ≤0.60; proxy-verifier controller below static baseline), content-predicts-where-
+   introspection-doesn't, transfer asymmetry (feedback yes, CoT no), SWE/LCB boundary.
+4. **Ceiling-breaking CI**: +4.2pp over always-Opus; honest bootstrap [+0.4, +8.8] excludes zero,
+   naive grazes. Thin but real; report both CIs.
+5. **Abstention reframed**: dead as policy novelty; alive as economic give-up branch
+   (resolve-per-dollar) and as the open RoR delta. EET's halt-threshold is prior art to cite.
+6. **Multi-sample static router**: dissected and closed — pass-pattern-as-router is incoherent
+   (any pass → submit; only decision point is all-fail where signal degenerates to one bit).
+
+Decision point: when oss-20B data lands → retry failed rows → train router variants → frontier
+result decides between exciting-method-paper and analysis/boundary-paper framings per existing
+gates.
+
+---
+
+## Confidence Baselines Fail: Self-Assessment and Token-Level Uncertainty (documented 2026-08-21)
+
+These two experiments establish that neither the generator's implicit uncertainty nor its explicit
+self-report carries routing signal, while a third model reading the attempt does. Together they
+support the paper's core claim: the value comes from the **evidence content of the attempt**, not
+from model introspection. Both were run earlier but never tabulated; results below were computed
+from the saved artifacts on 2026-08-21.
+
+### Baseline A — oracle verbalized self-assessment (pre-attempt)
+
+**Source**: `/mnt/llmd/results/exps/aristides/reason/self_assessment_eval.jsonl` (286 SWE-Smith eval
+instances), collected by `pipelinerl/swe/scripts/offline_router/collect_self_assessment.py`.
+gpt-oss-120b was asked *before attempting*: "Can you fix this bug? Y or N" (single character, no
+reasoning allowed). Soft confidence `p_yes` came from answer-token logprobs; hard `Y/N` from the
+decoded answer. Labels are real Daytona route-3 (oss-120b success) outcomes joined from the
+4-route real-label parquet (`offline_router_swe_smith_train1500_real_labels_4route_1780639659`,
+eval split).
+
+| Metric | Value |
+|--------|-------|
+| n instances | 286 |
+| 120b solve rate | 47.2% |
+| **AUC of p_yes vs actual 120b success** | **0.570** |
+| Mean p_yes overall | 0.902 |
+| Mean p_yes where 120b failed | 0.868 |
+| Mean p_yes where 120b succeeded | 0.941 |
+| AUC vs scout success (control) | 0.567 |
+| Cost per query | ~5,300 prompt + ~214 completion tokens through the 120B (210 of them reasoning tokens despite the no-reasoning instruction) |
+
+Interpretation:
+
+- The failure mode is **saturation, not mere miscalibration**: 183/286 instances received
+  p_yes ≈ 1.0 and only 28 fell below 0.5. The model essentially always says yes, leaving almost no
+  variance to rank with; residual AUC 0.570 is barely above chance.
+- The success/failure confidence gap (0.941 vs 0.868) is trivial.
+- For comparison on comparable data: input-only embedding predictor ≈ 0.682 in-domain and
+  post-scout ≈ 0.716–0.749. A trained predictor over problem text alone beats asking the oracle
+  itself by ~11 AUC points.
+- Caveat to state in the paper: self-assessment requires no training labels, whereas the embedding
+  predictors need ~1k+ labeled instances. But those labels are required for any learned router
+  anyway, so the marginal cost of the trained baseline is zero and verbalized confidence is
+  strictly dominated in every deployment-relevant regime.
+
+### Baseline B — scout token-level uncertainty (post-hoc entropy/logprobs)
+
+**Source**: `analysis/entropy_abstention_results.json`, produced by
+`analysis/entropy_abstention.py`. Qwen3-4B-Instruct-2507 was teacher-forced over its own saved
+SWE-Smith outputs (no re-generation, so Daytona labels stay valid); per-token full-vocab entropy
+and chosen-token logprobs were aggregated into instance-level signals. n = 217 eval instances,
+real labels. Signals predict oss-120b (route 3) and Claude Sonnet success.
+
+| Signal (↑ = confident) | AUC vs 120b | AUC vs Claude |
+|------------------------|-------------|---------------|
+| mean_token_logprob | **0.447** | **0.385** |
+| −mean_entropy | **0.462** | **0.401** |
+| −early_entropy (first 256 tokens) | 0.603 | 0.564 |
+| −output_length | 0.660 | 0.621 |
+| Input-only trained head | 0.634 | 0.623 |
+| Post-scout trained head | **0.716** | 0.638 |
+
+Interpretation:
+
+- Token-level confidence sits at or **below chance** for the strongest oracle (0.447/0.462).
+  Below 0.5 means confident scout outputs were *less* likely to have the oracle succeed — the
+  signal is not merely absent but mildly inverted.
+- Trivial heuristics beat every uncertainty measure: output length alone (0.660) outperforms all
+  entropy variants; models get verbose when struggling.
+- The trained post-scout head dominates (0.716), confirming the attempt's content carries signal
+  the generator's internal state does not surface.
+
+### Combined argument for the paper
+
+Cost-ordered baseline ladder on SWE-Smith (AUC for predicting 120b success):
+
+verbalized confidence 0.570 < token-level entropy ≈0.45–0.60 < prompt-length heuristic 0.563–0.66
+< input-only embedding 0.653–0.682 < post-scout embedding 0.716–0.749 < post-scout + test feedback
+0.780
+
+Each step up costs more compute but actually buys signal. Reviewers asking "why not just calibrate
+the model's own confidence?" can be answered with these two rows: implicit introspection fails
+(Baseline B) and explicit self-report fails (Baseline A). Remaining gap worth closing before
+submission: a self-consistency baseline (k samples, agreement rate) — it costs k× scout inference
+but reviewers may request the strongest cheap baseline rather than the weakest one.
+
+---
+
+## Multi-Sample Execution-Verified Baseline (analyzed 2026-08-21)
+
+The strongest cheap baseline candidate for the abstention claim: run k independent scout
+attempts, grade each in Daytona, and use the pass/fail pattern as the routing signal. Analyzed
+from the existing multi-rollout collection
+(`/mnt/llmd/results/exps/aristides/reason/offline_router_swe_smith_multirollout_eval150_proxy_verifier_rescore_dataset_1781735193`,
+150 SWE-Smith eval instances x 3 Qwen3-4B-Instruct rollouts, real Daytona labels).
+
+### Raw numbers
+
+| Quantity | Value |
+|----------|-------|
+| AUC of scout-pass-fraction vs 120b success | **0.841** (any-of-3 oracle labels) / 0.831 (rollout-0 oracle) |
+| Oracle success given 0/3 scout passes | **14.6%** (n=89) |
+| Oracle success given ≥1/3 scout passes | 75–86% |
+| Best-of-3 scout (submit if any passes) | ~free resolve gains already covered by `best_of_rollout_stats.json` |
+
+On its face 0.84 beats every single-attempt trained predictor (0.716–0.78).
+
+### Why the headline AUC overstates the baseline (important correction)
+
+A deployable policy never sees the graded agreement levels: **if any scout patch passes, you
+submit it and never invoke the router.** The only decision point is "all k patches failed," where
+the signal is deterministically 0/k — execution ground truth, not a prediction. The graded
+fraction {⅓, ⅔, 1} never reaches a threshold. So:
+
+- The AUC 0.841 ranks instances a real policy would have already resolved for free; as a
+  *decision* signal it degenerates to a single bit ("did all k fail").
+- The policy-relevant quantity is the conditional rate: after k scout failures, the oracle still
+  succeeds 14.6% of the time. Escalating on all-fail captures those; abstaining saves oracle cost
+  but cannot raise resolve rate. This is a **budget-constrained economics decision**, not a
+  resolve-rate improvement.
+- The "consensus policy beats always-120B" framing is mostly best-of-k with execution
+  verification wearing a router costume. It must be reported as such.
+
+### Honest accounting
+
+Cost per decision: k scout generations + k sandbox evaluations, versus one generation + one
+embedding pass for the post-scout predictor. In exchange the k-sample method obtains *certainty*
+about scout failure rather than an estimate. Where unit tests are available this is the baseline
+to beat on the cost axis; the paper's claim must be that trace-based prediction recovers most of
+the signal at roughly one-third the execution cost, or works where execution is unavailable
+(SWE-Bench-style grading is not available mid-pipeline).
+
+### What multi-sampling actually buys: a sequential execution-grounded policy
+
+The coherent form of the k-sample idea is not a static router but a state machine over
+{resample scout | escalate | stop}, with real evaluation outcomes as the state
+(`small_resample_vs_big_headroom.json`, n=148 overlap):
+
+| State | Resample value | Shift-up value |
+|------|----------------|----------------|
+| Scout attempt passes | Submit immediately. Escalation is counterproductive: the stronger model fails 9.6% of scout-passed instances; further sampling breaks it 5.8% | — |
+| Scout attempt fails | Any of 2 further scout attempts succeeds 15.6% | 20B succeeds 25.0% |
+
+With execution in the loop, every branch has known payoffs and resample-vs-escalate reduces to a
+cost-ratio calculation — an adaptive cascade, most natural on LCB where grading is instant and
+free. The learned-controller variant of this was tested previously
+(`analyze_swe_smith_multirollout_learned_controller_cv_1781899785`, verifier calibration dirs) and
+failed for a specific reason: the trained proxy verifier could not predict patch correctness
+without running tests. This replicates, in a third guise, the same finding as the verbalized
+self-assessment and token-entropy baselines above: in agentic repair, introspective signals do not
+predict execution outcomes; only execution itself does. This consistency strengthens the domain
+boundary claim — it explains why SWE routing is hard and why execution-grounded routing should be
+evaluated where execution is cheap (LCB).
+
+---
+
+- **Atropos** (arXiv 2604.15075): R agentic samples of an SLM, GCN predicts failure, early-stop or
+  hotswap mid-run to GPT-4o. Closest existing system to multi-trace-then-select-large.
+- **AI21 budget-aware SWE agents**: parallel rollouts + learned stop-classifiers on rollout
+  features (patch consistency, generated-test outcomes); cascade over budget levels.
+- **"LLMs Encode Their Failures"** (arXiv 2602.09924): probes predict policy-specific success;
+  probe-guided pool routing exceeds best single model at ~70% cost reduction (maj@5 setting).
+- **SWE-Router** (arXiv 2607.00053): cheap model runs K turns, value head reads partial
+  trajectory, continue-vs-escalate on SWE-Bench Verified (Route-AUC 0.78); Bayes-optimality result
+  for trajectory conditioning; notably did *not* beat baselines on its SWE-Smith split.
+- **SuperScout / "Scrouting"** (arXiv 2608.04804): 7B searcher explores repo, hidden states feed
+  an N-way frontier-fixer router on SWE-bench Pro; handoff consumed by fixer.
+- **AutoMix** (NeurIPS 2024): few-shot self-verification + POMDP accept/escalate router; includes
+  an explicit "unsolvable, route nowhere" class — the main prior art for true abstention.
+- **FrugalGPT** (TMLR 2024): sequential cascade with a *trained* DistilBERT answer-quality scorer
+  and thresholds — structurally, our binary abstention cell is FrugalGPT restricted to two tiers
+  with an embedding scorer. This is the sharpest form of the "not novel alone" critique and must
+  be answered head-on.
+- **RouteLLM / Hybrid LLM**: input-only routers (pre-generation), no attempt evidence — the
+  baselines our post-scout predictors dominate.
+- **Dekoninck & Baader, ICML 2025**: unified routing/cascading theory; identifies quality-estimator
+  quality as the critical factor — supports framing signal validity as the core contribution.
+- **RLCascadeRouter** (2026): RL cascade routing without quality estimators.
+- **UCCI** (2026): calibration-first uncertainty cascades (isotonic on token margins).
+- **Darwin Cascade** (non-archival): empty-patch as a deterministic 100%-precision escalation gate
+  on SWE-bench Lite — a degenerate execution-feedback gate, useful as a reference point.
+
+### Positioning consequence
+
+Binary scout→predict-oracle→abstain, alone, is a two-tier FrugalGPT/AutoMix variant and will be
+reviewed as such. The defensible contributions are: (1) the signal science — CoT vs execution
+feedback ablations, transfer, and the SWE/LCB domain boundary; (2) multi-tier direct-jump routing
+versus sequential cascades with model-specific success targets and the ceiling-breaking
+partitioning result; (3) true abstention modeled explicitly as a give-up branch (P(scout),
+P(oracle), escalate only when oracle-P high and scout-P low) — most cascade work assumes the large
+model always helps and never prices the hopeless branch; (4) corrected-evaluation rigor
+(temporal splits, evaluator pinning, leakage quarantine) as methodology contribution.
+
+---
 
 - **LLM cascades / routing**: FrugalGPT, routing networks, model selection papers — they route based on problem features, not scout output
-- **Confidence-based abstention**: calibrated LLM confidence for selective prediction — we use a separate predictor rather than the oracle's own confidence
+- **Confidence-based abstention**: calibrated LLM confidence for selective prediction — we use a separate predictor rather than the oracle's own confidence. Both our verbalized-confidence and token-level-uncertainty baselines fail empirically (see previous section), so this positioning claim is now backed by data
 - **Difficulty estimation**: predicting instance hardness from problem features — we show scout traces dominate problem features
 - **Process reward models / verifiers**: similar in spirit but trained to verify answers, not route between models; our predictor doesn't see the oracle's output at all
 - **Adaptive compute**: early-exit networks, speculative decoding — related family but different mechanism
