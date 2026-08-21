@@ -87,6 +87,7 @@ ${TRAIN_CMD} \\
   --eval-trajectories  ${LCB_COLLECTION_DIR}/trajectories_eval.jsonl \\
   --train-parquet-dir  ${LCB_COLLECTION_DIR}/train \\
   --eval-parquet-dir   ${LCB_COLLECTION_DIR}/eval \\
+  --eval-oracle-results ${LCB_COLLECTION_DIR}/oracle_eval.jsonl \\
   --output-dir         ${OUTPUT_DIR} \\
   --label-route-idx    ${LABEL_ROUTE_IDX} \\
   ${THINKING_ARG} \\

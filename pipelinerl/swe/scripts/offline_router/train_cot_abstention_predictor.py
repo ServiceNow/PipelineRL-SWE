@@ -87,6 +87,27 @@ def load_parquet_labels(parquet_dir: str, route_idx: int = 3) -> dict[str, bool]
     return labels
 
 
+def load_unresolved_oracle_problem_ids(path: str) -> set[str]:
+    """Return IDs whose oracle model call failed before producing an answer."""
+    latest: dict[str, dict[str, Any]] = {}
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            row = json.loads(line)
+            pid = str(row.get("problem_id") or "").strip()
+            if pid:
+                latest[pid] = row
+    return {
+        pid
+        for pid, row in latest.items()
+        if not str(row.get("full_output") or "").strip()
+        and str((row.get("eval_metadata") or {}).get("error_message", ""))
+        != "EmptyGeneration"
+    }
+
+
 # ── input text ────────────────────────────────────────────────────────────────
 
 _TF_FORMATS = TEST_FEEDBACK_FORMATS
@@ -270,6 +291,8 @@ def main() -> None:
                         help="Directory of train parquet shards with route_successes")
     parser.add_argument("--eval-parquet-dir", required=True,
                         help="Directory of eval parquet shards with route_successes")
+    parser.add_argument("--eval-oracle-results", default=None,
+                        help="Optional oracle_eval.jsonl; excludes unresolved model calls from eval")
     parser.add_argument("--label-route-idx", type=int, default=3,
                         help="Index into route_successes to use as label (default: 3 = gpt-oss-120b)")
     parser.add_argument("--output-dir", required=True)
@@ -328,10 +351,27 @@ def main() -> None:
 
     train_labels = load_parquet_labels(args.train_parquet_dir, route_idx=int(args.label_route_idx))
     eval_labels = load_parquet_labels(args.eval_parquet_dir, route_idx=int(args.label_route_idx))
+    excluded_eval_ids: set[str] = set()
+    if args.eval_oracle_results:
+        excluded_eval_ids = load_unresolved_oracle_problem_ids(args.eval_oracle_results)
+        eval_trajs = [
+            row
+            for row in eval_trajs
+            if str(row.get("problem_id") or row.get("instance_id") or "").strip()
+            not in excluded_eval_ids
+        ]
+        eval_labels = {
+            pid: label for pid, label in eval_labels.items() if pid not in excluded_eval_ids
+        }
 
     if accelerator.is_main_process:
         print(f"Train labels: {len(train_labels)} | pos={sum(train_labels.values())}", flush=True)
         print(f"Eval labels:  {len(eval_labels)} | pos={sum(eval_labels.values())}", flush=True)
+        if excluded_eval_ids:
+            print(
+                f"Excluded {len(excluded_eval_ids)} eval rows with unresolved oracle calls",
+                flush=True,
+            )
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_name, padding_side="left")
     pad_token_id = tokenizer.pad_token_id or tokenizer.eos_token_id or 0

@@ -7,6 +7,9 @@ from pipelinerl.swe.scripts.livecodebench.collect_lcb_trajectories import (
     is_evaluator_infrastructure_error,
     lcb_release_files,
 )
+from pipelinerl.swe.scripts.offline_router.train_cot_abstention_predictor import (
+    load_unresolved_oracle_problem_ids,
+)
 
 
 pytest.importorskip("lcb_runner.evaluation.compute_code_generation_metrics")
@@ -62,6 +65,30 @@ def test_evaluator_infrastructure_error_detection() -> None:
     assert not is_evaluator_infrastructure_error(
         [-1], {"error_message": "global timeout"}
     )
+
+
+def test_unresolved_oracle_calls_are_quarantined(tmp_path) -> None:
+    results = tmp_path / "oracle_eval.jsonl"
+    rows = [
+        {
+            "problem_id": "completed",
+            "full_output": "print(1)",
+            "eval_metadata": {"error_message": "Wrong Answer"},
+        },
+        {
+            "problem_id": "empty_generation",
+            "full_output": "",
+            "eval_metadata": {"error_message": "EmptyGeneration"},
+        },
+        {
+            "problem_id": "timed_out",
+            "full_output": "",
+            "eval_metadata": {"error_message": "TimeoutError()"},
+        },
+    ]
+    results.write_text("\n".join(json.dumps(row) for row in rows) + "\n")
+
+    assert load_unresolved_oracle_problem_ids(str(results)) == {"timed_out"}
 
 
 def _row(input_output: dict) -> dict:
