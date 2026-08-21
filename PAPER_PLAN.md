@@ -55,7 +55,7 @@ Both regimes can be tested on either dataset:
 | Dataset | Stronger-model success prediction / abstention | Full routing |
 |---------|------------------------------------------------|--------------|
 | **SWE** | Main completed line: predict gpt-oss-120b success from SWE-Smith scout evidence and test transfer on SWE-Bench Verified | Tried previously on SWE-Bench-style tasks and failed; tier selection appears substantially harder in this domain |
-| **LCB** | Tried first; the old near-perfect AUC motivated the routing hypothesis, but that result is invalid because of the broken evaluator and random split. The corrected temporal rerun is in progress | Main proposed next line: keep the scout or jump directly to a mid/high tier, conditional on corrected LCB evidence passing the validity gate |
+| **LCB** | Corrected temporal result: scout attempt predicts 120B success (AUC 0.769 vs. 0.552 input-only); public-test feedback has no demonstrated incremental gain in the first seed | Proposed next line after replication: keep the scout or jump directly to a mid/high tier |
 
 ### Experimental history and current hypothesis
 
@@ -66,10 +66,9 @@ new full-routing experiment on LCB.
 
 The old LCB result cannot support that conclusion because its evaluator was broken and its split
 leaked benchmark structure. The corrected LCB abstention experiment is therefore a **replication
-and signal-validity gate**. If scout trajectories and public-test feedback still add useful signal
-beyond problem-only features under official grading and a temporal split, proceed to collect
-intermediate-tier outcomes and test full routing on LCB. If they do not, the motivation for that
-routing experiment has not survived correction.
+and signal-validity gate**. The first corrected seed preserves a large scout-attempt signal beyond
+problem-only features, but does not show an incremental public-test-feedback gain. Replicate before
+collecting intermediate tiers; if the trace result holds, proceed to full routing on LCB.
 
 ## The Routing Signal: What the Scout's Trace Reveals
 
@@ -210,7 +209,19 @@ The previously reported LCB AUCs and solve rates are **not valid paper results**
 
 This invalidates the old 0.951–0.977 AUC table, the associated capture curve, and the interpretation that LCB execution feedback saturated routing. Those numbers remain useful only as debugging evidence for the wrapper failure and must not appear as headline results.
 
-The corrected protocol uses official LCB grading for both stdin and function-call tasks, a pinned `release_v6`, a `2024-10-01` temporal split, public tests as routing feedback, and public+private tests for final scout/oracle correctness. The corrected experiment will determine whether LCB is a genuine controlled positive setting or whether the old performance was entirely artifact-driven.
+The corrected protocol uses official LCB grading for both stdin and function-call tasks, a pinned `release_v6`, a `2024-10-01` temporal split, public tests as routing feedback, and public+private tests for final scout/oracle correctness. The serial regrade removes evaluator concurrency failures. Two held-out oracle API timeouts are quarantined rather than counted as oracle failures, leaving 339 valid eval instances.
+
+**Corrected temporal LCB result (2026-08-21, one seed)**:
+
+| Predictor input | Final eval AUC | Interpretation |
+|-----------------|----------------|----------------|
+| Problem only | 0.5521 | Near chance; little useful signal from description alone |
+| Problem + scout patch (no CoT) | **0.7693** | Large, credible scout-attempt signal |
+| Problem + scout patch (no CoT) + public test feedback | 0.7346 | No demonstrated incremental feedback gain in this seed |
+
+The previous 0.951-0.977 AUCs were higher because the target and split were invalid: function-call tasks were systematically labeled failed, private tests were decoded incorrectly, and random splitting enabled benchmark-era/platform shortcuts. The corrected collection also exposed a separate fork-safety issue in concurrent official-runner calls; serial regrading repaired the saved generations. These changes remove both label-format shortcuts and split leakage, so the new AUC is the relevant number. It is lower, but still strongly above the input-only baseline.
+
+The feedback model reached a transient epoch-2 AUC of 0.7765, but selecting it using the held-out eval set would be post hoc. The reported final 10-epoch value is 0.7346. Multiple seeds, a validation-selected checkpoint policy, and paired confidence intervals are required before claiming a small difference between post-scout and post-scout-plus-feedback.
 
 Key takeaways that remain supported:
 - Scout patch text improves SWE-Smith in-domain AUC over input-only, but the gain is modest.
@@ -317,7 +328,9 @@ Train the same predictor architecture on the same temporal split and 120B-succes
 | Post-scout | problem + scout code | value of the attempted solution |
 | Post-scout + public test feedback | problem + scout code + public test outcome | incremental value of deployable execution feedback |
 
-Run one seed first as a validity gate. If the corrected result is nontrivial, repeat all three conditions with at least three seeds and report mean, standard deviation, and paired bootstrap confidence intervals.
+**Completed, one seed (2026-08-21)**: all three conditions used 551 temporal-train instances and 339 valid temporal-eval instances. Final AUCs are 0.5521 input-only, 0.7693 post-scout, and 0.7346 post-scout plus public feedback. The corrected validity gate provisionally passes for scout-attempt signal, but not for an incremental test-feedback claim.
+
+Next: repeat all three conditions with at least three seeds, use a validation-selected checkpoint policy, and report mean, standard deviation, and paired bootstrap confidence intervals.
 
 This round does **not** constitute the actual-routing result. It only establishes whether the scout
 trajectory and public-test feedback add information beyond problem-only difficulty prediction. A
@@ -358,10 +371,11 @@ For both domains, report more than pooled AUC:
 
 1. **SWE feedback transfers — passed**: corrected test-feedback scoring beats both matched no-feedback transfer baselines. Retain SWE feedback as a positive cross-domain result; do not claim an incremental CoT gain.
 2. **SWE feedback does not transfer, corrected LCB works**: frame the paper as a controlled positive result plus a boundary finding. Execution-grounded routing works in code generation; model-specific success in agentic software repair is much harder to infer and transfer.
-3. **Corrected LCB input-only remains high but post-scout adds little**: the result is benchmark difficulty prediction, not scout-trace routing. Narrow the claim accordingly.
-4. **Corrected LCB also collapses**: stop the multi-tier cascade work and do not pursue the current routing claim without a new signal or task.
-5. **Only after a positive gate**: collect the chosen mid/high tiers and evaluate direct-jump routing.
-   Thinking-4B/CoT ablations and multiple seeds follow once the policy definition is stable.
+3. **Corrected LCB signal gate -- provisional pass**: post-scout reaches 0.7693 versus 0.5521 input-only on the first temporal seed. Replicate before treating this as a paper result; public feedback is not yet a positive result.
+4. **Corrected LCB input-only remains high but post-scout adds little**: the result is benchmark difficulty prediction, not scout-trace routing. Narrow the claim accordingly.
+5. **Corrected LCB also collapses on replication**: stop the multi-tier cascade work and do not pursue the current routing claim without a new signal or task.
+6. **Only after replicated positive gate**: collect the chosen mid/high tiers and evaluate direct-jump routing.
+   Thinking-4B/CoT ablations follow once the policy definition is stable.
 
 ### Explicitly deferred
 
@@ -393,7 +407,8 @@ These do not answer the immediate validity question and should not run before ro
 
 ## LCB Scout-First Cascade Routing (2026-08-19)
 
-> **Status**: actual-routing track, pending the corrected LCB signal-validity gate. The old
+> **Status**: actual-routing track, pending replication of the corrected LCB signal-validity result.
+> The first repaired temporal seed gives post-scout AUC 0.7693 versus 0.5521 input-only. The old
 > 100-problem solve rates and 0.95+ AUC results came from the broken evaluator and are not evidence
 > for this track.
 
@@ -421,16 +436,19 @@ This is a proper multi-class routing problem, not binary abstention. The predict
 - The old run appeared to show unusually strong difficulty signal, which motivated this experiment;
   corrected grading must establish whether that signal was real
 
-### Solve rates and tier overlap (100-problem eval)
+### Corrected binary anchor (temporal eval)
 
-| Model | Solve rate | Marginal vs. 4B |
-|-------|-----------|-----------------|
-| Scout (4B) | 34% | — |
-| gpt-oss-120b | 39% | +5pp |
-| Claude Opus 5 | 43% | +9pp |
+The previous 100-problem multi-tier solve-rate table is invalid and must not be used. The repaired
+4B/120B collection has 339 valid held-out instances after quarantining two unresolved 120B API
+calls:
 
-Per-problem: 29 solved by all, 14 solved by 120b/Opus but not 4B, 52 unsolvable by any.
-Opus deferred from collection (5-problem "Opus-only" tier too thin for training signal, $25/MTok).
+| Model | Solve rate |
+|-------|------------|
+| Scout (Qwen3-4B-Instruct-2507) | 93 / 339 = 27.4% |
+| Oracle (gpt-oss-120b) | 224 / 339 = 66.1% |
+
+These are only a binary anchor, not routing outcomes. No corrected 20B, 30B, or Opus outcomes have
+been collected, so multi-tier overlap and any cascade frontier remain unmeasured.
 
 ### Data plan
 
