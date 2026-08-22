@@ -59,7 +59,7 @@ python pipelinerl/swe/scripts/livecodebench/materialize_lcb_full_router.py --sou
 python pipelinerl/swe/scripts/livecodebench/convert_lcb_router_to_dataset.py --router-data-dir ${ROUTER_DATA_DIR} --output-dir ${DATASET_DIR} ${CONVERT_ARGS} && \
 ${TRAIN_LAUNCH} pipelinerl/swe/scripts/offline_router/train_qwen_embedding_router_baseline.py \
   --dataset-dir ${DATASET_DIR} --output-dir ${MODEL_DIR} \
-  --objective reward_bce --use-lora \
+  --objective reward_bce --use-lora --no-encoder-frozen \
   --lora-r ${LORA_R} --lora-alpha ${LORA_ALPHA} \
   --lora-target-modules q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj \
   --lr ${LR} --num-epochs ${NUM_EPOCHS} --max-seq-length ${MAX_SEQ_LENGTH} \
