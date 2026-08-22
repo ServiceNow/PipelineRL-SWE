@@ -788,3 +788,61 @@ model always helps and never prices the hopeless branch; (4) corrected-evaluatio
 - **Difficulty estimation**: predicting instance hardness from problem features — we show scout traces dominate problem features
 - **Process reward models / verifiers**: similar in spirit but trained to verify answers, not route between models; our predictor doesn't see the oracle's output at all
 - **Adaptive compute**: early-exit networks, speculative decoding — related family but different mechanism
+
+---
+
+## LCB Full-Routing First Results + Failure-Dumping Diagnosis (2026-08-22)
+
+First embedding-router runs on the corrected temporal LCB split (n=339 eval), one seed, using the
+repo-standard multi-route trainer (`train_qwen_embedding_router_baseline.py`, `--objective
+reward_bce`, one LoRA with an N-dim output over {scout, oss20, oss120}). Jobs:
+`lcb_embed_router_{postscout_testfb,inputonly}_seed17_1787374{180,211}`.
+
+### Frontier summary
+
+| Operating point | Post-scout+FB | Input-only | Random (matched) | Reference |
+|---|---|---|---|---|
+| Top | 60.8% @ 43.5k | **65.2% @ 49.9k** | 62.3% @ 56.8k | always-120B: 66.1% @ 64.1k |
+| Mid | **54.3% @ 19.4k** | 56.1% @ 22.6k | 44.8% @ 27.0k | always-oss20: 40.4% @ 14.4k |
+| Low | **46.9% @ 10.8k** | 45.1% @ 10.1k | 38.3% @ 16.2k | |
+
+Embedding ≫ the TF-IDF router trained the same morning (top end 59.6% → 65.2%). Router beats
+random-at-matched-cost at every λ (+1 to +10pp). Direct-jump still edges the sequential public-
+feedback cascade (59.3% @ 42.1k).
+
+### Failure-dumping diagnosis (the important finding)
+
+Per-instance analysis of the input-only router at λ=0:
+
+- It routes 50 instances away from 120B; **0/50 deviations succeed**. 92% of deviated instances
+  are *all-hopeless* (no route solves them); 120B would have resolved only 6%.
+- Routed-to-oss20 success rate: **0%** vs 40.4% base rate — the oss20 head is used as a garbage
+  disposal for hopeless instances under cost-weighted argmax.
+- So the "65.2% ≈ always-120B at 78% of the cost" headline is NOT cheap-win discovery: it is
+  default-to-expensive plus rational **failure dumping** — identify hopeless instances and shunt
+  them to the cheap tier instead of wasting a 64k-token call on a ~6% shot.
+
+Post-scout+FB shows the same pattern, weaker: 85 deviations, 9.4% chosen-success, 69%
+all-hopeless.
+
+**Implication for thread (a)**: roughly 30% of eval instances are all-hopeless AND identifiable
+(per-head AUCs from problem text alone: scout 0.854 / oss20 0.785 / oss120 0.827). The router
+invented the give-up action implicitly; the MDP should make it explicit. This is the strongest
+evidence yet that the abstain arm has real value on LCB.
+
+### Unresolved red flag — reconcile before trusting either number
+
+Problem-statement-only per-head AUCs here are 0.79–0.85, but the corrected abstention experiment
+(2026-08-21) measured input-only AUC **0.5521** for the same target (oss120 success), same
+temporal split. Differences between setups: multi-task (3 heads) vs single-target training; lr
+1e-4 vs 2e-5; input template (route legend + prompt vs abstention format); max_seq 8192 vs 24000;
+checkpoint selection by best eval_loss (here best epoch = final, so mild). A 0.28-AUC gap cannot
+be hand-waved. Required reconciliation experiment: single-target vs multi-task on identical
+converted data with everything else matched, both variants, then re-run policy evaluation.
+
+### Caveats on all numbers above
+
+Single seed; checkpoint selected by eval loss (touches eval); route mixes show the λ=0 policies
+send almost nothing to scout despite its free wins — calibration of the keep-scout arm remains
+poor in both TF-IDF and embedding routers. Multi-seed replication + paired bootstrap CIs are next,
+followed by the reconciliation experiment above.
