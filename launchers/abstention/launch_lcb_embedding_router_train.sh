@@ -25,7 +25,14 @@ LR=${LR:-1e-4}
 MAX_SEQ_LENGTH=${MAX_SEQ_LENGTH:-8192}
 SEED=${SEED:-17}
 NPROC=${NPROC:-4}
+TARGET_ROUTE_IDXS=${TARGET_ROUTE_IDXS:-}
 SNAPSHOT=${SNAPSHOT:-1}
+
+if [[ -n "${TARGET_ROUTE_IDXS}" ]]; then
+  ROUTE_ARG="--target-route-idxs ${TARGET_ROUTE_IDXS}"
+else
+  ROUTE_ARG=""
+fi
 
 if [[ "${INPUT_ONLY}" == "true" ]]; then
   VARIANT="inputonly"
@@ -63,6 +70,7 @@ ${TRAIN_LAUNCH} pipelinerl/swe/scripts/offline_router/train_qwen_embedding_route
   --lora-r ${LORA_R} --lora-alpha ${LORA_ALPHA} \
   --lora-target-modules q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj \
   --lr ${LR} --num-epochs ${NUM_EPOCHS} --max-seq-length ${MAX_SEQ_LENGTH} \
+  ${ROUTE_ARG} \
   --seed ${SEED} --gradient-checkpointing --checkpoint-every-epoch \
   ${TRAIN_INPUT_MODE} && \
 python pipelinerl/swe/scripts/livecodebench/adapt_baseline_preds_for_lcb_eval.py \
