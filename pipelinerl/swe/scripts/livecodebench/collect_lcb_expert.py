@@ -96,6 +96,7 @@ async def collect_split(
     # The official runner forks a worker per call; concurrent forks corrupt labels.
     eval_sem = asyncio.Semaphore(1)
     results = list(done.values())
+    generation_temperature = temperature
 
     async with aiohttp.ClientSession() as session:
         async def process(row: dict[str, Any]) -> dict[str, Any]:
@@ -158,6 +159,7 @@ async def collect_split(
                 "eval_metadata": full_report["metadata"],
                 "_lcb_evaluator_commit": LCB_EVALUATOR_COMMIT,
                 "_lcb_dataset_revision": dataset_revision,
+                "_generation_temperature": generation_temperature,
             }
 
         for index, task in enumerate(asyncio.as_completed([process(row) for row in todo]), 1):
@@ -205,6 +207,10 @@ def main() -> None:
                         help="HTTP timeout in seconds for a single OpenRouter generation")
     parser.add_argument("--title", default="PipelineRL-LCB-routing")
     parser.add_argument("--validate-only", action="store_true")
+    parser.add_argument("--output-suffix", default="",
+                        help="Suffix appended to output filenames (e.g. '_d3' for multi-draw collection)")
+    parser.add_argument("--splits", default="train,eval",
+                        help="Comma-separated splits to collect (default: train,eval)")
     args = parser.parse_args()
 
     source_dir = Path(args.source_collection_dir)
@@ -219,6 +225,8 @@ def main() -> None:
         "train": [row for row in rows if row["contest_date"] < args.temporal_cutoff],
         "eval": [row for row in rows if row["contest_date"] >= args.temporal_cutoff],
     }
+    wanted_splits = {s.strip() for s in args.splits.split(",") if s.strip()}
+    splits = {k: v for k, v in splits.items() if k in wanted_splits}
     for split, split_rows in splits.items():
         source_ids = _source_ids(source_dir, split)
         actual_ids = {problem_id(row) for row in split_rows}
@@ -230,7 +238,7 @@ def main() -> None:
     if args.validate_only:
         for split, split_rows in splits.items():
             validate_split(
-                split_rows, output_dir / f"{args.route_label}_{split}.jsonl", args.dataset_revision
+                split_rows, output_dir / f"{args.route_label}_{split}{args.output_suffix}.jsonl", args.dataset_revision
             )
         return
 
@@ -243,7 +251,7 @@ def main() -> None:
         asyncio.run(
             collect_split(
                 split_rows,
-                output_dir / f"{args.route_label}_{split}.jsonl",
+                output_dir / f"{args.route_label}_{split}{args.output_suffix}.jsonl",
                 args.model,
                 args.route_label,
                 api_key,
@@ -258,7 +266,7 @@ def main() -> None:
             )
         )
         validate_split(
-            split_rows, output_dir / f"{args.route_label}_{split}.jsonl", args.dataset_revision
+            split_rows, output_dir / f"{args.route_label}_{split}{args.output_suffix}.jsonl", args.dataset_revision
         )
 
 
