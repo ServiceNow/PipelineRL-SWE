@@ -936,3 +936,59 @@ deltas: abstain arm, content-based beliefs, and the weak-verifier/agentic regime
 reconciliation finding (input-only ≈ scout on LCB prediction), the MDP's content-policy may not
 need scout evidence at all on LCB — problem-text difficulty alone may drive it — which simplifies
 the story to "explicit give-up arm + calibrated allocation."
+
+---
+
+## THE HEADLINE FINDING: Scout Evidence Adds Nothing In-Domain on Either Domain (2026-08-23)
+
+Completing the reconciliation matrix. All cells single-target oss120-success prediction,
+converged recipe (lr 1e-4):
+
+| Domain | input-only | post-scout | delta |
+|--------|-----------|------------|-------|
+| LCB (temporal, n=339) | **0.850** | 0.789 (+test-fb) | −6.1pp |
+| SWE-Smith in-domain | **0.727** | 0.694 | −3.3pp |
+| SWE → Verified transfer | **0.624** | 0.620 | −0.4pp |
+
+Runs: `lcb_reconcile_a{1,5}_*`, `swe_smith_instruct_to_verified_transfer_route3_nocot{,_input_only}_10epoch_1787457{281,284}`.
+
+**Claim**: with properly trained baselines, scout patches — and even scout execution feedback on
+LCB — do not improve stronger-model success prediction over the problem statement alone. Point
+estimates are negative on both domains independently.
+
+### Interpretation
+
+- Problem statements already encode instance difficulty; a weak model's attempt adds evidence
+  about *that model's* limitations, which is largely predictable from difficulty plus noise.
+- Earlier "scout beats problem-only" results measured an undertrained baseline (see previous
+  section). All pre-2026-08-22 relative claims in this document inherit that artifact.
+- Mechanistically plausible that scout content actively hurts: predictors latch onto 4B-specific
+  failure patterns rather than intrinsic hardness.
+
+### Status of the three research threads after this finding
+
+- **Thread (b) "scout before you route"**: dead as a prediction-improvement story on both
+  domains. Routing frontiers survive but their value comes from cost allocation + the all-hopeless
+  cluster, not from scout evidence.
+- **Thread (a) MDP**: survives fully — resample/escalate/abstain economics never required scout
+  superiority; the abstain arm is motivated by the identifiable ~30% hopeless cluster.
+- **Thread (c)**: transforms from backup into potentially the main scientific contribution: a
+  rigorous negative result — "attempt-based signals do not add information beyond problem text for
+  routing to stronger models" — plus the introspection-fails trilogy and corrected-evaluation
+  methodology.
+
+### Mandatory before publishing this claim
+
+1. Paired bootstrap CIs on both in-domain deltas (are they significantly ≤ 0, or noise?)
+2. ≥2 additional seeds on the four headline cells
+3. One alternative-target check (does scout content predict oss20 or scout success better than
+   problem text? establishes whether the null is target-specific)
+4. Re-write affected sections above; mark superseded tables as lr-2e-5-conditioned
+
+### Thread (a) collection status update
+
+- Scout multidraw job `lcb_multidraw_scout_1787460253` exited without collecting: argparse
+  requires `--api-key-file` even when the key is provided via environment. Fix: create a dummy
+  local key file in the runner and pass it explicitly. Relaunch pending.
+- Experts job `lcb_multidraw_experts_1787460296` running normally (~25 min per draw-file, 20 files
+  total ≈ 8h).
