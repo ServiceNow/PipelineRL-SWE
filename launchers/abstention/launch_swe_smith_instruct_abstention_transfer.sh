@@ -45,6 +45,7 @@ ACCELERATE_CONFIG=${ACCELERATE_CONFIG:-base_mp}
 GRADIENT_ACCUMULATION_STEPS=${GRADIENT_ACCUMULATION_STEPS:-8}
 BATCH_SIZE=${BATCH_SIZE:-1}
 LR=${LR:-2e-5}
+SEED=${SEED:-17}
 
 if [[ "${INPUT_ONLY}" == "true" ]]; then
   INPUT_ONLY_ARG="--input-only"
@@ -54,7 +55,7 @@ else
   INPUT_ONLY_SUFFIX=""
 fi
 
-JOB_NAME=swe_smith_instruct_to_verified_transfer_route${LABEL_ROUTE_IDX}_nocot${INPUT_ONLY_SUFFIX}_${NUM_EPOCHS}epoch_${TIMESTAMP}
+JOB_NAME=swe_smith_instruct_to_verified_transfer_route${LABEL_ROUTE_IDX}_nocot${INPUT_ONLY_SUFFIX}_${NUM_EPOCHS}epoch_seed${SEED}_${TIMESTAMP}
 OUTPUT_DIR=/mnt/llmd/results/exps/aristides/reason/${JOB_NAME}
 
 RUNNER="${OUTPUT_DIR}/run_transfer.sh"
@@ -97,6 +98,7 @@ ${TRAIN_CMD} \\
   --lora-alpha         ${LORA_ALPHA} \\
   --lora-target-modules ${LORA_TARGET_MODULES} \\
   --gradient-checkpointing \\
+  --seed ${SEED} \\
   --checkpoint-every-epoch \\
   2>&1 | tee ${OUTPUT_DIR}/train.log
 
