@@ -41,7 +41,7 @@ COLLECT="python pipelinerl/swe/scripts/livecodebench/collect_lcb_expert.py \
 
 # Inner loop runs inside one job process; every draw/model gets its own output
 # file via --output-suffix so the resume logic works independently per file.
-COMMAND="cd ${REPO_ROOT} && set -e"
+COMMAND="cd ${REPO_ROOT} && source pipelinerl/swe/scripts/livecodebench/ensure_lcb_runner.sh && set -e"
 for DRAW in $(seq 0 $((NUM_DRAWS-1))); do
   for PAIR in "scout:${SCOUT_MODEL}:${TEMP_PRIMARY}" "oss20:${OSS20_MODEL}:${TEMP_PRIMARY}" "oss120:${OSS120_MODEL}:${TEMP_PRIMARY}"; do
     ROUTE="${PAIR%%:*}"; REST="${PAIR#*:}"; MODEL="${REST%%:*}"; TEMP="${REST##*:}"
@@ -49,7 +49,9 @@ for DRAW in $(seq 0 $((NUM_DRAWS-1))); do
   done
 done
 # Sensitivity arm: scout at T=0.6
-COMMAND="${COMMAND} && echo '=== sensitivity: scout temp 0.6 ===' && for D in $(seq 0 $((NUM_DRAWS-1))); do ${COLLECT} --route-label scout06 --model '${SCOUT_MODEL}' --temperature 0.6 --output-suffix _d\${D}; done"
+for DRAW in $(seq 0 $((NUM_DRAWS-1))); do
+  COMMAND="${COMMAND} && echo '=== sensitivity: scout temp 0.6 draw ${DRAW} ===' && ${COLLECT} --route-label scout06 --model '${SCOUT_MODEL}' --temperature 0.6 --output-suffix _d${DRAW}"
+done
 
 make -C "${REPO_ROOT}" job \
   JOB_NAME="${JOB_NAME}" ENV=pipeline-rl CONDA_EXE=/opt/conda/bin/conda SNAPSHOT="${SNAPSHOT}" \
