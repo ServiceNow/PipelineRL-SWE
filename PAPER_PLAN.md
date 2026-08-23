@@ -992,3 +992,33 @@ estimates are negative on both domains independently.
   local key file in the runner and pass it explicitly. Relaunch pending.
 - Experts job `lcb_multidraw_experts_1787460296` running normally (~25 min per draw-file, 20 files
   total ≈ 8h).
+
+### VERIFICATION REVERSAL (2026-08-23, later same day)
+
+The multi-seed verification battery overturned the seed-17 conclusion above:
+
+| Cell | seed17 | seed18 | seed19 | mean ± sd |
+|------|--------|--------|--------|-----------|
+| LCB input-only | 0.850 | 0.848 | 0.732 | 0.810 ± 0.055 |
+| LCB postscout+fb | 0.789 | 0.905 | 0.891 | 0.862 ± 0.053 |
+
+- SWE seed18: mixed again (input-only wins in-domain by 4pp, post-scout wins transfer by 5pp).
+- Alternative-target check (oss20): postscout+fb 0.798 > input-only 0.754.
+
+**Corrected conclusions:**
+
+1. There is NO reliable scout effect in either direction on either domain; the seed-17
+   "scout hurts significantly" claim was itself an artifact of run-level variance.
+2. **The dominant empirical effect is training-run variance (~±0.06 AUC)** for LoRA fine-tuning
+   on ~500 examples. Every single-run AUC comparison in this document (and in much of the routing
+   literature) is fragile at this data scale. This is a publishable methodological finding.
+3. Any real scout delta is small relative to this noise floor; detecting it requires many-seed
+   means (10 seeds/cell → SE ≈ 0.02).
+
+### PIVOT DECISION
+
+Primary effort moves to **thread (a): the {resample | escalate | abstain} MDP**, whose claims
+(cost allocation economics, give-up arm, failure-dumping structure) are stable across all the
+seed churn above. A 6-job seed extension (seeds 20–22, both LCB cells) runs as background
+due-diligence for the variance measurement, not as a headline claim.
+
