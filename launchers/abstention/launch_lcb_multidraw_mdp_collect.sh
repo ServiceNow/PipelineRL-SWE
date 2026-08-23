@@ -30,6 +30,8 @@ SNAPSHOT=${SNAPSHOT:-1}
 VLLM_PORT=${VLLM_PORT:-8000}
 
 SCOUT_MODEL="Qwen/Qwen3-4B-Instruct-2507"
+JOB_NAME=${JOB_NAME:-lcb_multidraw_${MODE}_${TIMESTAMP}}
+OUTPUT_DIR=${OUTPUT_DIR:-/mnt/llmd/results/exps/aristides/reason/${JOB_NAME}}
 
 COLLECT="python pipelinerl/swe/scripts/livecodebench/collect_lcb_expert.py \
   --source-collection-dir ${LCB_COLLECTION_DIR} \
@@ -38,18 +40,17 @@ COLLECT="python pipelinerl/swe/scripts/livecodebench/collect_lcb_expert.py \
   --max-tokens ${MAX_TOKENS} --eval-timeout ${EVAL_TIMEOUT} --gen-timeout ${GEN_TIMEOUT}"
 
 if [[ "${MODE}" == "scout" ]]; then
-  JOB_NAME=${JOB_NAME:-lcb_multidraw_scout_${TIMESTAMP}}
-  OUTPUT_DIR=${OUTPUT_DIR:-/mnt/llmd/results/exps/aristides/reason/${JOB_NAME}}
   RUNNER="${OUTPUT_DIR}/run_multidraw_scout.sh"
   mkdir -p "${OUTPUT_DIR}"
 
   # Build inner loop unrolled (dash-safe)
-  INNER="export OPENROUTER_API_KEY=local"
+  INNER="echo local > ${OUTPUT_DIR}/local_key.txt && export OPENROUTER_API_KEY=local"
+  LOCAL_KEY="${OUTPUT_DIR}/local_key.txt"
   for DRAW in $(seq 0 $((NUM_DRAWS-1))); do
-    INNER="${INNER} && echo '=== scout T0.2 draw ${DRAW} ===' && ${COLLECT} --base-url http://localhost:${VLLM_PORT} --route-label scout --model '${SCOUT_MODEL}' --temperature 0.2 --output-suffix _d${DRAW}"
+    INNER="${INNER} && echo '=== scout T0.2 draw ${DRAW} ===' && ${COLLECT} --api-key-file ${LOCAL_KEY} --base-url http://localhost:${VLLM_PORT} --route-label scout --model '${SCOUT_MODEL}' --temperature 0.2 --output-suffix _d${DRAW}"
   done
   for DRAW in $(seq 0 $((NUM_DRAWS-1))); do
-    INNER="${INNER} && echo '=== scout T0.6 draw ${DRAW} ===' && ${COLLECT} --base-url http://localhost:${VLLM_PORT} --route-label scout06 --model '${SCOUT_MODEL}' --temperature 0.6 --output-suffix _d${DRAW}"
+    INNER="${INNER} && echo '=== scout T0.6 draw ${DRAW} ===' && ${COLLECT} --api-key-file ${LOCAL_KEY} --base-url http://localhost:${VLLM_PORT} --route-label scout06 --model '${SCOUT_MODEL}' --temperature 0.6 --output-suffix _d${DRAW}"
   done
 
   cat > "${RUNNER}" << SCRIPT_EOF
