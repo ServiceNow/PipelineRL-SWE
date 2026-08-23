@@ -171,7 +171,12 @@ async def collect_split(
                 logger.info("%s: %d/%d collected", route_label, index, len(todo))
 
 
-def validate_split(rows: list[dict[str, Any]], output_path: Path, dataset_revision: str) -> None:
+def validate_split(
+    rows: list[dict[str, Any]],
+    output_path: Path,
+    dataset_revision: str,
+    max_invalid_frac: float = 0.0,
+) -> None:
     expected_ids = {problem_id(row) for row in rows}
     latest = _read_latest(output_path)
     missing = expected_ids - set(latest)
@@ -180,10 +185,21 @@ def validate_split(rows: list[dict[str, Any]], output_path: Path, dataset_revisi
         for pid in expected_ids & set(latest)
         if not _is_complete(latest[pid], dataset_revision)
     ]
-    if missing or invalid:
+    if missing:
+        raise ValueError(f"{output_path}: missing={len(missing)} invalid={len(invalid)}")
+    frac = len(invalid) / max(1, len(expected_ids))
+    if invalid and frac > max_invalid_frac:
         raise ValueError(
-            f"{output_path}: missing={len(missing)} invalid={len(invalid)}"
+            f"{output_path}: missing=0 invalid={len(invalid)} "
+            f"({frac:.1%} > max_invalid_frac={max_invalid_frac})"
         )
+    if invalid:
+        print(
+            f"{output_path.name}: {len(expected_ids) - len(invalid)}/{len(expected_ids)} valid "
+            f"({len(invalid)} invalid, tolerated <= {max_invalid_frac:.1%})",
+            flush=True,
+        )
+        return
     print(f"{output_path.name}: valid {len(expected_ids)} rows", flush=True)
 
 
@@ -211,6 +227,8 @@ def main() -> None:
                         help="Suffix appended to output filenames (e.g. '_d3' for multi-draw collection)")
     parser.add_argument("--splits", default="train,eval",
                         help="Comma-separated splits to collect (default: train,eval)")
+    parser.add_argument("--max-invalid-frac", type=float, default=0.0,
+                        help="Tolerate this fraction of invalid rows at validation (0.0 = strict)")
     args = parser.parse_args()
 
     source_dir = Path(args.source_collection_dir)
@@ -238,7 +256,8 @@ def main() -> None:
     if args.validate_only:
         for split, split_rows in splits.items():
             validate_split(
-                split_rows, output_dir / f"{args.route_label}_{split}{args.output_suffix}.jsonl", args.dataset_revision
+                split_rows, output_dir / f"{args.route_label}_{split}{args.output_suffix}.jsonl",
+                args.dataset_revision, max_invalid_frac=args.max_invalid_frac,
             )
         return
 
@@ -266,7 +285,8 @@ def main() -> None:
             )
         )
         validate_split(
-            split_rows, output_dir / f"{args.route_label}_{split}{args.output_suffix}.jsonl", args.dataset_revision
+            split_rows, output_dir / f"{args.route_label}_{split}{args.output_suffix}.jsonl",
+            args.dataset_revision, max_invalid_frac=args.max_invalid_frac,
         )
 
 
