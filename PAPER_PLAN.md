@@ -846,3 +846,93 @@ Single seed; checkpoint selected by eval loss (touches eval); route mixes show t
 send almost nothing to scout despite its free wins — calibration of the keep-scout arm remains
 poor in both TF-IDF and embedding routers. Multi-seed replication + paired bootstrap CIs are next,
 followed by the reconciliation experiment above.
+
+---
+
+## Hyperparameter Reconciliation: The Input-Only Baselines Were Undertrained (2026-08-23)
+
+**The single most important finding of this cycle.** Every predictor trained before 2026-08-22
+used lr 2e-5 / seq 24000 (`train_cot_abstention_predictor.py` defaults). Controlled re-runs on
+identical corrected LCB temporal data show this recipe severely undertrains the LoRA:
+
+### LCB input-only (problem text → oss120 success), single-target grid
+
+| Config | oss120 eval AUC |
+|--------|-----------------|
+| lr 2e-5, seq 24k (= old abstention gate recipe) | **0.500** |
+| lr 5e-5, seq 8192 | 0.758 |
+| **lr 1e-4, seq 8192** | **0.850** |
+| multi-task 3 heads, lr 2e-5 | 0.778 |
+
+Runs: `lcb_reconcile_a{1..4}_*`. A2 reproduces the old gate's ≈chance result exactly (harness
+validated); A1 shows the same input contains a 0.85-AUC signal.
+
+### Consequences for the scout thesis
+
+- **LCB**: post-scout+test-feedback at lr 1e-4 scores **0.789** (`lcb_reconcile_a5_*`) — BELOW
+  properly-trained input-only (0.850). On LCB, scout content adds nothing to oss120-success
+  prediction; the original gate comparison (post-scout 0.769 vs input-only 0.552) was an artifact
+  of comparing a converged model against an undertrained one. "Scout before you route" is dead on
+  LCB as a prediction-improvement claim.
+- **SWE**: input-only re-run at lr 1e-4 gives in-domain **0.7267** (was 0.682) and Verified
+  transfer **0.624** (was 0.578). Also undertrained. Post-scout @ 1e-4 was still running at
+  documentation time (`...route3_nocot_10epoch_1787458284`) — its result decides whether scout
+  patches add signal on agentic repair once the baseline is honest.
+- ALL AUC tables above in this document that predate 2026-08-22 must be read as
+  lr-2e-5-conditioned; relative claims (CoT vs no-CoT, feedback deltas) need re-derivation at
+  converged settings before publication.
+- Routing frontier results (2026-08-22 section) survive: they never claimed scout superiority,
+  and the input-only router being strong is consistent with this finding.
+- Failure-dumping diagnosis unchanged and reinforced: problem text alone identifies the
+  all-hopeless cluster (that is precisely what 0.85 AUC means).
+
+### Required going forward
+
+1. New standard recipe: lr 1e-4 (or validated convergence point), seq 8192 for LCB-length inputs;
+   report learning-rate sensitivity for any headline AUC.
+2. Re-run the SWE 2x2 ablation (no-CoT / CoT x feedback) at lr 1e-4 before quoting any scout-value
+   delta.
+3. Await SWE post-scout @ 1e-4 result to determine whether ANY scout-content claim survives on
+   either domain.
+
+---
+
+## Thread (a) MDP: Setup Status (2026-08-23)
+
+**Goal**: {resample | escalate | abstain} MDP over real execution signals on LCB, positioned as
+RoR-extension (content-vs-counts + explicit give-up arm + their verifier-gating regime).
+
+### Data collection (in progress)
+
+Correctness tensors `(problem × model × draw)` on the temporal eval split (339 problems),
+protocol RoR-parity: T=0.2 primary, k=10 draws per model; plus scout-only T=0.6 sensitivity arm.
+
+- `collect_lcb_expert.py` extended: `--output-suffix` (per-draw files keep resume logic),
+  `--splits`, `_generation_temperature` provenance field.
+- Launcher `launch_lcb_multidraw_mdp_collect.sh` with MODE=scout / MODE=experts:
+  - **scout job (GPU)** `lcb_multidraw_scout_1787460253`: local vLLM serves Qwen3-4B-Instruct-
+    2507 (Qwen models are NOT available on OpenRouter — HTTP 400 "not a valid model ID", verified
+    by direct API test after all 341 rows failed); collector hits localhost.
+  - **experts job (CPU)** `lcb_multidraw_experts_1787460296`: oss20+oss120 via OpenRouter,
+    sequential loop (official evaluator forbids concurrent forks).
+- Estimated wall time: hours (10k generations + 2× serialized gradings each).
+
+### Still to build (while collection runs)
+
+1. Tensor builder: draw jsonls → (problem × model × draw) outcome arrays + public-feedback texts.
+2. Policy replay suite: RoR-faithful greedy/UCB counting rule (baseline), content-predictor policy
+   (same allocation rule, probabilities from the embedding router), ABSTAIN extension (give-up arm
+   gated on posterior mass below threshold), cascade / best-of-K / static-router / random
+   controls.
+3. Eval harness: budget sweeps → cost-correctness Pareto fronts, paired bootstrap CIs, train-half
+   prior calibration, threshold selection on train only.
+4. Note: existing T=0 collections remain valid for thread-(b) static routing; T=0 draws cannot be
+   reused for resampling.
+
+### Decision-relevant context
+
+RoR (arXiv 2607.08665) already owns the counting-based version of this MDP (k=30, T=0.2). Our
+deltas: abstain arm, content-based beliefs, and the weak-verifier/agentic regime. Given the
+reconciliation finding (input-only ≈ scout on LCB prediction), the MDP's content-policy may not
+need scout evidence at all on LCB — problem-text difficulty alone may drive it — which simplifies
+the story to "explicit give-up arm + calibrated allocation."
