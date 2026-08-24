@@ -1059,3 +1059,33 @@ The 10-seed sweep supersedes BOTH the original single-seed claims and the three-
 - Thread (a): unchanged, data collection nearly complete.
 - Thread (c): shrinks back to the introspection-fails trilogy + methodology lessons; the
   cross-domain negative-result framing is off the table unless the SWE sweep also comes back null.
+
+---
+
+## FINAL TWO-DOMAIN VERDICT AT n=10 SEEDS PER DOMAIN (2026-08-24)
+
+SWE multi-seed sweep complete (`swe_smith_instruct_to_verified_transfer_route3_nocot{,_input_only}_10epoch_seed{17..26}_*`, lr 1e-4):
+
+| Metric | input-only | post-scout | delta | Welch p |
+|--------|-----------|------------|-------|---------|
+| SWE in-domain | 0.720 ± 0.021 | 0.717 ± 0.020 | −0.002 | 0.80 |
+| SWE → Verified transfer | 0.606 ± 0.015 | 0.625 ± 0.048 | +0.019 | 0.26 |
+
+### The paper's central empirical contrast (both domains, matched n=10 protocol)
+
+| | LCB | SWE |
+|---|---|---|
+| input-only | 0.784 ± 0.067 | 0.720 ± 0.021 |
+| post-scout + evidence | 0.900 ± 0.017 | 0.717 ± 0.020 |
+| scout delta | **+0.116 (p<0.001, 10/10 seeds)** | ≈0 (n.s.) |
+| variance effect of scout content | stabilizes (sd ÷4) | slightly destabilizes |
+
+**Headline claim**: attempt-based difficulty signals decisively improve stronger-model success
+prediction for short-form code generation (LCB) — large effect, near-zero run variance — while
+adding nothing reliable for agentic software repair (SWE), where neither problem text nor scout
+attempts predict oss120 success well (absolute AUCs ~0.72/~0.72 in-domain). The boundary is
+replicated across seeds with a matched protocol on both domains.
+
+Note the interesting asymmetry within SWE: transfer point-estimate favors scout (+1.9pp) while
+in-domain does not, and post-scout transfer variance triples — consistent with scout content
+adding noise rather than signal in this regime.
