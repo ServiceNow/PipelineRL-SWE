@@ -130,11 +130,16 @@ def main() -> None:
     parser.add_argument("--num-orderings", type=int, default=20)
     parser.add_argument("--pseudo-count", type=float, default=2.0)
     parser.add_argument("--cost-mode", choices=["usd", "weights"], default="weights")
+    parser.add_argument("--verifier", choices=["public", "full"], default="public",
+                        help="'full' = oracle verifier (diagnostic upper bound, not deployable)")
     args = parser.parse_args()
 
     d = load_tensors(Path(args.tensors_dir))
     R_full = d["resolved"].astype(bool)      # (P,M,K)
     R_pub = d["public"].astype(bool)
+    if args.verifier == "full":
+        print("WARNING: --verifier full is an oracle diagnostic, not deployable")
+        R_pub = R_full.copy()
     V = d["valid"]
     slots = [str(s) for s in d["model_slots"]]
     M = len(slots)
