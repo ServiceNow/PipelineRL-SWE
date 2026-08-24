@@ -1089,3 +1089,49 @@ replicated across seeds with a matched protocol on both domains.
 Note the interesting asymmetry within SWE: transfer point-estimate favors scout (+1.9pp) while
 in-domain does not, and post-scout transfer variance triples — consistent with scout content
 adding noise rather than signal in this regime.
+
+---
+
+## SESSION LOG & THREAD-(a) BUILD STATUS (2026-08-24)
+
+### Completed this cycle
+
+1. **Two-domain n=10 verdicts** (sections above): scout evidence decisively helps LCB
+   (+0.116 AUC, variance-stabilizing), does nothing on SWE. Central empirical table done.
+2. **MDP tensors built** (`mdp_tensors_v1`): 341 problems x {scout(T0.2), oss20, oss120} x 10
+   draws; solve rates 28.4/41.4/65.1 (full), 43.7/44.2/70.5 (public). Draw-variation check:
+   T=0.2 yields mixed outcomes on 52% of oss20 instances — temperature validated.
+3. **Verifier reliability measured**: false-accept rate of public tests = 35.1% (scout),
+   6.4% (oss20), 7.7% (oss120). RoR's HumanEval+ verifier had ~1%; our regime breaks their core
+   assumption — this is the quantitative motivation for the content arm.
+4. **RoR-faithful replay harness built and running** (`replay_mdp_baseline.py`,
+   `mdp_replay_v1`): counting policies with public verifier max out ~56% correctness;
+   oracle all-tests verifier lifts the same policies to ~74% at half the always-120B cost.
+   The deployable-vs-oracle gap (~18pp) is the target quantity for the content policy.
+5. **Framing decision**: public/private split is a benchmark artifact; deployed analogue is
+   partial-vs-final verification (CI economics) or absent verification (agentic domains).
+6. **AWS $/M-token prices recorded** (0.278 / 1.299 / 4.64 / 8.79 / 11.13 for
+   4B/oss20/qwen30/gemini-flash/oss120) in `replay_mdp_baseline.py` USD_PER_M_TOKENS.
+
+### In flight
+
+7. **Depth-1 sequential dataset** (`build_mdp_sequential_dataset.py`, `mdp_seq_dataset_v1`):
+   3,410 decision-point examples (1,640 cal / 1,770 test); heads = {scout-next, oss20,
+   oss120, nothing}; nothing-rate 34.3%.
+8. **Sequential policy training** (`train_mdp_sequential_policy.py`, job
+   `mdp_sequential_policy_1787591035`): Qwen3-Embedding-8B + LoRA, 4 BCE heads, input =
+   problem + most recent scout draw (code+feedback+public-pass bit) + reroll count +
+   earlier outcome bits.
+
+### Next steps
+
+9. Wire trained policy into `replay_mdp_baseline.py` as a fourth policy family: per-step
+   probabilities drive {resample | upgrade | abstain}, abstain threshold tau tuned on cal split.
+10. Evaluate on test half vs RoR ladder (public-verifier counting ~56%, oracle-verifier ~74%,
+    cascade ~66%, always-X). Headline: content-conditioned sequential control closes the
+    deployable-oracle gap while staying deployable.
+11. Optional depth extension (3 recent draws) if v1 shows promise; sensitivity arm (T=0.6
+    scout draws) already collected for draw-diversity ablation.
+12. Multi-seed the policy training once v1 validates single-seed.
+13. Paper assembly order: two-domain verdict table -> methodology lessons -> MDP frontier ->
+    RoR positioning -> introspection-fails trilogy as motivation appendix.
