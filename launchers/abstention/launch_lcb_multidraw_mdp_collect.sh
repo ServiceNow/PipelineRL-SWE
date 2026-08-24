@@ -60,6 +60,7 @@ if [[ "${MODE}" == "scout" ]]; then
 set -euo pipefail
 cd "${REPO_ROOT}"
 source pipelinerl/swe/scripts/livecodebench/ensure_lcb_runner.sh
+export HF_HUB_DISABLE_IMPLICIT_TOKEN=1
 
 echo '[vllm] Starting vLLM server for ${SCOUT_MODEL}...'
 python -m vllm.entrypoints.openai.api_server \\
