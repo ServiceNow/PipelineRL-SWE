@@ -1022,3 +1022,40 @@ Primary effort moves to **thread (a): the {resample | escalate | abstain} MDP**,
 seed churn above. A 6-job seed extension (seeds 20–22, both LCB cells) runs as background
 due-diligence for the variance measurement, not as a headline claim.
 
+
+---
+
+## FINAL RECONCILIATION VERDICT AT n=10 SEEDS: Scout Evidence Helps on LCB, Decisively (2026-08-24)
+
+The 10-seed sweep supersedes BOTH the original single-seed claims and the three-seed
+"reversal." Full LCB temporal results (oss120-success prediction, converged recipe lr 1e-4):
+
+| Cell | n | mean AUC | sd | min–max |
+|------|---|----------|----|---------|
+| input-only | 10 | 0.784 | ±0.067 | 0.642–0.858 |
+| post-scout + test-fb | 10 | **0.900** | **±0.017** | 0.869–0.927 |
+
+- Delta +0.116 AUC; Welch t=5.36, p<0.001; all 10 per-seed differences positive.
+- **Variance-stabilization finding**: input-only training is wildly seed-unstable (collapses to
+  0.642); scout-grounded training is near-deterministic (sd 0.017). Attempt content does not just
+  add signal — it anchors optimization. To our knowledge unstated in the routing literature.
+- SWE remains unresolved at current evidence: seed17 favored input-only, seed18 split by metric;
+  needs its own multi-seed sweep before any claim.
+
+### Methodology lessons (paper-ready as-is)
+
+1. Single-run LoRA comparisons on ~500-example datasets have ~±0.07 AUC run noise: both the
+   original gate's numbers and every intermediate conclusion in this document (including two
+   reversals by the author within one day) illustrate it. Multi-seed reporting is not optional.
+2. Undertrained-baseline artifacts can create, destroy, or invert apparent feature contributions
+   (lr 2e-5 vs 1e-4 moved input-only by +0.35 AUC).
+3. Recommended protocol adopted going forward: ≥10 seeds, mean±sd, Welch tests, lr sensitivity
+   reported.
+
+### Standing status of threads
+
+- Thread (b): alive again on LCB — "scout before you route" holds at n=10 with a large,
+  low-variance margin over problem-only routing. SWE side pending multi-seed.
+- Thread (a): unchanged, data collection nearly complete.
+- Thread (c): shrinks back to the introspection-fails trilogy + methodology lessons; the
+  cross-domain negative-result framing is off the table unless the SWE sweep also comes back null.
