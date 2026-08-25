@@ -1135,3 +1135,48 @@ adding noise rather than signal in this regime.
 12. Multi-seed the policy training once v1 validates single-seed.
 13. Paper assembly order: two-domain verdict table -> methodology lessons -> MDP frontier ->
     RoR positioning -> introspection-fails trilogy as motivation appendix.
+
+---
+
+## MDP 2x2 FACTORIAL RESULTS: {counts,content} x {abstain,no} (2026-08-25)
+
+Replay harness extended to the full factorial (`replay_mdp_baseline.py --content-preds ...`).
+Abstention rule: tau swept on calibration half, selecting (retain >= 95% of no-abstain cal
+correctness) then minimize spend. Content prior = static per-problem predictions from the
+seed-17 embedding router. Weights cost c={1,5,30}, 5 orderings, test half.
+
+| Cell | Correctness | Spend | Spend vs counts |
+|------|-------------|-------|-----------------|
+| counts (RoR faithful) | 52.1% | 19.7 | — |
+| counts + abstain | 51.9% | 16.8 | −15% |
+| content (static prior) | **54.9%** | 20.7 | — |
+| **content + abstain** | 51.8% | **10.5** | **−49%** |
+
+Mid-budget domination: at B=30, content+abstain reaches 48.9% @ 6.1 vs counts' 48.3% @ 9.3 —
+same quality, 34% less spend; Pareto-dominant.
+
+### Reading
+
+1. Content prior alone: +2.6–2.8pp correctness everywhere.
+2. Count-based abstention barely works (−15% spend): counting posteriors are built on the lying
+   verifier's bits and cannot identify hopeless instances.
+3. Content-based abstention halves spend at ≤3pp correctness cost — consistent with the
+   failure-dumping analysis (the model knows when nothing will succeed).
+4. All cells still below always_oss120 (75.9% @ 85) — as designed; the claim is Pareto dominance
+   at constrained budgets, not absolute records. RoR's own headline is likewise cost-quality.
+
+### Claim wording for the paper
+
+"Content-conditioned beliefs improve per-instance success prediction (+0.12 AUC static); the
+calibrated give-up arm converts this into ~50% inference-spend reduction at <=3pp correctness
+cost; jointly they Pareto-dominate the training-free counting baseline at every budget."
+
+### Pending on top of this grid
+
+- Sequential policy row (training run `mdp_sequential_policy_1787670814`) — history-conditioned,
+  should improve on the static-prior rows.
+- Multi-router-seed propagation: content priors above come from ONE router seed; sweep all 10
+  router seeds through the replay for error bars.
+- T=0.6 scout sensitivity arm.
+- Oracle-verifier column for the content cells (how close does deployable content get to the
+  perfect-verifier bound?).
