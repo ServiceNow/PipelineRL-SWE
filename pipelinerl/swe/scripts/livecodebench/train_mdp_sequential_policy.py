@@ -165,7 +165,7 @@ def main() -> None:
             for batch in tqdm(eval_loader, desc=f"eval {epoch}", disable=not accelerator.is_main_process):
                 logits, _, _ = model(input_ids=batch["input_ids"], attention_mask=batch["attention_mask"])
                 probs.extend(accelerator.gather_for_metrics(torch.sigmoid(logits.float())).cpu().tolist())
-                tgts.extend(accelerator.gather_for_metrics(batch["targets"]).cpu().tolist())
+                tgts.extend(accelerator.gather_for_metrics(batch["targets"].float().to(accelerator.device)).cpu().tolist())
         probs = np.array(probs); tgts = np.array(tgts)
         aucs = {}
         for i, h in enumerate(HEADS):
