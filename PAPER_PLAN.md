@@ -1,5 +1,12 @@
 # Paper Plan: Scout-Gated LLM Routing via Reasoning Traces
 
+> **Protocol correction (2026-08-25, latest):** The public/private-test formulation is no longer
+> the primary deployment protocol. All LCB MDP figures and LCB post-scout results below that use
+> public feedback are retained as historical weak-verifier experiments and are superseded for the
+> main claim. Protocol v2 uses full execution, enters the router only after a verified scout
+> failure, constructs reachable histories only, and reports a disjoint train/calibration/test
+> split. See the final section of this document.
+
 > Working title: **"Reasoning as Signal: Using Scout Traces to Route Hard Instances to Stronger Models"**
 
 ---
@@ -1240,3 +1247,106 @@ The public/private split is a benchmark-integrity artifact; the deployed analogu
 suites, or no tests at all (agentic domains). The content policy's job generalizes to
 "predict eventual correctness when current verification is incomplete," i.e. will-this-pass-CI
 prediction. Regime 2 (oracle verifier) remains a clearly-labeled diagnostic bound.
+
+
+---
+
+## PROTOCOL V2: FULL EXECUTION + REACHABLE FAILURE STATES (2026-08-25)
+
+The public/private distinction is a benchmark artifact and is no longer the primary real-world
+framing. The main LCB protocol now models the first-order deployment distinction: execution is
+available. Every attempted program is graded with the complete evaluator; a pass submits and a
+failure enters or remains in the allocation MDP. Public-only verification is retained solely as
+a weak-verifier sensitivity arm.
+
+### Legacy sequential run disposition
+
+`mdp_sequential_policy_1787670814` succeeded (8 epochs; old test AUCs approximately 0.75--0.86),
+but is diagnostic-only and must not be reported as the learned-policy result. Audit found three
+violations: its problem text was empty because `mdp_tensors_v1/problems.jsonl` omitted
+`problem_statement`; it created depth-0 states before the mandatory scout; and it created later
+states even after an earlier verifier pass. It also used public-test feedback with full-suite
+targets.
+
+### Corrected immutable artifacts
+
+Artifact root: `mdp_full_execution_v2_1787679948`. The bundle was reconstructed entirely from
+saved generations, so no model recollection was needed.
+
+- 341 problems x {scout, oss20, oss120} x 10 valid draws
+- canonical problem split: 170 train / 85 calibration / 86 test
+- full problem statements restored from the corrected temporal collection
+- prompt/completion token counts and aligned draw records retained
+- reachable dataset: 6,683 train / 3,275 calibration / 2,901 test decision states
+- all states begin after a failed mandatory scout; histories stop on any full-execution pass
+- histories include failed scout, oss20, and oss120 attempts
+
+### Corrected baseline replay (test split, 20 draw orderings)
+
+These are preliminary protocol-validation numbers, not the final learned-policy result:
+
+| Precisely defined policy | Resolve rate | Mean estimated USD | Mean calls |
+|---|---:|---:|---:|
+| single scout | 34.5% | 0.00059 | 1.00 |
+| single oss20 | 46.1% | 0.00382 | 1.00 |
+| single oss120 | 66.2% | 0.02910 | 1.00 |
+| scout then one oss120 | 67.3% | 0.02559 | 1.65 |
+| one-pass scout -> oss20 -> oss120 | 69.1% | 0.02476 | 2.13 |
+| best-of-10 oss120 (stop on pass) | 81.4% | 0.13261 | 3.04 |
+
+The count-based adaptive curve reaches 74.1% at mean estimated cost 0.0400; its decision-relevant
+conditional resolve rate after scout failure is 60.4% at that point. Costs use realized prompt +
+completion tokens multiplied by the recorded per-model token rate; decision-time affordability
+uses train-split expected cost, so future completion lengths are not leaked.
+
+Figures in `analysis/mdp_full_execution_v2/` replace the public-verifier frontier for protocol
+validation. They currently contain counts and fixed baselines only.
+
+### Remaining before final paper figures
+
+1. Run `train_mdp_reachable_policy.py`; select checkpoints on calibration BCE and touch test once.
+2. Replay the saved model dynamically with `replay_mdp_full_execution.py --sequential-model-dir`.
+3. Replicate learned-policy training across seeds before adding the sequential curve.
+4. Re-run the LCB input-only vs failed-attempt comparison strictly conditional on full-execution
+   scout failure. The old +0.116 all-instance/public-feedback result is not decision-valid.
+5. Regenerate the two-domain and variance figures from that conditional comparison. Until then,
+   the old versions remain visibly superseded rather than silently overwritten.
+
+---
+
+## FULL CAPABILITY LADDER COMPLETE: Sequential Policy Wins (2026-08-25)
+
+Sequential MDP policy trained (`mdp_sequential_policy_1787670814`: 4-head BCE on depth-1
+decision points, single seed) and wired into the replay as history-conditioned beliefs
+(`mdp_replay_v1_full`, 10 orderings, public verifier). Complete ladder at B=90:
+
+| Cell | Content? | Abstain? | Correctness | Spend |
+|------|----------|----------|-------------|-------|
+| counts (RoR faithful) | ✗ | ✗ | 52.6% | 19.9 |
+| counts + abstain | ✗ | ✓ | 52.5% | 17.0 |
+| content (static prior) | ✓ | ✗ | 55.8% | 20.9 |
+| content + abstain | ✓ | ✓ | 53.2% | **10.6** |
+| **sequential** | **history** | ✗ | **57.0%** | 21.6 |
+
+Every ingredient contributes monotonically:
+- static content prior: +3.2pp over counting
+- history conditioning: +1.1pp further (+4.4pp total over RoR-faithful)
+- abstention trades correctness for spend with strength tracking belief quality
+  (counts −15%, static content −49%, sequential n/a — it avoids doomed spends natively,
+  so no tau met the retain-95% calibration bar at high budgets)
+
+Mid-budget dominance holds: at B=60, sequential+abstain 52.5% @ 13.3 vs counts 49.4% @ 15.0.
+
+Policy test AUCs at final epoch: scout_next 0.844, oss20_fresh 0.750, oss120_fresh 0.765,
+nothing 0.780 — stable from epoch 1 onward.
+
+### Caveats
+
+Single policy-training seed; single router seed for the static-prior rows; orderings=10.
+Multi-seed propagation through both trained components is the remaining robustness step before
+these become headline numbers.
+
+### Paper figure
+
+`analysis/mdp_paper_figures/fig_mdp_frontier_2x2.png` now shows the full capability ladder
+(six curves + fixed baselines). This is the main result figure.
