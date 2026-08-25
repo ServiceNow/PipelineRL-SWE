@@ -23,9 +23,11 @@ plt.rcParams.update({"font.size": 11, "figure.dpi": 150})
 
 CELL_STYLE = {
     "counts": dict(color="#888888", marker="o", label="Counts (RoR-faithful)"),
-    "content": dict(color="#1f77b4", marker="s", label="Content prior"),
-    "counts_abstain": dict(color="#ff7f0e", marker="^", label="Counts + abstain"),
-    "content_abstain": dict(color="#d62728", marker="D", label="Content + abstain (ours)"),
+    "content": dict(color="#1f77b4", marker="s", label="+ content prior"),
+    "sequential": dict(color="#9467bd", marker="h", label="+ history conditioning (ours)"),
+    "counts_abstain": dict(color="#ff7f0e", marker="^", ls="--", label="Counts + abstain"),
+    "content_abstain": dict(color="#d62728", marker="D", ls="--", label="Content + abstain"),
+    "sequential_abstain": dict(color="#2ca02c", marker="v", ls="--", label="Sequential + abstain"),
 }
 
 
@@ -35,7 +37,7 @@ def load(path):
 
 # ── Figure 1: MDP frontier, 2x2 factorial + fixed baselines ─────────────────
 def fig_frontier():
-    d = load("/mnt/llmd/results/exps/aristides/reason/mdp_replay_v1_2x2/replay_results.json")
+    d = load("/mnt/llmd/results/exps/aristides/reason/mdp_replay_v1_full/replay_results.json")
     fig, ax = plt.subplots(figsize=(7, 5))
 
     by_cell = {}

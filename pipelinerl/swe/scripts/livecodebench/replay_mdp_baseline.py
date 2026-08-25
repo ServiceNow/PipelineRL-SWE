@@ -46,6 +46,7 @@ def replay_problem(
     policy: str = "greedy",
     rng: np.random.Generator | None = None,
     tau_abstain: float | None = None,
+    seq_probs: np.ndarray | None = None,
 ) -> dict[str, Any]:
     """Run one episode under a fixed draw-ordering. Returns spend + correctness."""
     M = len(C)
@@ -59,6 +60,27 @@ def replay_problem(
         # early stop: verifier already accepted a draw
         if submitted_idx is not None:
             break
+        # sequential policy: history-conditioned probabilities at current decision point
+        if seq_probs is not None:
+            depth = int(ptr[0])   # scout draws consumed == decision depth
+            depth = min(depth, 9)
+            ps = seq_probs[depth]
+            if tau_abstain is not None and ps[3] > tau_abstain:
+                break
+            avail_vals = {0: ps[0] / C[0], 1: ps[1] / C[1], 2: ps[2] / C[2]}
+            avail = [m for m in (0, 1, 2) if ptr[m] < R_pub.shape[1] and spent + C[m] <= budget]
+            if not avail:
+                break
+            m_star = min(avail, key=lambda m: -avail_vals[m])
+            k = int(orderings[m_star][ptr[m_star]])
+            ptr[m_star] += 1
+            spent += C[m_star]
+            pub = bool(R_pub[m_star][k])
+            w[m_star] += float(pub)
+            if pub and submitted_idx is None:
+                submitted_idx = (m_star, k)
+            continue
+
         # abstain arm: give up when estimated P(any model succeeds) <= tau
         if tau_abstain is not None:
             p_each = np.array([(S * prior[m] + w[m]) / (S + n[m]) for m in range(M)])
@@ -142,6 +164,9 @@ def main() -> None:
     parser.add_argument("--content-preds", default=None,
                         help="adapted eval_predictions.jsonl with p_successes per problem "
                              "(static content prior); enables the content cells")
+    parser.add_argument("--seq-preds", default=None,
+                        help="test_predictions.jsonl from train_mdp_sequential_policy.py "
+                             "(per problem_id+depth probabilities); enables the sequential cells")
     args = parser.parse_args()
 
     d = load_tensors(Path(args.tensors_dir))
@@ -204,26 +229,40 @@ def main() -> None:
                 content[str(r["problem_id"])] = np.array(r["p_successes"], dtype=float)
         print(f"loaded content priors for {len(content)} problems")
 
-    def episode(pi_local, oi_local, B, use_content, tau):
-        prior_vec = (
-            content.get(str(d["problem_ids"][pi_local]), prior)
-            if use_content else prior
-        )
+    seq_preds = None
+    if args.seq_preds:
+        seq_preds = {}
+        with open(args.seq_preds) as f:
+            for line in f:
+                r = json.loads(line)
+                seq_preds[(str(r["problem_id"]), int(r["depth"]))] = np.array(
+                    r["p_successes"], dtype=float)
+        print(f"loaded sequential predictions for {len(seq_preds)} decision points")
+
+    def episode(pi_local, oi_local, B, use_content, tau, seq=False):
+        pid = str(d["problem_ids"][pi_local])
+        prior_vec = content.get(pid, prior) if use_content else prior
+        sp_table = None
+        if seq and seq_preds is not None:
+            sp_table = {depth: v for (p_, depth), v in seq_preds.items() if p_ == pid}
+            if not sp_table:
+                sp_table = None
         return replay_problem(
             R_pub[pi_local], R_full[pi_local], C, orders[pi_local, oi_local], B,
-            prior_vec, S=args.pseudo_count, policy="greedy", tau_abstain=tau)
+            prior_vec, S=args.pseudo_count, policy="greedy", tau_abstain=tau,
+            seq_probs=sp_table)
 
-    def run_split(split_idx, B, use_content, tau):
+    def run_split(split_idx, B, use_content, tau, seq=False):
         idx = cal_idx if split_idx == "cal" else test_idx
         corrs, spends = [], []
         for pi_local in idx:
             for oi_local in range(args.num_orderings):
-                out = episode(int(pi_local), oi_local, B, use_content, tau)
+                out = episode(int(pi_local), oi_local, B, use_content, tau, seq=seq)
                 corrs.append(out["correct"]); spends.append(out["spend"])
         return float(np.mean(corrs)), float(np.mean(spends))
 
-    def evaluate(cell_name, B, use_content, tau):
-        corr_t, spend_t = run_split("test", B, use_content, tau)
+    def evaluate(cell_name, B, use_content, tau, seq=False):
+        corr_t, spend_t = run_split("test", B, use_content, tau, seq=seq)
         row = {"cell": cell_name, "budget": B, "tau": tau,
                "correctness": corr_t, "mean_cost": spend_t,
                "n_episodes": len(test_idx) * args.num_orderings}
@@ -262,6 +301,18 @@ def main() -> None:
             ok = [c for c in cand if c[1] >= RETAIN_FRAC * base_corr_cc]
             tau_star_c = min(ok, key=lambda c: c[2])[0] if ok else None
             evaluate("content_abstain", B, True, tau_star_c)
+
+        # sequential policy (history-conditioned): no-abstain + calibrated abstain
+        if seq_preds is not None:
+            evaluate("sequential", B, False, None, seq=True)
+            base_corr_sq, _ = run_split("cal", B, False, None, seq=True)
+            cand = []
+            for tau in tau_grid:
+                corr_c, spend_c = run_split("cal", B, False, tau, seq=True)
+                cand.append((tau, corr_c, spend_c))
+            ok = [c for c in cand if c[1] >= RETAIN_FRAC * base_corr_sq]
+            tau_star_s = min(ok, key=lambda c: c[2])[0] if ok else None
+            evaluate("sequential_abstain", B, False, tau_star_s, seq=True)
 
     out = Path(args.output_dir)
     out.mkdir(parents=True, exist_ok=True)
