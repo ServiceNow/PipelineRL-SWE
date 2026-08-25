@@ -45,6 +45,7 @@ def replay_problem(
     S: float,
     policy: str = "greedy",
     rng: np.random.Generator | None = None,
+    tau_abstain: float | None = None,
 ) -> dict[str, Any]:
     """Run one episode under a fixed draw-ordering. Returns spend + correctness."""
     M = len(C)
@@ -58,6 +59,12 @@ def replay_problem(
         # early stop: verifier already accepted a draw
         if submitted_idx is not None:
             break
+        # abstain arm: give up when estimated P(any model succeeds) <= tau
+        if tau_abstain is not None:
+            p_each = np.array([(S * prior[m] + w[m]) / (S + n[m]) for m in range(M)])
+            p_any = 1.0 - np.prod(1.0 - p_each)
+            if p_any <= tau_abstain:
+                break
         # affordable candidate models with remaining draws
         avail = [m for m in range(M) if ptr[m] < R_pub.shape[1] and spent + C[m] <= budget]
         if not avail:
@@ -132,6 +139,9 @@ def main() -> None:
     parser.add_argument("--cost-mode", choices=["usd", "weights"], default="weights")
     parser.add_argument("--verifier", choices=["public", "full"], default="public",
                         help="'full' = oracle verifier (diagnostic upper bound, not deployable)")
+    parser.add_argument("--content-preds", default=None,
+                        help="adapted eval_predictions.jsonl with p_successes per problem "
+                             "(static content prior); enables the content cells")
     args = parser.parse_args()
 
     d = load_tensors(Path(args.tensors_dir))
@@ -169,11 +179,11 @@ def main() -> None:
         prior[m] = float(np.mean(vals)) if vals else 0.5
     print(f"priors (public, cal half): {dict(zip(slots, prior.round(3)))}")
 
-    # pre-generate orderings: (P, num_orderings, M, K)
+    # pre-generate orderings: (P, num_orderings, M, K), indexed by global problem id
     orders = np.array([
         [[rng.permutation(K) for _ in range(M)] for _ in range(args.num_orderings)]
-        for _ in range(test_idx.size)
-    ])  # (N_test, O, M, K)
+        for _ in range(P)
+    ])  # (P, O, M, K)
 
     c_max = C.max()
     budgets = sorted({
@@ -184,35 +194,74 @@ def main() -> None:
 
     rows_out = []
 
-    def evaluate(policy_name: str, budget: float, runner) -> dict[str, Any]:
+    # static content prior: per-problem p vector from the trained router (if provided)
+    content = None
+    if args.content_preds:
+        content = {}
+        with open(args.content_preds) as f:
+            for line in f:
+                r = json.loads(line)
+                content[str(r["problem_id"])] = np.array(r["p_successes"], dtype=float)
+        print(f"loaded content priors for {len(content)} problems")
+
+    def episode(pi_local, oi_local, B, use_content, tau):
+        prior_vec = (
+            content.get(str(d["problem_ids"][pi_local]), prior)
+            if use_content else prior
+        )
+        return replay_problem(
+            R_pub[pi_local], R_full[pi_local], C, orders[pi_local, oi_local], B,
+            prior_vec, S=args.pseudo_count, policy="greedy", tau_abstain=tau)
+
+    def run_split(split_idx, B, use_content, tau):
+        idx = cal_idx if split_idx == "cal" else test_idx
         corrs, spends = [], []
-        for ni in range(test_idx.size):
-            pi = test_idx[ni]
-            for oi in range(args.num_orderings):
-                out = runner(R_pub[pi], R_full[pi], C, orders[ni, oi], budget)
-                corrs.append(out["correct"])
-                spends.append(out["spend"])
-        row = {
-            "policy": policy_name, "budget": budget,
-            "correctness": float(np.mean(corrs)),
-            "mean_cost": float(np.mean(spends)),
-            "n_episodes": len(corrs),
-        }
+        for pi_local in idx:
+            for oi_local in range(args.num_orderings):
+                out = episode(int(pi_local), oi_local, B, use_content, tau)
+                corrs.append(out["correct"]); spends.append(out["spend"])
+        return float(np.mean(corrs)), float(np.mean(spends))
+
+    def evaluate(cell_name, B, use_content, tau):
+        corr_t, spend_t = run_split("test", B, use_content, tau)
+        row = {"cell": cell_name, "budget": B, "tau": tau,
+               "correctness": corr_t, "mean_cost": spend_t,
+               "n_episodes": len(test_idx) * args.num_orderings}
         rows_out.append(row)
-        print(f"{policy_name:28s} B={budget:8.2f} corr={row['correctness']:.4f} cost={row['mean_cost']:.2f}")
-        return row
+        print(f"{cell_name:24s} B={B:7.2f} tau={str(tau):6s} corr={corr_t:.4f} cost={spend_t:.2f}")
+
+    tau_grid = [round(x, 2) for x in np.linspace(0.1, 0.9, 17)]
+
+    # abstention rule: retain >= RETAIN_FRAC of no-abstain calibration correctness,
+    # then minimize spend. (Maximizing correctness alone never abstains.)
+    RETAIN_FRAC = 0.95
 
     for B in budgets:
-        for pol in ["greedy", "ucb"]:
-            evaluate(
-                f"RoR_{pol}", B,
-                lambda rp, rf, c, o, b: replay_problem(rp, rf, c, o, b, prior, args.pseudo_count, pol),
-            )
-        evaluate("cascade", B, lambda rp, rf, c, o, b: run_fixed_policy(rp, rf, c, o, "cascade"))
-        evaluate("always_scout", B, lambda rp, rf, c, o, b: run_fixed_policy(rp, rf, c, o, "always_scout"))
-        evaluate("always_oss20", B, lambda rp, rf, c, o, b: run_fixed_policy(rp, rf, c, o, "always_oss20"))
-        evaluate("always_oss120", B, lambda rp, rf, c, o, b: run_fixed_policy(rp, rf, c, o, "always_oss120"))
-        # random allocation at matched budget is computed downstream from RoR route mixes
+        # references without abstention
+        evaluate("counts", B, False, None)
+        if content is not None:
+            evaluate("content", B, True, None)
+
+        # counts + abstain
+        base_corr_c, _ = run_split("cal", B, False, None)
+        cand = []
+        for tau in tau_grid:
+            corr_c, spend_c = run_split("cal", B, False, tau)
+            cand.append((tau, corr_c, spend_c))
+        ok = [c for c in cand if c[1] >= RETAIN_FRAC * base_corr_c]
+        tau_star = min(ok, key=lambda c: c[2])[0] if ok else None
+        evaluate("counts_abstain", B, False, tau_star)
+
+        # content + abstain
+        if content is not None:
+            base_corr_cc, _ = run_split("cal", B, True, None)
+            cand = []
+            for tau in tau_grid:
+                corr_c, spend_c = run_split("cal", B, True, tau)
+                cand.append((tau, corr_c, spend_c))
+            ok = [c for c in cand if c[1] >= RETAIN_FRAC * base_corr_cc]
+            tau_star_c = min(ok, key=lambda c: c[2])[0] if ok else None
+            evaluate("content_abstain", B, True, tau_star_c)
 
     out = Path(args.output_dir)
     out.mkdir(parents=True, exist_ok=True)
