@@ -1198,3 +1198,45 @@ n=10 tables):
 
 Pending additions once `mdp_sequential_policy_*` finishes: sequential-policy curve overlaid on
 the frontier figure + abstain-threshold operating points.
+
+---
+
+## KEY STRUCTURAL INSIGHT: The MDP Lives Entirely in the Failure Region (2026-08-25)
+
+Both RoR and our replay terminate the episode the moment any draw passes the verifier
+(`if submitted_idx is not None: break`). Since LCB's full suite contains the public tests,
+a public-fail guarantees full-suite fail — so an episode that exhausts its budget without a
+verifier pass resolves with probability exactly zero.
+
+Consequence: **all strategic value of the MDP concentrates in the failure region** — the strip
+of episodes where every draw so far has failed verification. While draws pass, nothing is
+decided (free wins terminate trivially). Within the failure region, the only decisions are:
+
+1. resample the scout vs escalate to oss20/oss120 (budget allocation across models)
+2. continue attempting vs give up (the abstain arm)
+
+This same structural fact surfaced three independent times during development, each initially
+looking like a separate issue:
+
+- The static multi-sample "router" framing was degenerate because any-pass instances never
+  reach a router (see Multi-Sample section);
+- Abstention only has value inside the failure region — outside it, giving up is strictly
+  dominated by submitting a passing draw;
+- Content prediction of eventual correctness is valuable precisely there too: the verifier
+  keeps saying "maybe" (public-passes that die privately) while content evidence can say "no."
+
+Paper framing note: early stopping on verifier success should be stated explicitly as an
+assumption shared with RoR, and the frontier comparison between policies should be described
+as differing in *how they behave after consecutive verifier failures* — counts-plus-prior is
+myopic there (its beliefs decay only via pseudo-counts), while history-conditioned content
+policies can read *how* attempts are failing, not just how many. This also cleanly explains
+why our counting baseline underperforms even the naive cascade under public-only verification:
+in the failure region, its belief signal is weakest exactly where decisions matter most.
+
+### Deployment framing for the verifier regimes (restating from discussion)
+
+The public/private split is a benchmark-integrity artifact; the deployed analogue of
+"routing-time verification" is partial-or-absent verification — cheap CI subsets vs full
+suites, or no tests at all (agentic domains). The content policy's job generalizes to
+"predict eventual correctness when current verification is incomplete," i.e. will-this-pass-CI
+prediction. Regime 2 (oracle verifier) remains a clearly-labeled diagnostic bound.
