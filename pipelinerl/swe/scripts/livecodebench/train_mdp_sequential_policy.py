@@ -186,7 +186,7 @@ def main() -> None:
                           desc="final predict"):
             logits, _, _ = model(input_ids=batch["input_ids"], attention_mask=batch["attention_mask"])
             probs.extend(accelerator.gather_for_metrics(torch.sigmoid(logits.float())).cpu().tolist())
-            tgts.extend(accelerator.gather_for_metrics(batch["targets"]).cpu().tolist())
+            tgts.extend(accelerator.gather_for_metrics(batch["targets"].float().to(accelerator.device)).cpu().tolist())
     if accelerator.is_main_process:
         _write_jsonl(output_dir / "test_predictions.jsonl", [
             {"problem_id": test_ds.rows[i]["problem_id"], "depth": test_ds.rows[i]["depth"],
