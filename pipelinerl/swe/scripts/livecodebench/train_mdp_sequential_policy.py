@@ -176,14 +176,21 @@ def main() -> None:
             print(f"Epoch {epoch}: loss={np.mean(losses):.4f} | {msg}", flush=True)
             history.append({"epoch": epoch, "loss": float(np.mean(losses)), "aucs": aucs})
 
+    # save weights first so a later crash cannot lose the run
+    if accelerator.is_main_process:
+        unwrapped = accelerator.unwrap_model(model)
+        torch.save(unwrapped.reward_head.state_dict(), output_dir / "reward_head.pt")
+        if hasattr(unwrapped, "encoder") and hasattr(unwrapped.encoder, "save_pretrained"):
+            unwrapped.encoder.save_pretrained(output_dir / "encoder")
+        tokenizer.save_pretrained(output_dir / "tokenizer")
+    accelerator.wait_for_everyone()
+
     # final predictions dump for replay wiring
     model.eval()
     probs, tgts = [], []
     metas = []
     with torch.no_grad():
-        for batch in tqdm(DataLoader(test_ds, batch_size=int(args.eval_batch_size), shuffle=False,
-                                     collate_fn=collate_fn, num_workers=0),
-                          desc="final predict"):
+        for batch in tqdm(eval_loader, desc="final predict"):
             logits, _, _ = model(input_ids=batch["input_ids"], attention_mask=batch["attention_mask"])
             probs.extend(accelerator.gather_for_metrics(torch.sigmoid(logits.float())).cpu().tolist())
             tgts.extend(accelerator.gather_for_metrics(batch["targets"].float().to(accelerator.device)).cpu().tolist())
