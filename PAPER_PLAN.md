@@ -62,7 +62,7 @@ Both regimes can be tested on either dataset:
 | Dataset | Stronger-model success prediction / abstention | Full routing |
 |---------|------------------------------------------------|--------------|
 | **SWE** | Main completed line: predict gpt-oss-120b success from SWE-Smith scout evidence and test transfer on SWE-Bench Verified | Tried previously on SWE-Bench-style tasks and failed; tier selection appears substantially harder in this domain |
-| **LCB** | Corrected temporal result: scout attempt predicts 120B success (AUC 0.769 vs. 0.552 input-only); public-test feedback has no demonstrated incremental gain in the first seed | Proposed next line after replication: keep the scout or jump directly to a mid/high tier |
+| **LCB** | Historical binary-prediction line; useful as signal evidence, but superseded as the primary deployment protocol | Protocol-v2 provisional result: count-decayed learned routing plus abstention adds useful full-execution Pareto points; replicate on a larger untouched temporal test set |
 
 ### Experimental history and current hypothesis
 
@@ -1373,6 +1373,28 @@ draws clustered over the 86 test problems. The hybrid passes the provisional dec
 - the hybrid remains materially worse at the smallest budget (47.91% versus 57.44%), so it is an
   addition to the Pareto frontier rather than a uniformly dominant replacement for counts.
 
+#### How much of the gain comes from abstention?
+
+At the useful high-budget points, the hybrid abstains on 26--27% of episodes that enter the router
+after mandatory scout failure. Since 65.1% of all episodes enter the router, this is 17--18% of all
+episodes. The same-budget decomposition is:
+
+| Budget | Policy | Correctness | Mean realized cost |
+|---:|---|---:|---:|
+| 0.07306 | counts, no abstention | 74.42% | 0.04008 |
+| 0.07306 | hybrid, no abstention | 74.42% | 0.03669 |
+| 0.07306 | hybrid + abstention | 73.95% | 0.02820 |
+| 0.08112 | counts, no abstention | 74.65% | 0.04164 |
+| 0.08112 | hybrid + abstention | 74.19% | 0.02870 |
+
+Thus the 8.45% result isolates better route selection at identical observed correctness, while the
+joint routing-plus-abstention policy saves 29.6--31.1% relative to counts without abstention for an
+observed 0.47-point correctness reduction. That reduction is statistically indistinguishable from
+zero in the present paired sample. Count abstention alone is weaker: at budget 0.07306 it reaches
+73.72% at cost 0.03690, versus the hybrid's 73.95% at 0.02820. The learned component's clearest
+current contribution is therefore identifying hopeless residual cases, while count decay supplies
+the reliable sequential route update.
+
 The apparently tiny scout rates are conditional rates in the hard tail after mandatory scout
 failure, not the marginal scout capability: scout solves 28.4% of all saved draws and the
 mandatory-scout replay solves 34.9% of test episodes. Among held-out reachable states, empirical
@@ -1385,17 +1407,55 @@ This is a one-model-seed, five-ordering result and is therefore provisional, not
 paper claim. It supports the factorized policy design: count decay supplies the reliable
 sequential update, and learned semantic predictions supply the residual routing signal.
 
+#### Paper value relative to the earlier binary-abstention result
+
+If replicated, this is a stronger primary result than the earlier pure stronger-model-success
+prediction/AUC line. It is closer to deployment, evaluates the complete correctness--cost outcome,
+chooses repeatedly among three model tiers plus give-up, and exposes a general design principle:
+pure learned probabilities can fail under repeated evidence, whereas a structural count update
+combined with a learned semantic residual can route and stop effectively. The pure-abstention
+experiments remain valuable motivation and representation evidence, but binary AUC alone does not
+show that the predictor improves an end-to-end allocation policy.
+
+The current evidence strength is nevertheless lower than the conceptual strength: there is one
+trained seed and only 86 independent test problems. Five replay orderings produce 430 correlated
+episodes, not 430 independent problems; one test problem moves observed accuracy by 1.16 points,
+so this split cannot resolve a 0.47-point accuracy difference. Because the current test frontier has
+now informed policy development, treat it as development evidence and reserve a newly collected,
+chronologically later problem set for a single locked confirmation.
+
 ### Remaining before final paper figures
 
-1. Repeat the frozen hybrid replay with 20 draw orderings to reduce replay Monte Carlo variance;
-   retain the same policy definition and compare it to counts with paired problem-level intervals.
-2. Train at least three LCB seeds and evaluate the predeclared hybrid without test-set tuning.
-   Report both the pure learned negative result and the hybrid result.
-3. If the LCB hybrid advantage replicates, activate the prepared SWE-Smith eval150 development
-   adaptation. First measure marginal and post-failure conditional route success rates there;
-   preserve eval300 as the untouched final test set.
-4. Regenerate primary figures and paper text from full-execution fixed/count baselines, the pure
-   learned diagnostic, and the replicated hybrid. Keep all legacy public/private figures superseded.
+1. **Freeze and stabilize the current result.** Repeat the existing hybrid with 20 replay
+   orderings and paired problem-clustered intervals. This reduces ordering noise but does not
+   increase the independent sample size or turn the current split into a confirmation set.
+2. **Run replay-only development ablations on train/calibration only.** Compare route/depth
+   calibration, route-specific failure decay, prediction of any remaining success per route, and
+   finite-horizon rather than greedy probability/cost control. Predeclare one final policy before
+   touching the new confirmation set.
+3. **Scale unique problems before draws.** Audit the available pinned/newer LCB pool and collect
+   the largest defensible chronological expansion, targeting at least 1,000 and preferably several
+   thousand unique problems if available. Preserve 10 draws per route where affordable, but
+   prioritize problem diversity: additional draws improve within-problem transition estimates,
+   whereas additional problems determine confidence intervals and generalization.
+4. **Use a strict temporal confirmation design.** Earlier problems train, a later block selects
+   checkpoints/calibration/decay/planning settings, and the newest block is touched once. Preserve
+   contest/platform grouping where needed and report both micro and macro results.
+5. **Measure training variance.** Run at least five, preferably ten, router seeds because the
+   earlier binary experiments found large LoRA seed variance. Propagate every seed through the
+   frozen replay and report paired frontier uncertainty, not only per-head AUC.
+6. **Complete the baseline and ablation grid.** Include fixed cascades, counts, counts + abstain,
+   input-only semantic residual, static content, pure learned sequential, count-decayed hybrid,
+   calibrated hybrid, and planning hybrid. Separate the value of semantic routing, structural
+   updating, planning, and abstention.
+7. **Test domain generality after locking the method.** Activate SWE-Smith eval150 only for
+   development, first measuring marginal and post-failure conditional route rates; retain eval300
+   as untouched test. If possible, enlarge SWE-Smith training/development with new independent
+   tasks rather than consuming eval300 during iteration.
+8. **Report deployment sensitivities.** Recompute frontiers under token cost, latency/attempt
+   count, and nonzero execution cost, plus model-price sensitivity. Regenerate paper figures only
+   from full-execution results; retain the pure learned failure as an informative ablation and keep
+   all legacy public/private figures superseded.
 
 ### Prepared SWE-Smith protocol-v2 extension (not launched)
 
