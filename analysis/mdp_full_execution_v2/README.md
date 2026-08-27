@@ -26,6 +26,20 @@ tensors changed 2,092 such labels and produced zero over-8,192-token states in a
 1,200-state sample (sample maximum 4,363). One gated diagnostic retraining is
 still required before any learned curve is added to the paper figures.
 
+
+## Learned-policy diagnostics
+
+`replay_mdp_full_execution.py` writes three complementary artifacts:
+
+- `replay_results.json`: aggregate frontier and fixed-baseline metrics;
+- `episode_traces.jsonl`: per-problem/order/policy outcomes plus compact decision traces
+  (state hash, available routes, probabilities, utility/cost scores, chosen action, and result);
+- `diagnostics.json`: route-choice/pass counts, mean predictions, and paired 95% bootstrap
+  intervals. Bootstrap resampling is clustered by problem, preserving the repeated draw
+  orderings within each problem.
+
+The trace output intentionally excludes problem text and generated code.
+
 Regenerate with:
 
 ```bash

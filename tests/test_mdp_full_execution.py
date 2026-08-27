@@ -16,6 +16,8 @@ from pipelinerl.swe.scripts.livecodebench.mdp_utils import (
     write_split_manifest,
 )
 from pipelinerl.swe.scripts.livecodebench.replay_mdp_full_execution import (
+    _paired_problem_bootstrap,
+    _summarize_decisions,
     replay_adaptive,
     replay_fixed,
 )
@@ -134,6 +136,83 @@ def test_adaptive_replay_enters_router_only_after_scout_failure() -> None:
     assert out["correct"] is True
     assert out["entered_router"] is True
     assert out["attempts"] == 2
+
+
+def test_adaptive_replay_trace_records_probabilities_state_and_choice() -> None:
+    slots = ["scout", "oss20", "oss120"]
+    outcomes = np.zeros((3, 2), dtype=bool)
+    outcomes[1, 0] = True
+    scorer = lambda _: np.array([0.1, 0.9, 0.1, 0.2])
+    result = replay_adaptive(
+        outcomes,
+        np.ones_like(outcomes),
+        np.ones_like(outcomes, dtype=float),
+        np.ones(3),
+        np.tile(np.arange(2), (3, 1)),
+        3.0,
+        np.ones(3) * 0.5,
+        2.0,
+        slots,
+        _records("p", slots, 2),
+        "p",
+        "problem",
+        scorer=scorer,
+        capture_trace=True,
+    )
+    assert result["correct"] is True
+    assert result["route_attempt_counts"] == {"scout": 1, "oss20": 1, "oss120": 0}
+    assert len(result["decision_trace"]) == 1
+    decision = result["decision_trace"][0]
+    assert decision["failure_counts"] == {"scout": 1, "oss20": 0, "oss120": 0}
+    assert decision["remaining_valid_draws"] == {"scout": 1, "oss20": 2, "oss120": 2}
+    assert decision["p_success_next"]["oss20"] == 0.9
+    assert decision["p_any_remaining"] == 0.8
+    assert decision["chosen_route"] == "oss20"
+    assert decision["chosen_draw_index"] == 0
+    assert decision["result"] == "pass"
+    assert decision["state_key"]
+
+
+def test_decision_summary_and_problem_clustered_bootstrap() -> None:
+    traced = [{
+        "decision_trace": [{
+            "p_success_next": {"scout": 0.1, "oss20": 0.8, "oss120": 0.2},
+            "p_any_remaining": 0.9,
+            "chosen_route": "oss20",
+            "result": "pass",
+        }]
+    }]
+    summary = _summarize_decisions(traced, ["scout", "oss20", "oss120"])
+    assert summary["route_choice_counts"] == {"scout": 0, "oss20": 1, "oss120": 0}
+    assert summary["route_pass_counts"]["oss20"] == 1
+    assert summary["mean_predicted_any_remaining"] == 0.9
+
+    reference = []
+    candidate = []
+    for pid in ("p0", "p1"):
+        for ordering_index in range(2):
+            reference.append({
+                "problem_id": pid,
+                "ordering_index": ordering_index,
+                "correct": False,
+                "realized_spend": 1.0,
+                "attempts": 1,
+            })
+            candidate.append({
+                "problem_id": pid,
+                "ordering_index": ordering_index,
+                "correct": pid == "p0",
+                "realized_spend": 2.0 if pid == "p0" else 0.5,
+                "attempts": 2 if pid == "p0" else 1,
+            })
+    comparison = _paired_problem_bootstrap(
+        reference, candidate, samples=500, seed=7
+    )
+    assert comparison["n_problems"] == 2
+    assert comparison["n_paired_episodes"] == 4
+    assert comparison["correctness_delta"] == 0.5
+    assert comparison["realized_cost_delta"] == 0.25
+    assert comparison["attempts_delta"] == 0.5
 
 
 def test_invalid_draws_are_skipped_without_cost() -> None:

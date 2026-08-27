@@ -4,6 +4,9 @@
 The router is entered only after a fully executed scout failure. A verified
 pass terminates immediately. Decisions use expected model cost estimated on
 the train split; reports charge realized prompt+completion tokens.
+
+The replay also writes per-episode decision traces, aggregate route-choice
+diagnostics, and paired confidence intervals clustered by problem.
 """
 
 from __future__ import annotations
@@ -123,36 +126,52 @@ def replay_adaptive(
     content_prior: np.ndarray | None = None,
     scorer: Callable[[str], np.ndarray] | None = None,
     tau_abstain: float | None = None,
+    capture_trace: bool = False,
 ) -> dict[str, Any]:
     ptr = np.zeros(len(slots), dtype=int)
     failures = np.zeros(len(slots), dtype=int)
     spent_budget = 0.0
     realized_spend = 0.0
     attempts: list[dict[str, Any]] = []
+    route_attempt_counts = {slot: 0 for slot in slots}
+    decision_trace: list[dict[str, Any]] = []
 
-    def attempt(mi: int) -> bool | None:
+    def finish(correct: bool, entered_router: bool, abstained: bool) -> dict[str, Any]:
+        result = {
+            "correct": correct,
+            "entered_router": entered_router,
+            "abstained": abstained,
+            "budget_spend": spent_budget,
+            "realized_spend": realized_spend,
+            "attempts": int(sum(route_attempt_counts.values())),
+            "route_attempt_counts": route_attempt_counts.copy(),
+        }
+        if capture_trace:
+            result["decision_trace"] = decision_trace
+        return result
+
+    def attempt(mi: int) -> tuple[bool | None, int | None]:
         nonlocal spent_budget, realized_spend
         draw, new_ptr = _next_valid_draw(orderings[mi], int(ptr[mi]), valid[mi])
         ptr[mi] = new_ptr
         if draw is None or spent_budget + expected_costs[mi] > budget:
-            return None
+            return None, draw
         ptr[mi] += 1
         spent_budget += float(expected_costs[mi])
         realized_spend += float(realized_costs[mi, draw])
+        route_attempt_counts[slots[mi]] += 1
         if outcomes[mi, draw]:
-            return True
+            return True, draw
         failures[mi] += 1
         attempts.append(records[(problem_id, slots[mi], draw)])
-        return False
+        return False, draw
 
     # Mandatory scout probe. If it cannot be afforded, no policy action occurs.
-    first = attempt(0)
+    first, _ = attempt(0)
     if first is True:
-        return {"correct": True, "entered_router": False, "abstained": False,
-                "budget_spend": spent_budget, "realized_spend": realized_spend, "attempts": 1}
+        return finish(True, False, False)
     if first is None:
-        return {"correct": False, "entered_router": False, "abstained": False,
-                "budget_spend": spent_budget, "realized_spend": realized_spend, "attempts": 0}
+        return finish(False, False, False)
 
     while True:
         available: list[int] = []
@@ -164,35 +183,85 @@ def replay_adaptive(
         if not available:
             break
 
+        remaining = _remaining_draw_counts(valid, orderings, ptr, slots)
+        state_text = (
+            _render_state(problem_statement, attempts, remaining)
+            if scorer is not None or capture_trace else None
+        )
         if scorer is not None:
-            remaining = _remaining_draw_counts(valid, orderings, ptr, slots)
-            text = _render_state(problem_statement, attempts, remaining)
-            all_probs = np.asarray(scorer(text), dtype=float)
+            if state_text is None:
+                raise AssertionError("Sequential scoring requires rendered state text")
+            all_probs = np.asarray(scorer(state_text), dtype=float)
             p_each = all_probs[: len(slots)]
-            p_any = 1.0 - float(all_probs[len(slots)]) if len(all_probs) > len(slots) else 1.0 - float(np.prod(1.0 - p_each))
+            p_any = (
+                1.0 - float(all_probs[len(slots)])
+                if len(all_probs) > len(slots)
+                else 1.0 - float(np.prod(1.0 - p_each))
+            )
+            belief_source = "sequential"
         elif content_prior is not None:
             p_each = np.asarray(content_prior, dtype=float)
             p_any = 1.0 - float(np.prod(1.0 - p_each))
+            belief_source = "content"
         else:
             p_each = np.asarray([
                 pseudo_count * prior[mi] / (pseudo_count + failures[mi])
                 for mi in range(len(slots))
             ])
             p_any = 1.0 - float(np.prod(1.0 - p_each))
+            belief_source = "counts"
+
+        decision: dict[str, Any] | None = None
+        if capture_trace:
+            decision = {
+                "failure_depth": int(failures.sum()),
+                "state_key": _state_key(state_text) if state_text is not None else None,
+                "belief_source": belief_source,
+                "failure_counts": {
+                    slot: int(failures[mi]) for mi, slot in enumerate(slots)
+                },
+                "remaining_valid_draws": remaining,
+                "available_routes": [slots[mi] for mi in available],
+                "spent_budget_before": float(spent_budget),
+                "remaining_budget_before": float(budget - spent_budget),
+                "p_success_next": {
+                    slot: float(p_each[mi]) for mi, slot in enumerate(slots)
+                },
+                "p_any_remaining": float(p_any),
+                "utility_per_expected_cost": {
+                    slots[mi]: float(p_each[mi] / expected_costs[mi])
+                    for mi in available
+                },
+                "tau_abstain": tau_abstain,
+            }
 
         if tau_abstain is not None and p_any <= tau_abstain:
-            return {"correct": False, "entered_router": True, "abstained": True,
-                    "budget_spend": spent_budget, "realized_spend": realized_spend,
-                    "attempts": len(attempts)}
+            if decision is not None:
+                decision.update({
+                    "chosen_route": None,
+                    "chosen_draw_index": None,
+                    "result": "abstain",
+                })
+                decision_trace.append(decision)
+            return finish(False, True, True)
+
         chosen = max(available, key=lambda mi: p_each[mi] / expected_costs[mi])
-        result = attempt(chosen)
+        result, chosen_draw = attempt(chosen)
+        if decision is not None:
+            decision.update({
+                "chosen_route": slots[chosen],
+                "chosen_draw_index": chosen_draw,
+                "result": (
+                    "pass" if result is True
+                    else "fail" if result is False
+                    else "unavailable"
+                ),
+            })
+            decision_trace.append(decision)
         if result is True:
-            return {"correct": True, "entered_router": True, "abstained": False,
-                    "budget_spend": spent_budget, "realized_spend": realized_spend,
-                    "attempts": len(attempts) + 1}
-    return {"correct": False, "entered_router": True, "abstained": False,
-            "budget_spend": spent_budget, "realized_spend": realized_spend,
-            "attempts": len(attempts)}
+            return finish(True, True, False)
+
+    return finish(False, True, False)
 
 
 def replay_fixed(
@@ -235,6 +304,98 @@ def _aggregate(outputs: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _summarize_decisions(
+    outputs: list[dict[str, Any]], slots: list[str]
+) -> dict[str, Any]:
+    decisions = [
+        decision
+        for output in outputs
+        for decision in output.get("decision_trace", [])
+    ]
+    choice_counts = {slot: 0 for slot in slots}
+    pass_counts = {slot: 0 for slot in slots}
+    probability_values = {slot: [] for slot in slots}
+    p_any_values: list[float] = []
+    for decision in decisions:
+        for slot in slots:
+            probability_values[slot].append(float(decision["p_success_next"][slot]))
+        p_any_values.append(float(decision["p_any_remaining"]))
+        chosen = decision.get("chosen_route")
+        if chosen in choice_counts:
+            choice_counts[chosen] += 1
+            if decision.get("result") == "pass":
+                pass_counts[chosen] += 1
+    return {
+        "n_decisions": len(decisions),
+        "route_choice_counts": choice_counts,
+        "route_pass_counts": pass_counts,
+        "abstain_decisions": sum(
+            decision.get("result") == "abstain" for decision in decisions
+        ),
+        "mean_predicted_next_success": {
+            slot: float(np.mean(values)) if values else None
+            for slot, values in probability_values.items()
+        },
+        "mean_predicted_any_remaining": (
+            float(np.mean(p_any_values)) if p_any_values else None
+        ),
+    }
+
+
+def _paired_problem_bootstrap(
+    reference: list[dict[str, Any]],
+    candidate: list[dict[str, Any]],
+    *,
+    samples: int,
+    seed: int,
+) -> dict[str, Any]:
+    """Cluster-bootstrap paired episode deltas by problem, preserving orderings."""
+    if samples < 1:
+        raise ValueError("Bootstrap samples must be positive")
+    reference_by_key = {
+        (str(row["problem_id"]), int(row["ordering_index"])): row for row in reference
+    }
+    candidate_by_key = {
+        (str(row["problem_id"]), int(row["ordering_index"])): row for row in candidate
+    }
+    if reference_by_key.keys() != candidate_by_key.keys():
+        raise ValueError("Paired policies must contain identical problem/ordering keys")
+
+    metrics = {
+        "correctness": "correct",
+        "realized_cost": "realized_spend",
+        "attempts": "attempts",
+    }
+    problem_ids = sorted({key[0] for key in reference_by_key})
+    deltas: dict[str, np.ndarray] = {}
+    for label, field in metrics.items():
+        per_problem = []
+        for pid in problem_ids:
+            keys = sorted(key for key in reference_by_key if key[0] == pid)
+            per_problem.append(float(np.mean([
+                float(candidate_by_key[key][field]) - float(reference_by_key[key][field])
+                for key in keys
+            ])))
+        deltas[label] = np.asarray(per_problem, dtype=float)
+
+    rng = np.random.default_rng(seed)
+    sampled_indices = rng.integers(0, len(problem_ids), size=(samples, len(problem_ids)))
+    result: dict[str, Any] = {
+        "n_problems": len(problem_ids),
+        "n_paired_episodes": len(reference_by_key),
+        "bootstrap_samples": samples,
+    }
+    for label, values in deltas.items():
+        draws = values[sampled_indices].mean(axis=1)
+        result[f"{label}_delta"] = float(values.mean())
+        result[f"{label}_delta_ci95"] = [
+            float(np.quantile(draws, 0.025)),
+            float(np.quantile(draws, 0.975)),
+        ]
+        result[f"probability_{label}_delta_gt_zero"] = float(np.mean(draws > 0.0))
+    return result
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tensors-dir", required=True)
@@ -247,7 +408,10 @@ def main() -> None:
     parser.add_argument("--sequential-model-dir")
     parser.add_argument("--retain-calibration-correctness", type=float, default=0.95)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--bootstrap-samples", type=int, default=2000)
     args = parser.parse_args()
+    if args.bootstrap_samples < 1:
+        raise ValueError("--bootstrap-samples must be positive")
     if args.execution_cost_usd < 0.0:
         raise ValueError("--execution-cost-usd must be non-negative")
     if args.execution_cost_usd and args.cost_mode != "usd":
@@ -306,23 +470,37 @@ def main() -> None:
     budgets = sorted(set(float(x) for x in np.linspace(expected_costs[0], 3.0 * max_cost, 12)))
     tau_grid = [float(x) for x in np.linspace(0.05, 0.95, 19)]
 
-    def run(indices: np.ndarray, budget: float, family: str, tau: float | None) -> list[dict[str, Any]]:
+    def run(
+        indices: np.ndarray,
+        budget: float,
+        family: str,
+        tau: float | None,
+        *,
+        capture_trace: bool = False,
+    ) -> list[dict[str, Any]]:
         outputs = []
         for pi in indices:
             pid = pids[int(pi)]
             for oi in range(args.num_orderings):
-                outputs.append(replay_adaptive(
+                result = replay_adaptive(
                     outcomes[int(pi)], valid[int(pi)], realized_costs[int(pi)], expected_costs,
                     orderings[int(pi), oi], budget, priors, args.pseudo_count, slots,
                     records, pid, str(problems[pid]["problem_statement"]),
                     content_prior=content.get(pid) if family == "content" else None,
                     scorer=scorer if family == "sequential" else None,
                     tau_abstain=tau,
-                ))
+                    capture_trace=capture_trace,
+                )
+                result["problem_id"] = pid
+                result["ordering_index"] = oi
+                outputs.append(result)
         return outputs
 
     families = ["counts"] + (["content"] if content else []) + (["sequential"] if scorer else [])
     rows: list[dict[str, Any]] = []
+    episode_rows: list[dict[str, Any]] = []
+    action_summaries: list[dict[str, Any]] = []
+    adaptive_outputs: dict[tuple[float, str], list[dict[str, Any]]] = {}
     for budget in budgets:
         for family in families:
             base_cal = _aggregate(run(cal_idx, budget, family, None))
@@ -333,8 +511,23 @@ def main() -> None:
                     candidates.append((metrics["mean_realized_cost"], tau))
             tau_star = min(candidates)[1] if candidates else None
             for suffix, tau in (("", None), ("_abstain", tau_star)):
-                metrics = _aggregate(run(test_idx, budget, family, tau))
-                rows.append({"policy": family + suffix, "budget": budget, "tau": tau, **metrics})
+                policy = family + suffix
+                outputs = run(test_idx, budget, family, tau, capture_trace=True)
+                adaptive_outputs[(budget, policy)] = outputs
+                metrics = _aggregate(outputs)
+                rows.append({"policy": policy, "budget": budget, "tau": tau, **metrics})
+                action_summaries.append({
+                    "policy": policy,
+                    "budget": budget,
+                    "tau": tau,
+                    **_summarize_decisions(outputs, slots),
+                })
+                episode_rows.extend({
+                    "policy": policy,
+                    "budget": budget,
+                    "tau": tau,
+                    **output,
+                } for output in outputs)
 
     fixed_plans = {
         "single_scout": [0],
@@ -346,14 +539,20 @@ def main() -> None:
         f"best_of_{K}_scout": [0] * K,
         f"best_of_{K}_oss120": [2] * K,
     }
+    fixed_outputs: dict[str, list[dict[str, Any]]] = {}
     for name, plan in fixed_plans.items():
         outputs = []
         for pi in test_idx:
+            pid = pids[int(pi)]
             for oi in range(args.num_orderings):
-                outputs.append(replay_fixed(
+                result = replay_fixed(
                     outcomes[int(pi)], valid[int(pi)], realized_costs[int(pi)],
                     orderings[int(pi), oi], plan,
-                ))
+                )
+                result["problem_id"] = pid
+                result["ordering_index"] = oi
+                outputs.append(result)
+        fixed_outputs[name] = outputs
         metrics = {
             "correctness": float(np.mean([row["correct"] for row in outputs])),
             "mean_realized_cost": float(np.mean([row["realized_spend"] for row in outputs])),
@@ -361,6 +560,60 @@ def main() -> None:
             "n_episodes": len(outputs),
         }
         rows.append({"policy": name, "budget": None, "tau": None, **metrics})
+        episode_rows.extend({
+            "policy": name,
+            "budget": None,
+            "tau": None,
+            **output,
+        } for output in outputs)
+
+    paired_comparisons: list[dict[str, Any]] = []
+    if scorer is not None:
+        for bi, budget in enumerate(budgets):
+            for suffix in ("", "_abstain"):
+                reference_policy = "counts" + suffix
+                candidate_policy = "sequential" + suffix
+                paired_comparisons.append({
+                    "reference_policy": reference_policy,
+                    "candidate_policy": candidate_policy,
+                    "budget": budget,
+                    **_paired_problem_bootstrap(
+                        adaptive_outputs[(budget, reference_policy)],
+                        adaptive_outputs[(budget, candidate_policy)],
+                        samples=args.bootstrap_samples,
+                        seed=args.seed + 1000 * bi + (1 if suffix else 0),
+                    ),
+                })
+
+        cascade_outputs = fixed_outputs["single_pass_cascade"]
+        cascade_cost = float(np.mean([row["realized_spend"] for row in cascade_outputs]))
+        closest_budget = min(
+            budgets,
+            key=lambda budget: abs(
+                _aggregate(adaptive_outputs[(budget, "sequential")])["mean_realized_cost"]
+                - cascade_cost
+            ),
+        )
+        paired_comparisons.append({
+            "reference_policy": "single_pass_cascade",
+            "candidate_policy": "sequential",
+            "budget": closest_budget,
+            "matching": "nearest_mean_realized_cost",
+            **_paired_problem_bootstrap(
+                cascade_outputs,
+                adaptive_outputs[(closest_budget, "sequential")],
+                samples=args.bootstrap_samples,
+                seed=args.seed + 999_999,
+            ),
+        })
+
+    diagnostics = {
+        "schema_version": 1,
+        "bootstrap_unit": "problem",
+        "bootstrap_samples": args.bootstrap_samples,
+        "action_summaries": action_summaries,
+        "paired_problem_bootstrap": paired_comparisons,
+    }
 
     output = {
         "schema_version": 2,
@@ -375,7 +628,14 @@ def main() -> None:
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "replay_results.json").write_text(json.dumps(output, indent=2) + "\n")
+    (out_dir / "diagnostics.json").write_text(json.dumps(diagnostics, indent=2) + "\n")
+    with open(out_dir / "episode_traces.jsonl", "w") as handle:
+        for row in episode_rows:
+            handle.write(json.dumps(row) + "\n")
     print(f"wrote {out_dir / 'replay_results.json'}")
+    print(f"wrote {out_dir / 'diagnostics.json'}")
+    print(f"wrote {out_dir / 'episode_traces.jsonl'}")
+
 
 
 if __name__ == "__main__":
