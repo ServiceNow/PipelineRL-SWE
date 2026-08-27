@@ -1322,9 +1322,12 @@ was required.
 
 ### Remaining before final paper figures
 
-1. Train one inexpensive LCB diagnostic on the rebuilt latest-attempt dataset, using calibration
-   checkpoint selection and a less aggressive optimization configuration. The scheduled configuration
-   is seed 17, 3 epochs, learning rate 2e-5, and 5 replay orderings, reusing the saved generations.
+1. Monitor the launched LCB latest-attempt diagnostic
+   `lcb_mdp_latest_attempt_seed17_1787808515` (scheduler job
+   `7b05d8c8-efbd-4931-8069-b114064aa86f`, submitted 2026-08-27; initially `QUEUING`).
+   It rebuilds tensors/states from the saved generations, then trains seed 17 for 3 epochs at
+   learning rate 2e-5 with calibration checkpoint selection and replays 5 orderings. Artifacts:
+   `/mnt/llmd/results/exps/aristides/reason/lcb_mdp_latest_attempt_seed17_1787808515`.
 2. Add per-episode action/prediction traces and paired problem-level bootstrap intervals to replay.
 3. Advance to multi-seed LCB training only if the learned policy beats counts or the cascade at
    matched cost; otherwise report the learned-policy result as a negative result.
