@@ -139,6 +139,14 @@ def main() -> None:
     parser.add_argument("--lora-alpha", type=int, default=64)
     parser.add_argument("--lora-dropout", type=float, default=0.05)
     parser.add_argument(
+        "--pos-weight", choices=["none", "balanced"], default="none",
+        help=(
+            "balanced: per-head BCE pos_weight = neg/pos from the train split. The scout head "
+            "has a 1.5%% positive rate and ends up 9.28x overconfident under unweighted BCE, "
+            "while the 55%% nothing head is calibrated at 1.08x -- error is monotone in base rate."
+        ),
+    )
+    parser.add_argument(
         "--lora-target-modules",
         default="q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj",
     )
@@ -159,6 +167,22 @@ def main() -> None:
         )
         for split in ("train", "calibration", "test")
     }
+    # Per-head pos_weight from the train split only. Unweighted BCE leaves the
+    # rare heads badly scaled, and because base rate is inversely ordered with
+    # route cost, that error systematically favours the cheapest route.
+    pos_weight = None
+    if args.pos_weight == "balanced":
+        train_targets = np.array(
+            [row["targets"] for row in _read(Path(args.dataset_dir) / "train.jsonl")],
+            dtype=float,
+        )
+        positives = train_targets.sum(axis=0)
+        negatives = len(train_targets) - positives
+        pos_weight = torch.tensor(
+            negatives / np.clip(positives, 1.0, None), dtype=torch.float32
+        )
+        accelerator.print(f"pos_weight per head: {pos_weight.tolist()}")
+
     collate = lambda batch: _collate(batch, pad_token_id=int(pad_token_id))
     train_loader = DataLoader(
         datasets["train"], batch_size=args.batch_size, shuffle=True, collate_fn=collate
@@ -228,7 +252,10 @@ def main() -> None:
                 logits, _, _ = model(
                     input_ids=batch["input_ids"], attention_mask=batch["attention_mask"]
                 )
-                loss = F.binary_cross_entropy_with_logits(logits.float(), batch["targets"].float())
+                loss = F.binary_cross_entropy_with_logits(
+                    logits.float(), batch["targets"].float(),
+                    pos_weight=None if pos_weight is None else pos_weight.to(logits.device),
+                )
                 accelerator.backward(loss)
                 optimizer.step()
                 scheduler.step()

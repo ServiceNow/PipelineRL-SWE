@@ -18,6 +18,9 @@ LR=${LR:-2e-5}
 NUM_ORDERINGS=${NUM_ORDERINGS:-5}
 HISTORIES_PER_PROBLEM=${HISTORIES_PER_PROBLEM:-10}
 START_PROTOCOL=${START_PROTOCOL:-scout_first}
+STATE_LAYOUT=${STATE_LAYOUT:-counts_last}
+POS_WEIGHT=${POS_WEIGHT:-balanced}
+CALIBRATION_MAP=${CALIBRATION_MAP:-}
 SNAPSHOT=${SNAPSHOT:-1}
 JOB_NAME=${JOB_NAME:-lcb_mdp_latest_attempt_seed${SEED}_${TIMESTAMP}}
 OUTPUT_DIR=${OUTPUT_DIR:-/mnt/llmd/results/exps/aristides/reason/${JOB_NAME}}
@@ -41,14 +44,17 @@ python pipelinerl/swe/scripts/livecodebench/build_mdp_tensors_v2.py \
   --output-dir ${TENSORS_DIR} && \
 python pipelinerl/swe/scripts/livecodebench/build_mdp_reachable_dataset.py \
   --tensors-dir ${TENSORS_DIR} --output-dir ${DATASET_DIR} \
-  --histories-per-problem ${HISTORIES_PER_PROBLEM} --start-protocol ${START_PROTOCOL} --seed 0 && \
+  --histories-per-problem ${HISTORIES_PER_PROBLEM} --start-protocol ${START_PROTOCOL} \
+  --state-layout ${STATE_LAYOUT} --seed 0 && \
 ${TRAIN_LAUNCH} pipelinerl/swe/scripts/livecodebench/train_mdp_reachable_policy.py \
   --dataset-dir ${DATASET_DIR} --output-dir ${MODEL_DIR} \
-  --seed ${SEED} --num-epochs ${NUM_EPOCHS} --lr ${LR} --max-seq-length 8192 && \
+  --seed ${SEED} --num-epochs ${NUM_EPOCHS} --lr ${LR} --max-seq-length 8192 \
+  --pos-weight ${POS_WEIGHT} && \
 python pipelinerl/swe/scripts/livecodebench/replay_mdp_full_execution.py \
   --tensors-dir ${TENSORS_DIR} --output-dir ${REPLAY_DIR} \
   --sequential-model-dir ${MODEL_DIR} --num-orderings ${NUM_ORDERINGS} \
-  --start-protocol ${START_PROTOCOL} --cost-mode usd"
+  --start-protocol ${START_PROTOCOL} --state-layout ${STATE_LAYOUT} --cost-mode usd\
+  ${CALIBRATION_MAP:+--calibration-map ${CALIBRATION_MAP}}"
 
 make -C "${REPO_ROOT}" job \
   JOB_NAME="${JOB_NAME}" ENV=pipeline-rl CONDA_EXE=/opt/conda/bin/conda \

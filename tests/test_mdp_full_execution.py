@@ -81,7 +81,32 @@ def test_policy_state_keeps_counts_and_only_latest_failed_attempt() -> None:
     assert "latest failure" in text
     assert "OLD_SCOUT_CODE" not in text
     assert "old failure" not in text
-    assert text.index("[Execution state]") < text.index("[Latest verified failed attempt")
+    assert "total_failures: 2" in text
+
+
+def test_counts_last_layout_puts_execution_state_at_the_readout_token() -> None:
+    """The encoder pools the final token, so the decay signal must end the prompt."""
+    attempts = [{
+        "model_slot": "oss20",
+        "code": "LATEST_OSS20_CODE",
+        "full_execution_feedback": "latest failure",
+    }]
+    remaining = {"scout": 8, "oss20": 9, "oss120": 10}
+    counts_last = _render_state("solve this", attempts, remaining, "counts_last")
+    problem_first = _render_state("solve this", attempts, remaining, "problem_first")
+
+    assert counts_last.rstrip().endswith("total_failures: 1")
+    assert counts_last.index("[Latest verified failed attempt") < counts_last.index("[Execution state]")
+    assert problem_first.index("[Execution state]") < problem_first.index("[Latest verified failed attempt")
+    assert problem_first.rstrip().endswith("LATEST_OSS20_CODE")
+    # Same information either way; only the read-out position differs.
+    for fragment in ("scout: failed=0, remaining=8", "LATEST_OSS20_CODE", "latest failure"):
+        assert fragment in counts_last and fragment in problem_first
+
+
+def test_unknown_state_layout_is_rejected() -> None:
+    with pytest.raises(ValueError, match="Unknown state layout"):
+        _render_state("p", [], {"scout": 1}, "nonsense")
 
 
 def test_remaining_counts_exclude_invalid_draws() -> None:

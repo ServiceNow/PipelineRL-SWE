@@ -33,7 +33,26 @@ def _render_state(
     problem_statement: str,
     attempts: list[dict[str, Any]],
     remaining: dict[str, int],
+    state_layout: str = "counts_last",
 ) -> str:
+    """Render a policy state.
+
+    `state_layout` controls where the execution-state block sits.
+
+    The encoder pools `last_hidden_state[:, -1]`, so the read-out token is
+    whatever ends the prompt. Under the original `problem_first` layout that was
+    the last token of a truncated code block, leaving the failure counts hundreds
+    to thousands of tokens upstream. The measured symptom was a model with strong
+    problem discrimination (within-depth AUC 0.834 on oss120) and almost no depth
+    sensitivity: predictions moved 0.180 -> 0.107 across failure depths 1-10 while
+    the true scout hazard went 0.041 -> 0.000.
+
+    `counts_last` puts the execution state immediately before the pooled token so
+    the decay signal is adjacent to the read-out. Retained `problem_first` for
+    reproducing the earlier artifacts.
+    """
+    if state_layout not in ("problem_first", "counts_last"):
+        raise ValueError(f"Unknown state layout: {state_layout}")
     failure_counts = {
         slot: sum(attempt["model_slot"] == slot for attempt in attempts)
         for slot in remaining
@@ -46,16 +65,23 @@ def _render_state(
     execution_lines.append(
         f"latest_attempted_route: {latest['model_slot'] if latest is not None else 'none'}"
     )
-    parts = [
-        "[Problem]\n" + problem_statement,
-        "[Execution state]\n" + "\n".join(execution_lines),
-    ]
-    if latest is not None:
-        parts.append(
-            f"[Latest verified failed attempt: {latest['model_slot']}]\n"
-            f"[Full execution] {latest['full_execution_feedback']}\n"
-            f"[Code]\n{latest['code'][:MAX_LATEST_ATTEMPT_CHARS]}"
-        )
+    execution_lines.append(f"total_failures: {len(attempts)}")
+    execution_block = "[Execution state]\n" + "\n".join(execution_lines)
+    attempt_block = (
+        None if latest is None else
+        f"[Latest verified failed attempt: {latest['model_slot']}]\n"
+        f"[Full execution] {latest['full_execution_feedback']}\n"
+        f"[Code]\n{latest['code'][:MAX_LATEST_ATTEMPT_CHARS]}"
+    )
+    parts = ["[Problem]\n" + problem_statement]
+    if state_layout == "problem_first":
+        parts.append(execution_block)
+        if attempt_block is not None:
+            parts.append(attempt_block)
+    else:
+        if attempt_block is not None:
+            parts.append(attempt_block)
+        parts.append(execution_block)
     return "\n\n".join(parts)
 
 
@@ -98,6 +124,10 @@ def main() -> None:
     parser.add_argument("--max-failures", type=int, default=10)
     parser.add_argument(
         "--start-protocol", choices=["scout_first", "free_start"], default="scout_first"
+    )
+    parser.add_argument(
+        "--state-layout", choices=["problem_first", "counts_last"], default="counts_last",
+        help="Where the execution-state block sits relative to the pooled read-out token",
     )
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
@@ -175,7 +205,7 @@ def main() -> None:
                     "split": split_for[pid],
                     "history_index": history_index,
                     "failure_depth": len(attempts),
-                    "text": _render_state(statement, attempts, remaining),
+                    "text": _render_state(statement, attempts, remaining, args.state_layout),
                     "targets": targets + [_nothing_remaining_target(
                         outcomes[pi], valid[pi], orders, ptr
                     )],
@@ -209,6 +239,7 @@ def main() -> None:
     summary = {
         "protocol": f"{args.start_protocol}_full_execution_failure_region",
         "state_representation": "problem_counts_latest_failed_attempt",
+        "state_layout": args.state_layout,
         "nothing_target": "no_successful_valid_draw_remains_in_any_route",
         "heads": HEADS,
         "histories_per_problem": int(args.histories_per_problem),

@@ -104,6 +104,40 @@ class TorchSequentialScorer:
         return probs
 
 
+def _load_calibrator(path: Path) -> Callable[[np.ndarray, int], np.ndarray]:
+    """Per-head, per-failure-depth recalibration fit by fit_depth_calibration.py.
+
+    Heads are indexed positionally, matching the model's output columns. Depths
+    outside the fitted range clamp to the nearest fitted depth, which is the
+    conservative choice: beyond the deepest observed bucket the hazards are flat
+    at (or near) zero anyway.
+    """
+    spec = json.loads(path.read_text())
+    heads = list(spec["heads"])
+    table = spec["calibration"]
+    by_index = [
+        {int(depth): entry for depth, entry in table[head].items()}
+        for head in heads
+    ]
+
+    def calibrate(probs: np.ndarray, depth: int) -> np.ndarray:
+        out = np.asarray(probs, dtype=float).copy()
+        for hi in range(min(len(out), len(by_index))):
+            buckets = by_index[hi]
+            if not buckets:
+                continue
+            key = depth if depth in buckets else min(buckets, key=lambda d: abs(d - depth))
+            entry = buckets[key]
+            if entry["mode"] == "constant":
+                out[hi] = float(entry["value"])
+            else:
+                x = float(np.log(np.clip(out[hi], 1e-6, 1 - 1e-6) / (1 - np.clip(out[hi], 1e-6, 1 - 1e-6))))
+                out[hi] = float(1.0 / (1.0 + np.exp(-(entry["a"] * x + entry["b"]))))
+        return out
+
+    return calibrate
+
+
 def _next_valid_draw(order: np.ndarray, ptr: int, valid: np.ndarray) -> tuple[int | None, int]:
     while ptr < len(order) and not valid[int(order[ptr])]:
         ptr += 1
@@ -126,6 +160,8 @@ def replay_adaptive(
     *,
     content_prior: np.ndarray | None = None,
     scorer: Callable[[str], np.ndarray] | None = None,
+    calibrator: Callable[[np.ndarray, int], np.ndarray] | None = None,
+    state_layout: str = "counts_last",
     tau_abstain: float | None = None,
     min_success_per_cost: float | None = None,
     value_of_correct: float | None = None,
@@ -199,13 +235,15 @@ def replay_adaptive(
 
         remaining = _remaining_draw_counts(valid, orderings, ptr, slots)
         state_text = (
-            _render_state(problem_statement, attempts, remaining)
+            _render_state(problem_statement, attempts, remaining, state_layout)
             if scorer is not None or capture_trace else None
         )
         if scorer is not None:
             if state_text is None:
                 raise AssertionError("Sequential scoring requires rendered state text")
             all_probs = np.asarray(scorer(state_text), dtype=float)
+            if calibrator is not None:
+                all_probs = calibrator(all_probs, int(failures.sum()))
             p_each = all_probs[: len(slots)]
             if apply_failure_decay:
                 p_each = p_each * pseudo_count / (pseudo_count + failures)
@@ -459,6 +497,17 @@ def main() -> None:
     parser.add_argument("--execution-cost-usd", type=float, default=0.0)
     parser.add_argument("--content-preds")
     parser.add_argument("--sequential-model-dir")
+    parser.add_argument(
+        "--state-layout", choices=["problem_first", "counts_last"], default="counts_last",
+        help="Must match the layout the sequential model was trained on",
+    )
+    parser.add_argument(
+        "--calibration-map",
+        help=(
+            "JSON from fit_depth_calibration.py. Applies per-route, per-failure-depth "
+            "recalibration to the learned heads before any decision is taken."
+        ),
+    )
     parser.add_argument("--retain-calibration-correctness", type=float, default=0.95)
     parser.add_argument(
         "--start-protocol", choices=["scout_first", "free_start"], default="scout_first"
@@ -524,6 +573,7 @@ def main() -> None:
         for row in _read_jsonl(Path(args.content_preds)):
             content[str(row["problem_id"])] = np.asarray(row["p_successes"][: len(slots)], dtype=float)
     scorer = TorchSequentialScorer(Path(args.sequential_model_dir)) if args.sequential_model_dir else None
+    calibrator = _load_calibrator(Path(args.calibration_map)) if args.calibration_map else None
 
     rng = np.random.default_rng(args.seed)
     P, M, K = outcomes.shape
@@ -576,6 +626,8 @@ def main() -> None:
                     records, pid, str(problems[pid]["problem_statement"]),
                     content_prior=content.get(pid) if family == "content" else None,
                     scorer=scorer if family in ("sequential", "sequential_decay") else None,
+                    calibrator=calibrator,
+                    state_layout=args.state_layout,
                     tau_abstain=tau,
                     min_success_per_cost=min_success_per_cost,
                     value_of_correct=value_of_correct,
@@ -812,6 +864,8 @@ def main() -> None:
         "schema_version": 2,
         "protocol": f"{args.start_protocol}_full_execution_mdp",
         "cost_mode": args.cost_mode,
+        "calibration_map": args.calibration_map,
+        "state_layout": args.state_layout,
         "execution_cost_usd_per_attempt": float(args.execution_cost_usd),
         "expected_decision_costs": dict(zip(slots, expected_costs.tolist())),
         "train_priors": dict(zip(slots, priors.tolist())),

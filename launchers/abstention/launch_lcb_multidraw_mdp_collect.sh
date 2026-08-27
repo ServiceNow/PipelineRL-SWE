@@ -21,6 +21,16 @@ MODE=${MODE:?Set MODE=scout or MODE=experts}
 
 TIMESTAMP=${TIMESTAMP:-$(date +%s)}
 NUM_DRAWS=${NUM_DRAWS:-10}
+# Asymmetric draw budget. Scout success is exactly zero past failure depth 5
+# (0 positives in 1,097 held-out states), so draws 6-10 of the scout are dead
+# spend; oss120 re-rolls are worth +14.4 points. Spend the difference on problems.
+SCOUT_DRAWS=${SCOUT_DRAWS:-${NUM_DRAWS}}
+EXPERT_DRAWS=${EXPERT_DRAWS:-${NUM_DRAWS}}
+# SPLITS=eval reproduces the original 341-problem collection; SPLITS=train adds
+# the 551 already-collected-for-scout problems that the MDP has never used.
+SPLITS=${SPLITS:-eval}
+# The T=0.6 scout sensitivity arm doubles scout cost; off by default for new splits.
+SCOUT_T06=${SCOUT_T06:-1}
 TEMP_PRIMARY=${TEMP_PRIMARY:-0.2}
 CONCURRENCY=${CONCURRENCY:-8}
 MAX_TOKENS=${MAX_TOKENS:-4096}
@@ -31,13 +41,13 @@ SNAPSHOT=${SNAPSHOT:-1}
 VLLM_PORT=${VLLM_PORT:-8000}
 
 SCOUT_MODEL="Qwen/Qwen3-4B-Instruct-2507"
-JOB_NAME=${JOB_NAME:-lcb_multidraw_${MODE}_${TIMESTAMP}}
+JOB_NAME=${JOB_NAME:-lcb_multidraw_${MODE}_${SPLITS}_${TIMESTAMP}}
 OUTPUT_DIR=${OUTPUT_DIR:-/mnt/llmd/results/exps/aristides/reason/${JOB_NAME}}
 
 COLLECT="python pipelinerl/swe/scripts/livecodebench/collect_lcb_expert.py \
   --source-collection-dir ${LCB_COLLECTION_DIR} \
   --output-dir ${OUTPUT_DIR} \
-  --splits eval --concurrency ${CONCURRENCY} \
+  --splits ${SPLITS} --concurrency ${CONCURRENCY} \
   --max-tokens ${MAX_TOKENS} --eval-timeout ${EVAL_TIMEOUT} --gen-timeout ${GEN_TIMEOUT} \
   --max-invalid-frac ${MAX_INVALID_FRAC}"
 
@@ -48,10 +58,10 @@ if [[ "${MODE}" == "scout" ]]; then
   # Build inner loop unrolled (dash-safe)
   INNER="echo local > ${OUTPUT_DIR}/local_key.txt && export OPENROUTER_API_KEY=local && export HF_HUB_DISABLE_IMPLICIT_TOKEN=1"
   LOCAL_KEY="${OUTPUT_DIR}/local_key.txt"
-  for DRAW in $(seq 0 $((NUM_DRAWS-1))); do
+  for DRAW in $(seq 0 $((SCOUT_DRAWS-1))); do
     INNER="${INNER} && echo '=== scout T0.2 draw ${DRAW} ===' && ${COLLECT} --api-key-file ${LOCAL_KEY} --base-url http://localhost:${VLLM_PORT} --route-label scout --model '${SCOUT_MODEL}' --temperature 0.2 --output-suffix _d${DRAW}"
   done
-  for DRAW in $(seq 0 $((NUM_DRAWS-1))); do
+  for DRAW in $(seq 0 $(( SCOUT_T06 == 1 ? SCOUT_DRAWS-1 : -1 ))); do
     INNER="${INNER} && echo '=== scout T0.6 draw ${DRAW} ===' && ${COLLECT} --api-key-file ${LOCAL_KEY} --base-url http://localhost:${VLLM_PORT} --route-label scout06 --model '${SCOUT_MODEL}' --temperature 0.6 --output-suffix _d${DRAW}"
   done
 
@@ -84,24 +94,24 @@ SCRIPT_EOF
     SNAPSHOT="${SNAPSHOT}" NPROC=1 GPU=1 GPU_MEM=24 CPU=8 CPU_MEM=32 COMMAND="bash ${RUNNER}"
 
 elif [[ "${MODE}" == "experts" ]]; then
-  JOB_NAME=${JOB_NAME:-lcb_multidraw_experts_${TIMESTAMP}}
+  JOB_NAME=${JOB_NAME:-lcb_multidraw_experts_${SPLITS}_${TIMESTAMP}}
   OUTPUT_DIR=${OUTPUT_DIR}/mnt/llmd/results/exps/aristides/reason/${JOB_NAME}
   OUTPUT_DIR=/mnt/llmd/results/exps/aristides/reason/${JOB_NAME}
   COMMAND="cd ${REPO_ROOT} && source pipelinerl/swe/scripts/livecodebench/ensure_lcb_runner.sh && export OPENROUTER_API_KEY=\$(cat ${OPENROUTER_API_KEY_FILE})"
-  for DRAW in $(seq 0 $((NUM_DRAWS-1))); do
+  for DRAW in $(seq 0 $((EXPERT_DRAWS-1))); do
     for PAIR in "oss20:openai/gpt-oss-20b" "oss120:openai/gpt-oss-120b"; do
       ROUTE="${PAIR%%:*}"; MODEL="${PAIR##*:}"
       COMMAND="${COMMAND} && echo '=== ${ROUTE} draw ${DRAW} ===' && ${COLLECT} --route-label ${ROUTE} --model '${MODEL}' --temperature ${TEMP_PRIMARY} --output-suffix _d${DRAW} --api-key-file ${OPENROUTER_API_KEY_FILE}"
     done
   done
-  for DRAW in $(seq 0 $((NUM_DRAWS-1))); do
+  for DRAW in $(seq 0 $((EXPERT_DRAWS-1))); do
     for PAIR in "oss20:openai/gpt-oss-20b" "oss120:openai/gpt-oss-120b"; do
       ROUTE="${PAIR%%:*}"; MODEL="${PAIR##*:}"
       COMMAND="${COMMAND} && echo '=== ${ROUTE} draw ${DRAW} ===' && ${COLLECT} --route-label ${ROUTE} --model '${MODEL}' --temperature ${TEMP_PRIMARY} --output-suffix _d${DRAW} --api-key-file ${OPENROUTER_API_KEY_FILE}"
     done
   done
   # Retry pass: resume reuses complete rows, retries timeouts
-  for DRAW in $(seq 0 $((NUM_DRAWS-1))); do
+  for DRAW in $(seq 0 $((EXPERT_DRAWS-1))); do
     for PAIR in "oss20:openai/gpt-oss-20b" "oss120:openai/gpt-oss-120b"; do
       ROUTE="${PAIR%%:*}"; MODEL="${PAIR##*:}"
       COMMAND="${COMMAND} && echo '=== ${ROUTE} draw ${DRAW} ===' && ${COLLECT} --route-label ${ROUTE} --model '${MODEL}' --temperature ${TEMP_PRIMARY} --output-suffix _d${DRAW} --api-key-file ${OPENROUTER_API_KEY_FILE}"
