@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Replay scout-first resample/escalate/abstain policies with full execution.
+"""Replay resample/escalate/abstain policies with full execution.
 
-The router is entered only after a fully executed scout failure. A verified
-pass terminates immediately. Decisions use expected model cost estimated on
-the train split; reports charge realized prompt+completion tokens.
+The start protocol is either scout-first or free-start. Free-start exposes
+{abstain, scout, oss20, oss120} at the root and after every failed attempt. A
+verified pass terminates immediately. Decisions use expected model cost
+estimated on the train split; reports charge realized prompt+completion tokens.
 
 The replay also writes per-episode decision traces, aggregate route-choice
 diagnostics, and paired confidence intervals clustered by problem.
@@ -126,9 +127,17 @@ def replay_adaptive(
     content_prior: np.ndarray | None = None,
     scorer: Callable[[str], np.ndarray] | None = None,
     tau_abstain: float | None = None,
+    min_success_per_cost: float | None = None,
+    value_of_correct: float | None = None,
     capture_trace: bool = False,
     apply_failure_decay: bool = False,
+    mandatory_scout: bool = True,
 ) -> dict[str, Any]:
+    controls = (tau_abstain, min_success_per_cost, value_of_correct)
+    if sum(control is not None for control in controls) > 1:
+        raise ValueError(
+            "Choose at most one of probability-threshold, marginal-value, or value-of-correct control"
+        )
     ptr = np.zeros(len(slots), dtype=int)
     failures = np.zeros(len(slots), dtype=int)
     spent_budget = 0.0
@@ -136,12 +145,14 @@ def replay_adaptive(
     attempts: list[dict[str, Any]] = []
     route_attempt_counts = {slot: 0 for slot in slots}
     decision_trace: list[dict[str, Any]] = []
+    entered_router = not mandatory_scout
 
-    def finish(correct: bool, entered_router: bool, abstained: bool) -> dict[str, Any]:
+    def finish(correct: bool, abstained: bool) -> dict[str, Any]:
         result = {
             "correct": correct,
             "entered_router": entered_router,
             "abstained": abstained,
+            "start_protocol": "scout_first" if mandatory_scout else "free_start",
             "budget_spend": spent_budget,
             "realized_spend": realized_spend,
             "attempts": int(sum(route_attempt_counts.values())),
@@ -167,12 +178,14 @@ def replay_adaptive(
         attempts.append(records[(problem_id, slots[mi], draw)])
         return False, draw
 
-    # Mandatory scout probe. If it cannot be afforded, no policy action occurs.
-    first, _ = attempt(0)
-    if first is True:
-        return finish(True, False, False)
-    if first is None:
-        return finish(False, False, False)
+    if mandatory_scout:
+        # Scout-first ablation: a verified pass resolves before any policy decision.
+        first, _ = attempt(0)
+        if first is True:
+            return finish(True, False)
+        if first is None:
+            return finish(False, False)
+        entered_router = True
 
     while True:
         available: list[int] = []
@@ -217,6 +230,19 @@ def replay_adaptive(
             p_any = 1.0 - float(np.prod(1.0 - p_each))
             belief_source = "counts"
 
+        ratios = {mi: float(p_each[mi] / expected_costs[mi]) for mi in available}
+        # The ratio is scale-invariant, so it ranks routes identically at every
+        # valuation and always prefers the cheapest. The dollar difference does not.
+        action_values = (
+            {
+                mi: float(p_each[mi] * value_of_correct - expected_costs[mi])
+                for mi in available
+            }
+            if value_of_correct is not None
+            else None
+        )
+        selection = ratios if action_values is None else action_values
+
         decision: dict[str, Any] | None = None
         if capture_trace:
             decision = {
@@ -235,23 +261,41 @@ def replay_adaptive(
                 },
                 "p_any_remaining": float(p_any),
                 "utility_per_expected_cost": {
-                    slots[mi]: float(p_each[mi] / expected_costs[mi])
-                    for mi in available
+                    slots[mi]: ratios[mi] for mi in available
                 },
+                "action_value": (
+                    None if action_values is None
+                    else {slots[mi]: action_values[mi] for mi in available}
+                ),
                 "tau_abstain": tau_abstain,
+                "min_success_per_cost": min_success_per_cost,
+                "value_of_correct": value_of_correct,
             }
 
-        if tau_abstain is not None and p_any <= tau_abstain:
+        probability_stop = tau_abstain is not None and p_any <= tau_abstain
+        marginal_stop = (
+            min_success_per_cost is not None
+            and max(ratios.values()) <= min_success_per_cost
+        )
+        # Under value control, stopping needs no separate threshold: abstaining is
+        # the zero-value action, so quit when no route has positive dollar value.
+        value_stop = action_values is not None and max(action_values.values()) <= 0.0
+        if probability_stop or marginal_stop or value_stop:
             if decision is not None:
                 decision.update({
                     "chosen_route": None,
                     "chosen_draw_index": None,
                     "result": "abstain",
+                    "abstain_reason": (
+                        "probability_threshold" if probability_stop
+                        else "marginal_value" if marginal_stop
+                        else "non_positive_action_value"
+                    ),
                 })
                 decision_trace.append(decision)
-            return finish(False, True, True)
+            return finish(False, True)
 
-        chosen = max(available, key=lambda mi: p_each[mi] / expected_costs[mi])
+        chosen = max(available, key=selection.__getitem__)
         result, chosen_draw = attempt(chosen)
         if decision is not None:
             decision.update({
@@ -265,9 +309,9 @@ def replay_adaptive(
             })
             decision_trace.append(decision)
         if result is True:
-            return finish(True, True, False)
+            return finish(True, False)
 
-    return finish(False, True, False)
+    return finish(False, False)
 
 
 def replay_fixed(
@@ -305,6 +349,9 @@ def _aggregate(outputs: list[dict[str, Any]]) -> dict[str, Any]:
         ),
         "abstention_rate_after_scout_failure": (
             float(np.mean([bool(row.get("abstained")) for row in entered])) if entered else None
+        ),
+        "overall_abstention_rate": float(
+            np.mean([bool(row.get("abstained")) for row in outputs])
         ),
         "n_episodes": len(outputs),
     }
@@ -413,6 +460,18 @@ def main() -> None:
     parser.add_argument("--content-preds")
     parser.add_argument("--sequential-model-dir")
     parser.add_argument("--retain-calibration-correctness", type=float, default=0.95)
+    parser.add_argument(
+        "--start-protocol", choices=["scout_first", "free_start"], default="scout_first"
+    )
+    parser.add_argument(
+        "--include-marginal-value-stop",
+        action="store_true",
+        help=(
+            "Also run the _value_stop variant. Superseded: a single threshold on max_m p/cost "
+            "cannot both stop cheap re-rolls and permit escalation (see analysis README), and the "
+            "value sweep replaces it. Kept only for reproducing that negative result."
+        ),
+    )
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--bootstrap-samples", type=int, default=2000)
     args = parser.parse_args()
@@ -473,14 +532,37 @@ def main() -> None:
         for _ in range(P)
     ])
     max_cost = float(expected_costs.max())
-    budgets = sorted(set(float(x) for x in np.linspace(expected_costs[0], 3.0 * max_cost, 12)))
+    # Full-exhaustion spend: every draw of every route. The value sweep can reach it, so the
+    # budget-swept RoR cell must be able to as well or the high-cost comparison is unfair to it.
+    # The original 12 points are preserved so earlier recorded numbers stay comparable.
+    exhaustion_cost = float((expected_costs * K).sum())
+    budgets = sorted(set(
+        [float(x) for x in np.linspace(expected_costs[0], 3.0 * max_cost, 12)]
+        + [float(x) for x in np.linspace(3.0 * max_cost, exhaustion_cost, 6)[1:]]
+    ))
     tau_grid = [float(x) for x in np.linspace(0.05, 0.95, 19)]
+    initial_max_ratio = float(np.max(priors / expected_costs))
+    marginal_grid = [
+        float(x)
+        for x in np.geomspace(initial_max_ratio / 1000.0, initial_max_ratio * 1.5, 25)
+    ]
+    # Value control sweeps one scalar: the dollar value of a correct answer. It is the
+    # Lagrange multiplier on correctness, so it needs no calibration-selected threshold.
+    breakeven = expected_costs / priors
+    value_grid = [
+        float(x)
+        for x in np.geomspace(0.5 * float(breakeven.min()), 200.0 * float(breakeven.max()), 24)
+    ]
+    # A cap that never binds, so the value frontier is generated by R alone.
+    unconstrained_budget = float((expected_costs * K).sum()) + 1.0
 
     def run(
         indices: np.ndarray,
         budget: float,
         family: str,
         tau: float | None,
+        min_success_per_cost: float | None = None,
+        value_of_correct: float | None = None,
         *,
         capture_trace: bool = False,
     ) -> list[dict[str, Any]]:
@@ -495,8 +577,11 @@ def main() -> None:
                     content_prior=content.get(pid) if family == "content" else None,
                     scorer=scorer if family in ("sequential", "sequential_decay") else None,
                     tau_abstain=tau,
+                    min_success_per_cost=min_success_per_cost,
+                    value_of_correct=value_of_correct,
                     capture_trace=capture_trace,
                     apply_failure_decay=family == "sequential_decay",
+                    mandatory_scout=args.start_protocol == "scout_first",
                 )
                 result["problem_id"] = pid
                 result["ordering_index"] = oi
@@ -512,6 +597,8 @@ def main() -> None:
     episode_rows: list[dict[str, Any]] = []
     action_summaries: list[dict[str, Any]] = []
     adaptive_outputs: dict[tuple[float, str], list[dict[str, Any]]] = {}
+    # Budget-swept families reproduce the RoR baseline faithfully: count-based beliefs,
+    # greedy allocation, budget as the knob. Kept on by default for that reason.
     for budget in budgets:
         for family in families:
             base_cal = _aggregate(run(cal_idx, budget, family, None))
@@ -521,24 +608,88 @@ def main() -> None:
                 if metrics["correctness"] >= args.retain_calibration_correctness * base_cal["correctness"]:
                     candidates.append((metrics["mean_realized_cost"], tau))
             tau_star = min(candidates)[1] if candidates else None
-            for suffix, tau in (("", None), ("_abstain", tau_star)):
+            marginal_star = None
+            if args.include_marginal_value_stop:
+                marginal_candidates = []
+                for threshold in marginal_grid:
+                    metrics = _aggregate(run(cal_idx, budget, family, None, threshold))
+                    if metrics["correctness"] >= args.retain_calibration_correctness * base_cal["correctness"]:
+                        marginal_candidates.append(
+                            (metrics["mean_realized_cost"], -threshold, threshold)
+                        )
+                marginal_star = min(marginal_candidates)[2] if marginal_candidates else None
+            # "" is the RoR-faithful cell (no give-up arm); "_abstain" is our give-up extension.
+            variants = [("", None, None), ("_abstain", tau_star, None)]
+            if args.include_marginal_value_stop:
+                variants.append(("_value_stop", None, marginal_star))
+            for suffix, tau, marginal_threshold in variants:
                 policy = family + suffix
-                outputs = run(test_idx, budget, family, tau, capture_trace=True)
+                outputs = run(
+                    test_idx, budget, family, tau, marginal_threshold, capture_trace=True
+                )
                 adaptive_outputs[(budget, policy)] = outputs
                 metrics = _aggregate(outputs)
-                rows.append({"policy": policy, "budget": budget, "tau": tau, **metrics})
+                rows.append({
+                    "policy": policy,
+                    "budget": budget,
+                    "tau": tau,
+                    "min_success_per_cost": marginal_threshold,
+                    "value_of_correct": None,
+                    **metrics,
+                })
                 action_summaries.append({
                     "policy": policy,
                     "budget": budget,
                     "tau": tau,
+                    "min_success_per_cost": marginal_threshold,
+                    "value_of_correct": None,
                     **_summarize_decisions(outputs, slots),
                 })
                 episode_rows.extend({
                     "policy": policy,
                     "budget": budget,
                     "tau": tau,
+                    "min_success_per_cost": marginal_threshold,
+                    "value_of_correct": None,
                     **output,
                 } for output in outputs)
+
+    # Value-controlled frontier. One scalar R drives escalation and stopping jointly,
+    # so there is no budget grid and no calibration-selected abstention threshold.
+    value_outputs: dict[tuple[float, str], list[dict[str, Any]]] = {}
+    for family in families:
+        for value_of_correct in value_grid:
+            policy = family + "_value"
+            outputs = run(
+                test_idx, unconstrained_budget, family, None, None, value_of_correct,
+                capture_trace=True,
+            )
+            value_outputs[(value_of_correct, policy)] = outputs
+            metrics = _aggregate(outputs)
+            rows.append({
+                "policy": policy,
+                "budget": None,
+                "tau": None,
+                "min_success_per_cost": None,
+                "value_of_correct": value_of_correct,
+                **metrics,
+            })
+            action_summaries.append({
+                "policy": policy,
+                "budget": None,
+                "tau": None,
+                "min_success_per_cost": None,
+                "value_of_correct": value_of_correct,
+                **_summarize_decisions(outputs, slots),
+            })
+            episode_rows.extend({
+                "policy": policy,
+                "budget": None,
+                "tau": None,
+                "min_success_per_cost": None,
+                "value_of_correct": value_of_correct,
+                **output,
+            } for output in outputs)
 
     fixed_plans = {
         "single_scout": [0],
@@ -570,11 +721,20 @@ def main() -> None:
             "mean_attempts": float(np.mean([row["attempts"] for row in outputs])),
             "n_episodes": len(outputs),
         }
-        rows.append({"policy": name, "budget": None, "tau": None, **metrics})
+        rows.append({
+            "policy": name,
+            "budget": None,
+            "tau": None,
+            "min_success_per_cost": None,
+            "value_of_correct": None,
+            **metrics,
+        })
         episode_rows.extend({
             "policy": name,
             "budget": None,
             "tau": None,
+            "min_success_per_cost": None,
+            "value_of_correct": None,
             **output,
         } for output in outputs)
 
@@ -583,7 +743,10 @@ def main() -> None:
         candidate_families = ("sequential", "sequential_decay")
         for fi, candidate_family in enumerate(candidate_families):
             for bi, budget in enumerate(budgets):
-                for suffix in ("", "_abstain"):
+                suffixes = ("", "_abstain") + (
+                    ("_value_stop",) if args.include_marginal_value_stop else ()
+                )
+                for suffix in suffixes:
                     reference_policy = "counts" + suffix
                     candidate_policy = candidate_family + suffix
                     paired_comparisons.append({
@@ -597,6 +760,21 @@ def main() -> None:
                             seed=args.seed + 100_000 * fi + 1000 * bi + (1 if suffix else 0),
                         ),
                     })
+
+        for fi, candidate_family in enumerate(candidate_families):
+            for vi, value_of_correct in enumerate(value_grid):
+                paired_comparisons.append({
+                    "reference_policy": "counts_value",
+                    "candidate_policy": candidate_family + "_value",
+                    "budget": None,
+                    "value_of_correct": value_of_correct,
+                    **_paired_problem_bootstrap(
+                        value_outputs[(value_of_correct, "counts_value")],
+                        value_outputs[(value_of_correct, candidate_family + "_value")],
+                        samples=args.bootstrap_samples,
+                        seed=args.seed + 500_000 + 100_000 * fi + 1000 * vi,
+                    ),
+                })
 
         cascade_outputs = fixed_outputs["single_pass_cascade"]
         cascade_cost = float(np.mean([row["realized_spend"] for row in cascade_outputs]))
@@ -632,7 +810,7 @@ def main() -> None:
 
     output = {
         "schema_version": 2,
-        "protocol": "scout_first_full_execution_failure_region",
+        "protocol": f"{args.start_protocol}_full_execution_mdp",
         "cost_mode": args.cost_mode,
         "execution_cost_usd_per_attempt": float(args.execution_cost_usd),
         "expected_decision_costs": dict(zip(slots, expected_costs.tolist())),

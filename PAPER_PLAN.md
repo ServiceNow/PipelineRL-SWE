@@ -1350,6 +1350,13 @@ below 0.252, so the calibration-selected abstention threshold 0.05 could never f
 
 ### Count-decayed learned hybrid replay (provisional positive)
 
+> **Mechanism correction (2026-08-27).** The framing below -- "structural Bayesian update plus a
+> learned semantic residual" -- is not what the decay is doing. The calibration audit later in this
+> file shows the learned scout probability is **9.28x overconfident**, and the `2/(2+failures)`
+> factor shrinks it ~3.5x by depth 5, cutting ECE from 0.1341 to 0.0382. The decay is functionally a
+> **rare-event recalibrator**. The empirical result stands; the explanation does not. Do not write
+> the paper around the structural-prior story until recalibration has separated the two effects.
+
 The predeclared no-retraining hybrid multiplies each learned route-success probability by the
 same failure-count prior used by the count policy, `pseudo_count / (pseudo_count + failures)`
 with pseudo-count 2. This retains RoR's structural update after failures while allowing the
@@ -1423,6 +1430,448 @@ episodes, not 430 independent problems; one test problem moves observed accuracy
 so this split cannot resolve a 0.47-point accuracy difference. Because the current test frontier has
 now informed policy development, treat it as development evidence and reserve a newly collected,
 chronologically later problem set for a single locked confirmation.
+
+### Marginal-value stopping does not produce early abstention (2026-08-27, development-only)
+
+Motivated by the observation that `_abstain` policies quit only after 12--20 failures, the replay
+gained a `_value_stop` variant replacing the probability threshold `p_any <= tau` with a
+marginal-value rule `max_m p_m / cost_m <= T`, with `T` selected on calibration under the same
+retained-correctness constraint. Artifact: `replay_early_stop_dev_v1/` under
+`lcb_mdp_latest_attempt_seed17_1787808515`. It does not do what it was built for.
+
+- **0% of `_value_stop` abstentions occur while the scout still has draws left**, at both audited
+  budgets, versus **96.2%** for the `tau` rule at budget 0.01667. Its abstention depth is set by
+  scout exhaustion (10 draws), not by a stopping decision.
+- **The route statistics do not overlap.** On the unconstrained decay policy at budget 0.07306,
+  scout's `p/cost` while available has minimum **24.03** across 2,373 decisions, while oss120's
+  `p/cost` has maximum **20.58** across 3,752 decisions. Any `T` that stops a single scout re-roll
+  therefore forbids **100%** of oss120 calls and 32.9% of oss20 calls. This is an expressiveness
+  limit of the rule class, not a tuning failure: no threshold expresses "stop re-rolling the cheap
+  route but escalate to the expensive one." Route costs span 53x.
+- **The defect is the action rule, not the stopping rule.** `max_m p_m/cost_m <= T` is *exactly
+  equivalent* to `max_m (p_m*R - cost_m) <= 0` for `R = 1/T`, so `_value_stop` already uses the
+  myopic-optimal stopping criterion; re-parameterizing it changes nothing. The failure is that
+  `argmax_m p_m/cost_m` is scale-invariant and hence **independent of `R`** -- it prefers the
+  cheapest route at every valuation, so it grinds the scout to exhaustion however `T` is set. One
+  `T` is then asked to both permit oss120 (`T <= 20.58`) and stop scout (`T > 24.03`) along a
+  trajectory it cannot reshape. `tau` does better at early stopping because `p_any` is cost-blind,
+  encoding "hopeless problem" -- a crude proxy for small `R`.
+- **But `_value_stop` is not globally worse and must not be written up as a failed policy.** It
+  contributes 15 Pareto points versus 12 for `tau`, and `sequential_decay_value_stop` owns the
+  entire mid-cost band (0.01038--0.01714 at 61.9--67.4% correctness) where no `tau` policy appears,
+  reaching 67.44% at 0.01714 against `sequential_decay_abstain`'s 68.37% at 0.02084. It is
+  dominated only at the headline point: 74.19% at 0.03072 versus `_abstain`'s 74.19% at 0.02870.
+
+Reading: `_value_stop` earns its frontier points for a different reason than intended -- "run the
+cheap route to exhaustion, then quit before escalating" -- so **early abstention remains unsolved**.
+All numbers above are development-only on the 86-problem test split and are not confirmation
+results.
+
+**The prescribed fix is to select actions by value difference and sweep the valuation.** Replace
+`argmax_m p_m/cost_m` with `argmax_m (p_m*R - cost_m)`, stop when that maximum is `<= 0`, and
+generate the frontier by sweeping the single scalar `R` (the Lagrange multiplier on correctness)
+rather than by a budget grid crossed with a separately calibrated `tau`/`T`. Measured over all
+3,799 decisions at budget 0.07306, the ratio rule's route mix is constant at scout 58% / oss20 39%
+/ oss120 3% for *every* `R`, while the value rule sweeps scout 38% (R=0.02) to oss120 99% (R=1.00)
+as its stopping rate falls from 54.2% to 0%; the two rules disagree on 28.4%--95.9% of decisions.
+This removes the meaningless "retain 95% of calibration correctness" threshold-selection heuristic
+and makes escalation and stopping share one knob. Finite-horizon planning
+(`Q_m = p_m*R - cost_m + (1-p_m)*V(s')`) stays on the list but is **demoted and re-labelled**: since
+`V >= 0`, the continuation term only makes continuing more attractive, so it pushes abstention
+later, not earlier. It corrects a different error and should follow the `R`-sweep, not precede it.
+
+### RoR is the primal; our utility formulation is its Lagrangian dual (2026-08-27)
+
+Checked against the paper itself (arXiv 2607.08665, *"Resample or Reroute? Budget-Aware Test-Time
+Model Selection for Large Language Models"*) rather than second-hand notes. RoR maximizes expected
+correctness **subject to a per-query cost budget**, allocating by *estimated marginal correctness
+per unit cost*, with beliefs from empirical success counts over an eleven-model pool. Confirmed: no
+abstain/give-up action; budget exhaustion is the only stopping condition. Correction to an earlier
+note in this file: the "T=0.2" in the RoR-parity protocol is the **sampling temperature**, not a
+decision threshold.
+
+This means two things we had wrong.
+
+1. **The budget cap `B` is RoR's formulation, not incidental machinery.** Deleting it would turn
+   the primary baseline into a strawman. The budget-swept `counts` family (greedy `p/cost`, no
+   give-up arm) is the RoR-faithful cell and stays on by default.
+2. **The `argmax_m p_m/cost_m` ratio rule is not a defect.** Under a hard budget it is the standard
+   greedy knapsack rule, i.e. the correct primal solution. The earlier entry above framing it as
+   the bug is withdrawn; what it lacks is a stopping theory, not a correct ordering.
+
+Our formulation is the **Lagrangian dual** of the same problem. Maximizing expected correctness
+subject to `sum(cost) <= B` relaxes to maximizing `sum(p) - lambda*sum(cost)`, i.e. acting on
+`p_m*R - cost_m` with `R = 1/lambda`. That is the contribution statement:
+
+| | RoR (primal) | ours (dual) |
+|---|---|---|
+| knob | per-query budget `B` | value of a correct answer `R` |
+| action rule | `argmax p/cost` (greedy knapsack) | `argmax (p*R - cost)` |
+| stopping | budget exhaustion only | `max_m (p_m*R - cost_m) <= 0` |
+| abstention | none | falls out as the zero-utility action |
+
+What the dual buys, stated as claims we must defend:
+
+- **No arbitrary per-query cap.** `B` is a per-episode allowance applied identically to every
+  problem regardless of promise, which works against the adaptive allocation the paper argues for.
+  `R` spends more on tractable problems and nothing on hopeless ones by construction.
+- **Abstention is derived, not tuned.** This removes the `tau` grid and the "retain 95% of
+  calibration correctness" selection heuristic, which had no decision-theoretic justification.
+  It directly addresses the give-up arm listed above as the open RoR delta.
+- **One interpretable knob.** `R` is dollars per correct answer -- a deployment parameter a reader
+  can reason about, unlike `tau = 0.2`.
+
+Honest caveats to carry:
+
+- Sweeping `R` is a linear scalarization, so it recovers only the **convex hull** of the
+  correctness--cost frontier; a budget sweep can reach non-convex points that no `R` attains.
+  Mixing two policies convexifies, but the limitation should be stated.
+- The dual is only as good as `p`. RoR's count-based beliefs are empirically grounded per episode;
+  ours are learned and **9.28x overconfident on the cheap route** (see calibration entry). The
+  formulation advantage can be swamped entirely by belief quality, so calibration is a
+  precondition for this claim, not a refinement of it.
+
+### Free-start protocol is currently vacuous (2026-08-27, development-only)
+
+`replay_free_start_dev_v1/` removes the mandatory scout, exposing {abstain, scout, oss20, oss120} at
+the root across all 341 problems including those a mandatory scout would have solved; the builder
+gained a matching `--start-protocol free_start` mode (14,844 reachable examples, all problems at
+depth 0). **104 of 108 (budget, policy) cells are bit-identical to scout-first.** The four
+differences sit at the degenerate smallest budget 0.00055, where root abstention becomes affordable
+(34.42% at 0.00038--0.00045 versus 34.88% at 0.00058).
+
+Same root cause: **every policy picks scout at the root 100% of the time at every budget above the
+smallest**, because `prior/cost` is 432.8 (scout) versus 96.0 (oss20) and 21.5 (oss120). The
+free-start policy re-imposes the mandatory scout on itself. This is not an out-of-distribution
+artifact from the model never seeing root states -- the `counts` family uses train priors, not the
+model, and behaves identically. The ablation therefore cannot yet answer "should the scout be called
+at all?", because it is evaluated under a rule structurally incapable of declining. It is blocked on
+the same action-rule fix and must be re-run after it. Treat these numbers as a protocol check, not
+a result.
+
+### Calibration audit: the binding constraint (2026-08-27)
+
+Measured on `model/test_predictions.jsonl` -- the reachable-dataset test split (2,901 states, 61
+problems, depths 1--10), which has balanced route/depth coverage and no policy-induced selection
+bias, unlike replay traces.
+
+| head | base rate | mean pred | pred/actual | ECE | AUC |
+|---|---:|---:|---:|---:|---:|
+| `nothing` | 0.552 | 0.597 | 1.08x | 0.178 | 0.862 |
+| `oss120_fresh` | 0.270 | 0.263 | **0.97x** | 0.107 | 0.852 |
+| `oss20_fresh` | 0.090 | 0.180 | 2.00x | 0.103 | 0.834 |
+| `scout_next` | 0.015 | 0.134 | **9.28x** | 0.120 | 0.693 |
+
+Four findings.
+
+1. **Good ranking, bad probabilities.** AUCs 0.69--0.86 match the training log exactly. This is not
+   an undertrained model; it is a calibration failure.
+2. **Miscalibration is monotone in base rate**, and base rate is inversely ordered with cost. The
+   cheapest route is the rarest event and therefore the most inflated, so **miscalibration
+   systematically manufactures the cheap-route preference** that drives all the scout-grinding
+   pathologies recorded above. This is an artifact, not a property of the problem.
+3. **It is overfitting, not undertraining.** Train loss falls monotonically (0.566 / 0.366 / 0.277)
+   while calibration loss bottoms at epoch 1 (0.448 / 0.396 / 0.415), and *every* calibration AUC
+   peaks at **epoch 0** and declines thereafter. More epochs strictly hurt. Data-limited at 141
+   training problems, not compute-limited. Minor: the checkpoint is selected on calibration loss
+   (epoch 1) while AUC peaks at epoch 0 -- if recalibration handles probabilities, select on AUC.
+4. **Not distribution shift.** Train/test base rates agree within 6% (scout 0.0148 vs 0.0145) with
+   identical depth composition. The model predicts 0.134 for scout when even its *own training*
+   base rate is 0.0148, so it is not regressing to the training marginal either. Classic
+   extreme-imbalance failure of a 1.5%-positive head.
+
+Depth structure the model misses entirely. Empirical scout hazard by failure depth is
+`0.041, 0.025, 0.013, 0.011, 0.008, 0, 0, 0, 0, 0` -- **exactly zero positives across 1,097 states
+at depths 6--10** -- while the model predicts ~0.11 throughout. Conversely at depth 1 it
+*underestimates* oss120 (0.337 predicted vs 0.541 actual). At the single most important decision the
+relative scout-vs-oss120 comparison is distorted by roughly 10x.
+
+This retroactively explains the count-decay hybrid: multiplying by `2/(2+failures)` shrinks scout's
+inflated number ~3.5x by depth 5, cutting ECE from 0.1341 to 0.0382 on policy traces. **The
+"structural Bayesian prior" is functionally a rare-event recalibrator.** The mechanism described in
+the hybrid entry above is wrong and should be restated.
+
+Consequence: calibration is a **precondition**, not a refinement. Every downstream comparison
+(utility formulation, continuation value, planning) is evaluated on probabilities that are 9x wrong
+on the cheap route, so a negative result would be unattributable. Fix order: post-hoc per-route,
+depth-conditioned recalibration fit on calibration only (free, replay-only); then `pos_weight`/focal
+loss on the rare heads at the next retrain; then more unique problems. Not more epochs.
+
+### Headroom and baselines: what routing can and cannot buy (2026-08-27)
+
+Oracle analysis on the 86-problem replay test split, from the saved tensors.
+
+| solvable within 10 draws by | share |
+|---|---:|
+| scout | 47.7% |
+| oss20 | 67.4% |
+| oss120 | 81.4% |
+| **any route** | **81.4%** |
+| none (hopeless) | 18.6% |
+
+**oss120's coverage exactly equals any-route coverage.** Scout and oss20 contribute *zero*
+exclusive coverage -- every problem they solve, oss120 also solves. There is **no capability
+complementarity** in this pool: routing can only ever buy money, never accuracy. The paper cannot
+claim model specialization, and must answer "why not just use the big model?" with the cost figure.
+The 18.6% hopeless share is the theoretical ceiling on what abstention can save.
+
+Fixed baselines (first-valid-draw semantics, USD):
+
+| policy | correctness | cost |
+|---|---:|---:|
+| `single_scout` | 34.88% | $0.00058 |
+| `single_oss20` | 46.74% | $0.00379 |
+| `best_of_10_scout` | 47.67% | $0.00493 |
+| `scout_then_oss20` | 53.95% | $0.00379 |
+| `single_oss120` | 66.98% | $0.02900 |
+| `scout_then_oss120` | 68.37% | $0.02541 |
+| `single_pass_cascade` | 70.00% | $0.02421 |
+| `best_of_10_oss120` | **81.40%** | $0.13376 |
+| `sequential_decay_abstain` (ours) | 73.95% | $0.02820 |
+| `counts` (best adaptive) | 74.65% | $0.04164 |
+
+The adaptive policy strictly dominates `single_oss120` and captures 91% of achievable accuracy at
+21% of the cost of `best_of_10_oss120`. That is the honest headline framing.
+
+### Re-rolling the large model is the largest untouched lever (2026-08-27)
+
+`single_oss120` 66.98% -> `best_of_10_oss120` 81.40% is **+14.42 points** from re-rolling the
+expensive model alone, and it reaches the 81.4% ceiling. Our policies never use it:
+
+| policy | mean oss120 calls/episode | distribution |
+|---|---:|---|
+| `counts` | 0.33 | 0x: 67%, 1x: 33% |
+| `sequential_decay_abstain` | 0.19 | 0x: 81%, 1x: 19% |
+
+**Never twice, in any episode.** The cause is structural: the budget grid is
+`linspace(min_cost, 3*max_cost, 12)`, topping out at $0.089 -- three oss120 calls -- while
+`best_of_10_oss120` costs $0.13376. **The experiment's cost ceiling sits below the region where the
+highest-value strategy lives**, so we have never tested it. The value sweep has no ceiling and fixes
+this automatically (its cap is $1.342 against a maximum possible spend of $0.342, so it cannot
+bind). **Fixed 2026-08-27:** the budget grid now runs to full-exhaustion spend `sum(expected_cost *
+K)` = $0.34241 in 17 points, preserving the original 12 so recorded numbers stay comparable and
+adding $0.140/$0.191/$0.241/$0.292/$0.342. Both formulations now reach the same ceiling; capping the
+RoR cell at $0.089 while sweeping ours to $0.342 would have made the baseline a strawman at the high
+end.
+
+Note for positioning: re-rolling large models differentiates us from *cascades*
+(`single_pass_cascade` is one shot per tier and structurally cannot), but **not from RoR**, whose
+whole premise is resample-vs-reroute. Consistent with the standing instruction above not to claim
+first formulation of resample-vs-escalate.
+
+### Data pool audit: 892 problems collected, 341 used (2026-08-27)
+
+The source collection (`lcb_corrected_temporal_qwen_qwen3_4b_instruct_2507_1787205448`, pinned
+`release_v6`) already holds **892 problems: 551 train + 341 eval**, temporally split. The MDP
+experiment uses **only the 341 eval problems**, which it then re-splits 170/85/86.
+
+Worse, that re-split is **random, not temporal**: `split_manifest.json` records
+`{"method": "sorted_ids_numpy_permutation", "seed": 0}`. The chronological rigor the plan claims is
+not currently implemented.
+
+Both are fixed by one collection job: run oss20/oss120 multidraw on the 551 already-collected
+problems. No pool decisions, no new dataset design, purely generation + Daytona execution.
+
+- Unique problems: 341 -> 892 (2.6x).
+- Enables a genuine temporal design: train on the earlier 551, hold out the later 341 as a
+  chronological test set touched once.
+- Test problems 86 -> 341, so one problem moves accuracy **0.29pt instead of 1.16pt** -- which is
+  what makes the ~0.5pt effects we keep measuring resolvable at all.
+
+Collection design, from the hazard data: **asymmetric draws.** Scout draws 6--10 are provably dead
+(0 successes in 1,097 states), while oss120 re-rolls are worth +14.42 points. Cut scout to ~4 draws
+and keep oss120 at 10. This is the long pole (multi-day) and has zero dependency on any replay-side
+work, so it launches first and everything else proceeds in parallel.
+
+### Planned: structural continuation value, and the experiment grid (2026-08-27)
+
+The value rule as implemented is **myopic**: `Q_m = p_m*R - cost_m`, dropping `(1-p_m)*V(s')`. On
+real priors at R=$0.25 that flips the first decision -- myopic picks oss120 (0.130), one-step picks
+scout (0.0592 + 0.761*0.130 = 0.158) -- so the myopic dual **over-escalates**. Note also that since
+`V >= 0`, a continuation term pushes abstention *later*, not earlier; it corrects a different error
+than the late-abstention pathology.
+
+Failure is deterministic in this MDP (a failed route leads to exactly one successor), so lookahead
+branches only on route choice: ~3^N model calls per decision for depth N. Full DP over the
+(counts, last_route) lattice is ~1.7M forward passes.
+
+**Preferred design -- structural continuation, semantic decision point:**
+
+```
+Q_m = p_m^model(s)*R - cost_m + (1 - p_m^model(s)) * V_struct(s'_m)
+```
+
+- `p^model`: instance-specific, evaluated only at the current state -- **one forward pass per
+  decision, same cost as today**.
+- `V_struct`: full-horizon continuation from *empirical per-route, per-depth hazards*, solved by
+  backward induction over the 1,331-state count lattice **once, offline, in milliseconds**.
+
+This gives the exact horizon with no truncation parameter, and encodes the structural collapse the
+model completely misses (scout hazard is literally 0 from depth 6). It is the same
+structure-plus-semantics factorization the count-decay hybrid stumbled onto, applied to the *value
+function* rather than as a multiplicative fudge on the probability -- a principled version of the
+thing that already worked. **Hazards must be fit on train only**; fitting them on the evaluation
+split would reintroduce exactly the threshold-on-test problem the dual formulation removed.
+
+Depth-1/depth-2 model-based lookahead is then an **ablation, not the method**: its job is to test
+whether semantic continuation adds anything over structural. Full DP only if that says yes.
+
+**Experiment grid.** The value sweep gives a clean 2x2 isolating formulation from belief source,
+which is what a reviewer needs to see before the dual can be claimed as the contribution:
+
+| | primal (budget + `p/cost`) | dual (`R` + `p*R - cost`) |
+|---|---|---|
+| count beliefs | `counts` <- RoR-faithful | `counts_value` |
+| learned beliefs | `sequential_decay` | `sequential_decay_value` |
+
+All cross-formulation comparisons are **cost-matched with problem-clustered paired bootstrap CIs**,
+matching by nearest mean realized cost (as the existing cascade comparison already does). The
+headline test is RoR-primal `counts` against `sequential_decay_value`. This pairing is not yet in
+`paired_comparisons` -- the two sweeps share no knob -- but both write full `episode_traces.jsonl`,
+so it is computable post hoc without re-running.
+
+### RoR read from the paper: what they do, and where our regime sits (2026-08-27)
+
+Read from the PDF, not second-hand. Supersedes guesses elsewhere in this file.
+
+**Belief update (their Eq. 2).** For model `m` on query `i`, after `n_im` draws of which `w_im`
+verified correct:
+
+```
+p_hat_im = (s * p_bar_m + w_im) / (s + n_im)
+```
+
+`p_bar_m` is "model m's offline accuracy, **calibrated once on the train split**" -- a *scalar per
+model*. `s` is the pseudo-count. **RoR never conditions on the problem text.** The only per-query
+signal is the observed pass/fail counts inside that query.
+
+Two consequences:
+
+- **Our `counts` baseline is exactly RoR.** `pseudo_count * prior[m] / (pseudo_count + failures[m])`
+  equals Eq. 2 when `w = 0`, which always holds in the failure region because a success terminates.
+  The reproduction is faithful.
+- **RoR calibrates its prior on train; we do not calibrate ours.** The current comparison is
+  therefore rigged *in RoR's favour*. Calibrating our beliefs is a fairness requirement, not an
+  optimization.
+
+**Their Table I positioning** (reproduced) draws our gap for us:
+
+| family | chooses among models | repeated draws | per-query budget | imperfect verifier |
+|---|:-:|:-:|:-:|:-:|
+| Learned routers | yes | -- | -- | -- |
+| Cascades | yes (sequential) | -- | cost gate | confidence gate |
+| Best-of-N / self-consistency | -- | yes | fixed N | selector needed |
+| Reject option | abstain/accept | -- | reject cost | confidence |
+| **RoR** | yes | yes | yes | yes (parametric) |
+
+Query-conditioning sits in the *learned routers* row (no draws, no budget); abstention sits in the
+*reject option* row (no draws, no budget). Neither is in the RoR row. Our cell is the union.
+
+**Their pool: 11 open-weight models across eight pretraining lineages** -- Mistral; Qwen 2.5 at
+7B/14B/32B plus a Qwen-based DeepSeek-R1 distill; Phi-4; OLMo-2; Yi-1.5; Granite-3.3; Gemma-2;
+Llama-3.1. Note this is **cross-lineage**, not a size ladder. Ours (Qwen3-4B, gpt-oss-20b,
+gpt-oss-120b) is essentially two lineages and mostly a capability ladder, which is the likely source
+of our zero-complementarity finding.
+
+**Their per-benchmark regimes (Table V, matched mid budget, parameter-size cost proxy):**
+
+| benchmark | regime | RoR | best baseline | note |
+|---|---|---:|---:|---|
+| GSM8K | saturated | 0.993 @ 9.6 | 0.992 cascade @ 12.3 | margin is cost only |
+| MATH-500 | intermediate | 0.877 @ 26.5 | 0.850 best-of-K | +2.7 pts |
+| **GPQA-Diamond** | **hard, heterogeneous** | **0.892 @ 26.6** | 0.644 best-of-K | **+24.8 pts** |
+| HumanEval+ | code | 0.962 @ 21.5 | 0.952 cascade | undirected baselines converge |
+
+**This is the finding that matters most for us.** GPQA-Diamond is where "the pool's specialists
+genuinely differ" and rerouting pays (+24.8). On **code**, their own honest caveat states: with a
+near-perfect execution verifier and a high union ceiling (0.988 oracle), "the two undirected
+budget-scalable baselines converge toward RoR" -- cascade 0.952, random 0.952--0.960 -- "because
+when almost every query is solvable by *some* draw and verification is reliable, spreading" budget
+works nearly as well as directing it. And on saturated benchmarks they state plainly that "the
+advantage comes from **stopping early on cheap models** rather than from finding a specialist."
+
+So: **we are working in the regime their own paper flags as least favourable to cross-model
+selection.** Our LCB setting is full-execution verified with an 81.4% union ceiling and zero
+specialist advantage -- the code/saturated regime, not the GPQA regime. That explains the
+difficulty, and it also dictates the framing.
+
+**Precision on "stopping" -- two different mechanisms, do not conflate them.** RoR's Algorithm 1 has
+exactly two loop exits: a verifier-confirmed correct draw (line 9, which they label "early
+stopping"), or budget exhaustion (line 3). On failure, line 13 still *returns the best candidate* --
+RoR never refuses to answer. So their "stopping early on cheap models" means **terminating on a
+win** obtained cheaply, not giving up.
+
+| stop when | RoR | ours |
+|---|:-:|:-:|
+| you have won (success termination) | yes (line 9) | yes |
+| you cannot win (give-up) | **no** | yes |
+
+The two cover **disjoint** problem sets: success termination avoids overspending on the 81.4% that
+are solvable; abstention avoids spending on the 18.6% that are not. Our contribution is therefore
+*orthogonal* to their mechanism, not a better version of it.
+
+**Reframing (recommended).** Do not claim specialist routing gains; the pool cannot deliver them and
+we should say so. Claim instead: *in the verified-code regime where selection gains provably vanish,
+what remains is cost efficiency -- RoR captures the solvable half by terminating on success, and the
+unsolvable half is untouched because the budget-constrained ratio formulation cannot express
+giving up.* Our proof that the ratio statistic
+admits no viable threshold (scout floor 24.03 vs oss120 ceiling 20.58, disjoint) and that the
+Lagrangian dual yields stopping for free at `Q <= 0` is then directly on-target rather than
+incidental. Our zero-complementarity measurement becomes a *supporting* finding, not an
+embarrassment.
+
+Also note a parallel worth citing: at their lowest GPQA budgets, single-commit baselines *beat* RoR
+(0.55--0.57 vs 0.35) until mean spend reaches ~15. Our own low-budget loss to `counts` has the same
+shape, so low-budget underperformance is a known regime effect, not necessarily a defect -- but
+ours is currently caused by miscalibration, which theirs is not.
+
+### Reject cost: abstention is currently free, and that is not defensible (2026-08-27)
+
+In the present replay, abstaining ends the episode with `correct = False` and **no additional
+charge** -- the policy simply stops paying and takes the loss. That makes abstention free, and a
+large part of the reported ~30% saving comes from declining 17--18% of episodes at zero penalty.
+
+In deployment a refused query does not vanish; something else absorbs it (human escalation, a
+frontier API call, a lost request). The reject-option literature -- their Table I row -- models this
+as a **reject cost** `d`: being wrong costs 1, rejecting costs `d < 1`, and the optimal rule rejects
+when confidence falls below `1 - d`.
+
+The utility formulation expresses this in one line: abstaining has value `-d` rather than `0`, so
+the stopping test becomes `max_m (p_m*R - cost_m) <= -d` and the policy continues while any action
+beats the fallback. `d` is either fixed from deployment economics or swept as a second axis. This is
+another argument for the dual: the primal has nowhere to put `d`.
+
+**Required before claiming the abstention result.** Report the frontier at `d = 0` (current), at
+`d` equal to one oss120 call, and at `d` equal to a plausible human-escalation cost. If the gain
+survives only at `d = 0`, say so. A reviewer will otherwise observe that we bought a 30% saving by
+refusing to answer, and the result will not survive.
+
+### Revised work order (2026-08-27, supersedes the ordering in the list below)
+
+1. **Launch oss20/oss120 multidraw on the 551 held-out problems.** Long pole, multi-day, zero
+   dependencies. Asymmetric draws: ~4 scout, 10 oss120.
+2. **Retire the budget cap as the frontier knob for our method** while keeping the budget-swept
+   `counts` cell for RoR parity, and extend its grid past $0.134. Hours.
+3. **Post-hoc recalibration** (per-route, depth-conditioned, calibration split only), then re-run
+   the frontier. Everything downstream is unattributable until this lands.
+4. **Structural continuation value**; then depth-1/2 lookahead as an ablation.
+5. **On new data**: retrain with `pos_weight`, select on AUC, evaluate once on the 341 temporal test.
+6. **Train a `content` (problem-text-only) predictor** over the reachable dataset and supply it via
+   `--content-preds`. The `content` family is currently **never evaluated** in any run -- the flag
+   has never been passed -- so the cleanest test of query-conditioning is absent from the grid.
+7. **Multi-seed (5--10) and 20 replay orderings**, propagating every seed through the full frontier
+   rather than reporting per-head AUC.
+8. **Report the reject-cost sweep** (see the reject-cost entry above) before claiming the abstention
+   result.
+
+Fairness checklist for the headline RoR comparison, all required together: extended budget grid to
+$0.342 (done); our beliefs calibrated as theirs are (open); multi-seed (open); cost-matched pairing
+with problem-clustered bootstrap (computable post hoc); reject cost reported (open).
+
+Open question worth deciding explicitly rather than drifting: whether the re-roll dimension earns
+its place at all. If the decisions that matter all occur in the first ~3 actions, this is an
+escalation problem dressed as a 30-step MDP, and the simpler framing may be the more defensible
+paper.
 
 ### Remaining before final paper figures
 

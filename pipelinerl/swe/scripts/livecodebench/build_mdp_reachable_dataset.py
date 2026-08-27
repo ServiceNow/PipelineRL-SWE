@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Build full-execution policy examples from reachable failure-only histories.
 
-Every sampled trajectory starts with the scout. A passing attempt terminates
-the trajectory, so no post-pass state can enter training or evaluation. The
-policy text contains explicit per-route counts plus only the latest failed
-attempt; the complete ordered history is retained separately as provenance.
+The start protocol is either scout-first or free-start. A passing attempt
+terminates the trajectory, so no post-pass state can enter training or
+evaluation. The policy text contains explicit per-route counts plus only the
+latest failed attempt; the complete ordered history is retained separately as
+provenance.
 """
 
 from __future__ import annotations
@@ -95,6 +96,9 @@ def main() -> None:
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--histories-per-problem", type=int, default=10)
     parser.add_argument("--max-failures", type=int, default=10)
+    parser.add_argument(
+        "--start-protocol", choices=["scout_first", "free_start"], default="scout_first"
+    )
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
 
@@ -136,17 +140,18 @@ def main() -> None:
             ptr = np.zeros(len(slots), dtype=int)
             attempts: list[dict[str, Any]] = []
 
-            # Scout-first protocol. A success resolves the problem before any decision.
-            while ptr[0] < K and not valid[pi, 0, int(orders[0, ptr[0]])]:
+            if args.start_protocol == "scout_first":
+                # A mandatory scout success resolves before any decision state exists.
+                while ptr[0] < K and not valid[pi, 0, int(orders[0, ptr[0]])]:
+                    ptr[0] += 1
+                if ptr[0] >= K:
+                    continue
+                scout_draw = int(orders[0, ptr[0]])
                 ptr[0] += 1
-            if ptr[0] >= K:
-                continue
-            scout_draw = int(orders[0, ptr[0]])
-            ptr[0] += 1
-            if outcomes[pi, 0, scout_draw]:
-                skipped_initial_pass += 1
-                continue
-            attempts.append(records[(pid, "scout", scout_draw)])
+                if outcomes[pi, 0, scout_draw]:
+                    skipped_initial_pass += 1
+                    continue
+                attempts.append(records[(pid, "scout", scout_draw)])
 
             while len(attempts) <= args.max_failures:
                 next_draws: list[int | None] = []
@@ -202,7 +207,7 @@ def main() -> None:
             for row in split_rows:
                 handle.write(json.dumps(row) + "\n")
     summary = {
-        "protocol": "scout_first_full_execution_failure_region",
+        "protocol": f"{args.start_protocol}_full_execution_failure_region",
         "state_representation": "problem_counts_latest_failed_attempt",
         "nothing_target": "no_successful_valid_draw_remains_in_any_route",
         "heads": HEADS,

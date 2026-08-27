@@ -2,6 +2,7 @@ import json
 import sys
 
 import numpy as np
+import pytest
 
 from pipelinerl.swe.scripts.livecodebench.build_mdp_reachable_dataset import (
     _nothing_remaining_target,
@@ -202,6 +203,144 @@ def test_sequential_decay_applies_route_failure_prior_before_choice() -> None:
     assert result["correct"] is True
 
 
+def test_free_start_can_abstain_before_any_model_call() -> None:
+    slots = ["scout", "oss20", "oss120"]
+    result = replay_adaptive(
+        np.zeros((3, 2), dtype=bool),
+        np.ones((3, 2), dtype=bool),
+        np.ones((3, 2), dtype=float),
+        np.ones(3),
+        np.tile(np.arange(2), (3, 1)),
+        3.0,
+        np.ones(3) * 0.5,
+        2.0,
+        slots,
+        _records("p", slots, 2),
+        "p",
+        "problem",
+        scorer=lambda _: np.array([0.01, 0.01, 0.01, 0.99]),
+        tau_abstain=0.1,
+        capture_trace=True,
+        mandatory_scout=False,
+    )
+    assert result["abstained"] is True
+    assert result["attempts"] == 0
+    assert result["start_protocol"] == "free_start"
+    assert result["decision_trace"][0]["failure_depth"] == 0
+    assert result["decision_trace"][0]["result"] == "abstain"
+
+
+def test_free_start_can_choose_an_expert_at_the_root() -> None:
+    slots = ["scout", "oss20", "oss120"]
+    outcomes = np.zeros((3, 2), dtype=bool)
+    outcomes[1, 0] = True
+    result = replay_adaptive(
+        outcomes,
+        np.ones_like(outcomes),
+        np.ones_like(outcomes, dtype=float),
+        np.ones(3),
+        np.tile(np.arange(2), (3, 1)),
+        3.0,
+        np.ones(3) * 0.5,
+        2.0,
+        slots,
+        _records("p", slots, 2),
+        "p",
+        "problem",
+        scorer=lambda _: np.array([0.1, 0.9, 0.1, 0.1]),
+        capture_trace=True,
+        mandatory_scout=False,
+    )
+    assert result["correct"] is True
+    assert result["attempts"] == 1
+    assert result["route_attempt_counts"] == {"scout": 0, "oss20": 1, "oss120": 0}
+    assert result["decision_trace"][0]["failure_depth"] == 0
+    assert result["decision_trace"][0]["chosen_route"] == "oss20"
+
+
+def test_marginal_value_stop_can_quit_immediately_after_mandatory_failure() -> None:
+    slots = ["scout", "oss20", "oss120"]
+    result = replay_adaptive(
+        np.zeros((3, 2), dtype=bool),
+        np.ones((3, 2), dtype=bool),
+        np.ones((3, 2), dtype=float),
+        np.ones(3),
+        np.tile(np.arange(2), (3, 1)),
+        3.0,
+        np.ones(3) * 0.5,
+        2.0,
+        slots,
+        _records("p", slots, 2),
+        "p",
+        "problem",
+        scorer=lambda _: np.array([0.3, 0.2, 0.1, 0.9]),
+        min_success_per_cost=0.31,
+        capture_trace=True,
+    )
+    assert result["abstained"] is True
+    assert result["attempts"] == 1
+    assert result["decision_trace"][0]["failure_depth"] == 1
+    assert result["decision_trace"][0]["abstain_reason"] == "marginal_value"
+
+
+def _unequal_cost_replay(**kwargs):
+    """Ratio ranks scout first (50 > 25 > 20); dollar value ranks oss120 first."""
+    slots = ["scout", "oss20", "oss120"]
+    return replay_adaptive(
+        np.zeros((3, 2), dtype=bool),
+        np.ones((3, 2), dtype=bool),
+        np.ones((3, 2), dtype=float),
+        np.array([0.001, 0.004, 0.03]),
+        np.tile(np.arange(2), (3, 1)),
+        10.0,
+        np.array([0.05, 0.10, 0.60]),
+        2.0,
+        slots,
+        _records("p", slots, 2),
+        "p",
+        "problem",
+        scorer=lambda _: np.array([0.05, 0.10, 0.60, 0.5]),
+        capture_trace=True,
+        mandatory_scout=False,
+        **kwargs,
+    )
+
+
+def test_ratio_selection_prefers_the_cheapest_route() -> None:
+    result = _unequal_cost_replay()
+    assert result["decision_trace"][0]["chosen_route"] == "scout"
+    assert result["decision_trace"][0]["action_value"] is None
+
+
+def test_value_selection_prefers_the_expensive_high_probability_route() -> None:
+    result = _unequal_cost_replay(value_of_correct=1.0)
+    assert result["decision_trace"][0]["chosen_route"] == "oss120"
+    assert result["decision_trace"][0]["action_value"]["oss120"] > 0.0
+
+
+def test_value_selection_ranking_is_not_scale_invariant() -> None:
+    """The ratio rule ranks routes identically at every valuation; value does not."""
+    low = _unequal_cost_replay(value_of_correct=0.04)
+    high = _unequal_cost_replay(value_of_correct=1.0)
+    assert low["decision_trace"][0]["chosen_route"] == "scout"
+    assert high["decision_trace"][0]["chosen_route"] == "oss120"
+
+
+def test_value_control_abstains_at_the_root_without_a_threshold() -> None:
+    result = _unequal_cost_replay(value_of_correct=0.01)
+    assert result["abstained"] is True
+    assert result["attempts"] == 0
+    assert result["decision_trace"][0]["failure_depth"] == 0
+    assert result["decision_trace"][0]["abstain_reason"] == "non_positive_action_value"
+    assert result["decision_trace"][0]["tau_abstain"] is None
+    assert result["decision_trace"][0]["min_success_per_cost"] is None
+
+
+def test_stopping_controls_are_mutually_exclusive() -> None:
+    with pytest.raises(ValueError, match="at most one"):
+        _unequal_cost_replay(value_of_correct=1.0, tau_abstain=0.5)
+
+
 def test_decision_summary_and_problem_clustered_bootstrap() -> None:
     traced = [{
         "decision_trace": [{
@@ -310,3 +449,24 @@ def test_reachable_dataset_contains_only_failed_histories(tmp_path, monkeypatch)
         for attempt in row["attempt_history"]:
             mi = slots.index(attempt["model_slot"])
             assert not outcomes[pi, mi, attempt["draw_index"]]
+
+
+    free_start_dir = tmp_path / "free_start_dataset"
+    monkeypatch.setattr(sys, "argv", [
+        "build_mdp_reachable_dataset.py",
+        "--tensors-dir", str(tensor_dir),
+        "--output-dir", str(free_start_dir),
+        "--histories-per-problem", "4",
+        "--max-failures", "4",
+        "--start-protocol", "free_start",
+    ])
+    build_dataset()
+    free_start_rows = [
+        json.loads(line)
+        for split in ("train", "calibration", "test")
+        for line in open(free_start_dir / f"{split}.jsonl")
+    ]
+    roots = [row for row in free_start_rows if row["failure_depth"] == 0]
+    assert {row["problem_id"] for row in roots} == set(pids)
+    assert all(row["attempt_history"] == [] for row in roots)
+    assert all("latest_attempted_route: none" in row["text"] for row in roots)
