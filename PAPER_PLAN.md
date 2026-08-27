@@ -1279,7 +1279,9 @@ saved generations, so no model recollection was needed.
 - prompt/completion token counts and aligned draw records retained
 - reachable dataset: 6,683 train / 3,275 calibration / 2,901 test decision states
 - all states begin after a failed mandatory scout; histories stop on any full-execution pass
-- histories include failed scout, oss20, and oss120 attempts
+- policy text contains explicit per-route failure/remaining counts and only the latest failed
+  attempt; complete histories remain provenance metadata rather than model context
+- the `nothing` target is positive only when no successful valid draw remains in any route
 
 ### Corrected baseline replay (test split, 20 draw orderings)
 
@@ -1302,19 +1304,53 @@ uses train-split expected cost, so future completion lengths are not leaked.
 Figures in `analysis/mdp_full_execution_v2/` replace the public-verifier frontier for protocol
 validation. They currently contain counts and fixed baselines only.
 
+### First corrected learned run disposition
+
+`lcb_mdp_full_execution_seed17_1787680221` completed end to end. Its four held-out AUCs were
+approximately 0.79--0.86, but its sequential policy did not improve the cost/accuracy frontier
+over the count policy or one-pass cascade. Calibration BCE selected epoch 0 and worsened sharply
+thereafter.
+
+Post-run audit found two representation/label issues, so this learned curve is diagnostic rather
+than final: complete histories caused 13.2% sampled-state truncation (about 46% at depth 10), and
+the old `nothing` head meant only that the next draw from each route would fail. The corrected
+builder now presents problem + explicit per-route counts + only the latest failed attempt, and
+labels `nothing` only when no successful valid draw remains anywhere. On the saved LCB tensors,
+the new representation had zero truncation in a 1,200-state sample (maximum 4,363/8,192 tokens)
+and corrected 2,092 labels where all next draws fail but a later draw succeeds. No recollection
+was required.
+
 ### Remaining before final paper figures
 
-1. Run `train_mdp_reachable_policy.py`; select checkpoints on calibration BCE and touch test once.
-2. Replay the saved model dynamically with `replay_mdp_full_execution.py --sequential-model-dir`.
-3. Replicate learned-policy training across seeds before adding the sequential curve.
-4. Re-run the LCB input-only vs failed-attempt comparison strictly conditional on full-execution
-   scout failure. The old +0.116 all-instance/public-feedback result is not decision-valid.
-5. Regenerate the two-domain and variance figures from that conditional comparison. Until then,
-   the old versions remain visibly superseded rather than silently overwritten.
+1. Train one inexpensive LCB diagnostic on the rebuilt latest-attempt dataset, using calibration
+   checkpoint selection and a less aggressive optimization configuration. The scheduled configuration
+   is seed 17, 3 epochs, learning rate 2e-5, and 5 replay orderings, reusing the saved generations.
+2. Add per-episode action/prediction traces and paired problem-level bootstrap intervals to replay.
+3. Advance to multi-seed LCB training only if the learned policy beats counts or the cascade at
+   matched cost; otherwise report the learned-policy result as a negative result.
+4. Re-run the LCB counts-only versus latest-failed-attempt comparison strictly conditional on
+   full-execution scout failure.
+5. Regenerate the two-domain and variance figures only after that gate. Keep SWE-Smith unlaunched
+   until the LCB diagnostic passes.
+
+### Prepared SWE-Smith protocol-v2 extension (not launched)
+
+The agentic-domain adapter now consumes real sandbox execution for both routing and final
+correctness, uses the matched scout/oss20/oss120 portfolio, and reuses the same reachable-state
+trainer/replay. The existing eval150 artifacts contain 143 problems with all nine reports; this
+is suitable for development only (72/36/35 internal split). The preferred paper evaluation uses
+eval150 for training/calibration and the already-generated, non-overlapping eval300 bundle as an
+untouched test set after its nine real sandbox reports per problem are collected. Missing reports
+are invalid, never negative labels. See `analysis/swe_smith_mdp_full_execution_v2/README.md`.
 
 ---
 
-## FULL CAPABILITY LADDER COMPLETE: Sequential Policy Wins (2026-08-25)
+## LEGACY WEAK-VERIFIER CAPABILITY LADDER (SUPERSEDED; 2026-08-25)
+
+This section records the old public/private-verifier experiment for provenance only. It uses
+the invalid legacy state dataset audited above (including empty problem text and unreachable
+histories), so neither its learned-policy numbers nor its figure are primary paper results.
+Protocol v2 above replaces it; do not compare these values directly with full-execution replay.
 
 Sequential MDP policy trained (`mdp_sequential_policy_1787670814`: 4-head BCE on depth-1
 decision points, single seed) and wired into the replay as history-conditioned beliefs
@@ -1348,5 +1384,5 @@ these become headline numbers.
 
 ### Paper figure
 
-`analysis/mdp_paper_figures/fig_mdp_frontier_2x2.png` now shows the full capability ladder
-(six curves + fixed baselines). This is the main result figure.
+`analysis/mdp_paper_figures/fig_mdp_frontier_2x2.png` shows this legacy weak-verifier ladder
+(six curves + fixed baselines). It is retained for provenance and is not a main result figure.

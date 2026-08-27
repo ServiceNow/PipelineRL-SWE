@@ -153,3 +153,22 @@ file modification times are advancing.
 
 `DAYTONA_API_KEY` and `OPENROUTER_API_KEY` are always read from `.env` at runtime — never
 hardcoded, never passed as EAI job command-line arguments (which would appear in logs).
+
+
+## Corrected full-execution MDP (protocol v2)
+
+The primary LCB allocation protocol no longer uses public tests as a routing-time oracle and
+private tests as hidden correctness. Use
+`launch_lcb_mdp_full_execution.sh` for the corrected pipeline: complete execution, mandatory
+scout first, reachable failure-only histories, canonical train/calibration/test splits,
+calibration-selected checkpoints, realized-token costs, and dynamic learned-policy replay.
+
+`launch_lcb_mdp_sequential_train.sh` and `mdp_sequential_policy_1787670814` are retained as the
+legacy weak-verifier experiment. Do not use them for primary paper claims.
+
+The prepared agentic-domain counterpart is
+`launch_swe_smith_mdp_full_execution.sh`. It uses real SWE-Smith sandbox reports
+for both routing and final correctness, defaults to the LCB-matched
+scout/oss20/oss120 portfolio, and does not submit unless `SUBMIT=1` is set.
+See `analysis/swe_smith_mdp_full_execution_v2/README.md` for the data audit and
+the preferred 150-development/300-heldout protocol.

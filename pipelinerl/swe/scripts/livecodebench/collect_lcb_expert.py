@@ -25,6 +25,7 @@ from pipelinerl.swe.scripts.livecodebench.collect_lcb_trajectories import (
     openrouter_call,
     problem_id,
 )
+from pipelinerl.swe.scripts.livecodebench.mdp_utils import redact_sensitive_text
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -128,7 +129,9 @@ async def collect_split(
                         evaluate_code, code, row, eval_timeout
                     )
             except Exception as exc:
-                logger.warning("%s failed for %s: %s", route_label, pid, exc)
+                logger.warning(
+                    "%s failed for %s: %s", route_label, pid, redact_sensitive_text(exc)
+                )
                 out = {
                     "full_output": "",
                     "thinking_text": "",
@@ -140,7 +143,7 @@ async def collect_split(
                 public_report = full_report = {
                     "resolved": False,
                     "result_codes": [],
-                    "metadata": {"error_message": repr(exc)},
+                    "metadata": {"error_message": redact_sensitive_text(repr(exc))},
                 }
             return {
                 "problem_id": pid,

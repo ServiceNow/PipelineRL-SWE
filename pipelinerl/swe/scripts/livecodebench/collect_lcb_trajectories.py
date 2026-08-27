@@ -44,6 +44,8 @@ import aiohttp
 import numpy as np
 import pandas as pd
 
+from pipelinerl.swe.scripts.livecodebench.mdp_utils import redact_sensitive_text
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
@@ -263,7 +265,7 @@ def evaluate_code(
             "passing": [],
             "failing": ["TEST_RUNNER_ERROR"],
             "result_codes": [],
-            "metadata": {"error_message": repr(exc)},
+            "metadata": {"error_message": redact_sensitive_text(repr(exc))},
         }
 
     normalized = [
@@ -441,7 +443,7 @@ async def collect_scout(
                     temperature=temperature, title=title, semaphore=sem,
                 )
             except Exception as e:
-                logger.warning("Scout failed for %s: %s", pid, e)
+                logger.warning("Scout failed for %s: %s", pid, redact_sensitive_text(e))
                 out = {"full_output": "", "thinking_text": "", "prompt_tokens": 0,
                        "completion_tokens": 0, "latency_s": 0.0}
 
@@ -589,7 +591,7 @@ async def collect_oracle(
                         evaluate_code, code, row, eval_timeout
                     )
             except Exception as e:
-                logger.warning("Oracle failed for %s: %s", pid, e)
+                logger.warning("Oracle failed for %s: %s", pid, redact_sensitive_text(e))
                 out = {"full_output": "", "thinking_text": "", "prompt_tokens": 0,
                        "completion_tokens": 0, "latency_s": 0.0}
                 code = ""
@@ -598,7 +600,7 @@ async def collect_oracle(
                     "passing": [],
                     "failing": ["MODEL_CALL_ERROR"],
                     "result_codes": [],
-                    "metadata": {"error_message": repr(e)},
+                    "metadata": {"error_message": redact_sensitive_text(repr(e))},
                 }
             return {
                 "problem_id": pid,
