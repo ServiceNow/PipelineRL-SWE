@@ -1320,21 +1320,45 @@ the new representation had zero truncation in a 1,200-state sample (maximum 4,36
 and corrected 2,092 labels where all next draws fail but a later draw succeeds. No recollection
 was required.
 
+### Latest-attempt gated rerun and decision diagnostics
+
+`lcb_mdp_latest_attempt_seed17_1787808515` completed end to end (seed 17, 3 epochs,
+learning rate 2e-5, 5 replay orderings). Calibration selected epoch 1. Test AUCs were
+0.693 scout-next, 0.834 oss20-next, 0.852 oss120-next, and 0.862 nothing-remaining.
+Despite this predictive signal, the learned policy did not improve the frontier:
+
+- at budget 0.00861, learned minus counts correctness was -9.77 points, paired
+  problem-bootstrap 95% CI [-16.05, -3.95];
+- at budgets 0.06501 and 0.07306, the deltas were -5.12 points
+  (CI [-10.00, -0.93]) and -5.81 points (CI [-10.47, -1.86]);
+- at the highest budgets both reached 74.65%, but learned cost was 0.04220 versus
+  0.04164 for counts;
+- nearest the cascade's cost, learned was -2.56 points (CI [-8.14, +2.56]) and used
+  7.17 more attempts/problem-ordering (CI [+5.78, +8.61]).
+
+The replay-only diagnostic artifact is
+`/mnt/llmd/results/exps/aristides/reason/lcb_mdp_latest_attempt_seed17_1787808515/replay_diagnostics_v1`.
+It contains 20,640 adaptive and 3,440 fixed per-episode rows, action/probability traces, and
+5,000-draw paired bootstraps clustered over the 86 test problems.
+
+The failure mechanism is structural. Across 2,498 unique learned states, mean predicted scout
+success changed only from 0.176 after one scout failure to 0.163 after nine. Its mean
+probability/cost score therefore stayed around 285--319, versus roughly 53--58 for oss20.
+The learned policy exhausted scout, then oss20, and delayed oss120: at budget 0.06501 counts
+made 144 oss120 choices while learned made zero. The learned `p(any remaining)` never fell
+below 0.252, so the calibration-selected abstention threshold 0.05 could never fire.
+
 ### Remaining before final paper figures
 
-1. Monitor the launched LCB latest-attempt diagnostic
-   `lcb_mdp_latest_attempt_seed17_1787808515` (scheduler job
-   `7b05d8c8-efbd-4931-8069-b114064aa86f`, submitted 2026-08-27; initially `QUEUING`).
-   It rebuilds tensors/states from the saved generations, then trains seed 17 for 3 epochs at
-   learning rate 2e-5 with calibration checkpoint selection and replays 5 orderings. Artifacts:
-   `/mnt/llmd/results/exps/aristides/reason/lcb_mdp_latest_attempt_seed17_1787808515`.
-2. Add per-episode action/prediction traces and paired problem-level bootstrap intervals to replay.
-3. Advance to multi-seed LCB training only if the learned policy beats counts or the cascade at
-   matched cost; otherwise report the learned-policy result as a negative result.
-4. Re-run the LCB counts-only versus latest-failed-attempt comparison strictly conditional on
-   full-execution scout failure.
-5. Regenerate the two-domain and variance figures only after that gate. Keep SWE-Smith unlaunched
-   until the LCB diagnostic passes.
+1. Do not run multi-seed learned-policy training or launch SWE-Smith under the current greedy
+   learned-probability policy; the predeclared gate failed.
+2. If retaining a learned-policy arm, test one no-retraining hybrid replay that multiplies learned
+   content probabilities by the explicit count-based failure-decay prior. This preserves RoR's
+   strong structural update while testing whether content supplies a useful residual.
+3. Report the pure learned latest-attempt policy as a negative result unless that hybrid beats
+   counts with paired problem-level confidence intervals.
+4. Regenerate the primary figures and paper text from full-execution counts/fixed baselines plus
+   the appropriately labeled learned-policy result; keep legacy public/private figures superseded.
 
 ### Prepared SWE-Smith protocol-v2 extension (not launched)
 

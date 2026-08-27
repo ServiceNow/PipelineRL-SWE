@@ -23,8 +23,15 @@ The current builder instead uses problem + explicit per-route failure/remaining
 counts + only the latest failed attempt. Its abstention target is positive only
 when no successful valid draw remains in any route. Rebuilding the saved LCB
 tensors changed 2,092 such labels and produced zero over-8,192-token states in a
-1,200-state sample (sample maximum 4,363). One gated diagnostic retraining is
-still required before any learned curve is added to the paper figures.
+1,200-state sample (sample maximum 4,363).
+
+The gated latest-attempt run `lcb_mdp_latest_attempt_seed17_1787808515`
+completed but did not beat counts or the cascade. Its replay diagnostics are in
+`replay_diagnostics_v1/` under that artifact root. The learned policy barely
+reduced scout success probability after repeated failures (mean 0.176 after one
+scout failure versus 0.163 after nine), so probability/cost routing exhausted
+cheap scout draws before escalating. This is a negative learned-policy result;
+do not add its curve as a headline improvement.
 
 
 ## Learned-policy diagnostics
