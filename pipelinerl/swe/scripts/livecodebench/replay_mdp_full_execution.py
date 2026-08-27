@@ -127,6 +127,7 @@ def replay_adaptive(
     scorer: Callable[[str], np.ndarray] | None = None,
     tau_abstain: float | None = None,
     capture_trace: bool = False,
+    apply_failure_decay: bool = False,
 ) -> dict[str, Any]:
     ptr = np.zeros(len(slots), dtype=int)
     failures = np.zeros(len(slots), dtype=int)
@@ -193,12 +194,17 @@ def replay_adaptive(
                 raise AssertionError("Sequential scoring requires rendered state text")
             all_probs = np.asarray(scorer(state_text), dtype=float)
             p_each = all_probs[: len(slots)]
-            p_any = (
-                1.0 - float(all_probs[len(slots)])
-                if len(all_probs) > len(slots)
-                else 1.0 - float(np.prod(1.0 - p_each))
-            )
-            belief_source = "sequential"
+            if apply_failure_decay:
+                p_each = p_each * pseudo_count / (pseudo_count + failures)
+                p_any = 1.0 - float(np.prod(1.0 - p_each))
+                belief_source = "sequential_decay"
+            else:
+                p_any = (
+                    1.0 - float(all_probs[len(slots)])
+                    if len(all_probs) > len(slots)
+                    else 1.0 - float(np.prod(1.0 - p_each))
+                )
+                belief_source = "sequential"
         elif content_prior is not None:
             p_each = np.asarray(content_prior, dtype=float)
             p_any = 1.0 - float(np.prod(1.0 - p_each))
@@ -487,16 +493,21 @@ def main() -> None:
                     orderings[int(pi), oi], budget, priors, args.pseudo_count, slots,
                     records, pid, str(problems[pid]["problem_statement"]),
                     content_prior=content.get(pid) if family == "content" else None,
-                    scorer=scorer if family == "sequential" else None,
+                    scorer=scorer if family in ("sequential", "sequential_decay") else None,
                     tau_abstain=tau,
                     capture_trace=capture_trace,
+                    apply_failure_decay=family == "sequential_decay",
                 )
                 result["problem_id"] = pid
                 result["ordering_index"] = oi
                 outputs.append(result)
         return outputs
 
-    families = ["counts"] + (["content"] if content else []) + (["sequential"] if scorer else [])
+    families = (
+        ["counts"]
+        + (["content"] if content else [])
+        + (["sequential", "sequential_decay"] if scorer else [])
+    )
     rows: list[dict[str, Any]] = []
     episode_rows: list[dict[str, Any]] = []
     action_summaries: list[dict[str, Any]] = []
@@ -569,43 +580,47 @@ def main() -> None:
 
     paired_comparisons: list[dict[str, Any]] = []
     if scorer is not None:
-        for bi, budget in enumerate(budgets):
-            for suffix in ("", "_abstain"):
-                reference_policy = "counts" + suffix
-                candidate_policy = "sequential" + suffix
-                paired_comparisons.append({
-                    "reference_policy": reference_policy,
-                    "candidate_policy": candidate_policy,
-                    "budget": budget,
-                    **_paired_problem_bootstrap(
-                        adaptive_outputs[(budget, reference_policy)],
-                        adaptive_outputs[(budget, candidate_policy)],
-                        samples=args.bootstrap_samples,
-                        seed=args.seed + 1000 * bi + (1 if suffix else 0),
-                    ),
-                })
+        candidate_families = ("sequential", "sequential_decay")
+        for fi, candidate_family in enumerate(candidate_families):
+            for bi, budget in enumerate(budgets):
+                for suffix in ("", "_abstain"):
+                    reference_policy = "counts" + suffix
+                    candidate_policy = candidate_family + suffix
+                    paired_comparisons.append({
+                        "reference_policy": reference_policy,
+                        "candidate_policy": candidate_policy,
+                        "budget": budget,
+                        **_paired_problem_bootstrap(
+                            adaptive_outputs[(budget, reference_policy)],
+                            adaptive_outputs[(budget, candidate_policy)],
+                            samples=args.bootstrap_samples,
+                            seed=args.seed + 100_000 * fi + 1000 * bi + (1 if suffix else 0),
+                        ),
+                    })
 
         cascade_outputs = fixed_outputs["single_pass_cascade"]
         cascade_cost = float(np.mean([row["realized_spend"] for row in cascade_outputs]))
-        closest_budget = min(
-            budgets,
-            key=lambda budget: abs(
-                _aggregate(adaptive_outputs[(budget, "sequential")])["mean_realized_cost"]
-                - cascade_cost
-            ),
-        )
-        paired_comparisons.append({
-            "reference_policy": "single_pass_cascade",
-            "candidate_policy": "sequential",
-            "budget": closest_budget,
-            "matching": "nearest_mean_realized_cost",
-            **_paired_problem_bootstrap(
-                cascade_outputs,
-                adaptive_outputs[(closest_budget, "sequential")],
-                samples=args.bootstrap_samples,
-                seed=args.seed + 999_999,
-            ),
-        })
+        for fi, candidate_family in enumerate(candidate_families):
+            closest_budget = min(
+                budgets,
+                key=lambda budget: abs(
+                    _aggregate(adaptive_outputs[(budget, candidate_family)])[
+                        "mean_realized_cost"
+                    ] - cascade_cost
+                ),
+            )
+            paired_comparisons.append({
+                "reference_policy": "single_pass_cascade",
+                "candidate_policy": candidate_family,
+                "budget": closest_budget,
+                "matching": "nearest_mean_realized_cost",
+                **_paired_problem_bootstrap(
+                    cascade_outputs,
+                    adaptive_outputs[(closest_budget, candidate_family)],
+                    samples=args.bootstrap_samples,
+                    seed=args.seed + 999_999 + fi,
+                ),
+            })
 
     diagnostics = {
         "schema_version": 1,

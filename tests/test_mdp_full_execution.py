@@ -173,6 +173,35 @@ def test_adaptive_replay_trace_records_probabilities_state_and_choice() -> None:
     assert decision["state_key"]
 
 
+def test_sequential_decay_applies_route_failure_prior_before_choice() -> None:
+    slots = ["scout", "oss20", "oss120"]
+    outcomes = np.zeros((3, 2), dtype=bool)
+    outcomes[1, 0] = True
+    result = replay_adaptive(
+        outcomes,
+        np.ones_like(outcomes),
+        np.ones_like(outcomes, dtype=float),
+        np.ones(3),
+        np.tile(np.arange(2), (3, 1)),
+        3.0,
+        np.ones(3) * 0.5,
+        2.0,
+        slots,
+        _records("p", slots, 2),
+        "p",
+        "problem",
+        scorer=lambda _: np.array([0.6, 0.5, 0.1, 0.2]),
+        capture_trace=True,
+        apply_failure_decay=True,
+    )
+    decision = result["decision_trace"][0]
+    assert decision["belief_source"] == "sequential_decay"
+    assert np.isclose(decision["p_success_next"]["scout"], 0.4)
+    assert np.isclose(decision["p_success_next"]["oss20"], 0.5)
+    assert decision["chosen_route"] == "oss20"
+    assert result["correct"] is True
+
+
 def test_decision_summary_and_problem_clustered_bootstrap() -> None:
     traced = [{
         "decision_trace": [{
