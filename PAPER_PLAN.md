@@ -1846,6 +1846,75 @@ another argument for the dual: the primal has nowhere to put `d`.
 survives only at `d = 0`, say so. A reviewer will otherwise observe that we bought a 30% saving by
 refusing to answer, and the result will not survive.
 
+### First utility-formulation frontier (2026-08-27, development-only, PARTIAL COMPARISON)
+
+Artifact: `lcb_mdp_latest_attempt_seed17_1787808515/replay_ror_vs_value_{scout_first,free_start}_v1`.
+Produced with the **miscalibrated** model (scout 9.28x over) on the **old `problem_first`** layout,
+so it is a lower bound on what the corrected model should reach.
+
+Best correctness at or below each cost, scout-first:
+
+| cost | `counts` (RoR primal) | `counts_value` | `sequential_decay` | `sequential_decay_value` |
+|---:|---|---|---|---|
+| $0.0100 | 60.93% | 60.93% | 47.91% | **61.86%** |
+| $0.0200 | **65.12%** | 65.12% | 65.12% | 64.65% |
+| $0.0300 | 68.60% | 65.12% | 68.60% | **70.93%** |
+| $0.0417 | 74.65% @ .0416 | 74.65% | 74.42% | **75.81% @ .0305** |
+
+- The dual with learned beliefs wins at three of four matched costs; at $0.0417 it is **+1.16 points
+  at 27% lower cost**.
+- It reaches the **81.40% union ceiling at $0.1226**, against `best_of_10_oss120` 81.40% @ $0.13376
+  -- same accuracy, **8.3% cheaper** -- and 80.93% @ $0.09757.
+- Abstention falls smoothly out of `R` with no threshold: 65.1% of episodes at R=$0.0012 down to
+  0.0% at R>=$1.32, where correctness pins at the ceiling.
+
+**Two caveats that must travel with these numbers.**
+
+1. **The comparison above $0.0417 is not valid.** This run predates the budget-grid extension, so the
+   primal families were swept only to $0.0417 while the dual reached $0.143. Nothing in the
+   high-cost region is a fair RoR comparison until the extended-grid re-run lands.
+2. **`counts_value` matches `counts` exactly wherever both were swept** (60.93/60.93, 65.12/65.12,
+   74.65/74.65). So the formulation *alone* buys nothing in that region. The win comes from learned
+   beliefs **plus** a formulation that can use them -- which is the more defensible claim, and the
+   one the 2x2 grid is designed to support.
+
+**Free-start becomes informative only under the dual.** Under the ratio rule every policy chose
+scout at the root 100% of the time at every budget (recorded above as the vacuous-ablation entry).
+Under the value rule the root action sweeps with `R`:
+
+| R ($/correct) | root action |
+|---:|---|
+| 0.0012 | ABSTAIN 100% |
+| 0.0055 | scout 70%, ABSTAIN 30% |
+| 0.0264 | scout 100% |
+| 0.1260 | oss20 100% |
+| 0.6021 | oss120 85%, oss20 15% |
+| 2.8770 | oss120 100% |
+
+"Should the scout be called at all?" is now answerable, and the answer is a function of what a
+correct answer is worth. This is the clearest single demonstration that the dual expresses
+decisions the primal structurally cannot, and it is independent of the frontier numbers.
+
+### Runtime reference and job hygiene (2026-08-27)
+
+Measured on the 86-problem test split, 5 orderings, one GPU:
+
+| run shape | duration |
+|---|---:|
+| budget sweep only, 12 points | 13m 40s |
+| 12 budgets + 24-point value sweep, scout_first | 52m 15s |
+| same, free_start | 55m 37s |
+| both protocols chained in one process | **1h 48m** |
+
+The value sweep dominates: it escalates into states the budget sweep never visits, so the scorer's
+state-key cache misses. With the 17-point extended grid expect ~60--65 min per protocol.
+
+**Protocols must be launched as separate parallel jobs**, never chained -- chaining converted two
+~55 minute runs into a 1h48m serial wait. `launch_lcb_mdp_replay.sh` runs exactly one protocol over
+an existing artifact for this reason. It requires `STATE_LAYOUT` explicitly: artifacts built before
+2026-08-27 were trained on `problem_first`, and replaying them under the new `counts_last` default
+would feed the scorer state text it has never seen.
+
 ### Revised work order (2026-08-27, supersedes the ordering in the list below)
 
 1. **Launch oss20/oss120 multidraw on the 551 held-out problems.** Long pole, multi-day, zero
