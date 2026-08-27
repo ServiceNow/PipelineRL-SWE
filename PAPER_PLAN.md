@@ -1895,6 +1895,49 @@ Under the value rule the root action sweeps with `R`:
 correct answer is worth. This is the clearest single demonstration that the dual expresses
 decisions the primal structurally cannot, and it is independent of the frontier numbers.
 
+### The advantage is on COST at matched accuracy, and abstention is the whole mechanism (2026-08-27)
+
+The accuracy framing understates the result and is also the fragile one (the primal was
+under-swept). The cost framing at *matched* accuracy is stronger and rests on a mechanism RoR
+structurally lacks. Every policy reaching the 81.40% union ceiling, by cost:
+
+| policy | knob | cost | abstain |
+|---|---:|---:|---:|
+| **`sequential_value`** | R=0.1863 | **$0.06852** | **13.5%** |
+| `sequential_decay_value` | R=0.8902 | $0.12261 | 13.0% |
+| `best_of_10_oss120` | -- | $0.13376 | n/a |
+| every non-abstaining policy (incl. `counts_value`) | -- | $0.1429--$0.1437 | 0.0% |
+
+- **48.8% cheaper than `best_of_10_oss120`** and **52% cheaper than the best non-abstaining
+  policy**, at identical ceiling accuracy.
+- Ablating only the give-up arm within one policy: `sequential_decay_value` costs $0.12261 with
+  13.0% abstention and $0.14285 with 0%, i.e. **14.2% cheaper at identical accuracy purely from
+  abstention**.
+- **No policy without a give-up arm finds a cheap ceiling point**, including `counts_value` -- the
+  dual running on RoR's count beliefs. So this is not the formulation alone: it requires learned,
+  query-conditioned beliefs *and* an action space that can stop.
+
+**The abstentions are provably all on unsolvable problems.** The policy reaches *exactly* the
+ceiling while declining 13.5% of episodes; abstaining on even one solvable problem would have put
+correctness below 81.40%. So it identified 13.5 of the 18.6 percentage points of hopeless problems
+(73% of them) and quit before spending. This is forced by the arithmetic, not inferred from the
+frontier, and it is the `nothing` head's 0.855 within-depth AUC doing the work.
+
+**This is also where the reject-cost objection is weakest.** On a hopeless problem RoR exhausts its
+budget and returns its best wrong candidate (their Algorithm 1, line 13); we spend little and return
+nothing. Both are scored incorrect, so the correctness axis is a wash and the saving survives for
+any reject cost below the grinding cost. For code specifically, a silently-wrong patch that will be
+reviewed or merged is plausibly worse than an explicit refusal. Still report the sweep.
+
+**Open puzzle before claiming any of this.** `sequential_value` (raw learned, no count decay) finds
+the ceiling at $0.06852 while `sequential_decay_value` needs $0.12261 -- the decay makes it too
+conservative here, inverting the earlier frontier result where decay won. Understand this before
+choosing which policy to headline; it may be another symptom of the miscalibration, since the decay
+was compensating for inflated scout probabilities that matter less once R is large.
+
+Caveats unchanged: development-only, 86 test problems, one seed, five orderings, miscalibrated
+model on the old `problem_first` layout, reject cost priced at zero.
+
 ### Runtime reference and job hygiene (2026-08-27)
 
 Measured on the 86-problem test split, 5 orderings, one GPU:
