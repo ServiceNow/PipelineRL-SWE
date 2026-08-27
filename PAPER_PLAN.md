@@ -1348,17 +1348,54 @@ The learned policy exhausted scout, then oss20, and delayed oss120: at budget 0.
 made 144 oss120 choices while learned made zero. The learned `p(any remaining)` never fell
 below 0.252, so the calibration-selected abstention threshold 0.05 could never fire.
 
+### Count-decayed learned hybrid replay (provisional positive)
+
+The predeclared no-retraining hybrid multiplies each learned route-success probability by the
+same failure-count prior used by the count policy, `pseudo_count / (pseudo_count + failures)`
+with pseudo-count 2. This retains RoR's structural update after failures while allowing the
+model's problem- and attempt-specific prediction to act as a residual. Its abstention probability
+is recomputed from these decayed route probabilities.
+
+The replay artifact is
+`/mnt/llmd/results/exps/aristides/reason/lcb_mdp_latest_attempt_seed17_1787808515/replay_hybrid_v1`.
+It uses the same test split and saved predictions, five draw orderings, and 5,000 paired bootstrap
+draws clustered over the 86 test problems. The hybrid passes the provisional decision gate:
+
+- at budget 0.07306, the non-abstaining hybrid exactly matched counts at 74.42% correctness while
+  reducing mean cost from 0.04008 to 0.03669 (8.45%); paired cost delta 95% CI
+  [-0.00639, -0.00077], with P(delta > 0) = 0.0032;
+- at the high-budget abstaining point, the hybrid reached 74.19% correctness at 0.02870 cost,
+  versus 74.42% at 0.04008 for the neighboring count point. The correctness difference was
+  -0.23 points, CI [-1.16, +0.47], while cost fell by 28.4%, CI [-0.01841, -0.00517];
+- at the middle abstaining point, the hybrid reached 73.95% at 0.02820 versus counts' 73.72% at
+  0.03690. The correctness difference was +0.23 points, CI [-0.47, +1.16], while cost fell by
+  23.6%, CI [-0.01475, -0.00319];
+- the hybrid remains materially worse at the smallest budget (47.91% versus 57.44%), so it is an
+  addition to the Pareto frontier rather than a uniformly dominant replacement for counts.
+
+The apparently tiny scout rates are conditional rates in the hard tail after mandatory scout
+failure, not the marginal scout capability: scout solves 28.4% of all saved draws and the
+mandatory-scout replay solves 34.9% of test episodes. Among held-out reachable states, empirical
+next-scout success drops from 3.15% after one scout failure to 0.81%, 0.19%, and 0.30% after two,
+three, and four failures. The model substantially overpredicts these values (15.6%, 12.8%, 11.7%,
+and 11.4%), explaining why pure learned routing keeps drawing scout. The hybrid corrects this
+calibration/structural failure without retraining.
+
+This is a one-model-seed, five-ordering result and is therefore provisional, not yet a headline
+paper claim. It supports the factorized policy design: count decay supplies the reliable
+sequential update, and learned semantic predictions supply the residual routing signal.
+
 ### Remaining before final paper figures
 
-1. Do not run multi-seed learned-policy training or launch SWE-Smith under the current greedy
-   learned-probability policy; the predeclared gate failed.
-2. If retaining a learned-policy arm, test one no-retraining hybrid replay that multiplies learned
-   content probabilities by the explicit count-based failure-decay prior. This preserves RoR's
-   strong structural update while testing whether content supplies a useful residual.
-3. Report the pure learned latest-attempt policy as a negative result unless that hybrid beats
-   counts with paired problem-level confidence intervals.
-4. Regenerate the primary figures and paper text from full-execution counts/fixed baselines plus
-   the appropriately labeled learned-policy result; keep legacy public/private figures superseded.
+1. Repeat the frozen hybrid replay with 20 draw orderings to reduce replay Monte Carlo variance;
+   retain the same policy definition and compare it to counts with paired problem-level intervals.
+2. Train at least three LCB seeds and evaluate the predeclared hybrid without test-set tuning.
+   Report both the pure learned negative result and the hybrid result.
+3. If the LCB hybrid advantage replicates, activate the prepared SWE-Smith eval150 development
+   adaptation. First measure marginal and post-failure conditional route success rates there;
+   preserve eval300 as the untouched final test set.
+4. Regenerate primary figures and paper text from full-execution fixed/count baselines, the pure
+   learned diagnostic, and the replicated hybrid. Keep all legacy public/private figures superseded.
 
 ### Prepared SWE-Smith protocol-v2 extension (not launched)
 

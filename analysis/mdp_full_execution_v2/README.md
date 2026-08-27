@@ -34,6 +34,25 @@ cheap scout draws before escalating. This is a negative learned-policy result;
 do not add its curve as a headline improvement.
 
 
+A predeclared no-retraining hybrid replay now supplies the missing structural
+update by multiplying each learned probability by the count prior
+`2 / (2 + route failures)`. Results are in `replay_hybrid_v1/` under the same
+artifact root. At budget 0.07306, this hybrid matched counts at 74.42%
+correctness while lowering mean cost from 0.04008 to 0.03669 (8.45%; paired
+95% CI for the cost delta [-0.00639, -0.00077]). Its abstaining high-budget
+point achieved 74.19% at 0.02870, statistically indistinguishable in
+correctness from the neighboring 74.42%-at-0.04008 count point, with a 28.4%
+cost reduction (cost-delta CI [-0.01841, -0.00517]). The hybrid adds useful
+Pareto points but remains worse than counts at the smallest budget.
+
+These are provisional results from one trained seed and five replay orderings.
+They support a factorized policy--reliable count decay plus a learned semantic
+residual--but require 20-ordering and multi-training-seed replication before use
+as a headline claim. The very low scout rates diagnosed here are conditional
+on prior mandatory-scout failure: marginal saved-draw scout success is 28.4%,
+whereas next-scout success after one held-out failure is only 3.15%.
+
+
 ## Learned-policy diagnostics
 
 `replay_mdp_full_execution.py` writes three complementary artifacts:
@@ -44,6 +63,8 @@ do not add its curve as a headline improvement.
 - `diagnostics.json`: route-choice/pass counts, mean predictions, and paired 95% bootstrap
   intervals. Bootstrap resampling is clustered by problem, preserving the repeated draw
   orderings within each problem.
+- `hybrid_frontier_comparisons.json` in the hybrid replay directory: paired comparisons between
+  count, pure learned, count-decayed learned, and count-decayed learned-with-abstention frontiers.
 
 The trace output intentionally excludes problem text and generated code.
 
