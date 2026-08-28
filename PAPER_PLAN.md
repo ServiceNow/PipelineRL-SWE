@@ -2334,6 +2334,36 @@ cost at $0.10/M is **38% of total spend**, so the low-cost region of our frontie
 overstated without it. Add router cost as a configurable term and report the frontier with it on;
 do not quietly restrict the claim to the ceiling where it happens not to matter.
 
+### Conditional vs overall savings coincide here; the 8% vs 51% gap is abstention (2026-08-28)
+
+Computed directly from `replay_extgrid_scout_first_v2` traces at the matched 81.40% ceiling
+(430 episodes, `sequential_value` R=0.1863 vs `counts` at full-exhaustion budget):
+
+| | overall | conditional (reached router) |
+|---|---:|---:|
+| `counts` (RoR) | $0.13793 | $0.21171 |
+| `sequential_value` (ours) | $0.06690 | $0.10263 |
+| saving | **51.5%** | **51.5%** |
+
+**There is no dilution.** Scout-resolved episodes are 34.9% of episodes but only **0.05% of total
+spend** ($0.00055 against a $0.138 average), so conditioning on router entry cannot move the
+percentage. Reporting both remains honest but is uninformative in this setup -- say so rather than
+implying the conditional number is a stronger effect.
+
+**The 8-10% vs 40-51% confusion is not conditional-vs-overall, it is with/without abstention.**
+Three distinct comparisons have been in circulation:
+
+| figure | what it compares |
+|---|---|
+| 8.45% | count-decay hybrid: `sequential_decay` vs `counts`, **both without abstention**, budget $0.07306, matched 74.42% |
+| 40-43% | the `counts_last` replay, conditional and overall |
+| 51.5% | ours **with** abstention vs RoR, matched at the 81.40% ceiling |
+
+8.45% is what better routing buys with the give-up arm off; 51.5% is with it on. This agrees with
+the direct ablation (abstention off within one policy costs 14.2% at identical accuracy) and with
+the fact that no policy lacking a give-up arm reaches a cheap ceiling point. Do not present 8-10%
+and 51.5% as competing estimates of the same quantity.
+
 ### Prepared SWE-Smith protocol-v2 extension (not launched)
 
 The agentic-domain adapter now consumes real sandbox execution for both routing and final
