@@ -2412,6 +2412,40 @@ State that in one sentence rather than sweeping it. Router inference cost is com
 (6.42 calls/episode; 51.5% -> at worst 47.6%) and does not need to be a policy arm, but **must be
 reported at the cheap end too**, where it is 38% of total spend.
 
+### Tier 1 results: RoR is not under-tuned (2026-08-28)
+
+`replay_tier1_counts_cpu_v1` -- count families only, so no scorer and no GPU. Cheapest cost to reach
+the 81.40% ceiling:
+
+| RoR variant | cost @ ceiling |
+|---|---:|
+| s=0.5 | **$0.13733** (best) |
+| s=1 | $0.13740 |
+| s=2 (our default) | $0.13793 |
+| s=5 / 10 / 20 | $0.13849 |
+| UCB | $0.13849 |
+
+**Both fairness checks come back null.**
+
+1. **Pseudo-count sensitivity: none.** The full sweep spans 0.8%, and every `s` gives identical
+   74.65% at a $0.045 budget. RoR's own insensitivity claim replicates on our pool despite the
+   regime difference (3 models vs 11, 53x cost spread, k=10 vs 30). Our `s=2` default was not
+   handicapping the baseline.
+2. **UCB is not RoR's stronger arm here** ($0.13849 vs greedy $0.13793), consistent with their
+   Table V. Comparing against greedy was already the harder comparison; that is now measured
+   rather than assumed.
+
+**Headline restated against RoR at its best setting: $0.06690 vs $0.13733 = 51.3% cheaper**
+(was 51.5% at s=2). Immaterial change -- report the 51.3% figure and cite the sweep.
+
+Remaining Tier 1 item is the one expected to bite: freezing `R` on calibration for *our* policy
+(`sequential*_value_frozen`), which needs the scorer and is running on the local GPU. The
+count-family half (`counts_value_frozen`) is already in this artifact.
+
+Note on execution: this arm needs **no GPU and no eai job** -- dropping `--sequential-model-dir`
+collapses `families` to `["counts"]` and takes the scorer out of the path entirely. Prefer that for
+any baseline-only sweep.
+
 ### Prepared SWE-Smith protocol-v2 extension (not launched)
 
 The agentic-domain adapter now consumes real sandbox execution for both routing and final
