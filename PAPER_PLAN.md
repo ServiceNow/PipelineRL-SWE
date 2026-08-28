@@ -2446,6 +2446,35 @@ Note on execution: this arm needs **no GPU and no eai job** -- dropping `--seque
 collapses `families` to `["counts"]` and takes the scorer out of the path entirely. Prefer that for
 any baseline-only sweep.
 
+### Tier 1 result: frozen-R survives, but the retention target is a new knob (2026-08-28)
+
+`replay_tier1_fairness_v1`. R selected on CALIBRATION only, test touched once per target.
+
+| policy | retention target | R* (calibration) | cal corr | TEST corr | TEST cost |
+|---|---:|---:|---:|---:|---:|
+| **`sequential_value_frozen`** | **0.95** | **0.1863** | 76.00% | **81.40%** | **$0.06690** |
+| `sequential_value_frozen` | 0.98 / 0.99 / 1.00 | 0.4073 | 77.65% | 81.40% | $0.14001 |
+| `sequential_decay_value_frozen` | 0.95 | 0.2755 | 74.12% | 79.30% | $0.05754 |
+| `sequential_decay_value_frozen` | 1.00 | 1.3162 | 77.65% | 81.40% | $0.14275 |
+| `counts_value_frozen` | 0.99 / 1.00 | 0.2755 | 77.65% | 81.40% | $0.14343 |
+
+**The post-hoc selection concern is resolved.** Calibration independently selects R=0.1863 -- the
+same value previously read off the test frontier -- giving 81.40% at $0.06690. Against RoR at its
+best `s` ($0.13733) that is **51.3% cheaper with no test-set selection anywhere in the pipeline**.
+All three Tier 1 threats (post-hoc R, pseudo-count tuning, UCB variant) are now cleared.
+
+**But the retention target is itself a selection knob, and it matters a lot.** At targets 0.98--1.00
+the frozen R overshoots to 0.4073 and costs $0.14001 for the same 81.40% -- no better than RoR.
+Cause: the calibration ceiling is 77.65% while the test ceiling is 81.40%, so a strict
+retention target on calibration purchases spending the test split does not need. **Report all four
+targets.** Quoting only 0.95 moves the selection up one level rather than removing it. The honest
+headline is "at a predeclared 0.95 retention target", and the target must be declared before the
+final temporal evaluation, not chosen from this table.
+
+**Do not quote a 58.1% figure.** An automated summary produced it by comparing
+`sequential_decay_value_frozen` at 79.30% against RoR at 81.40%; it is cheaper only because it is
+less accurate. Matched-accuracy comparisons only.
+
 ### Prepared SWE-Smith protocol-v2 extension (not launched)
 
 The agentic-domain adapter now consumes real sandbox execution for both routing and final
