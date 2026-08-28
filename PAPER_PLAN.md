@@ -2528,29 +2528,40 @@ Problem-clustered bootstrap (10,000 resamples over the 86 development problems) 
 95% CI [-0.8%, +0.3%] -- indistinguishable from zero. So there is no operating point where the
 baseline significantly beats us.
 
-**Router cost creates a regime boundary, and the earlier "headline survives" claim was scoped too
-broadly.** Including router inference at 3,000 tokens/call and $0.10/M:
+**Router cost is negligible; an earlier "regime boundary" entry here was wrong and is retracted.**
+Two errors inflated it ~8x: the per-state token count was *assumed* at 3,000 when the measured mean
+is **1,321** (median 918, p90 2,602), and the price was *assumed* at $0.10/M without calculation.
 
-| our correctness | saving (solver only) | saving (+ router) |
-|---:|---:|---:|
-| 52.56% | +15.2% | **-10.4%** |
-| 61.63% | +29.3% | +15.6% |
-| 68.60% | -0.2% | **-10.6%** |
-| 74.42% | +18.9% | +13.2% |
-| 78.14% | +20.1% | +16.7% |
-| **81.40%** | **+51.5%** | **+50.1%** |
+Calculated properly: a single Qwen3-Embedding-8B forward pass over 1,321 tokens is
+`2 x 8e9 x 1321 = 21.1 TFLOP`, ~52.8 ms on an H100 at 400 TFLOP/s effective, ~$0.0278/M tokens at
+$2.50/GPU-hour. At 6.42 router calls/episode that is **$0.000236/episode = 0.4% of our $0.06690
+ceiling point**, and ~4% at the cheapest operating points -- not the 38% recorded earlier.
 
-At the ceiling router cost is immaterial (51.5% -> 50.1%). Below ~70% correctness it **reverses the
-sign**: total solver spend there is under a cent while the policy still makes ~6 router calls per
-episode, so a fixed 8B forward-pass overhead dominates. The previous entry recorded that router
-cost is 38% of spend at the cheap end but still framed the conclusion as unaffected; that framing
-was correct only at the ceiling.
+| our correctness | raw | +8B router | +0.6B router | +$0.13/M (embedding-3-large) |
+|---:|---:|---:|---:|---:|
+| 52.56% | +15.2% | +12.0% | +14.9% | +0.5% |
+| 61.63% | +29.3% | +27.6% | +29.1% | +21.4% |
+| 68.60% | -0.2% | -1.5% | -0.3% | -6.2% |
+| 74.42% | +18.9% | +18.2% | +18.8% | +15.7% |
+| 78.14% | +20.1% | +19.7% | +20.1% | +18.2% |
+| **81.40%** | **+51.5%** | **+51.3%** | **+51.5%** | **+50.7%** |
 
-**Reporting requirement.** State the claim as regime-conditional: the advantage is large and robust
-in the high-accuracy regime (>=~74%) and absent or negative below ~70% once routing compute is
-counted. Do not quote the ceiling number as if it held across the frontier. This is defensible --
-the deployment-relevant regime for verified code generation is the high-accuracy end, and RoR
-themselves argue regime-conditionally -- but it must be stated rather than scoped silently.
+Savings stay positive across the whole frontier under **every** pricing basis, including $0.13/M
+which is higher than the figure that produced the spurious boundary. The only negative cell is the
+68.60% point already shown to be noise (-0.2%, CI [-0.8%, +0.3%]).
+
+Report the 8B compute basis as primary (it matches how the solver costs are constructed -- actual
+resource use) and the commercial-embedding-API basis as a sensitivity row.
+
+**Smaller encoder (0.6B) is a latency argument, not an economic one.** At $0.0021/M the router
+becomes 0.0% of spend, but 8B is already 0.4%, so cost is not the motivation. The real gain is
+latency: 3.96 ms vs 52.8 ms per call, i.e. ~24 ms vs ~340 ms added per episode. Worth an ablation
+for the deployment story; not urgent, and it must not be justified on cost grounds.
+
+**Process note.** Two invented numbers reached this document today: a "58.1% saving" from an
+automated summary comparing mismatched accuracies, and a "$0.10/M" router price that was assumed
+rather than derived. Both produced findings that survived one review pass. Derive cost parameters
+before recording conclusions that depend on them.
 
 **Gap to close:** the `counts_s*` and `counts_ucb` arms run with `capture_trace=False`, so they
 write no episode traces and cannot be bootstrapped. Comparisons against RoR at its best `s` are
