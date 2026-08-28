@@ -207,6 +207,8 @@ def replay_adaptive(
     scorer: Callable[..., np.ndarray] | None = None,
     calibrator: Callable[[np.ndarray, int], np.ndarray] | None = None,
     state_layout: str = "counts_last",
+    exploration_bonus: bool = False,
+    decay_pseudo_count: float | None = None,
     tau_abstain: float | None = None,
     min_success_per_cost: float | None = None,
     value_of_correct: float | None = None,
@@ -300,7 +302,8 @@ def replay_adaptive(
                 all_probs = calibrator(all_probs, int(failures.sum()))
             p_each = all_probs[: len(slots)]
             if apply_failure_decay:
-                p_each = p_each * pseudo_count / (pseudo_count + failures)
+                decay_s = pseudo_count if decay_pseudo_count is None else decay_pseudo_count
+                p_each = p_each * decay_s / (decay_s + failures)
                 p_any = 1.0 - float(np.prod(1.0 - p_each))
                 belief_source = "sequential_decay"
             else:
@@ -323,6 +326,14 @@ def replay_adaptive(
             belief_source = "counts"
 
         ratios = {mi: float(p_each[mi] / expected_costs[mi]) for mi in available}
+        if exploration_bonus:
+            t = int(failures.sum())
+            ratios = {
+                mi: ratios[mi] + float(
+                    np.sqrt(2.0 * np.log(t + 1) / (failures[mi] + 1)) / expected_costs[mi]
+                )
+                for mi in available
+            }
         # The ratio is scale-invariant, so it ranks routes identically at every
         # valuation and always prefers the cheapest. The dollar difference does not.
         action_values = (
@@ -548,6 +559,32 @@ def main() -> None:
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--num-orderings", type=int, default=5)
     parser.add_argument("--pseudo-count", type=float, default=2.0)
+    parser.add_argument(
+        "--pseudo-count-grid", default="",
+        help=(
+            "Comma-separated s values for RoR's belief update (s*p_bar+w)/(s+n). s sets how fast "
+            "failures pull the estimate off the offline prior, i.e. how quickly RoR escalates. "
+            "RoR reports insensitivity over an order of magnitude on their pool; verify it on ours "
+            "and report the baseline at its BEST s rather than inheriting the claim."
+        ),
+    )
+    parser.add_argument(
+        "--decay-pseudo-count", type=float, default=None,
+        help="Pseudo-count for our sequential_decay variant. Defaults to --pseudo-count; set "
+             "separately so the RoR sweep and our decay do not move in lockstep.",
+    )
+    parser.add_argument(
+        "--ucb", action="store_true",
+        help="Also run RoR's UCB variant (exploration bonus sqrt(2 ln(t+1)/(n_m+1))/c_m).",
+    )
+    parser.add_argument(
+        "--retention-grid", default="0.95,0.98,0.99,1.0",
+        help=(
+            "Correctness-retention targets for freezing R on CALIBRATION. For each target the "
+            "cheapest R meeting it on calibration is frozen, then reported once on test. Fixes the "
+            "post-hoc selection of R=0.1863 off the test frontier."
+        ),
+    )
     parser.add_argument("--cost-mode", choices=["usd", "weights"], default="usd")
     parser.add_argument("--execution-cost-usd", type=float, default=0.0)
     parser.add_argument("--content-preds")
@@ -670,6 +707,8 @@ def main() -> None:
         value_of_correct: float | None = None,
         *,
         capture_trace: bool = False,
+        pseudo_count: float | None = None,
+        exploration_bonus: bool = False,
     ) -> list[dict[str, Any]]:
         outputs = []
         for pi in indices:
@@ -677,7 +716,8 @@ def main() -> None:
             for oi in range(args.num_orderings):
                 result = replay_adaptive(
                     outcomes[int(pi)], valid[int(pi)], realized_costs[int(pi)], expected_costs,
-                    orderings[int(pi), oi], budget, priors, args.pseudo_count, slots,
+                    orderings[int(pi), oi], budget, priors,
+                    args.pseudo_count if pseudo_count is None else pseudo_count, slots,
                     records, pid, str(problems[pid]["problem_statement"]),
                     content_prior=content.get(pid) if family == "content" else None,
                     scorer=scorer if family in ("sequential", "sequential_decay") else None,
@@ -688,6 +728,8 @@ def main() -> None:
                     value_of_correct=value_of_correct,
                     capture_trace=capture_trace,
                     apply_failure_decay=family == "sequential_decay",
+                    decay_pseudo_count=args.decay_pseudo_count,
+                    exploration_bonus=exploration_bonus,
                     mandatory_scout=args.start_protocol == "scout_first",
                 )
                 result["problem_id"] = pid
@@ -760,6 +802,63 @@ def main() -> None:
                     "value_of_correct": None,
                     **output,
                 } for output in outputs)
+
+    # --- Baseline fairness arms ---------------------------------------------------
+    # (a) Pseudo-count sensitivity for RoR's belief update. s controls how quickly
+    #     observed failures pull the estimate off the offline prior, i.e. how fast the
+    #     baseline escalates. We must report RoR at its best s, not at our default.
+    # (b) RoR ships a greedy AND a UCB variant; comparing only against greedy leaves an
+    #     unverified assumption that greedy is their stronger arm.
+    pseudo_grid = [float(x) for x in args.pseudo_count_grid.split(",") if x.strip()]
+    for s_value in pseudo_grid:
+        for budget in budgets:
+            outputs = run(test_idx, budget, "counts", None, pseudo_count=s_value,
+                          capture_trace=False)
+            rows.append({
+                "policy": f"counts_s{s_value:g}", "budget": budget, "tau": None,
+                "min_success_per_cost": None, "value_of_correct": None,
+                "pseudo_count": s_value, **_aggregate(outputs),
+            })
+    if args.ucb:
+        for budget in budgets:
+            outputs = run(test_idx, budget, "counts", None, exploration_bonus=True,
+                          capture_trace=False)
+            rows.append({
+                "policy": "counts_ucb", "budget": budget, "tau": None,
+                "min_success_per_cost": None, "value_of_correct": None,
+                **_aggregate(outputs),
+            })
+
+    # --- R frozen on calibration ----------------------------------------------------
+    # The headline R was previously chosen by reading the TEST frontier for the cheapest
+    # point at ceiling accuracy. That is post-hoc selection. Here each retention target
+    # picks its R on calibration only; the test split is then touched once per target.
+    retention_grid = [float(x) for x in args.retention_grid.split(",") if x.strip()]
+    frozen_rows: list[dict[str, Any]] = []
+    for family in families:
+        cal_by_r = {
+            r: _aggregate(run(cal_idx, unconstrained_budget, family, None, None, r))
+            for r in value_grid
+        }
+        cal_ceiling = max(m["correctness"] for m in cal_by_r.values())
+        for target in retention_grid:
+            ok = [(m["mean_realized_cost"], r) for r, m in cal_by_r.items()
+                  if m["correctness"] >= target * cal_ceiling]
+            if not ok:
+                continue
+            r_star = min(ok)[1]
+            test_metrics = _aggregate(run(test_idx, unconstrained_budget, family, None, None, r_star))
+            frozen_rows.append({
+                "policy": f"{family}_value_frozen",
+                "budget": None, "tau": None, "min_success_per_cost": None,
+                "value_of_correct": r_star,
+                "selection": "calibration_only",
+                "retention_target": target,
+                "calibration_correctness": cal_by_r[r_star]["correctness"],
+                "calibration_ceiling": cal_ceiling,
+                **test_metrics,
+            })
+    rows.extend(frozen_rows)
 
     # Value-controlled frontier. One scalar R drives escalation and stopping jointly,
     # so there is no budget grid and no calibration-selected abstention threshold.

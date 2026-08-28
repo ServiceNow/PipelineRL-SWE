@@ -2364,6 +2364,54 @@ the direct ablation (abstention off within one policy costs 14.2% at identical a
 the fact that no policy lacking a give-up arm reaches a cheap ceiling point. Do not present 8-10%
 and 51.5% as competing estimates of the same quantity.
 
+### Tier 1 baseline-fairness pass (2026-08-28, implemented)
+
+Three changes, all replay-only, aimed at things that could **shrink the 51.5% headline**. Done
+before quoting that number again, on the principle that we already found one instance of the
+harness handicapping RoR (the budget grid capped at $0.089, below `best_of_10_oss120` at $0.13376).
+
+**1. Freeze `R` on calibration (`--retention-grid`).** The headline R=0.1863 was selected by reading
+the *test* frontier for the cheapest point at exactly ceiling accuracy. That is post-hoc selection
+and is the most likely reason the number is optimistic. For each correctness-retention target the
+cheapest R meeting it **on calibration** is now frozen, and the test split is touched once per
+target, emitted as `<family>_value_frozen` with `selection: calibration_only` plus the calibration
+correctness and ceiling for provenance. Expect the frozen number to be worse than 51.5%; that is
+the point.
+
+**2. Pseudo-count sweep for RoR (`--pseudo-count-grid`).** RoR's update is
+`p_hat = (s*p_bar_m + w)/(s + n)`; in our failure region `w=0`, so the belief is `s*p_bar/(s+n)` and
+`s` directly sets how fast the baseline escalates:
+
+| s | belief after 5 failures |
+|---:|---|
+| 0.5 | 0.09x prior (escalates fast) |
+| 2 (our default) | 0.29x prior |
+| 10 | 0.67x prior (keeps re-rolling) |
+
+RoR reports insensitivity to `s` over an order of magnitude, but on **their** pool (11 models, k=30,
+four benchmarks). Our regime differs enough -- 3 models, 53x cost spread, k=10, near-perfect
+verifier -- that the claim should be verified rather than inherited. Emitted as `counts_s{value}`.
+**Report RoR at its best s.**
+
+**3. RoR's UCB variant (`--ucb`).** RoR ships greedy *and* UCB (exploration bonus
+`sqrt(2 ln(t+1)/(n_m+1))/c_m`). We only implemented greedy. Their Table V suggests greedy is the
+stronger arm on three of four benchmarks, so this is expected to be a null check -- but it converts
+an assumption into evidence. Emitted as `counts_ucb`.
+
+Supporting change: `--decay-pseudo-count` separates our `sequential_decay` variant's pseudo-count
+from RoR's, so sweeping `s` for the baseline does not drag our own policy along with it.
+
+Tests added: UCB explores more routes than greedy; decay pseudo-count is independent of the RoR
+pseudo-count; greedy is bit-identical when exploration is off. 25 tests pass.
+
+**Not in Tier 1, with reasons.** Reject cost `d` is omitted deliberately: on a pool-unsolved problem
+both policies end up incorrect -- we return nothing, RoR returns its best wrong candidate (their
+Alg. 1 line 13) -- so a symmetric accounting charges `d` to both and it cancels. It only fails to
+cancel if refusing is worse than silently answering wrong, which for code is the opposite of true.
+State that in one sentence rather than sweeping it. Router inference cost is computed separately
+(6.42 calls/episode; 51.5% -> at worst 47.6%) and does not need to be a policy arm, but **must be
+reported at the cheap end too**, where it is 38% of total spend.
+
 ### Prepared SWE-Smith protocol-v2 extension (not launched)
 
 The agentic-domain adapter now consumes real sandbox execution for both routing and final

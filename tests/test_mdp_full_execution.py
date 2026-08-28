@@ -520,3 +520,54 @@ def test_reachable_dataset_contains_only_failed_histories(tmp_path, monkeypatch)
     assert {row["problem_id"] for row in roots} == set(pids)
     assert all(row["attempt_history"] == [] for row in roots)
     assert all("latest_attempted_route: none" in row["text"] for row in roots)
+
+
+def test_ucb_bonus_shifts_choice_toward_the_less_sampled_route() -> None:
+    """RoR's UCB arm: sqrt(2 ln(t+1)/(n_m+1))/c_m added to the ratio."""
+    slots = ["scout", "oss20", "oss120"]
+    kwargs = dict(
+        content_prior=None, capture_trace=True, mandatory_scout=False,
+        scorer=lambda _, **__: np.array([0.30, 0.28, 0.05, 0.5]),
+    )
+    common = (
+        np.zeros((3, 4), dtype=bool), np.ones((3, 4), dtype=bool),
+        np.ones((3, 4), dtype=float), np.array([0.001, 0.001, 0.03]),
+        np.tile(np.arange(4), (3, 1)), 10.0, np.array([0.3, 0.28, 0.05]), 2.0,
+        slots, _records("p", slots, 4), "p", "problem",
+    )
+    greedy = replay_adaptive(*common, **kwargs)
+    ucb = replay_adaptive(*common, exploration_bonus=True, **kwargs)
+    # Greedy commits to the highest ratio every time; UCB must explore more routes.
+    assert len({d["chosen_route"] for d in greedy["decision_trace"]}) <= \
+           len({d["chosen_route"] for d in ucb["decision_trace"]})
+
+
+def test_decay_pseudo_count_is_independent_of_the_ror_pseudo_count() -> None:
+    """The RoR s-sweep must not drag our decay variant along with it."""
+    slots = ["scout", "oss20", "oss120"]
+    def go(decay_s):
+        return replay_adaptive(
+            np.zeros((3, 3), dtype=bool), np.ones((3, 3), dtype=bool),
+            np.ones((3, 3), dtype=float), np.ones(3), np.tile(np.arange(3), (3, 1)),
+            10.0, np.ones(3) * 0.5, 2.0, slots, _records("p", slots, 3), "p", "problem",
+            scorer=lambda _, **__: np.array([0.4, 0.3, 0.2, 0.5]),
+            apply_failure_decay=True, decay_pseudo_count=decay_s,
+            capture_trace=True, mandatory_scout=False,
+        )
+    weak = go(0.5)["decision_trace"]
+    strong = go(50.0)["decision_trace"]
+    # A large decay pseudo-count barely shrinks beliefs after one failure; a small one does.
+    assert weak[1]["p_success_next"]["scout"] < strong[1]["p_success_next"]["scout"]
+
+
+def test_greedy_is_unchanged_when_exploration_is_off() -> None:
+    slots = ["scout", "oss20", "oss120"]
+    common = (
+        np.zeros((3, 3), dtype=bool), np.ones((3, 3), dtype=bool),
+        np.ones((3, 3), dtype=float), np.ones(3), np.tile(np.arange(3), (3, 1)),
+        10.0, np.ones(3) * 0.5, 2.0, slots, _records("p", slots, 3), "p", "problem",
+    )
+    a = replay_adaptive(*common, capture_trace=True, mandatory_scout=False)
+    b = replay_adaptive(*common, exploration_bonus=False, capture_trace=True, mandatory_scout=False)
+    assert [d["chosen_route"] for d in a["decision_trace"]] == \
+           [d["chosen_route"] for d in b["decision_trace"]]
