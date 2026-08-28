@@ -27,6 +27,8 @@ HISTORIES_PER_PROBLEM=${HISTORIES_PER_PROBLEM:-10}
 START_PROTOCOL=${START_PROTOCOL:-scout_first}
 STATE_LAYOUT=${STATE_LAYOUT:-problem_first}
 POS_WEIGHT=${POS_WEIGHT:-none}
+STATE_FEATURE_MODE=${STATE_FEATURE_MODE:-text_only}
+STATE_FEATURE_HIDDEN_SIZE=${STATE_FEATURE_HIDDEN_SIZE:-64}
 TEMPORAL_CALIBRATION_FRACTION=${TEMPORAL_CALIBRATION_FRACTION:-0.5}
 ROUTE_DRAW_COUNTS=${ROUTE_DRAW_COUNTS:-scout=4,oss20=10,oss120=10}
 SNAPSHOT=${SNAPSHOT:-1}
@@ -40,7 +42,7 @@ Prepared but not submitted.
   train: 551 problems through 2024-09-28
   calibration: earliest half of later 341 problems
   test: latest half of later 341 problems
-  state layout: ${STATE_LAYOUT}; pos weight: ${POS_WEIGHT}
+  state layout: ${STATE_LAYOUT}; state features: ${STATE_FEATURE_MODE}; pos weight: ${POS_WEIGHT}
   route draws: ${ROUTE_DRAW_COUNTS}
 
 Submit explicitly with: SUBMIT=1 bash ${SCRIPT_DIR}/launch_lcb_mdp_temporal_551_341.sh
@@ -72,7 +74,8 @@ python pipelinerl/swe/scripts/livecodebench/build_mdp_reachable_dataset.py \
   --state-layout ${STATE_LAYOUT} --seed 0 && \
 ${TRAIN_LAUNCH} pipelinerl/swe/scripts/livecodebench/train_mdp_reachable_policy.py \
   --dataset-dir ${DATASET_DIR} --output-dir ${MODEL_DIR} --seed ${SEED} \
-  --num-epochs ${NUM_EPOCHS} --lr ${LR} --max-seq-length 8192 --pos-weight ${POS_WEIGHT} && \
+  --num-epochs ${NUM_EPOCHS} --lr ${LR} --max-seq-length 8192 --pos-weight ${POS_WEIGHT} \
+  --state-feature-mode ${STATE_FEATURE_MODE} --state-feature-hidden-size ${STATE_FEATURE_HIDDEN_SIZE} && \
 python pipelinerl/swe/scripts/livecodebench/replay_mdp_full_execution.py \
   --tensors-dir ${TENSORS_DIR} --output-dir ${REPLAY_DIR} --sequential-model-dir ${MODEL_DIR} \
   --num-orderings ${NUM_ORDERINGS} --start-protocol ${START_PROTOCOL} \

@@ -10,6 +10,10 @@ from pipelinerl.swe.scripts.livecodebench.build_mdp_reachable_dataset import (
     _render_state,
     main as build_dataset,
 )
+from pipelinerl.swe.scripts.livecodebench.structured_state import (
+    STATE_FEATURE_NAMES,
+    build_structured_state_features,
+)
 from pipelinerl.swe.scripts.livecodebench.mdp_utils import (
     build_split_manifest,
     redact_sensitive_text,
@@ -82,6 +86,27 @@ def test_policy_state_keeps_counts_and_only_latest_failed_attempt() -> None:
     assert "OLD_SCOUT_CODE" not in text
     assert "old failure" not in text
     assert "total_failures: 2" in text
+
+
+
+def test_structured_state_features_expose_normalized_counts_and_latest_route() -> None:
+    attempts = [
+        {"model_slot": "scout"},
+        {"model_slot": "oss20"},
+    ]
+    values = build_structured_state_features(
+        attempts,
+        {"scout": 3, "oss20": 9, "oss120": 10},
+        {"scout": 4, "oss20": 10, "oss120": 10},
+        ["scout", "oss20", "oss120"],
+    )
+    assert len(values) == len(STATE_FEATURE_NAMES) == 11
+    assert values == pytest.approx([
+        1 / 4, 1 / 10, 0.0,
+        3 / 4, 9 / 10, 1.0,
+        2 / 24,
+        0.0, 0.0, 1.0, 0.0,
+    ])
 
 
 def test_counts_last_layout_puts_execution_state_at_the_readout_token() -> None:

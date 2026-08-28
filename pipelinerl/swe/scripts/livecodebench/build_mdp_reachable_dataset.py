@@ -18,6 +18,11 @@ from typing import Any
 import numpy as np
 
 from pipelinerl.swe.scripts.livecodebench.mdp_utils import load_split_manifest
+from pipelinerl.swe.scripts.livecodebench.structured_state import (
+    STATE_FEATURE_NAMES,
+    STATE_FEATURE_VERSION,
+    build_structured_state_features,
+)
 
 
 HEADS = ["scout_next", "oss20_fresh", "oss120_fresh", "nothing"]
@@ -200,12 +205,18 @@ def main() -> None:
                 if not available:
                     break
                 remaining = _remaining_draw_counts(valid[pi], orders, ptr, slots)
+                route_capacities = {
+                    slot: int(valid[pi, mi].sum()) for mi, slot in enumerate(slots)
+                }
                 rows.append({
                     "problem_id": pid,
                     "split": split_for[pid],
                     "history_index": history_index,
                     "failure_depth": len(attempts),
                     "text": _render_state(statement, attempts, remaining, args.state_layout),
+                    "state_features": build_structured_state_features(
+                        attempts, remaining, route_capacities, slots
+                    ),
                     "targets": targets + [_nothing_remaining_target(
                         outcomes[pi], valid[pi], orders, ptr
                     )],
@@ -240,6 +251,8 @@ def main() -> None:
         "protocol": f"{args.start_protocol}_full_execution_failure_region",
         "state_representation": "problem_counts_latest_failed_attempt",
         "state_layout": args.state_layout,
+        "structured_state_feature_version": STATE_FEATURE_VERSION,
+        "structured_state_feature_names": STATE_FEATURE_NAMES,
         "nothing_target": "no_successful_valid_draw_remains_in_any_route",
         "heads": HEADS,
         "histories_per_problem": int(args.histories_per_problem),

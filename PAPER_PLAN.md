@@ -2238,6 +2238,24 @@ count features are useful. After a stable method is selected, report rolling chr
 across the 892 problems and reserve SWE-Smith eval300 as the external confirmation rather than
 waiting for new LCB data.
 
+#### Structured-state feature test (prepared, not submitted)
+
+The next controlled row holds the chronological split, data construction, route horizons, seed,
+three-epoch schedule, unweighted BCE, latest failed code, aggregate full-execution feedback, and
+`counts_last` text prompt fixed. It changes only the policy head: alongside the normalized Qwen
+embedding, a small 11-to-64 feature encoder receives per-route failed fractions, per-route
+remaining-draw fractions, a total-failure fraction, and a latest-route one-hot (none/scout/oss20/
+oss120). The fused representation feeds the same four success/none heads. Features are normalized
+by the valid draw capacity available to that problem and route; no hidden test inputs, individual
+test identifiers, or extra verifier information are added. The dataset serializes the vector and
+its named schema, training checkpoints it with the head, and replay reconstructs the same vector at
+every decision. The opt-in launcher is
+`launchers/abstention/launch_lcb_mdp_temporal_551_341_structured_state.sh`. Compare its calibrated
+frontier, abstention timing, depth hazards, and paired problem-level intervals directly against the
+contemporaneous `counts_last` text-only run. A gain would show that the router needs direct numeric
+state access; no gain would rule out this simple representation change before more complex
+continuation modeling.
+
 ### Prepared SWE-Smith protocol-v2 extension (not launched)
 
 The agentic-domain adapter now consumes real sandbox execution for both routing and final

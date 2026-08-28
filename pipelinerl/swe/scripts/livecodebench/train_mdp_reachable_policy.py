@@ -29,13 +29,20 @@ from pipelinerl.swe.scripts.offline_router.train_qwen_embedding_router_baseline 
     QwenEmbeddingRouter,
     _dtype_from_name,
 )
+from pipelinerl.swe.scripts.livecodebench.structured_policy import StructuredStatePolicy
+from pipelinerl.swe.scripts.livecodebench.structured_state import (
+    STATE_FEATURE_NAMES,
+    STATE_FEATURE_VERSION,
+)
 
 
 HEADS = ["scout_next", "oss20_fresh", "oss120_fresh", "nothing"]
 
 
 class PolicyDataset(Dataset):
-    def __init__(self, rows: list[dict[str, Any]], tokenizer: Any, max_length: int) -> None:
+    def __init__(
+        self, rows: list[dict[str, Any]], tokenizer: Any, max_length: int, *, require_state_features: bool
+    ) -> None:
         self.rows: list[dict[str, Any]] = []
         for row in rows:
             encoded = tokenizer(
@@ -43,6 +50,13 @@ class PolicyDataset(Dataset):
             )
             if not encoded.get("input_ids"):
                 continue
+            features = row.get("state_features")
+            if require_state_features and features is None:
+                raise ValueError("Structured policy requires state_features in every dataset row")
+            if features is not None and len(features) != len(STATE_FEATURE_NAMES):
+                raise ValueError(
+                    f"Expected {len(STATE_FEATURE_NAMES)} structured state features, got {len(features)}"
+                )
             self.rows.append({
                 "row_idx": len(self.rows),
                 "problem_id": row["problem_id"],
@@ -51,6 +65,7 @@ class PolicyDataset(Dataset):
                 "target": [float(value) for value in row["targets"]],
                 "input_ids": [int(value) for value in encoded["input_ids"]],
                 "attention_mask": [int(value) for value in encoded["attention_mask"]],
+                **({"state_features": [float(value) for value in features]} if features is not None else {}),
             })
 
     def __len__(self) -> int:
@@ -65,6 +80,32 @@ def _read(path: Path) -> list[dict[str, Any]]:
         return [json.loads(line) for line in handle if line.strip()]
 
 
+def _collate_policy(batch: list[dict[str, Any]], pad_token_id: int) -> dict[str, Any]:
+    collated = _collate(batch, pad_token_id)
+    if "state_features" in batch[0]:
+        collated["state_features"] = torch.tensor(
+            [row["state_features"] for row in batch], dtype=torch.float32
+        )
+    return collated
+
+
+def _forward_policy(model: torch.nn.Module, batch: dict[str, Any]) -> torch.Tensor:
+    kwargs: dict[str, Any] = {
+        "input_ids": batch["input_ids"],
+        "attention_mask": batch["attention_mask"],
+    }
+    if "state_features" in batch:
+        kwargs["state_features"] = batch["state_features"]
+    logits, _, _ = model(**kwargs)
+    return logits
+
+
+def _save_policy_components(model: torch.nn.Module, output_dir: Path) -> None:
+    torch.save(model.reward_head.state_dict(), output_dir / "reward_head.pt")
+    if isinstance(model, StructuredStatePolicy):
+        torch.save(model.state_feature_encoder.state_dict(), output_dir / "state_feature_encoder.pt")
+
+
 @torch.no_grad()
 def _evaluate(
     accelerator: Accelerator,
@@ -76,7 +117,7 @@ def _evaluate(
     model.eval()
     collected: list[tuple[int, list[float], list[float]]] = []
     for batch in tqdm(loader, desc=desc, disable=not accelerator.is_main_process):
-        logits, _, _ = model(input_ids=batch["input_ids"], attention_mask=batch["attention_mask"])
+        logits = _forward_policy(model, batch)
         probs = torch.sigmoid(logits.float())
         targets = batch["targets"].float().to(probs.device)
         indices = batch["row_indices"].to(probs.device)
@@ -122,6 +163,11 @@ def main() -> None:
     parser.add_argument("--dataset-dir", required=True)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--model-name", default="Qwen/Qwen3-Embedding-8B")
+    parser.add_argument(
+        "--state-feature-mode", choices=["text_only", STATE_FEATURE_VERSION], default="text_only",
+        help="text_only reproduces the existing head; structured_v1 fuses normalized state scalars.",
+    )
+    parser.add_argument("--state-feature-hidden-size", type=int, default=64)
     parser.add_argument("--max-seq-length", type=int, default=8192)
     parser.add_argument("--num-epochs", type=int, default=8)
     parser.add_argument("--batch-size", type=int, default=4)
@@ -163,7 +209,8 @@ def main() -> None:
     pad_token_id = tokenizer.pad_token_id or tokenizer.eos_token_id or 0
     datasets = {
         split: PolicyDataset(
-            _read(Path(args.dataset_dir) / f"{split}.jsonl"), tokenizer, args.max_seq_length
+            _read(Path(args.dataset_dir) / f"{split}.jsonl"), tokenizer, args.max_seq_length,
+            require_state_features=args.state_feature_mode == STATE_FEATURE_VERSION,
         )
         for split in ("train", "calibration", "test")
     }
@@ -183,7 +230,11 @@ def main() -> None:
         )
         accelerator.print(f"pos_weight per head: {pos_weight.tolist()}")
 
-    collate = lambda batch: _collate(batch, pad_token_id=int(pad_token_id))
+    collate = (
+        lambda batch: _collate_policy(batch, pad_token_id=int(pad_token_id))
+        if args.state_feature_mode == STATE_FEATURE_VERSION
+        else _collate(batch, pad_token_id=int(pad_token_id))
+    )
     train_loader = DataLoader(
         datasets["train"], batch_size=args.batch_size, shuffle=True, collate_fn=collate
     )
@@ -194,7 +245,7 @@ def main() -> None:
         datasets["test"], batch_size=args.eval_batch_size, shuffle=False, collate_fn=collate
     )
 
-    model = QwenEmbeddingRouter(
+    model_kwargs = dict(
         model_name=args.model_name,
         target_dim=len(HEADS),
         dropout=args.dropout,
@@ -215,6 +266,15 @@ def main() -> None:
         embedding_input_layout="single",
         segment_count=1,
     )
+    model: torch.nn.Module
+    if args.state_feature_mode == STATE_FEATURE_VERSION:
+        model = StructuredStatePolicy(
+            **model_kwargs,
+            state_feature_dim=len(STATE_FEATURE_NAMES),
+            state_feature_hidden_size=args.state_feature_hidden_size,
+        )
+    else:
+        model = QwenEmbeddingRouter(**model_kwargs)
     optimizer = torch.optim.AdamW(
         [parameter for parameter in model.parameters() if parameter.requires_grad],
         lr=args.lr,
@@ -235,6 +295,8 @@ def main() -> None:
         "n_train": len(datasets["train"]),
         "n_calibration": len(datasets["calibration"]),
         "n_test": len(datasets["test"]),
+        "state_feature_names": list(STATE_FEATURE_NAMES),
+        "state_feature_dim": len(STATE_FEATURE_NAMES),
     }
     if accelerator.is_main_process:
         (output_dir / "train_config.json").write_text(json.dumps(config, indent=2) + "\n")
@@ -249,9 +311,7 @@ def main() -> None:
         train_losses = []
         for batch in tqdm(train_loader, desc=f"train {epoch}", disable=not accelerator.is_main_process):
             with accelerator.accumulate(model):
-                logits, _, _ = model(
-                    input_ids=batch["input_ids"], attention_mask=batch["attention_mask"]
-                )
+                logits = _forward_policy(model, batch)
                 loss = F.binary_cross_entropy_with_logits(
                     logits.float(), batch["targets"].float(),
                     pos_weight=None if pos_weight is None else pos_weight.to(logits.device),
@@ -289,7 +349,7 @@ def main() -> None:
                 best_loss = calibration_loss
                 best_epoch = epoch
                 checkpoint_dir.mkdir(parents=True, exist_ok=True)
-                torch.save(unwrapped.reward_head.state_dict(), checkpoint_dir / "reward_head.pt")
+                _save_policy_components(unwrapped, checkpoint_dir)
                 unwrapped.encoder.save_pretrained(checkpoint_dir / "encoder")
         accelerator.wait_for_everyone()
 
@@ -306,7 +366,7 @@ def main() -> None:
     )
     if accelerator.is_main_process:
         unwrapped = accelerator.unwrap_model(model)
-        torch.save(unwrapped.reward_head.state_dict(), output_dir / "reward_head.pt")
+        _save_policy_components(unwrapped, output_dir)
         unwrapped.encoder.save_pretrained(output_dir / "encoder")
         tokenizer.save_pretrained(output_dir / "tokenizer")
         with open(output_dir / "test_predictions.jsonl", "w") as handle:

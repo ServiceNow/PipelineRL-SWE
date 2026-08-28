@@ -25,6 +25,11 @@ from pipelinerl.swe.scripts.livecodebench.build_mdp_reachable_dataset import (
     _render_state,
 )
 from pipelinerl.swe.scripts.livecodebench.mdp_utils import load_split_manifest, split_indices
+from pipelinerl.swe.scripts.livecodebench.structured_state import (
+    STATE_FEATURE_NAMES,
+    STATE_FEATURE_VERSION,
+    build_structured_state_features,
+)
 
 
 USD_PER_M_TOKENS = {"scout": 0.278, "oss20": 1.299, "oss120": 11.13}
@@ -52,6 +57,17 @@ class TorchSequentialScorer:
         self.torch = torch
         self.F = F
         config = json.loads((model_dir / "train_config.json").read_text())
+        self.state_feature_mode = str(config.get("state_feature_mode", "text_only"))
+        self.uses_structured_state_features = self.state_feature_mode == STATE_FEATURE_VERSION
+        self.state_feature_dim = int(config.get("state_feature_dim", 0))
+        self.state_feature_hidden_size = int(config.get("state_feature_hidden_size", 0))
+        if self.state_feature_mode not in {"text_only", STATE_FEATURE_VERSION}:
+            raise ValueError(f"Unsupported state feature mode: {self.state_feature_mode}")
+        if self.state_feature_mode == STATE_FEATURE_VERSION and (
+            self.state_feature_dim != len(STATE_FEATURE_NAMES)
+            or self.state_feature_hidden_size < 1
+        ):
+            raise ValueError("Structured model has incompatible state-feature metadata")
         model_name = str(config["model_name"])
         dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
         kwargs: dict[str, Any] = {"torch_dtype": dtype}
@@ -67,9 +83,23 @@ class TorchSequentialScorer:
             raise ValueError("Unsupported reward-head layout: missing 1.weight")
         mlp_hidden = int(first_weight.shape[0])
         target_dim = int(head_state["4.weight"].shape[0])
+        head_input_size = hidden_size
+        if self.state_feature_mode == STATE_FEATURE_VERSION:
+            head_input_size += self.state_feature_hidden_size
+            self.state_feature_encoder = torch.nn.Sequential(
+                torch.nn.Linear(self.state_feature_dim, self.state_feature_hidden_size),
+                torch.nn.GELU(),
+            )
+            self.state_feature_encoder.load_state_dict(
+                torch.load(
+                    model_dir / "state_feature_encoder.pt", map_location="cpu", weights_only=True
+                )
+            )
+        else:
+            self.state_feature_encoder = None
         self.head = torch.nn.Sequential(
             torch.nn.Dropout(0.0),
-            torch.nn.Linear(hidden_size, mlp_hidden),
+            torch.nn.Linear(head_input_size, mlp_hidden),
             torch.nn.GELU(),
             torch.nn.Dropout(0.0),
             torch.nn.Linear(mlp_hidden, target_dim),
@@ -80,10 +110,19 @@ class TorchSequentialScorer:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.encoder.to(self.device).eval()
         self.head.to(self.device).eval()
+        if self.state_feature_encoder is not None:
+            self.state_feature_encoder.to(self.device).eval()
         self.cache: dict[str, np.ndarray] = {}
 
-    def __call__(self, text: str) -> np.ndarray:
-        key = _state_key(text)
+    def __call__(self, text: str, state_features: list[float] | None = None) -> np.ndarray:
+        if self.state_feature_mode == STATE_FEATURE_VERSION:
+            if state_features is None or len(state_features) != self.state_feature_dim:
+                raise ValueError("Structured scorer requires the configured state feature vector")
+            feature_array = np.asarray(state_features, dtype=np.float32)
+            key = _state_key(text + "\0" + feature_array.tobytes().hex())
+        else:
+            feature_array = None
+            key = _state_key(text)
         if key in self.cache:
             return self.cache[key]
         torch = self.torch
@@ -99,6 +138,12 @@ class TorchSequentialScorer:
             outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask, return_dict=True)
             pooled = outputs.last_hidden_state[:, -1]
             pooled = self.F.normalize(pooled.float(), p=2, dim=1)
+            if feature_array is not None:
+                if self.state_feature_encoder is None:
+                    raise AssertionError("Missing structured state encoder")
+                numeric = torch.from_numpy(feature_array).to(self.device).reshape(1, -1)
+                numeric = self.state_feature_encoder(numeric.to(dtype=pooled.dtype))
+                pooled = torch.cat([pooled, numeric], dim=1)
             probs = torch.sigmoid(self.head(pooled)).cpu().numpy()[0]
         self.cache[key] = probs
         return probs
@@ -159,7 +204,7 @@ def replay_adaptive(
     problem_statement: str,
     *,
     content_prior: np.ndarray | None = None,
-    scorer: Callable[[str], np.ndarray] | None = None,
+    scorer: Callable[..., np.ndarray] | None = None,
     calibrator: Callable[[np.ndarray, int], np.ndarray] | None = None,
     state_layout: str = "counts_last",
     tau_abstain: float | None = None,
@@ -234,6 +279,10 @@ def replay_adaptive(
             break
 
         remaining = _remaining_draw_counts(valid, orderings, ptr, slots)
+        route_capacities = {slot: int(valid[mi].sum()) for mi, slot in enumerate(slots)}
+        state_features = build_structured_state_features(
+            attempts, remaining, route_capacities, slots
+        )
         state_text = (
             _render_state(problem_statement, attempts, remaining, state_layout)
             if scorer is not None or capture_trace else None
@@ -241,7 +290,12 @@ def replay_adaptive(
         if scorer is not None:
             if state_text is None:
                 raise AssertionError("Sequential scoring requires rendered state text")
-            all_probs = np.asarray(scorer(state_text), dtype=float)
+            raw_probs = (
+                scorer(state_text, state_features)
+                if getattr(scorer, "uses_structured_state_features", False)
+                else scorer(state_text)
+            )
+            all_probs = np.asarray(raw_probs, dtype=float)
             if calibrator is not None:
                 all_probs = calibrator(all_probs, int(failures.sum()))
             p_each = all_probs[: len(slots)]
@@ -291,6 +345,7 @@ def replay_adaptive(
                     slot: int(failures[mi]) for mi, slot in enumerate(slots)
                 },
                 "remaining_valid_draws": remaining,
+                "structured_state_features": state_features,
                 "available_routes": [slots[mi] for mi in available],
                 "spent_budget_before": float(spent_budget),
                 "remaining_budget_before": float(budget - spent_budget),
