@@ -2256,6 +2256,31 @@ contemporaneous `counts_last` text-only run. A gain would show that the router n
 state access; no gain would rule out this simple representation change before more complex
 continuation modeling.
 
+#### Fair reporting of overall and conditional savings
+
+Overall realized spend and correctness over every test problem and replay ordering are the primary
+deployment metrics. They include the mandatory scout, scout-success episodes, router-entry
+episodes, escalations, re-rolls, and abstentions. The post-scout-failure analysis is a legitimate
+secondary mechanism analysis because the initial scout is fixed and mandatory for every policy; the
+conditioning event is therefore not selected by the learned router. It must report the number of
+router-entry episodes, conditional correctness, conditional realized spend, and problem-clustered
+uncertainty intervals, and it must use the same correctness-matching/envelope rule as the overall
+frontier. It should not replace the overall metric or be presented as an unconditional deployment
+saving.
+
+A direct readout from the completed exploratory random-341 `counts_last` replay illustrates the
+expected decomposition (86 test problems, five orderings, one training seed; not temporal
+confirmation). At utility value `R=0.126`, the learned value-stop policy reached 80.23% overall
+correctness versus 80.00% for the no-abstention count/RoR-style policy, while reducing overall
+realized spend from $0.0980 to $0.0561 (42.8%). Among scout-failure router entries, conditional
+correctness was 69.64% versus 69.29% and conditional spend was $0.1504 versus $0.0860 (42.8%).
+At `R=0.186`, both policies reached 81.40% overall correctness; overall spend was $0.1379
+versus $0.0821 (40.5%), and conditional spend was $0.2117 versus $0.1259 (40.5%), with equal
+71.43% conditional correctness. These are exploratory effect sizes only; the temporal runs must
+re-estimate them with paired problem-level intervals. The earlier 8--10% shorthand should not be
+used as a general summary of this replay, and the retired weak-verifier ~50% result remains
+non-primary.
+
 ### Prepared SWE-Smith protocol-v2 extension (not launched)
 
 The agentic-domain adapter now consumes real sandbox execution for both routing and final
