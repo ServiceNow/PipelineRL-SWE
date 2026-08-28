@@ -2281,6 +2281,59 @@ re-estimate them with paired problem-level intervals. The earlier 8--10% shortha
 used as a general summary of this replay, and the retired weak-verifier ~50% result remains
 non-primary.
 
+### Free-start is a null result -- do not spend jobs on it (2026-08-28)
+
+`replay_extgrid_free_start_v2` vs `replay_extgrid_scout_first_v2`, both on the extended budget grid,
+random-341 development split, all policies given the same start protocol.
+
+| cost | ours SF | ours FS | RoR SF | RoR FS |
+|---:|---:|---:|---:|---:|
+| $0.005 | 55.12% | 55.12% | 34.88% | 34.88% |
+| $0.010 | 61.86% | 61.86% | 60.93% | 60.93% |
+| $0.020 | 64.65% | 64.65% | 65.12% | 65.12% |
+| $0.030 | 70.93% | 70.93% | 68.60% | 68.60% |
+| $0.045 | 77.44% | 77.44% | 74.65% | 74.65% |
+| $0.067 | **81.40%** | 79.30% | 78.37% | 78.37% |
+| $0.138 | 81.40% | 81.40% | 81.40% | 81.40% |
+
+Free-start is **identical to scout-first at every operating point except $0.067, where it is 2.1
+points worse**. At the ceiling: ours $0.06861 free-start vs $0.06690 scout-first; RoR is
+bit-identical at $0.13793 under both.
+
+Mechanism: at the root the scout costs $0.00055 and solves 47.7% of problems outright, so any `R`
+large enough to take any action at all takes that one. The mandatory scout was never a binding
+constraint -- it is what the optimal policy does anyway. This reproduces, under the utility rule,
+the earlier finding that the ratio rule also chose scout at the root 100% of the time.
+
+**Decision: do not launch free-start training jobs.** The ablation is well-posed, already answered,
+and the answer is null. Report it as a one-line negative ("removing the mandatory scout changes
+neither frontier") rather than treating it as an open question. Note also that the earlier
+"free-start is vacuous" entry above is now superseded in its diagnosis: it is not vacuous because
+the *rule* cannot decline the scout, it is null because declining the scout is not worth doing.
+
+### Router inference cost: sized, and the headline survives (2026-08-28)
+
+Addresses the audit finding that reported dollar costs cover solver calls only, while our policy
+invokes an 8B embedding encoder repeatedly and RoR's count update is free.
+
+Measured at the winning operating point (`sequential_value`, R=0.1863, 430 episodes): **6.42 router
+calls per episode** against 7.28 solver attempts. At ~3,000 tokens per rendered state:
+
+| router price | added $/episode | ours | vs RoR $0.13793 |
+|---|---:|---:|---:|
+| $0.02 /M | $0.00038 | $0.06728 | 51.2% cheaper |
+| $0.05 /M | $0.00096 | $0.06786 | 50.8% cheaper |
+| $0.10 /M | $0.00192 | $0.06882 | 50.1% cheaper |
+| $0.278 /M (scout's own price -- an overestimate) | $0.00535 | $0.07225 | **47.6% cheaper** |
+
+So the headline degrades from 51.5% to at worst 47.6%, and $0.278/M is a deliberate overestimate
+since the encoder does a single forward pass with no generation. **The conclusion is unaffected.**
+
+**But it must be included at the cheap end.** At operating points around $0.005 total spend, router
+cost at $0.10/M is **38% of total spend**, so the low-cost region of our frontier is materially
+overstated without it. Add router cost as a configurable term and report the frontier with it on;
+do not quietly restrict the claim to the ceiling where it happens not to matter.
+
 ### Prepared SWE-Smith protocol-v2 extension (not launched)
 
 The agentic-domain adapter now consumes real sandbox execution for both routing and final
