@@ -2214,6 +2214,15 @@ calibrate on the earliest 170 problems of the later 341 block (through 2025-01-0
 the remaining 171 problems dated 2025-01-11 onward. This is development evidence, not a claim of
 researcher-blind final confirmation: the later 341 collection has already informed exploratory work.
 
+The input artifacts and split are now materialized at
+`/mnt/llmd/results/exps/aristides/reason/lcb_mdp_temporal_551_341_prepared_v1/`: `tensors_v3`
+contains all 892 problems with the 551/170/171 source-temporal assignment, and both
+`reachable_dataset_problem_first` and `reachable_dataset_counts_last` have been built and
+validated. `rolling_temporal_folds_v1.json` partitions all 892 problems into five contiguous,
+equal-date-preserving blocks (177/180/179/174/182 problems) and defines three rolling-origin
+train/calibration/test folds. These are preparation artifacts only; no corresponding jobs have
+been submitted yet.
+
 The tensor builder now supports combined train/eval collections and explicit asymmetric horizons:
 four scout draws and ten draws for each expert. The four-scout horizon is intentional; available
 train data show later scout draws are unproductive, and absent draws are represented as unavailable
