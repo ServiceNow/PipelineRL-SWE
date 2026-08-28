@@ -16,6 +16,8 @@ REPO_ROOT=$(cd "${SCRIPT_DIR}/../.." && pwd)
 : "${ARTIFACT_DIR:?Set ARTIFACT_DIR to a run containing tensors_v2/ and model/}"
 : "${STATE_LAYOUT:?Set STATE_LAYOUT to the layout the model was trained on (problem_first|counts_last)}"
 
+# Artifacts built before 2026-08-28 use tensors_v2; the temporal 551->341 runs use tensors_v3.
+TENSORS_DIR=${TENSORS_DIR:-${ARTIFACT_DIR}/tensors_v2}
 START_PROTOCOL=${START_PROTOCOL:-scout_first}
 NUM_ORDERINGS=${NUM_ORDERINGS:-5}
 COST_MODE=${COST_MODE:-usd}
@@ -28,7 +30,7 @@ OUTPUT_DIR=${OUTPUT_DIR:-${ARTIFACT_DIR}/${REPLAY_TAG}}
 
 COMMAND="cd ${REPO_ROOT} && \
 python pipelinerl/swe/scripts/livecodebench/replay_mdp_full_execution.py \
-  --tensors-dir ${ARTIFACT_DIR}/tensors_v2 \
+  --tensors-dir ${TENSORS_DIR} \
   --output-dir ${OUTPUT_DIR} \
   --sequential-model-dir ${ARTIFACT_DIR}/model \
   --num-orderings ${NUM_ORDERINGS} \
