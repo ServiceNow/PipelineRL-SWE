@@ -2475,6 +2475,43 @@ final temporal evaluation, not chosen from this table.
 `sequential_decay_value_frozen` at 79.30% against RoR at 81.40%; it is cheaper only because it is
 less accurate. Matched-accuracy comparisons only.
 
+### Launcher hazard: running jobs execute the LIVE tree but import from a frozen snapshot (2026-08-28)
+
+Two of the three temporal representation jobs died, and **not** because of the eai 502 outage
+(that was hours later, at ~22:50; these failed at 19:16--19:24). Real cause, from
+`eai job log`, identical for both:
+
+```
+ModuleNotFoundError: No module named 'pipelinerl.swe.scripts.livecodebench.structured_state'
+```
+
+**Mechanism.** The launcher sets `--workdir` and `PYTHONPATH` to a frozen snapshot
+(`~/snapshots2/<sha>`), but `COMMAND` begins with `cd /home/toolkit/PipelineRL-SWE`. So a job runs
+the **live working tree's script file** while resolving `import pipelinerl.*` against its
+**launch-time snapshot**. Editing the live tree therefore breaks jobs that are already running, as
+soon as a script gains an import the older snapshot lacks.
+
+| time | event |
+|---|---|
+| 17:54 | `problem_first`, `counts_last` launched; snapshot predates `structured_state.py` |
+| ~18:04 | `structured_state.py` added to the live tree; `structured` launched |
+| 19:16--19:24 | the first two reach replay, run the *live* `replay_mdp_full_execution.py` (which now imports `structured_state`) against their *old* snapshot -> ImportError |
+| 20:16 | `structured` succeeds -- its snapshot contains the module |
+
+Both jobs had already completed training, so only the replay stage was lost; the saved models were
+re-replayed directly rather than retrained.
+
+**Implications.**
+
+- A long multi-stage job is exposed to every edit made to the live tree while it runs. New modules
+  imported by any stage are the specific trigger.
+- Fix options: make `COMMAND` `cd` into the snapshot rather than the live tree, so a job is fully
+  hermetic; or, until then, avoid adding new modules to the live tree while multi-stage jobs are in
+  flight.
+- **Check job state explicitly rather than inferring it from missing output.** These looked like
+  "still running" for hours because the output directory simply never appeared. `eai job ls` showed
+  FAILED/CANCELLED immediately.
+
 ### Prepared SWE-Smith protocol-v2 extension (not launched)
 
 The agentic-domain adapter now consumes real sandbox execution for both routing and final
