@@ -2512,6 +2512,50 @@ re-replayed directly rather than retrained.
   "still running" for hours because the output directory simply never appeared. `eai job ls` showed
   FAILED/CANCELLED immediately.
 
+### Uncertainty intervals and the router-cost regime boundary (2026-08-28)
+
+Problem-clustered bootstrap (10,000 resamples over the 86 development problems) on
+`replay_tier1_fairness_v1`.
+
+**Headline now has an interval.** At matched 81.40% ceiling accuracy, ours $0.06690 vs RoR $0.13793:
+
+- **cost saving 51.5%, 95% CI [33.2%, 65.9%]**; P(saving>0)=100%, P(>25%)=99.7%, P(>40%)=89.8%.
+- correctness delta +0.00 pts, CI [+0.00, +0.00]. The zero width is correct, not a bug: both
+  policies sit at the ceiling, so every resample has them solving the identical problem set. It is
+  a genuinely matched comparison.
+
+**The one place we trailed is noise.** At 68.60% correctness the apparent -1.0% is -0.2% with
+95% CI [-0.8%, +0.3%] -- indistinguishable from zero. So there is no operating point where the
+baseline significantly beats us.
+
+**Router cost creates a regime boundary, and the earlier "headline survives" claim was scoped too
+broadly.** Including router inference at 3,000 tokens/call and $0.10/M:
+
+| our correctness | saving (solver only) | saving (+ router) |
+|---:|---:|---:|
+| 52.56% | +15.2% | **-10.4%** |
+| 61.63% | +29.3% | +15.6% |
+| 68.60% | -0.2% | **-10.6%** |
+| 74.42% | +18.9% | +13.2% |
+| 78.14% | +20.1% | +16.7% |
+| **81.40%** | **+51.5%** | **+50.1%** |
+
+At the ceiling router cost is immaterial (51.5% -> 50.1%). Below ~70% correctness it **reverses the
+sign**: total solver spend there is under a cent while the policy still makes ~6 router calls per
+episode, so a fixed 8B forward-pass overhead dominates. The previous entry recorded that router
+cost is 38% of spend at the cheap end but still framed the conclusion as unaffected; that framing
+was correct only at the ceiling.
+
+**Reporting requirement.** State the claim as regime-conditional: the advantage is large and robust
+in the high-accuracy regime (>=~74%) and absent or negative below ~70% once routing compute is
+counted. Do not quote the ceiling number as if it held across the frontier. This is defensible --
+the deployment-relevant regime for verified code generation is the high-accuracy end, and RoR
+themselves argue regime-conditionally -- but it must be stated rather than scoped silently.
+
+**Gap to close:** the `counts_s*` and `counts_ucb` arms run with `capture_trace=False`, so they
+write no episode traces and cannot be bootstrapped. Comparisons against RoR at its best `s` are
+currently point estimates only. Enable traces for those arms before the final tables.
+
 ### Prepared SWE-Smith protocol-v2 extension (not launched)
 
 The agentic-domain adapter now consumes real sandbox execution for both routing and final
