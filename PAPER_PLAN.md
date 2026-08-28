@@ -2075,6 +2075,137 @@ paper.
    from full-execution results; retain the pure learned failure as an informative ablation and keep
    all legacy public/private figures superseded.
 
+## PLAN TO SUBMISSION
+
+This is the operative roadmap from the current development result to a submission-ready TMLR
+paper, superseding shorter work-order lists above where they conflict. The target claim is:
+
+> Query-conditioned beliefs about whether further verified attempts remain worthwhile enable
+> substantially cheaper inference at matched correctness than count-based rerouting, because the
+> policy can stop selectively on exhausted problems.
+
+The math and terminology are maintained in [`UTILITY_FORMULATION.md`](UTILITY_FORMULATION.md).
+
+### Phase 1 -- make the pipeline trustworthy
+
+1. Extend `build_mdp_tensors_v2.py` to ingest both `*_train_d*.jsonl` and `*_eval_d*.jsonl` and
+   matching source metadata. It currently cannot consume the running 551-problem train collection.
+2. Remove the duplicated expert loops from `launch_lcb_multidraw_mdp_collect.sh`.
+3. Add integrity tests for disjoint problem splits, full-execution labels, cost/draw alignment,
+   pass termination, free-start coverage, deterministic replay, and invalid-draw handling.
+4. Standardize terminology: `pool-unsolved`, not intrinsically unsolvable; `myopic utility`, not an
+   exact solved dual MDP; and `solver-call cost` until all overhead is priced.
+5. Add router inference cost and latency, verifier/execution cost, and reject cost.
+
+**Gate:** one documented command rebuilds tensors, trains, replays, validates invariants, and
+regenerates tables without manual artifact manipulation.
+
+### Phase 2 -- finish collection and freeze the data protocol
+
+1. Complete and audit the ongoing 551-problem expert collection. The four-draw scout collection is
+   complete; ten-draw expert collection is the current long pole.
+2. Treat the repeatedly inspected 341-problem collection as development data, not a final test.
+3. Collect a newer chronological LCB block that remains sealed until the method is frozen.
+4. Assign immutable roles: earlier problems for training, the current 341 for development and
+   calibration, and the newest block for one-shot confirmation.
+5. Prefer independent problems over unnecessary extra draws; provisionally retain four to five
+   scout draws and ten expert draws per problem.
+6. Commit a versioned manifest containing IDs, dates, platforms, dataset revision, models,
+   sampling parameters, artifacts, and split roles.
+
+**Gate:** final confirmation IDs and analysis protocol are committed before outcomes are examined.
+
+### Phase 3 -- lock the method on development data
+
+1. Separate the confounded job-3 changes: `counts_last` without balanced `pos_weight`, then
+   balanced `pos_weight` under the old layout.
+2. Add explicit numeric execution-state features rather than relying only on prompt text counts.
+3. Calibrate without final-test access using route-specific failure counts or state features, not
+   only total failure depth.
+4. Compare raw, per-route Platt/isotonic, empirical route-depth hazard, and
+   learned-plus-structural calibration.
+5. Compare the current one-step `pR-c` rule against structural finite-horizon continuation. Add a
+   learned continuation residual only if the structural comparison leaves a clear gap.
+6. Freeze one primary and one fallback policy, including checkpoint, calibration, state layout,
+   and the value-of-correctness selection rule.
+
+**Gate:** no policy-design decision changes after final confirmation begins.
+
+### Phase 4 -- complete baselines and ablations
+
+| component | required conditions |
+|---|---|
+| fixed allocation | single routes, one-pass cascade, best-of-K |
+| RoR-style | count beliefs + hard budget + probability/cost ratio |
+| formulation-only | count beliefs + utility stop |
+| problem-only semantics | problem text without attempt history |
+| sequential semantics | problem + failure state + latest failed attempt |
+| calibration | raw versus frozen calibrated beliefs |
+| planning | myopic versus continuation-aware utility |
+| stopping | reject arm versus forced exhaustion |
+| initial action | mandatory scout versus free start over all problems |
+
+The core factorial comparison is count versus query-conditioned beliefs crossed with
+budget-and-ratio versus utility-and-stop. Isolate whether failed-attempt content helps beyond
+problem difficulty, planning helps beyond one-step utility, and abstention causes the saving.
+
+**Gate:** every component named in the main claim has a direct ablation.
+
+### Phase 5 -- freeze evaluation and statistics
+
+Freeze checkpointing, calibration, `R` selection, replay orderings, cost model, reject costs,
+primary metrics, matching tolerances, and baseline implementations before confirmation.
+
+1. Run at least five router seeds, preferably ten.
+2. Use at least twenty replay orderings while keeping the problem as the independent unit.
+3. Report paired problem-clustered intervals for cost at matched correctness, correctness at matched
+   cost, abstention rate, and false abstention on pool-solvable problems.
+4. Use a predeclared frontier interpolation/envelope rule, not a post-hoc test row that happens to
+   equal the finite-pool ceiling.
+5. Propagate training variance through the complete frontier rather than reporting only head AUC.
+
+**Gate:** the headline comparison has a problem-level uncertainty interval.
+
+### Phase 6 -- stress-test deployment assumptions
+
+Sweep router cost and latency, verifier/execution cost, reject cost, value of correctness `R`, model
+prices, draw counts, temperature, imperfect verification, and mandatory-scout versus free-start.
+Present a robust deployment region, not one favorable operating point. If the saving survives only
+with free rejection or omitted router cost, make that part of the claim.
+
+### Phase 7 -- establish external validity
+
+After locking LCB, activate SWE-Smith protocol v2. First verify meaningful marginal pass rates,
+post-failure success, complementarity, and reroll decay. Use eval150 for development and preserve
+non-overlapping eval300 as test after collecting its complete real sandbox reports. Run the frozen
+method and baseline grid without redesigning around SWE-Smith test outcomes. A negative result can
+still establish a useful boundary condition.
+
+### Phase 8 -- paper and reproducibility package
+
+Organize the paper around the stopping problem, the limitation of unthresholded count-and-ratio
+allocation, query-conditioned failure beliefs, utility and continuation, full-execution replay,
+temporal LCB confirmation, mechanism ablations, external validity, and limitations.
+
+Primary outputs: correctness-cost frontier with uncertainty; both matched frontier comparisons;
+the beliefs-by-formulation 2-by-2; calibration and hazards; abstention timing and false abstention;
+mandatory-scout versus free-start; deployment-cost sensitivity; and cross-domain results.
+
+Release manifests, provenance, environment/model versions, one-command pipeline entry points,
+frozen configs and seeds, aggregate outputs, figure scripts, and redistribution limitations.
+
+### Immediate execution order
+
+1. Finish and validate the 551-problem collection.
+2. Fix train-split ingestion and collection-launch duplication while it runs.
+3. Launch the two clean state-layout/positive-weight diagnostics on existing development data.
+4. Add total-cost accounting and route-specific calibration.
+5. Run continuation and the complete development ablation grid.
+6. Freeze the method and confirmation protocol.
+7. Collect and open the new chronological confirmation block exactly once.
+8. Run SWE-Smith only after LCB is locked.
+9. Regenerate the paper from frozen artifacts and complete the reproducibility audit.
+
 ### Prepared SWE-Smith protocol-v2 extension (not launched)
 
 The agentic-domain adapter now consumes real sandbox execution for both routing and final
