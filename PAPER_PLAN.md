@@ -2206,6 +2206,29 @@ frozen configs and seeds, aggregate outputs, figure scripts, and redistribution 
 8. Run SWE-Smith only after LCB is locked.
 9. Regenerate the paper from frozen artifacts and complete the reproducibility audit.
 
+### Temporal 551-to-341 protocol setup (2026-08-28)
+
+We will proceed pragmatically without waiting for a hypothetical new LCB release. The primary next
+experiment is the existing chronological split: fit on all 551 problems dated through 2024-09-28,
+calibrate on the earliest 170 problems of the later 341 block (through 2025-01-04), and report on
+the remaining 171 problems dated 2025-01-11 onward. This is development evidence, not a claim of
+researcher-blind final confirmation: the later 341 collection has already informed exploratory work.
+
+The tensor builder now supports combined train/eval collections and explicit asymmetric horizons:
+four scout draws and ten draws for each expert. The four-scout horizon is intentional; available
+train data show later scout draws are unproductive, and absent draws are represented as unavailable
+rather than failures. The first opt-in suite compares `problem_first` and `counts_last`, both with
+unweighted BCE, under this same temporal protocol. Its submission wrapper waits 30 seconds between
+job launches.
+
+Method development is still authorized on this temporal setup. The next controlled improvement is
+explicit numeric state features (per-route failures, remaining draws, total failures, and latest
+route) concatenated to the policy head, followed by route-specific calibration and structural
+continuation value. The prompt-position `counts_last` result does not settle whether structured
+count features are useful. After a stable method is selected, report rolling chronological folds
+across the 892 problems and reserve SWE-Smith eval300 as the external confirmation rather than
+waiting for new LCB data.
+
 ### Prepared SWE-Smith protocol-v2 extension (not launched)
 
 The agentic-domain adapter now consumes real sandbox execution for both routing and final

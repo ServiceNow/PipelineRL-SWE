@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 from collections import Counter
+import re
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,7 @@ from pipelinerl.swe.scripts.livecodebench.collect_lcb_expert import (
 )
 from pipelinerl.swe.scripts.livecodebench.mdp_utils import (
     TENSOR_SCHEMA_VERSION,
+    write_source_temporal_split_manifest,
     write_split_manifest,
 )
 
@@ -51,18 +53,38 @@ def _result_feedback(resolved: bool, result_codes: list[Any]) -> str:
 
 
 def _load_source_metadata(source_dir: Path) -> dict[str, dict[str, Any]]:
-    source_path = source_dir / "scout_eval.jsonl"
-    if not source_path.is_file():
-        raise FileNotFoundError(f"Missing corrected source collection: {source_path}")
-    rows = _read_latest(source_path)
+    """Load both sides of the corrected source-temporal collection."""
     required = {"problem_statement", "contest_date", "platform", "difficulty"}
-    missing = [pid for pid, row in rows.items() if not str(row.get("problem_statement") or "").strip()]
-    if missing:
-        raise ValueError(f"Source collection has {len(missing)} rows without problem statements")
-    return {
-        pid: {"problem_id": pid, **{key: row.get(key) for key in required}}
-        for pid, row in rows.items()
-    }
+    source: dict[str, dict[str, Any]] = {}
+    for split in ("train", "eval"):
+        source_path = source_dir / f"scout_{split}.jsonl"
+        if not source_path.is_file() and split == "train":
+            continue
+        if not source_path.is_file():
+            raise FileNotFoundError(f"Missing corrected source collection: {source_path}")
+        rows = _read_latest(source_path)
+        missing = [pid for pid, row in rows.items() if not str(row.get("problem_statement") or "").strip()]
+        if missing:
+            raise ValueError(f"{source_path} has {len(missing)} rows without problem statements")
+        overlap = set(source) & set(rows)
+        if overlap:
+            raise ValueError(f"Source temporal splits overlap; examples={sorted(overlap)[:5]}")
+        source.update({
+            pid: {
+                "problem_id": pid,
+                "source_temporal_split": split,
+                **{key: row.get(key) for key in required},
+            }
+            for pid, row in rows.items()
+        })
+    return source
+
+
+def _collection_key(path: Path) -> tuple[str, str, int] | None:
+    match = re.match(r"^(scout|oss20|oss120)_(train|eval)_d(\d+)$", path.stem)
+    if match is None:
+        return None
+    return match.group(1), match.group(2), int(match.group(3))
 
 
 def main() -> None:
@@ -71,29 +93,62 @@ def main() -> None:
     parser.add_argument("--source-collection-dir", required=True)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--num-draws", type=int, default=10)
+    parser.add_argument(
+        "--route-draw-counts", default="",
+        help="Optional comma-separated per-route available draws, e.g. scout=4,oss20=10,oss120=10.",
+    )
     parser.add_argument("--split-seed", type=int, default=0)
     parser.add_argument("--train-fraction", type=float, default=0.5)
     parser.add_argument("--calibration-fraction", type=float, default=0.25)
+    parser.add_argument("--split-mode", choices=["random", "source_temporal"], default="random")
+    parser.add_argument("--temporal-calibration-fraction", type=float, default=0.5,
+                        help="Fraction of the later source-temporal split assigned to calibration.")
     parser.add_argument("--require-complete", action=argparse.BooleanOptionalAction, default=True)
     args = parser.parse_args()
 
+    route_draw_counts = {slot: int(args.num_draws) for slot in MODEL_SLOTS}
+    if args.route_draw_counts:
+        for item in args.route_draw_counts.split(","):
+            route, separator, raw_count = item.strip().partition("=")
+            if separator != "=" or route not in route_draw_counts:
+                raise ValueError(f"Invalid --route-draw-counts item: {item!r}")
+            count = int(raw_count)
+            if not 1 <= count <= args.num_draws:
+                raise ValueError(f"Draw count for {route} must be in [1, {args.num_draws}]")
+            route_draw_counts[route] = count
     roots = [Path(value) for value in args.collection_dir]
     source = _load_source_metadata(Path(args.source_collection_dir))
     tables: dict[tuple[str, int], dict[str, dict[str, Any]]] = {}
     for root in roots:
-        for path in sorted(root.glob("*_eval_d*.jsonl")):
-            route = path.stem.split("_eval_")[0]
-            if route not in MODEL_SLOTS:
+        for path in sorted(root.glob("*_d*.jsonl")):
+            parsed = _collection_key(path)
+            if parsed is None:
                 continue
-            draw = int(path.stem.rsplit("_d", 1)[1])
-            if draw < args.num_draws:
-                key = (route, draw)
-                if key in tables:
-                    raise ValueError(f"Duplicate table for {key}: {path}")
-                tables[key] = _read_latest(path)
+            route, split, draw = parsed
+            if draw >= route_draw_counts[route]:
+                continue
+            rows = _read_latest(path)
+            key = (route, draw)
+            table = tables.setdefault(key, {})
+            overlap = set(table) & set(rows)
+            if overlap:
+                raise ValueError(
+                    f"Duplicate {route} draw {draw} rows across collection roots; "
+                    f"examples={sorted(overlap)[:5]}"
+                )
+            expected_source_ids = {
+                pid for pid, meta in source.items() if meta["source_temporal_split"] == split
+            }
+            unexpected = set(rows) - expected_source_ids
+            if unexpected:
+                raise ValueError(
+                    f"{path} contains IDs outside source {split} split; "
+                    f"examples={sorted(unexpected)[:5]}"
+                )
+            table.update(rows)
 
     for slot in MODEL_SLOTS:
-        for draw in range(args.num_draws):
+        for draw in range(route_draw_counts[slot]):
             if (slot, draw) not in tables:
                 raise FileNotFoundError(f"Missing {slot} draw {draw}")
 
@@ -115,6 +170,8 @@ def main() -> None:
     for pi, pid in enumerate(pids):
         for mi, slot in enumerate(MODEL_SLOTS):
             for draw in range(args.num_draws):
+                if draw >= route_draw_counts[slot]:
+                    continue
                 row = tables[(slot, draw)][pid]
                 ok = _is_complete(row, LCB_DATASET_REVISION)
                 valid[pi, mi, draw] = ok
@@ -139,7 +196,10 @@ def main() -> None:
                     "completion_tokens": float(row.get("completion_tokens") or 0),
                 })
 
-    complete = valid.all(axis=(1, 2))
+    complete = np.asarray([
+        all(valid[pi, mi, :route_draw_counts[slot]].all() for mi, slot in enumerate(MODEL_SLOTS))
+        for pi in range(len(pids))
+    ], dtype=bool)
     if args.require_complete and not complete.all():
         bad = [pids[i] for i in np.flatnonzero(~complete)[:10]]
         raise ValueError(f"{int((~complete).sum())} problems have invalid draws; examples={bad}")
@@ -168,22 +228,32 @@ def main() -> None:
         for row in records:
             if row["problem_id"] in kept_set:
                 handle.write(json.dumps(row) + "\n")
-    manifest = write_split_manifest(
-        out / "split_manifest.json",
-        kept_ids,
-        seed=args.split_seed,
-        train_fraction=args.train_fraction,
-        calibration_fraction=args.calibration_fraction,
-    )
+    if args.split_mode == "source_temporal":
+        manifest = write_source_temporal_split_manifest(
+            out / "split_manifest.json",
+            [source[pid] for pid in kept_ids],
+            calibration_fraction_of_later=args.temporal_calibration_fraction,
+        )
+    else:
+        manifest = write_split_manifest(
+            out / "split_manifest.json",
+            kept_ids,
+            seed=args.split_seed,
+            train_fraction=args.train_fraction,
+            calibration_fraction=args.calibration_fraction,
+        )
     summary = {
         "schema_version": TENSOR_SCHEMA_VERSION,
         "protocol": "full_execution",
         "num_problems": len(kept_ids),
         "num_draws": int(args.num_draws),
+        "route_draw_counts": route_draw_counts,
         "model_slots": MODEL_SLOTS,
         "source_collection_dir": str(Path(args.source_collection_dir)),
         "collection_dirs": [str(root) for root in roots],
+        "split_mode": args.split_mode,
         "split_seed": int(args.split_seed),
+        "temporal_calibration_fraction": float(args.temporal_calibration_fraction),
         "num_train": len(manifest["train_problem_ids"]),
         "num_calibration": len(manifest["calibration_problem_ids"]),
         "num_test": len(manifest["test_problem_ids"]),
