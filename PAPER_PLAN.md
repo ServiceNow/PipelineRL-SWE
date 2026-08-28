@@ -1938,6 +1938,63 @@ was compensating for inflated scout probabilities that matter less once R is lar
 Caveats unchanged: development-only, 86 test problems, one seed, five orderings, miscalibrated
 model on the old `problem_first` layout, reject cost priced at zero.
 
+### FAIR RoR comparison, extended grid (2026-08-28) -- the cost result holds
+
+`replay_extgrid_scout_first_v2`, budget grid swept to full exhaustion ($0.34241). This supersedes
+the "comparison above $0.0417 is not valid" caveat: RoR now reaches the ceiling.
+
+Cheapest route to the 81.40% union ceiling, per family:
+
+| policy | cost | abstain |
+|---|---:|---:|
+| **`sequential_value`** (dual + learned beliefs) | **$0.06690** | 13.7% |
+| `sequential_decay_value` | $0.12256 | 12.8% |
+| `best_of_10_oss120` | $0.13376 | -- |
+| **`counts`** (RoR primal, extended grid) | **$0.13793** | 0% |
+| `counts_value` (dual + count beliefs) | $0.14343 | 0% |
+
+- **51.5% cheaper than a properly-swept RoR at identical accuracy.**
+- At matched cost (~$0.066): RoR 78.37% @ $0.06611 vs ours 81.40% @ $0.06690, **+3.03 points**.
+- RoR's extended frontier: 74.65% @ $0.04164 -> 78.37% @ $0.06611 -> 80.93% @ $0.11818 ->
+  81.40% @ $0.13793. It does improve substantially once allowed to spend, as predicted; the
+  advantage is not an artifact of under-sweeping the baseline.
+
+**The 2x2 is now clean and rests on a fairly-swept baseline:** primal+counts $0.13793 ->
+dual+counts $0.14343 (no better) -> dual+learned $0.06690. The formulation alone buys nothing; the
+result requires query-conditioned beliefs *and* an action space that can stop. `counts_value`
+cannot abstain at all, because count beliefs never say "hopeless": `p_m*R - cost_m` stays positive
+for some route at any R large enough to reach the ceiling. That is the structural reason RoR cannot
+reach the cheap point, and it is not a tuning gap.
+
+### Job 3 negative result: counts_last + pos_weight made the model worse (2026-08-28)
+
+`lcb_mdp_latest_attempt_seed17_1787873573`. **Two variables were changed at once, which was an
+error** -- they should have been separate parallel jobs, and the confound cannot be resolved from
+this run.
+
+Calibration-split AUC at the selected epoch (the honest comparison, and the checkpoint criterion):
+
+| head | old | new | delta |
+|---|---:|---:|---:|
+| scout_next | 0.7223 | 0.5742 | **-0.1481** |
+| oss20_fresh | 0.7530 | 0.7465 | -0.0065 |
+| oss120_fresh | 0.7408 | 0.7359 | -0.0049 |
+| nothing | 0.7066 | 0.7028 | -0.0038 |
+
+Worse on every head. The test split shows scout at +0.1358 (0.693 -> 0.829) but that contradicts
+calibration by a similar magnitude in the opposite direction, which is the signature of noise on a
+1.5%-positive target rather than a real gain -- do not report the test-split scout number.
+
+**The stated success test failed.** Scout prediction by failure depth went 0.480 -> 0.405 against a
+truth of 0.041 -> 0.000; the old model went 0.180 -> 0.107. The relative dynamic range is unchanged,
+so the model still does not learn the decay, and the read-out-position hypothesis is not confirmed.
+Calibration also degraded (scout 9.28x -> 29.89x over), which is expected from `pos_weight` --
+it rebalances gradients, it does not calibrate -- so the ratio is not the metric to judge it by.
+
+Next, as **separate** jobs: (a) `counts_last` alone, (b) `pos_weight` alone, (c) explicit numeric
+count features concatenated to the pooled embedding before the head, which is the stronger version
+of the hypothesis and does not depend on the encoder noticing two digits of text.
+
 ### Runtime reference and job hygiene (2026-08-27)
 
 Measured on the 86-problem test split, 5 orderings, one GPU:
