@@ -35,7 +35,7 @@ python pipelinerl/swe/scripts/livecodebench/replay_mdp_full_execution.py \
   --start-protocol ${START_PROTOCOL} \
   --state-layout ${STATE_LAYOUT} \
   --cost-mode ${COST_MODE} \
-  ${CALIBRATION_MAP:+--calibration-map ${CALIBRATION_MAP}}"
+  ${CALIBRATION_MAP:+--calibration-map ${CALIBRATION_MAP}} ${EXTRA_REPLAY_ARGS:-}"
 
 make -C "${REPO_ROOT}" job \
   JOB_NAME="${JOB_NAME}" ENV=pipeline-rl CONDA_EXE=/opt/conda/bin/conda \
