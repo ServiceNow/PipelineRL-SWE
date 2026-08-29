@@ -2620,3 +2620,101 @@ these become headline numbers.
 
 `analysis/mdp_paper_figures/fig_mdp_frontier_2x2.png` shows this legacy weak-verifier ladder
 (six curves + fixed baselines). It is retained for provenance and is not a main result figure.
+
+---
+
+## Exact Bellman solve over the failure-count lattice (2026-08-29)
+
+### Motivation
+
+Every routing arm to date has used a **myopic** rule: `argmax_m p_m·R − c_m`, with abstention as
+the zero-value action. Codex's audit flagged this correctly — calling it a "dual" is too strong,
+because it drops the continuation term `(1 − p_m)·V(s')`. Consequences: the policy cannot
+distinguish "scout is cheap and oss120 is still in reserve" from "this is the last affordable
+shot," and it does not know draws are finite.
+
+This is also the most likely explanation for the sharpest negative result in the temporal
+analysis: at matched `R`, the learned scorer is significantly **cheaper** at 15–18 of 24 `R`
+values but significantly **more accurate at 0 of 24**. All measured gain sits on the cost axis.
+Ordering is exactly what a myopic rule throws away.
+
+### The solve is exact, not learned
+
+The earlier framing of "train with the full Bellman" (fitted-Q, or policy gradient against the
+replay simulator) was wrong, and it was the reason the direction was previously deprioritized as
+data-starved at 551 problems. **The MDP is small enough to solve outright:**
+
+- Draws are exchangeable given the problem, so per-route failure counts are a sufficient
+  statistic. Full history adds tokens, not information.
+- With `n_total ≤ 10` over three routes the lattice is `C(13,3) = 286` states.
+- The transition model is fully determined by beliefs the scorer already emits.
+- Budget and capacity feasibility are deterministic functions of the count vector (per-route
+  costs are constants), so neither enters the state.
+
+```
+V(k) = max( 0,  max_m [ p_m(k)·R − c_m + (1 − p_m(k))·V(k + e_m) ] )
+p_m(k) = pbar_m · s / (s + n_m + k_m)
+```
+
+Backward induction, descending on every axis. No bootstrapping, no value regression, and no
+hindsight bias from an oracle target — the three failure modes that made the learned variants
+unattractive. Future beliefs are extrapolated with the same Beta–Bernoulli posterior the myopic
+decay arm already applies, so belief models are identical between arms and the comparison
+isolates the continuation value alone.
+
+`--bellman-horizons H1,H2,...` adds `<family>_bellman_h<H>_value` arms beside the myopic
+`<family>_value` arms, plus calibration-frozen variants and paired bootstraps at matched `R`.
+
+**H=1 truncates every successor to zero and therefore reproduces the myopic rule exactly.**
+Verified two ways: as a unit test, and end-to-end on the real temporal tensors — 0 mismatches in
+correctness or cost across all 24 `R` values.
+
+### Why RoR did not do this
+
+Not tractability. Their 11-model pool gives `C(21,11) ≈ 353k` states — 265× ours, still very
+solvable — and the hard budget adds no dimension for the reason above.
+
+Partly the knapsack framing. Maximizing `1 − ∏(1−p_m)` subject to `Σc_m ≤ B` is a knapsack in
+log space (`max Σ log(1/(1−p_m))`), for which greedy-by-density is the textbook heuristic; RoR's
+`p/c` is its small-`p` linearization. Framed as set selection under a budget, the adaptive
+structure disappears from view.
+
+**But the substantive reason is that it would not have paid.** The continuation value only
+separates actions when routes differ in how much *query-specific* option value they preserve.
+Under a global scalar `p̄_m` every problem looks identical to the policy, the optimal ordering is
+constant across queries, and greedy-by-density is already near-optimal.
+
+Measured on the counts family (RoR's own belief model), temporal split, 2 orderings:
+
+| target | myopic | h=2 | h=4 |
+|--------|--------|-----|-----|
+| 65.0% | $0.04358 | $0.04513 | $0.04529 |
+| 70.0% | $0.07470 | $0.07576 | $0.07623 |
+| 73.0% | $0.16475 | $0.16250 | $0.16302 |
+
+±1–3%, both directions. **Given RoR's belief model, RoR left nothing on the table.**
+
+### Claim under test
+
+> The exact Bellman solve is worth doing only once the prior is query-conditioned. The learned
+> prior and the sequential solve are complementary; neither is worth much alone.
+
+This is currently a hypothesis with one supporting leg (the counts family above). It requires the
+`sequential_decay_bellman_h*` arms to confirm. **Pre-registered failure condition:** if those also
+come back flat, the continuation value is null for this problem class regardless of the prior, and
+the correct write-up is a negative result — greedy-by-density is near-optimal for adaptive routing
+— not a method contribution.
+
+### Status
+
+Implemented in `replay_mdp_full_execution.py`; 37 tests pass (from 25). Launched on all three
+temporal layouts with `--bellman-horizons 2,4,8`, reusing existing models and `tensors_v3`; no
+retraining and no new collection.
+
+### Consequence for the log-basis work
+
+If the policy applies `s·p̄_m(x)/(s + n_m)` analytically inside the DP, the network never has to
+represent the decay internally. The "why can't the model learn the hazard" thread (and the
+proposed `log(s/(s+n))` feature basis) therefore drops from method-critical to diagnostic. It also
+explains why `structured` did not beat `counts_last`: those features asked the network to learn
+something that can simply be computed.

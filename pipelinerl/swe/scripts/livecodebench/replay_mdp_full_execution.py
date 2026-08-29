@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import itertools
 import json
 from pathlib import Path
 from typing import Any, Callable
@@ -189,6 +190,85 @@ def _next_valid_draw(order: np.ndarray, ptr: int, valid: np.ndarray) -> tuple[in
     return (int(order[ptr]), ptr) if ptr < len(order) else (None, ptr)
 
 
+def _solve_bellman_action_values(
+    pbar: np.ndarray,
+    failures: np.ndarray,
+    remaining_by_route: list[int],
+    expected_costs: np.ndarray,
+    spent_budget: float,
+    budget: float,
+    value_of_correct: float,
+    decay_s: float | None,
+    horizon: int,
+) -> tuple[dict[int, float], float]:
+    """Exact backward induction over the reachable failure-count lattice.
+
+        V(k) = max( 0, max_m [ p_m(k)*R - c_m + (1 - p_m(k)) * V(k + e_m) ] )
+
+    The myopic rule this replaces drops the `(1 - p) V(k + e_m)` term, so it
+    cannot tell "scout is cheap and oss120 is still in reserve" from "this is the
+    last affordable shot", and it does not know draws are finite.
+
+    Nothing here is learned. Draws are exchangeable given the problem, so the
+    per-route failure counts are a sufficient statistic and this lattice is the
+    entire state space -- at most C(h+3,3) nodes. The transition model is fully
+    determined by the beliefs the scorer already emits, so the Bellman equation
+    is solved rather than approximated: no bootstrapping, no value regression,
+    and no hindsight bias from an oracle target.
+
+    Future beliefs are extrapolated analytically as `pbar_m * s / (s + n_m)`,
+    the same Beta-Bernoulli posterior the myopic decay arm applies. That keeps
+    the belief model identical between the two arms so the comparison isolates
+    the continuation value. `decay_s=None` holds beliefs constant with depth.
+
+    Both budget and capacity feasibility are deterministic functions of `k`
+    (costs are per-route constants), so neither needs to enter the state.
+
+    Returns (action value per route at the current state, state value). The
+    state value is 0 exactly when abstaining is optimal. `horizon=1` truncates
+    every successor to 0 and therefore reproduces the myopic rule exactly.
+    """
+    n_routes = len(pbar)
+    caps = [min(int(remaining_by_route[m]), horizon) for m in range(n_routes)]
+    values: dict[tuple[int, ...], float] = {}
+    root_action_values: dict[int, float] = {}
+    zero = tuple(0 for _ in range(n_routes))
+
+    # Descending on every axis, so every successor k + e_m is already solved.
+    for offsets in itertools.product(*[range(cap, -1, -1) for cap in caps]):
+        depth = sum(offsets)
+        if depth >= horizon:
+            values[offsets] = 0.0
+            continue
+        spent = spent_budget + sum(
+            offsets[m] * float(expected_costs[m]) for m in range(n_routes)
+        )
+        action_values: dict[int, float] = {}
+        best = 0.0  # abstaining is always available and worth exactly zero
+        for m in range(n_routes):
+            if offsets[m] >= caps[m]:
+                continue  # route exhausted its remaining valid draws
+            if spent + float(expected_costs[m]) > budget + 1e-12:
+                continue
+            if decay_s is None:
+                p = float(pbar[m])
+            else:
+                p = float(pbar[m]) * decay_s / (decay_s + float(failures[m] + offsets[m]))
+            successor = list(offsets)
+            successor[m] += 1
+            q = (
+                p * value_of_correct
+                - float(expected_costs[m])
+                + (1.0 - p) * values[tuple(successor)]
+            )
+            action_values[m] = q
+            best = max(best, q)
+        values[offsets] = best
+        if offsets == zero:
+            root_action_values = action_values
+    return root_action_values, values[zero]
+
+
 def replay_adaptive(
     outcomes: np.ndarray,
     valid: np.ndarray,
@@ -212,10 +292,16 @@ def replay_adaptive(
     tau_abstain: float | None = None,
     min_success_per_cost: float | None = None,
     value_of_correct: float | None = None,
+    bellman_horizon: int | None = None,
     capture_trace: bool = False,
     apply_failure_decay: bool = False,
     mandatory_scout: bool = True,
 ) -> dict[str, Any]:
+    if bellman_horizon is not None:
+        if value_of_correct is None:
+            raise ValueError("Bellman lookahead requires the value-of-correct control")
+        if bellman_horizon < 1:
+            raise ValueError("--bellman-horizon must be at least 1 (1 == myopic)")
     controls = (tau_abstain, min_success_per_cost, value_of_correct)
     if sum(control is not None for control in controls) > 1:
         raise ValueError(
@@ -301,8 +387,12 @@ def replay_adaptive(
             if calibrator is not None:
                 all_probs = calibrator(all_probs, int(failures.sum()))
             p_each = all_probs[: len(slots)]
+            # The undecayed prediction is the lattice prior: the Bellman solve
+            # re-applies the decay itself at each future depth.
+            bellman_pbar, bellman_decay_s = p_each, None
             if apply_failure_decay:
                 decay_s = pseudo_count if decay_pseudo_count is None else decay_pseudo_count
+                bellman_decay_s = decay_s
                 p_each = p_each * decay_s / (decay_s + failures)
                 p_any = 1.0 - float(np.prod(1.0 - p_each))
                 belief_source = "sequential_decay"
@@ -315,6 +405,7 @@ def replay_adaptive(
                 belief_source = "sequential"
         elif content_prior is not None:
             p_each = np.asarray(content_prior, dtype=float)
+            bellman_pbar, bellman_decay_s = p_each, None
             p_any = 1.0 - float(np.prod(1.0 - p_each))
             belief_source = "content"
         else:
@@ -322,6 +413,7 @@ def replay_adaptive(
                 pseudo_count * prior[mi] / (pseudo_count + failures[mi])
                 for mi in range(len(slots))
             ])
+            bellman_pbar, bellman_decay_s = np.asarray(prior, dtype=float), pseudo_count
             p_any = 1.0 - float(np.prod(1.0 - p_each))
             belief_source = "counts"
 
@@ -336,14 +428,29 @@ def replay_adaptive(
             }
         # The ratio is scale-invariant, so it ranks routes identically at every
         # valuation and always prefers the cheapest. The dollar difference does not.
-        action_values = (
-            {
+        state_value: float | None = None
+        if value_of_correct is None:
+            action_values = None
+        elif bellman_horizon is None:
+            action_values = {
                 mi: float(p_each[mi] * value_of_correct - expected_costs[mi])
                 for mi in available
             }
-            if value_of_correct is not None
-            else None
-        )
+        else:
+            root_action_values, state_value = _solve_bellman_action_values(
+                bellman_pbar,
+                failures,
+                [int(remaining[slot]) for slot in slots],
+                expected_costs,
+                spent_budget,
+                budget,
+                value_of_correct,
+                bellman_decay_s,
+                bellman_horizon,
+            )
+            action_values = {
+                mi: root_action_values[mi] for mi in available if mi in root_action_values
+            }
         selection = ratios if action_values is None else action_values
 
         decision: dict[str, Any] | None = None
@@ -369,8 +476,10 @@ def replay_adaptive(
                 },
                 "action_value": (
                     None if action_values is None
-                    else {slots[mi]: action_values[mi] for mi in available}
+                    else {slots[mi]: value for mi, value in action_values.items()}
                 ),
+                "bellman_horizon": bellman_horizon,
+                "state_value": state_value,
                 "tau_abstain": tau_abstain,
                 "min_success_per_cost": min_success_per_cost,
                 "value_of_correct": value_of_correct,
@@ -383,7 +492,9 @@ def replay_adaptive(
         )
         # Under value control, stopping needs no separate threshold: abstaining is
         # the zero-value action, so quit when no route has positive dollar value.
-        value_stop = action_values is not None and max(action_values.values()) <= 0.0
+        value_stop = action_values is not None and (
+            not action_values or max(action_values.values()) <= 0.0
+        )
         if probability_stop or marginal_stop or value_stop:
             if decision is not None:
                 decision.update({
@@ -399,7 +510,7 @@ def replay_adaptive(
                 decision_trace.append(decision)
             return finish(False, True)
 
-        chosen = max(available, key=selection.__getitem__)
+        chosen = max(selection, key=selection.__getitem__)
         result, chosen_draw = attempt(chosen)
         if decision is not None:
             decision.update({
@@ -585,6 +696,16 @@ def main() -> None:
             "post-hoc selection of R=0.1863 off the test frontier."
         ),
     )
+    parser.add_argument(
+        "--bellman-horizons", default="",
+        help=(
+            "Comma-separated lookahead depths for the exact Bellman solve over the failure-count "
+            "lattice, e.g. '1,2,4,8'. Each adds <family>_bellman_h<H>_value arms alongside the "
+            "myopic <family>_value arms. H=1 truncates every successor to zero and so reproduces "
+            "the myopic rule exactly; larger H credits the continuation value the myopic rule "
+            "drops. Empty disables the arms entirely."
+        ),
+    )
     parser.add_argument("--cost-mode", choices=["usd", "weights"], default="usd")
     parser.add_argument("--execution-cost-usd", type=float, default=0.0)
     parser.add_argument("--content-preds")
@@ -709,6 +830,7 @@ def main() -> None:
         capture_trace: bool = False,
         pseudo_count: float | None = None,
         exploration_bonus: bool = False,
+        bellman_horizon: int | None = None,
     ) -> list[dict[str, Any]]:
         outputs = []
         for pi in indices:
@@ -726,6 +848,7 @@ def main() -> None:
                     tau_abstain=tau,
                     min_success_per_cost=min_success_per_cost,
                     value_of_correct=value_of_correct,
+                    bellman_horizon=bellman_horizon,
                     capture_trace=capture_trace,
                     apply_failure_decay=family == "sequential_decay",
                     decay_pseudo_count=args.decay_pseudo_count,
@@ -834,10 +957,22 @@ def main() -> None:
     # point at ceiling accuracy. That is post-hoc selection. Here each retention target
     # picks its R on calibration only; the test split is then touched once per target.
     retention_grid = [float(x) for x in args.retention_grid.split(",") if x.strip()]
+    # horizon None is the myopic rule; each explicit horizon is an exact Bellman solve
+    # over the same beliefs, so the pair isolates the continuation value.
+    bellman_horizons = [int(x) for x in args.bellman_horizons.split(",") if x.strip()]
+    value_arms: list[tuple[str, int | None]] = (
+        [(family, None) for family in families]
+        + [(family, h) for family in families for h in bellman_horizons]
+    )
+
+    def _value_policy(family: str, horizon: int | None) -> str:
+        return f"{family}_value" if horizon is None else f"{family}_bellman_h{horizon}_value"
+
     frozen_rows: list[dict[str, Any]] = []
-    for family in families:
+    for family, horizon in value_arms:
         cal_by_r = {
-            r: _aggregate(run(cal_idx, unconstrained_budget, family, None, None, r))
+            r: _aggregate(run(cal_idx, unconstrained_budget, family, None, None, r,
+                              bellman_horizon=horizon))
             for r in value_grid
         }
         cal_ceiling = max(m["correctness"] for m in cal_by_r.values())
@@ -847,11 +982,13 @@ def main() -> None:
             if not ok:
                 continue
             r_star = min(ok)[1]
-            test_metrics = _aggregate(run(test_idx, unconstrained_budget, family, None, None, r_star))
+            test_metrics = _aggregate(run(test_idx, unconstrained_budget, family, None, None,
+                                          r_star, bellman_horizon=horizon))
             frozen_rows.append({
-                "policy": f"{family}_value_frozen",
+                "policy": f"{_value_policy(family, horizon)}_frozen",
                 "budget": None, "tau": None, "min_success_per_cost": None,
                 "value_of_correct": r_star,
+                "bellman_horizon": horizon,
                 "selection": "calibration_only",
                 "retention_target": target,
                 "calibration_correctness": cal_by_r[r_star]["correctness"],
@@ -863,12 +1000,12 @@ def main() -> None:
     # Value-controlled frontier. One scalar R drives escalation and stopping jointly,
     # so there is no budget grid and no calibration-selected abstention threshold.
     value_outputs: dict[tuple[float, str], list[dict[str, Any]]] = {}
-    for family in families:
+    for family, horizon in value_arms:
         for value_of_correct in value_grid:
-            policy = family + "_value"
+            policy = _value_policy(family, horizon)
             outputs = run(
                 test_idx, unconstrained_budget, family, None, None, value_of_correct,
-                capture_trace=True,
+                capture_trace=True, bellman_horizon=horizon,
             )
             value_outputs[(value_of_correct, policy)] = outputs
             metrics = _aggregate(outputs)
@@ -878,6 +1015,7 @@ def main() -> None:
                 "tau": None,
                 "min_success_per_cost": None,
                 "value_of_correct": value_of_correct,
+                "bellman_horizon": horizon,
                 **metrics,
             })
             action_summaries.append({
@@ -886,6 +1024,7 @@ def main() -> None:
                 "tau": None,
                 "min_success_per_cost": None,
                 "value_of_correct": value_of_correct,
+                "bellman_horizon": horizon,
                 **_summarize_decisions(outputs, slots),
             })
             episode_rows.extend({
@@ -894,6 +1033,7 @@ def main() -> None:
                 "tau": None,
                 "min_success_per_cost": None,
                 "value_of_correct": value_of_correct,
+                "bellman_horizon": horizon,
                 **output,
             } for output in outputs)
 
@@ -945,6 +1085,29 @@ def main() -> None:
         } for output in outputs)
 
     paired_comparisons: list[dict[str, Any]] = []
+    # Bellman vs myopic at matched R and matched beliefs: the only difference is
+    # whether the continuation value is credited, so this isolates it directly.
+    # Not gated on the scorer -- the counts family is the cleanest read on the
+    # continuation value alone, with no learned prior in the way.
+    for fi, (family, horizon) in enumerate(value_arms):
+        if horizon is None:
+            continue
+        reference_policy = _value_policy(family, None)
+        candidate_policy = _value_policy(family, horizon)
+        for vi, value_of_correct in enumerate(value_grid):
+            paired_comparisons.append({
+                "reference_policy": reference_policy,
+                "candidate_policy": candidate_policy,
+                "budget": None,
+                "value_of_correct": value_of_correct,
+                "bellman_horizon": horizon,
+                **_paired_problem_bootstrap(
+                    value_outputs[(value_of_correct, reference_policy)],
+                    value_outputs[(value_of_correct, candidate_policy)],
+                    samples=args.bootstrap_samples,
+                    seed=args.seed + 900_000 + 10_000 * fi + 100 * vi,
+                ),
+            })
     if scorer is not None:
         candidate_families = ("sequential", "sequential_decay")
         for fi, candidate_family in enumerate(candidate_families):
@@ -1020,6 +1183,7 @@ def main() -> None:
         "cost_mode": args.cost_mode,
         "calibration_map": args.calibration_map,
         "state_layout": args.state_layout,
+        "bellman_horizons": bellman_horizons,
         "execution_cost_usd_per_attempt": float(args.execution_cost_usd),
         "expected_decision_costs": dict(zip(slots, expected_costs.tolist())),
         "train_priors": dict(zip(slots, priors.tolist())),

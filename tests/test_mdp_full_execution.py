@@ -22,6 +22,7 @@ from pipelinerl.swe.scripts.livecodebench.mdp_utils import (
 )
 from pipelinerl.swe.scripts.livecodebench.replay_mdp_full_execution import (
     _paired_problem_bootstrap,
+    _solve_bellman_action_values,
     _summarize_decisions,
     replay_adaptive,
     replay_fixed,
@@ -571,3 +572,146 @@ def test_greedy_is_unchanged_when_exploration_is_off() -> None:
     b = replay_adaptive(*common, exploration_bonus=False, capture_trace=True, mandatory_scout=False)
     assert [d["chosen_route"] for d in a["decision_trace"]] == \
            [d["chosen_route"] for d in b["decision_trace"]]
+
+
+# --- Exact Bellman solve over the failure-count lattice ---------------------------
+
+
+def _solve(**kwargs):
+    """One route, p=0.5 flat, cost 0.1, R=1.0 -- small enough to verify by hand."""
+    params = dict(
+        pbar=np.array([0.5]),
+        failures=np.zeros(1, dtype=int),
+        remaining_by_route=[2],
+        expected_costs=np.array([0.1]),
+        spent_budget=0.0,
+        budget=10.0,
+        value_of_correct=1.0,
+        decay_s=None,
+        horizon=2,
+    )
+    params.update(kwargs)
+    return _solve_bellman_action_values(**params)
+
+
+def test_bellman_backward_induction_matches_hand_computation() -> None:
+    # V(1) = 0.5*1 - 0.1 + 0.5*V(2) = 0.4, with V(2) = 0 by horizon truncation.
+    # V(0) = 0.5*1 - 0.1 + 0.5*0.4 = 0.6.
+    action_values, state_value = _solve(horizon=2)
+    assert action_values[0] == pytest.approx(0.6)
+    assert state_value == pytest.approx(0.6)
+
+
+def test_bellman_horizon_one_is_the_myopic_action_value() -> None:
+    action_values, state_value = _solve(horizon=1)
+    assert action_values[0] == pytest.approx(0.5 * 1.0 - 0.1)
+    assert state_value == pytest.approx(0.4)
+
+
+def test_bellman_state_value_is_monotone_in_horizon() -> None:
+    """Deeper lookahead can only add option value: abstaining is always worth 0."""
+    values = [_solve(horizon=h)[1] for h in (1, 2, 3, 4, 5)]
+    assert all(b >= a - 1e-12 for a, b in zip(values, values[1:]))
+    assert values[-1] > values[0]
+
+
+def test_bellman_respects_remaining_draw_capacity() -> None:
+    action_values, state_value = _solve(remaining_by_route=[0])
+    assert action_values == {}
+    assert state_value == 0.0
+
+
+def test_bellman_excludes_routes_the_budget_cannot_afford() -> None:
+    action_values, _ = _solve_bellman_action_values(
+        pbar=np.array([0.5, 0.9]),
+        failures=np.zeros(2, dtype=int),
+        remaining_by_route=[2, 2],
+        expected_costs=np.array([0.1, 5.0]),
+        spent_budget=0.0,
+        budget=1.0,
+        value_of_correct=1.0,
+        decay_s=None,
+        horizon=3,
+    )
+    assert set(action_values) == {0}
+
+
+def test_bellman_abstains_when_every_action_is_worth_less_than_nothing() -> None:
+    action_values, state_value = _solve(value_of_correct=0.01)
+    assert state_value == 0.0
+    assert max(action_values.values()) <= 0.0
+
+
+def test_bellman_decay_lowers_the_value_of_repeating_a_failed_route() -> None:
+    flat = _solve(decay_s=None, horizon=3)[1]
+    decayed = _solve(decay_s=1.0, horizon=3)[1]
+    assert decayed < flat
+
+
+def _bellman_replay(**kwargs):
+    """Myopic grabs oss120 outright; the cheap scout preserves that option for later."""
+    slots = ["scout", "oss20", "oss120"]
+    return replay_adaptive(
+        np.zeros((3, 3), dtype=bool),
+        np.ones((3, 3), dtype=bool),
+        np.ones((3, 3), dtype=float),
+        np.array([0.0001, 0.05, 0.2]),
+        np.tile(np.arange(3), (3, 1)),
+        10.0,
+        np.array([0.05, 0.02, 0.5]),
+        1.0,
+        slots,
+        _records("p", slots, 3),
+        "p",
+        "problem",
+        scorer=lambda _: np.array([0.05, 0.02, 0.5, 0.5]),
+        apply_failure_decay=True,
+        decay_pseudo_count=1.0,
+        capture_trace=True,
+        mandatory_scout=False,
+        **kwargs,
+    )
+
+
+def test_bellman_horizon_one_reproduces_the_myopic_replay_exactly() -> None:
+    myopic = _bellman_replay(value_of_correct=1.0)
+    lookahead_one = _bellman_replay(value_of_correct=1.0, bellman_horizon=1)
+    assert myopic["correct"] == lookahead_one["correct"]
+    assert myopic["realized_spend"] == pytest.approx(lookahead_one["realized_spend"])
+    assert myopic["route_attempt_counts"] == lookahead_one["route_attempt_counts"]
+    for a, b in zip(myopic["decision_trace"], lookahead_one["decision_trace"]):
+        assert a["chosen_route"] == b["chosen_route"]
+        for slot, value in a["action_value"].items():
+            assert value == pytest.approx(b["action_value"][slot])
+
+
+def test_continuation_value_orders_the_cheap_route_before_the_expensive_expert() -> None:
+    myopic = _bellman_replay(value_of_correct=1.0)
+    lookahead = _bellman_replay(value_of_correct=1.0, bellman_horizon=2)
+    # Myopic maximizes p*R - c and takes the expert immediately. The Bellman arm
+    # sees that scout costs a hundredth of a cent and leaves oss120 undecayed.
+    assert myopic["decision_trace"][0]["chosen_route"] == "oss120"
+    assert lookahead["decision_trace"][0]["chosen_route"] == "scout"
+    assert lookahead["decision_trace"][0]["state_value"] > \
+           myopic["decision_trace"][0]["action_value"]["oss120"]
+
+
+def test_bellman_trace_records_horizon_and_state_value() -> None:
+    result = _bellman_replay(value_of_correct=1.0, bellman_horizon=4)
+    decision = result["decision_trace"][0]
+    assert decision["bellman_horizon"] == 4
+    assert decision["state_value"] > 0.0
+    assert result["decision_trace"][0]["value_of_correct"] == 1.0
+
+
+def test_myopic_replay_records_no_state_value() -> None:
+    decision = _bellman_replay(value_of_correct=1.0)["decision_trace"][0]
+    assert decision["bellman_horizon"] is None
+    assert decision["state_value"] is None
+
+
+def test_bellman_requires_the_value_control_and_a_positive_horizon() -> None:
+    with pytest.raises(ValueError, match="value-of-correct"):
+        _bellman_replay(bellman_horizon=2)
+    with pytest.raises(ValueError, match="at least 1"):
+        _bellman_replay(value_of_correct=1.0, bellman_horizon=0)
