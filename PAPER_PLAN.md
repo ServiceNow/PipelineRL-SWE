@@ -2760,3 +2760,114 @@ pass). The independent opt-in launcher is:
 
 ```bash
 SUBMIT=1 bash launchers/abstention/launch_lcb_mdp_oracle_stopping_temporal.sh
+
+---
+
+## Learned one-step transitions in the Bellman solve (2026-08-30)
+
+### What the analytic DP was assuming
+
+The exact Bellman solve calls the scorer **once**, at the current state, then extrapolates every
+future belief as `pbar_m · s/(s + n_m)`. That carries two assumptions:
+
+1. beliefs decay at rate `s/(s+n)`;
+2. a failure on route `m` says **nothing** about route `m′`.
+
+The second is almost certainly false — a hard problem is hard for every route — and the analytic
+form structurally cannot express it. The trained model can: it sees the whole count vector and
+emits all four heads, so it is free to lower `oss120` after three scout failures. **We never asked
+it.** The model was consulted only about the state we are in, never about the states we plan
+through.
+
+This is the concrete mechanism behind the standing diagnosis. Two independent observations point at
+the transition model rather than the recursion: `h4`/`h8` are no better than `h2` (deeper lookahead
+compounds transition error), and lookahead makes the *counts* family monotonically **worse**
+($0.07762 → $0.07854 → $0.07930 → $0.07930), because optimizing harder against a bad belief model
+moves you further in the wrong direction.
+
+### The arm
+
+`--learned-transition-horizons H` queries the scorer at each depth-1 successor instead of
+extrapolating. At `H=2` that is *every node the recursion touches*, so the arm is the **exact
+Bellman optimum under the model's own beliefs**, with no analytic extrapolation anywhere.
+
+Only the source of the raw belief changes; the decay is applied identically at every node either
+way. The paired bootstrap references the **same horizon with analytic transitions**, so the delta
+isolates the transition model and nothing else.
+
+**No leakage.** Successor counts are known exactly at decision time, but the content of an attempt
+not yet made is not, so the latest observed attempt's text is carried forward unchanged. Using the
+real future draw's code would leak an outcome the policy cannot see in deployment. A test asserts
+the root's successor queries contain no draw code at all.
+
+Requires no retraining. 44 tests pass (from 39).
+
+### Why this before Codex's retraining program
+
+Codex's recommended sequence (train an explicit remaining-solvability head `q(s)`, add
+depth-balanced sampling, paired adjacent-state consistency, action-conditioned transition loss,
+remove the analytic double-decay) is well motivated and probably right eventually. But every step
+of it costs a training run, and all of it is premised on the transition model being the bottleneck.
+
+This arm tests that premise for the price of one replay. If learned transitions move the frontier,
+the premise holds and the retraining program is justified. If they do not, the premise was wrong and
+we have avoided an entire retraining sequence chasing it.
+
+### Launcher hermeticity fixed (long-standing hazard, recorded 2026-08-28 as `a2e27d2`)
+
+With `SNAPSHOT=1` the Makefile already sets both `--workdir` and `PYTHONPATH` to
+`/home/toolkit/snapshots2/<revision>`, so jobs are hermetic **by default**. Our launcher silently
+undid this by prefixing `COMMAND` with `cd ${REPO_ROOT}` (the live tree): Python then loaded the
+**entry script** from the live tree — it becomes `sys.path[0]` — while `from pipelinerl...` still
+resolved against the snapshot. That mixed resolution is what killed two jobs on 2026-08-28.
+
+`launch_lcb_mdp_replay.sh` no longer `cd`s. Edits made to the live tree while a job runs can no
+longer reach it. The same `cd ${REPO_ROOT}` pattern remains inside `COMMAND` in several other
+launchers (`launch_lcb_mdp_full_execution.sh`, `launch_lcb_mdp_sequential_train.sh`,
+`launch_lcb_mdp_temporal_551_341.sh`, `launch_lcb_embedding_router_train.sh`, and the collection
+launchers) and should get the same treatment.
+
+### The `nothing` head is currently dead weight
+
+Confirmed by inspection: `p_any` is read at exactly one place, the `tau_abstain` threshold. The
+value and Bellman arms stop via `max_m(p_m·R − c_m) ≤ 0`, so **they never touch the `nothing` head
+at all.** It was trained for the original threshold-abstention design and became vestigial when the
+utility formulation replaced it.
+
+It is not redundant in principle, though. The per-route heads answer "will the next draw of route
+`m` succeed?"; `nothing` answers "will *any* remaining draw of *any* route succeed?" — a statement
+about the whole remaining budget, not one step. Those come apart: every next-draw probability can
+sit below threshold while the problem is still solvable within the remaining draws.
+
+The Bellman state value `V(0)` is the utility-theoretic analogue of that same quantity, so we now
+have two independent estimates of it and can cross-check them.
+
+**But it is currently our worst head on the temporal split** — scout_next 0.8166, oss20_fresh
+0.8265, oss120_fresh 0.7529, **nothing 0.7335**. If the oracle diagnostic confirms stopping is the
+dominant lever, then the head governing stopping being the weakest is precisely the problem, and
+Codex's proposal to train `q(s)` explicitly becomes the priority. (The 0.862 figure for this head
+is from the *development* model, not the temporal one.)
+
+### Headline correction
+
+Codex reported the temporal saving as 9.1% / 11.0%. That is accurate for **one calibration-frozen
+point at 70.41%**, which sits at the weakest part of the curve — and it is not comparable to the
+myopic frozen arm, which lands at 67.37%. The matched-accuracy frontier bootstrap (171 problems,
+1000 resamples, both frontiers rebuilt inside each resample) gives:
+
+| target | RoR | ours (h2) | saving | 95% CI | P(>0) |
+|---|---:|---:|---:|---|---:|
+| 60.0% | $0.03396 | $0.02441 | **+28.1%** | [+7.6, +36.8] | 1.00 |
+| 65.0% | $0.04877 | $0.03972 | **+18.6%** | [+1.8, +33.2] | 0.98 |
+| 68.0% | $0.06570 | $0.05443 | +17.2% | [−3.0, +29.3] | 0.96 |
+| 70.0% | $0.07699 | $0.06783 | +11.9% | [−9.4, +27.9] | 0.89 |
+| 73.0% | $0.16584 | $0.14124 | +14.8% | [−9.2, +26.7] | 0.90 |
+
+So the 27% was **not invalid** — it was a different operating point. The frontier is the comparable
+number because it is what RoR reports.
+
+The genuinely negative finding is a different one: **Bellman ≈ myopic.** The myopic frontier gives
++28.8 / +18.6 / +17.3 / +9.6 / +13.1 at the same targets. `h2` leads slightly at the top but well
+inside the CIs. The pre-registered failure condition is essentially met — *the continuation value is
+not a method contribution on its own*, and the savings versus RoR come from the learned prior plus
+abstention. Whether learned transitions change that is what these jobs test.

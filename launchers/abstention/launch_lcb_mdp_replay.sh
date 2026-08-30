@@ -28,8 +28,15 @@ TIMESTAMP=${TIMESTAMP:-$(date +%s)}
 JOB_NAME=${JOB_NAME:-lcb_replay_${START_PROTOCOL}_${TIMESTAMP}}
 OUTPUT_DIR=${OUTPUT_DIR:-${ARTIFACT_DIR}/${REPLAY_TAG}}
 
-COMMAND="cd ${REPO_ROOT} && \
-python pipelinerl/swe/scripts/livecodebench/replay_mdp_full_execution.py \
+# No `cd` into the live tree. With SNAPSHOT=1 the Makefile already sets both
+# --workdir and PYTHONPATH to /home/toolkit/snapshots2/<revision>, so the job is
+# hermetic by default. Prefixing the command with `cd ${REPO_ROOT}` silently
+# undid that: Python loaded the ENTRY SCRIPT from the live tree (it becomes
+# sys.path[0]) while `from pipelinerl...` still resolved against the snapshot.
+# That mixed resolution is what killed two jobs on 2026-08-28, when a module
+# added to the live tree after launch was absent from their snapshot. Staying in
+# the snapshot means edits made while a job runs cannot reach it.
+COMMAND="python pipelinerl/swe/scripts/livecodebench/replay_mdp_full_execution.py \
   --tensors-dir ${TENSORS_DIR} \
   --output-dir ${OUTPUT_DIR} \
   --sequential-model-dir ${ARTIFACT_DIR}/model \
