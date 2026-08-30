@@ -772,3 +772,109 @@ def test_oracle_stopping_overrides_value_stop_until_a_stored_success() -> None:
         *common, value_of_correct=1.0, capture_trace=True, mandatory_scout=False,
         oracle_stopping=True,
     )
+
+
+# --- Learned one-step transitions inside the Bellman solve -------------------------
+
+
+def _transition_replay(successor_probs=None, **kwargs):
+    """Scorer returns root beliefs normally, and `successor_probs` once counts move.
+
+    The analytic form reuses the root prediction at every lattice node, so it can
+    never see a scout failure as evidence against oss120. A learned transition can.
+    """
+    slots = ["scout", "oss20", "oss120"]
+    root = np.array([0.30, 0.20, 0.60, 0.5])
+
+    def scorer(text, features=None):
+        if successor_probs is not None and "total_failures: 1" in text:
+            return np.asarray(successor_probs, dtype=float)
+        return root
+
+    return replay_adaptive(
+        np.zeros((3, 3), dtype=bool),
+        np.ones((3, 3), dtype=bool),
+        np.ones((3, 3), dtype=float),
+        np.array([0.001, 0.004, 0.03]),
+        np.tile(np.arange(3), (3, 1)),
+        10.0,
+        np.array([0.30, 0.20, 0.60]),
+        2.0,
+        slots,
+        _records("p", slots, 3),
+        "p",
+        "problem",
+        scorer=scorer,
+        apply_failure_decay=True,
+        decay_pseudo_count=2.0,
+        value_of_correct=1.0,
+        capture_trace=True,
+        mandatory_scout=False,
+        **kwargs,
+    )
+
+
+def test_learned_transitions_require_a_bellman_horizon() -> None:
+    with pytest.raises(ValueError, match="require a Bellman horizon"):
+        _transition_replay(learned_transitions=True)
+
+
+def test_learned_transitions_are_inert_when_the_model_agrees_with_the_decay() -> None:
+    """A successor prediction equal to the root reproduces the analytic arm exactly."""
+    analytic = _transition_replay(bellman_horizon=2)
+    learned = _transition_replay(
+        successor_probs=[0.30, 0.20, 0.60, 0.5], bellman_horizon=2, learned_transitions=True
+    )
+    assert [d["chosen_route"] for d in analytic["decision_trace"]] == \
+           [d["chosen_route"] for d in learned["decision_trace"]]
+    assert analytic["realized_spend"] == pytest.approx(learned["realized_spend"])
+
+
+def test_learned_transitions_propagate_failure_across_routes() -> None:
+    """A pessimistic successor lowers the continuation value the analytic arm keeps high."""
+    analytic = _transition_replay(bellman_horizon=2)
+    pessimistic = _transition_replay(
+        successor_probs=[0.01, 0.01, 0.02, 0.9], bellman_horizon=2, learned_transitions=True
+    )
+    assert pessimistic["decision_trace"][0]["state_value"] < \
+           analytic["decision_trace"][0]["state_value"]
+
+
+def test_learned_transitions_do_not_change_the_myopic_horizon() -> None:
+    """H=1 never evaluates a successor, so the transition model cannot matter.
+
+    Only the root decision is compared: from the second decision onward the real
+    state itself has a failure, which the stub cannot distinguish from a
+    hypothetical successor by rendered text alone.
+    """
+    analytic = _transition_replay(bellman_horizon=1)["decision_trace"][0]
+    learned = _transition_replay(
+        successor_probs=[0.01, 0.01, 0.02, 0.9], bellman_horizon=1, learned_transitions=True
+    )["decision_trace"][0]
+    for slot, value in analytic["action_value"].items():
+        assert value == pytest.approx(learned["action_value"][slot])
+
+
+def test_learned_transitions_never_read_the_unseen_draw_outcome() -> None:
+    """The successor state must be renderable from counts the policy already has."""
+    seen: list[str] = []
+    slots = ["scout", "oss20", "oss120"]
+
+    def scorer(text, features=None):
+        seen.append(text)
+        return np.array([0.30, 0.20, 0.60, 0.5])
+
+    replay_adaptive(
+        np.zeros((3, 3), dtype=bool), np.ones((3, 3), dtype=bool),
+        np.ones((3, 3), dtype=float), np.array([0.001, 0.004, 0.03]),
+        np.tile(np.arange(3), (3, 1)), 10.0, np.array([0.30, 0.20, 0.60]), 2.0,
+        slots, _records("p", slots, 3), "p", "problem",
+        scorer=scorer, apply_failure_decay=True, value_of_correct=1.0,
+        bellman_horizon=2, learned_transitions=True, mandatory_scout=False,
+    )
+    # The first four queries are the root and its three successors, all issued
+    # before any attempt exists. A successor built from a real future draw would
+    # carry that draw's code; a successor built from observed state cannot.
+    assert any("total_failures: 1" in text for text in seen[:4]), "no successor was queried"
+    for text in seen[:4]:
+        assert "scout-" not in text and "oss20-" not in text and "oss120-" not in text

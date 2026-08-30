@@ -215,6 +215,7 @@ def _solve_bellman_action_values(
     value_of_correct: float,
     decay_s: float | None,
     horizon: int,
+    raw_belief_at: Callable[[tuple[int, ...]], np.ndarray] | None = None,
 ) -> tuple[dict[int, float], float]:
     """Exact backward induction over the reachable failure-count lattice.
 
@@ -249,6 +250,21 @@ def _solve_bellman_action_values(
     root_action_values: dict[int, float] = {}
     zero = tuple(0 for _ in range(n_routes))
 
+    def raw_belief(offsets: tuple[int, ...]) -> np.ndarray:
+        """Undecayed per-route beliefs at a lattice node.
+
+        Analytic default reuses the root prediction at every node, which asserts
+        that failing route m says nothing about route m'. That is the assumption
+        `raw_belief_at` replaces: the model is queried at the successor and can
+        lower every route at once, because a hard problem is hard for everyone.
+        The decay below is applied identically either way, so swapping this
+        function isolates the transition model and nothing else.
+        """
+        if raw_belief_at is None:
+            return pbar
+        supplied = raw_belief_at(offsets)
+        return pbar if supplied is None else supplied
+
     # Descending on every axis, so every successor k + e_m is already solved.
     for offsets in itertools.product(*[range(cap, -1, -1) for cap in caps]):
         depth = sum(offsets)
@@ -260,15 +276,16 @@ def _solve_bellman_action_values(
         )
         action_values: dict[int, float] = {}
         best = 0.0  # abstaining is always available and worth exactly zero
+        node_raw = raw_belief(offsets)
         for m in range(n_routes):
             if offsets[m] >= caps[m]:
                 continue  # route exhausted its remaining valid draws
             if spent + float(expected_costs[m]) > budget + 1e-12:
                 continue
             if decay_s is None:
-                p = float(pbar[m])
+                p = float(node_raw[m])
             else:
-                p = float(pbar[m]) * decay_s / (decay_s + float(failures[m] + offsets[m]))
+                p = float(node_raw[m]) * decay_s / (decay_s + float(failures[m] + offsets[m]))
             successor = list(offsets)
             successor[m] += 1
             q = (
@@ -308,6 +325,7 @@ def replay_adaptive(
     min_success_per_cost: float | None = None,
     value_of_correct: float | None = None,
     bellman_horizon: int | None = None,
+    learned_transitions: bool = False,
     capture_trace: bool = False,
     apply_failure_decay: bool = False,
     mandatory_scout: bool = True,
@@ -318,6 +336,8 @@ def replay_adaptive(
             raise ValueError("Bellman lookahead requires the value-of-correct control")
         if bellman_horizon < 1:
             raise ValueError("--bellman-horizon must be at least 1 (1 == myopic)")
+    if learned_transitions and bellman_horizon is None:
+        raise ValueError("Learned transitions require a Bellman horizon")
     controls = (tau_abstain, min_success_per_cost, value_of_correct)
     if sum(control is not None for control in controls) > 1:
         raise ValueError(
@@ -384,6 +404,7 @@ def replay_adaptive(
 
         remaining = _remaining_draw_counts(valid, orderings, ptr, slots)
         route_capacities = {slot: int(valid[mi].sum()) for mi, slot in enumerate(slots)}
+        latest_attempt = attempts[-1] if attempts else None
         state_features = build_structured_state_features(
             attempts, remaining, route_capacities, slots
         )
@@ -453,6 +474,53 @@ def replay_adaptive(
                 for mi in available
             }
         else:
+            raw_belief_at = None
+            if learned_transitions and scorer is not None:
+                def raw_belief_at(offsets: tuple[int, ...]) -> np.ndarray | None:
+                    """Query the model one failure ahead instead of extrapolating.
+
+                    Only depth 1 is queried: for horizon 2 that is every node the
+                    recursion touches, so H=2 becomes the exact optimum under the
+                    model's own beliefs with no analytic extrapolation at all.
+                    Deeper nodes fall back to the analytic form.
+
+                    The successor's counts are known exactly at decision time, but
+                    the content of an attempt not yet made is not, so the latest
+                    observed attempt's text is carried forward unchanged. Using the
+                    real future draw's code here would leak an outcome the policy
+                    cannot see in deployment.
+                    """
+                    if sum(offsets) != 1:
+                        return None
+                    mi = next(i for i, k in enumerate(offsets) if k == 1)
+                    if latest_attempt is None:
+                        hypothetical = {
+                            "model_slot": slots[mi],
+                            "code": "",
+                            "full_execution_feedback": "Full execution: FAILED",
+                        }
+                    else:
+                        hypothetical = dict(latest_attempt)
+                        hypothetical["model_slot"] = slots[mi]
+                    next_attempts = attempts + [hypothetical]
+                    next_remaining = dict(remaining)
+                    next_remaining[slots[mi]] = max(0, next_remaining[slots[mi]] - 1)
+                    text = _render_state(
+                        problem_statement, next_attempts, next_remaining, state_layout
+                    )
+                    features = build_structured_state_features(
+                        next_attempts, next_remaining, route_capacities, slots
+                    )
+                    probs = np.asarray(
+                        scorer(text, features)
+                        if getattr(scorer, "uses_structured_state_features", False)
+                        else scorer(text),
+                        dtype=float,
+                    )
+                    if calibrator is not None:
+                        probs = calibrator(probs, int(failures.sum()) + 1)
+                    return probs[: len(slots)]
+
             root_action_values, state_value = _solve_bellman_action_values(
                 bellman_pbar,
                 failures,
@@ -463,6 +531,7 @@ def replay_adaptive(
                 value_of_correct,
                 bellman_decay_s,
                 bellman_horizon,
+                raw_belief_at=raw_belief_at,
             )
             action_values = {
                 mi: root_action_values[mi] for mi in available if mi in root_action_values
@@ -739,6 +808,16 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--learned-transition-horizons", default="",
+        help=(
+            "Comma-separated Bellman horizons to ALSO run with learned one-step transitions, "
+            "querying the scorer at each depth-1 successor instead of extrapolating the root "
+            "prediction analytically. At H=2 that covers every node the recursion touches, so "
+            "the arm is the exact optimum under the model's own beliefs. Adds "
+            "<family>_bellman_h<H>_learned_value arms. Requires --sequential-model-dir."
+        ),
+    )
+    parser.add_argument(
         "--oracle-stopping-family",
         choices=["counts", "content", "sequential", "sequential_decay"],
         help=(
@@ -884,6 +963,7 @@ def main() -> None:
         pseudo_count: float | None = None,
         exploration_bonus: bool = False,
         bellman_horizon: int | None = None,
+        learned_transitions: bool = False,
         oracle_stopping: bool = False,
     ) -> list[dict[str, Any]]:
         outputs = []
@@ -903,6 +983,7 @@ def main() -> None:
                     min_success_per_cost=min_success_per_cost,
                     value_of_correct=value_of_correct,
                     bellman_horizon=bellman_horizon,
+                    learned_transitions=learned_transitions,
                     capture_trace=capture_trace,
                     apply_failure_decay=family == "sequential_decay",
                     decay_pseudo_count=args.decay_pseudo_count,
@@ -1020,26 +1101,37 @@ def main() -> None:
     # horizon None is the myopic rule; each explicit horizon is an exact Bellman solve
     # over the same beliefs, so the pair isolates the continuation value.
     bellman_horizons = [int(x) for x in args.bellman_horizons.split(",") if x.strip()]
-    value_arms: list[tuple[str, int | None]] = (
-        [(family, None) for family in families]
-        + [(family, h) for family in families for h in bellman_horizons]
+    learned_horizons = [
+        int(x) for x in args.learned_transition_horizons.split(",") if x.strip()
+    ]
+    if learned_horizons and scorer is None:
+        raise ValueError("--learned-transition-horizons requires --sequential-model-dir")
+    # Learned transitions only alter beliefs the SCORER produces, so they are
+    # meaningless for the count-based families.
+    learned_families = [f for f in families if f in ("sequential", "sequential_decay")]
+    value_arms: list[tuple[str, int | None, bool]] = (
+        [(family, None, False) for family in families]
+        + [(family, h, False) for family in families for h in bellman_horizons]
+        + [(family, h, True) for family in learned_families for h in learned_horizons]
     )
     oracle_arm = (
         (args.oracle_stopping_family, args.oracle_stopping_horizon)
         if args.oracle_stopping_family else None
     )
-    if oracle_arm is not None and oracle_arm not in value_arms:
-        value_arms.append(oracle_arm)
+    if oracle_arm is not None and (*oracle_arm, False) not in value_arms:
+        value_arms.append((*oracle_arm, False))
 
-    def _value_policy(family: str, horizon: int | None) -> str:
-        return f"{family}_value" if horizon is None else f"{family}_bellman_h{horizon}_value"
+    def _value_policy(family: str, horizon: int | None, learned: bool = False) -> str:
+        if horizon is None:
+            return f"{family}_value"
+        return f"{family}_bellman_h{horizon}{'_learned' if learned else ''}_value"
 
     frozen_rows: list[dict[str, Any]] = []
     oracle_frozen_pairs: list[dict[str, Any]] = []
-    for family, horizon in value_arms:
+    for family, horizon, learned in value_arms:
         cal_by_r = {
             r: _aggregate(run(cal_idx, unconstrained_budget, family, None, None, r,
-                              bellman_horizon=horizon))
+                              bellman_horizon=horizon, learned_transitions=learned))
             for r in value_grid
         }
         cal_ceiling = max(m["correctness"] for m in cal_by_r.values())
@@ -1050,21 +1142,23 @@ def main() -> None:
                 continue
             r_star = min(ok)[1]
             test_outputs = run(test_idx, unconstrained_budget, family, None, None,
-                               r_star, bellman_horizon=horizon)
+                               r_star, bellman_horizon=horizon,
+                               learned_transitions=learned)
             test_metrics = _aggregate(test_outputs)
-            policy = f"{_value_policy(family, horizon)}_frozen"
+            policy = f"{_value_policy(family, horizon, learned)}_frozen"
             frozen_rows.append({
                 "policy": policy,
                 "budget": None, "tau": None, "min_success_per_cost": None,
                 "value_of_correct": r_star,
                 "bellman_horizon": horizon,
+                "learned_transitions": learned,
                 "selection": "calibration_only",
                 "retention_target": target,
                 "calibration_correctness": cal_by_r[r_star]["correctness"],
                 "calibration_ceiling": cal_ceiling,
                 **test_metrics,
             })
-            if oracle_arm == (family, horizon):
+            if oracle_arm == (family, horizon) and not learned:
                 oracle_outputs = run(
                     test_idx, unconstrained_budget, family, None, None, r_star,
                     bellman_horizon=horizon, oracle_stopping=True, capture_trace=True,
@@ -1104,12 +1198,13 @@ def main() -> None:
     # Value-controlled frontier. One scalar R drives escalation and stopping jointly,
     # so there is no budget grid and no calibration-selected abstention threshold.
     value_outputs: dict[tuple[float, str], list[dict[str, Any]]] = {}
-    for family, horizon in value_arms:
+    for family, horizon, learned in value_arms:
         for value_of_correct in value_grid:
-            policy = _value_policy(family, horizon)
+            policy = _value_policy(family, horizon, learned)
             outputs = run(
                 test_idx, unconstrained_budget, family, None, None, value_of_correct,
                 capture_trace=True, bellman_horizon=horizon,
+                learned_transitions=learned,
             )
             value_outputs[(value_of_correct, policy)] = outputs
             metrics = _aggregate(outputs)
@@ -1208,11 +1303,15 @@ def main() -> None:
     # whether the continuation value is credited, so this isolates it directly.
     # Not gated on the scorer -- the counts family is the cleanest read on the
     # continuation value alone, with no learned prior in the way.
-    for fi, (family, horizon) in enumerate(value_arms):
+    for fi, (family, horizon, learned) in enumerate(value_arms):
         if horizon is None:
             continue
-        reference_policy = _value_policy(family, None)
-        candidate_policy = _value_policy(family, horizon)
+        # Learned-transition arms pair against the SAME horizon with analytic
+        # transitions, so the delta is the transition model and nothing else.
+        reference_policy = (
+            _value_policy(family, horizon, False) if learned else _value_policy(family, None)
+        )
+        candidate_policy = _value_policy(family, horizon, learned)
         for vi, value_of_correct in enumerate(value_grid):
             paired_comparisons.append({
                 "reference_policy": reference_policy,
@@ -1220,6 +1319,7 @@ def main() -> None:
                 "budget": None,
                 "value_of_correct": value_of_correct,
                 "bellman_horizon": horizon,
+                "learned_transitions": learned,
                 **_paired_problem_bootstrap(
                     value_outputs[(value_of_correct, reference_policy)],
                     value_outputs[(value_of_correct, candidate_policy)],
@@ -1303,6 +1403,7 @@ def main() -> None:
         "calibration_map": args.calibration_map,
         "state_layout": args.state_layout,
         "bellman_horizons": bellman_horizons,
+        "learned_transition_horizons": learned_horizons,
         "oracle_stopping_arm": (
             None if oracle_arm is None else {
                 "family": oracle_arm[0],
