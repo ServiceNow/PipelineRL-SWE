@@ -932,3 +932,54 @@ def test_fold_shaped_manifest_satisfies_the_split_validator() -> None:
     # Problems outside the fold must not be silently tolerated.
     with pytest.raises(ValueError, match="does not match tensors"):
         validate_split_manifest(manifest, ["a", "b", "c", "d", "e"])
+
+
+def test_oracle_routing_picks_the_cheapest_route_that_actually_succeeds() -> None:
+    """Diagnostic upper bound on route choice: stopping is left untouched."""
+    slots = ["scout", "oss20", "oss120"]
+    outcomes = np.zeros((3, 2), dtype=bool)
+    outcomes[1, 0] = True  # only oss20's next draw succeeds
+    common = (
+        outcomes, np.ones((3, 2), dtype=bool), np.ones((3, 2), dtype=float),
+        np.array([0.001, 0.004, 0.03]), np.tile(np.arange(2), (3, 1)), 10.0,
+        np.array([0.05, 0.05, 0.90]), 2.0, slots, _records("p", slots, 2), "p", "problem",
+    )
+    kwargs = dict(value_of_correct=1.0, capture_trace=True, mandatory_scout=False)
+    # The value rule prefers oss120 on belief; the oracle takes the one that works.
+    assert replay_adaptive(*common, **kwargs)["decision_trace"][0]["chosen_route"] == "oss120"
+    oracle = replay_adaptive(*common, oracle_routing=True, **kwargs)
+    assert oracle["decision_trace"][0]["chosen_route"] == "oss20"
+    assert oracle["decision_trace"][0]["oracle_routed"] is True
+    assert oracle["correct"] is True
+
+
+def test_oracle_routing_falls_back_to_the_policy_when_nothing_succeeds() -> None:
+    slots = ["scout", "oss20", "oss120"]
+    common = (
+        np.zeros((3, 2), dtype=bool), np.ones((3, 2), dtype=bool),
+        np.ones((3, 2), dtype=float), np.array([0.001, 0.004, 0.03]),
+        np.tile(np.arange(2), (3, 1)), 10.0, np.array([0.05, 0.05, 0.90]), 2.0,
+        slots, _records("p", slots, 2), "p", "problem",
+    )
+    kwargs = dict(value_of_correct=1.0, capture_trace=True, mandatory_scout=False)
+    plain = replay_adaptive(*common, **kwargs)
+    oracle = replay_adaptive(*common, oracle_routing=True, **kwargs)
+    assert [d["chosen_route"] for d in plain["decision_trace"]] == \
+           [d["chosen_route"] for d in oracle["decision_trace"]]
+    assert all(d["oracle_routed"] is False for d in oracle["decision_trace"])
+
+
+def test_oracle_routing_does_not_change_when_the_policy_abstains() -> None:
+    """Routing help is worthless if the policy has already decided to quit."""
+    slots = ["scout", "oss20", "oss120"]
+    outcomes = np.zeros((3, 2), dtype=bool)
+    outcomes[2, 0] = True
+    common = (
+        outcomes, np.ones((3, 2), dtype=bool), np.ones((3, 2), dtype=float),
+        np.array([0.001, 0.004, 0.03]), np.tile(np.arange(2), (3, 1)), 10.0,
+        np.array([0.05, 0.05, 0.90]), 2.0, slots, _records("p", slots, 2), "p", "problem",
+    )
+    # R tiny -> every action value is negative -> abstain at the root regardless.
+    kwargs = dict(value_of_correct=1e-4, capture_trace=True, mandatory_scout=False)
+    assert replay_adaptive(*common, **kwargs)["abstained"] is True
+    assert replay_adaptive(*common, oracle_routing=True, **kwargs)["abstained"] is True

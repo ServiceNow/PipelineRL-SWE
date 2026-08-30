@@ -326,6 +326,7 @@ def replay_adaptive(
     value_of_correct: float | None = None,
     bellman_horizon: int | None = None,
     learned_transitions: bool = False,
+    oracle_routing: bool = False,
     capture_trace: bool = False,
     apply_failure_decay: bool = False,
     mandatory_scout: bool = True,
@@ -609,7 +610,23 @@ def replay_adaptive(
                 decision_trace.append(decision)
             return finish(False, True)
 
-        chosen = max(selection, key=selection.__getitem__)
+        oracle_route = None
+        if oracle_routing:
+            # Diagnostic upper bound on ROUTE CHOICE only. Among routes the policy
+            # could take, prefer one whose next draw actually succeeds, cheapest
+            # first. Stopping is untouched, so pairing this against the same policy
+            # without it isolates how much is lost by picking the wrong route.
+            succeeding = []
+            for mi in available:
+                draw, _ = _next_valid_draw(orderings[mi], int(ptr[mi]), valid[mi])
+                if draw is not None and outcomes[mi, draw]:
+                    succeeding.append(mi)
+            if succeeding:
+                oracle_route = min(succeeding, key=lambda mi: float(expected_costs[mi]))
+        chosen = (
+            oracle_route if oracle_route is not None
+            else max(selection, key=selection.__getitem__)
+        )
         result, chosen_draw = attempt(chosen)
         if decision is not None:
             decision.update({
@@ -623,6 +640,8 @@ def replay_adaptive(
             })
             if oracle_stopping:
                 decision["oracle_has_remaining_success"] = oracle_has_remaining_success
+            if oracle_routing:
+                decision["oracle_routed"] = oracle_route is not None
             decision_trace.append(decision)
         if result is True:
             return finish(True, False)
@@ -965,6 +984,7 @@ def main() -> None:
         bellman_horizon: int | None = None,
         learned_transitions: bool = False,
         oracle_stopping: bool = False,
+        oracle_routing: bool = False,
     ) -> list[dict[str, Any]]:
         outputs = []
         for pi in indices:
@@ -990,6 +1010,7 @@ def main() -> None:
                     exploration_bonus=exploration_bonus,
                     mandatory_scout=args.start_protocol == "scout_first",
                     oracle_stopping=oracle_stopping,
+                    oracle_routing=oracle_routing,
                 )
                 result["problem_id"] = pid
                 result["ordering_index"] = oi
@@ -1158,12 +1179,23 @@ def main() -> None:
                 "calibration_ceiling": cal_ceiling,
                 **test_metrics,
             })
-            if oracle_arm == (family, horizon) and not learned:
+            # Full headroom decomposition: which of stopping, routing, or the
+            # portfolio itself limits us. Stopping and routing are run separately
+            # so their contributions are attributable, then jointly to expose any
+            # interaction; "both" is also the pool ceiling this policy could reach.
+            oracle_variants = (
+                (("_oracle_stop", True, False),
+                 ("_oracle_route", False, True),
+                 ("_oracle_both", True, True))
+                if oracle_arm == (family, horizon) and not learned else ()
+            )
+            for suffix, ora_stop, ora_route in oracle_variants:
                 oracle_outputs = run(
                     test_idx, unconstrained_budget, family, None, None, r_star,
-                    bellman_horizon=horizon, oracle_stopping=True, capture_trace=True,
+                    bellman_horizon=horizon, oracle_stopping=ora_stop,
+                    oracle_routing=ora_route, capture_trace=True,
                 )
-                oracle_policy = f"{policy}_oracle_stop"
+                oracle_policy = f"{policy}{suffix}"
                 frozen_rows.append({
                     "policy": oracle_policy,
                     "budget": None, "tau": None, "min_success_per_cost": None,
@@ -1174,7 +1206,13 @@ def main() -> None:
                     "calibration_correctness": cal_by_r[r_star]["correctness"],
                     "calibration_ceiling": cal_ceiling,
                     "diagnostic_only": True,
-                    "oracle_information": "any_remaining_stored_draw_succeeds",
+                    "oracle_information": (
+                        "any_remaining_stored_draw_succeeds" if ora_stop and not ora_route
+                        else "cheapest_route_whose_next_draw_succeeds" if ora_route and not ora_stop
+                        else "both_remaining_success_and_succeeding_route"
+                    ),
+                    "oracle_stopping": ora_stop,
+                    "oracle_routing": ora_route,
                     **_aggregate(oracle_outputs),
                 })
                 episode_rows.extend({
