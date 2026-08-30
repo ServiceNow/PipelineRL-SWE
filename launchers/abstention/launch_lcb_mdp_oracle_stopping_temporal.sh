@@ -40,3 +40,5 @@ NUM_ORDERINGS=5 \
 REPLAY_TAG="${REPLAY_TAG}" \
 JOB_NAME="${JOB_NAME}" \
 SNAPSHOT=1 \
+EXTRA_REPLAY_ARGS="--bellman-horizons 2 --oracle-stopping-family sequential_decay --oracle-stopping-horizon 2 --bootstrap-samples ${BOOTSTRAP_SAMPLES}" \
+bash "${SCRIPT_DIR}/launch_lcb_mdp_replay.sh"
