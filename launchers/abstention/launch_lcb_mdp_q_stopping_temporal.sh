@@ -21,6 +21,10 @@ REPLAY_TAG=${REPLAY_TAG:-replay_q_stop_v1}
 JOB_NAME=${JOB_NAME:-lcb_mdp_temporal_counts_last_q_stop_${TIMESTAMP}}
 Q_STOP_GRID=${Q_STOP_GRID:-0.02,0.05,0.08,0.12,0.16,0.20,0.25,0.30,0.40,0.50}
 BOOTSTRAP_SAMPLES=${BOOTSTRAP_SAMPLES:-2000}
+# One retention target, not the usual four. q_abstain REPLACES stopping, so R only
+# influences routing -- which the oracle decomposition already showed is worth ~3%.
+# Sweeping R x q re-answers a settled question 4x and was costing ~40 test replays.
+RETENTION_GRID=${RETENTION_GRID:-0.95}
 
 if [[ "${SUBMIT}" != "1" ]]; then
   cat <<EOF
@@ -31,7 +35,8 @@ Prepared but not submitted.
   policy: sequential_decay Bellman H=2, routing unchanged
   intervention: stopping replaced by a threshold on the learned q(s)
   q grid: ${Q_STOP_GRID}
-  also runs: oracle stop / route / both, for the comparison this exists to make
+  retention targets: ${RETENTION_GRID}
+  oracle arms: run separately by launch_lcb_mdp_oracle_stopping_temporal.sh
 
 Submit explicitly with:
   SUBMIT=1 bash ${BASH_SOURCE[0]}
@@ -39,8 +44,9 @@ EOF
   exit 0
 fi
 
-# Oracle arms run alongside so the achievable and upper-bound numbers land in one
-# artifact on identical episodes, rather than being compared across jobs.
+# The oracle arms are dropped here: lcb_oracle_decomp_1788125027 is already running
+# them on this same artifact, model, tensors, orderings and frozen R, so the
+# achievable-vs-upper-bound comparison stays valid across the two jobs.
 ARTIFACT_DIR="${ARTIFACT_DIR}" \
 TENSORS_DIR="${TENSORS_DIR}" \
 STATE_LAYOUT=counts_last \
@@ -49,8 +55,7 @@ NUM_ORDERINGS=5 \
 REPLAY_TAG="${REPLAY_TAG}" \
 JOB_NAME="${JOB_NAME}" \
 SNAPSHOT=1 \
-EXTRA_REPLAY_ARGS="--bellman-horizons 2 \
+EXTRA_REPLAY_ARGS="--bellman-horizons 2 --retention-grid ${RETENTION_GRID} \
   --q-stop-family sequential_decay --q-stop-horizon 2 --q-stop-grid ${Q_STOP_GRID} \
-  --oracle-stopping-family sequential_decay --oracle-stopping-horizon 2 \
   --bootstrap-samples ${BOOTSTRAP_SAMPLES}" \
 bash "${SCRIPT_DIR}/launch_lcb_mdp_replay.sh"
