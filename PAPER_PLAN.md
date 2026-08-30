@@ -2871,3 +2871,62 @@ The genuinely negative finding is a different one: **Bellman ≈ myopic.** The m
 inside the CIs. The pre-registered failure condition is essentially met — *the continuation value is
 not a method contribution on its own*, and the savings versus RoR come from the learned prior plus
 abstention. Whether learned transitions change that is what these jobs test.
+
+---
+
+## The model already encodes cross-route failure information (2026-08-30)
+
+First **positive mechanistic** evidence for the transition story. Everything prior to this was an
+argument from absence — a list of nulls plus a structural claim about what the analytic form cannot
+express. This measures the signal directly.
+
+Within-problem contrasts on the `sequential_value` arm, whose recorded `p_success_next` is raw model
+output with no analytic decay applied. The target route's own failure count is held at 0, isolating
+the cross-route effect.
+
+| belief | driver | mean Δ | median Δ | \|Δ\|>0.05 | n |
+|---|---|---:|---:|---:|---:|
+| p[oss20] | oss120 failures | **−0.0568** | −0.0497 | 49.3% | 71 |
+| p[oss120] | oss20 failures | **−0.0515** | −0.0416 | 41.7% | 96 |
+| p[oss120] | scout failures | −0.0175 | −0.0129 | 6.6% | 121 |
+| p[oss20] | scout failures | +0.0134 | +0.0001 | 16.5% | 121 |
+| p[scout] | **own** failures | −0.0041 | | | 121 |
+| p[oss20] | **own** failures | −0.0334 | | | 96 |
+| p[oss120] | **own** failures | −0.0504 | | | 71 |
+
+**Cross-route sensitivity is as large as own-route sensitivity.** oss120's belief falls 0.0515 when
+*oss20* fails versus 0.0504 when *oss120 itself* fails. The analytic extrapolation
+`p_m · s/(s + n_m)` decays on own-route counts only, so it models the second and discards the first:
+roughly **half the belief movement the model actually produces is thrown away** before the DP sees
+it. That is the quantity `--learned-transition-horizons` recovers.
+
+The asymmetry is interpretable. Scout failures carry almost no cross-route information (−0.0175,
++0.0134) — scout is weak, so its failure is barely evidence. Expert failures are strongly
+informative about other experts. A global scalar prior cannot express this, and RoR's belief update
+has no channel for it: their `p̂_im` updates route `m` from route `m`'s own observations only.
+
+### Correction to the standing "the model cannot learn the decay" diagnosis
+
+That diagnosis was measured on the **scout** head and then generalized to the model. The bottom rows
+reproduce it exactly — scout own-route sensitivity is −0.0041, flat. But the **expert** heads move an
+order of magnitude more, and expert decisions are where the money is. The correct statement is
+narrower: *the model is depth-insensitive for the cheapest route, and responsive for the experts.*
+
+This also predicted the wrong thing earlier in the day. The reasoning was: learned transitions query
+states differing from the root only in depth; the model is depth-insensitive; therefore
+`raw(successor) ≈ raw(root)` and the arm is approximately a no-op. The first and third steps hold;
+the second is false for exactly the routes that matter.
+
+### Caveats
+
+Beliefs **move** cross-route; this does not show the movement is well **calibrated**. The sign is
+right (failures lower other routes' estimates), the magnitude is unverified. n is 71–121 problems
+per contrast, and deeper driver-failure states within a problem are reached only along particular
+trajectories, so some selection remains.
+
+### Consequence for priority
+
+Raises the expected value of the running `learned_trans` jobs and drops the `q(s)` / depth-balanced
+training program to second place, pending their result. The `q(s)` argument is untouched by this
+finding — it rests on the `nothing` head being the weakest (0.733) and on 43% of training gradient
+coming from depths 1–2, which is a separate defect.
