@@ -190,6 +190,21 @@ def _next_valid_draw(order: np.ndarray, ptr: int, valid: np.ndarray) -> tuple[in
     return (int(order[ptr]), ptr) if ptr < len(order) else (None, ptr)
 
 
+def _has_remaining_success(
+    outcomes: np.ndarray,
+    valid: np.ndarray,
+    orderings: np.ndarray,
+    ptr: np.ndarray,
+) -> bool:
+    """Whether any still-unseen valid draw succeeds (diagnostic oracle only)."""
+    for mi in range(outcomes.shape[0]):
+        for position in range(int(ptr[mi]), len(orderings[mi])):
+            draw = int(orderings[mi, position])
+            if valid[mi, draw] and outcomes[mi, draw]:
+                return True
+    return False
+
+
 def _solve_bellman_action_values(
     pbar: np.ndarray,
     failures: np.ndarray,
@@ -296,6 +311,7 @@ def replay_adaptive(
     capture_trace: bool = False,
     apply_failure_decay: bool = False,
     mandatory_scout: bool = True,
+    oracle_stopping: bool = False,
 ) -> dict[str, Any]:
     if bellman_horizon is not None:
         if value_of_correct is None:
@@ -495,17 +511,31 @@ def replay_adaptive(
         value_stop = action_values is not None and (
             not action_values or max(action_values.values()) <= 0.0
         )
-        if probability_stop or marginal_stop or value_stop:
+        # Diagnostic upper bound: replace only the stopping decision with perfect
+        # knowledge of the stored future outcomes. Route scores, rankings, costs,
+        # capacities, R, and Bellman horizon remain untouched. This deliberately
+        # leaks future outcomes and must never be reported as a deployable policy.
+        oracle_has_remaining_success = (
+            _has_remaining_success(outcomes, valid, orderings, ptr)
+            if oracle_stopping else None
+        )
+        oracle_stop = oracle_stopping and not oracle_has_remaining_success
+        regular_stop = (
+            not oracle_stopping and (probability_stop or marginal_stop or value_stop)
+        )
+        if oracle_stop or regular_stop:
             if decision is not None:
                 decision.update({
                     "chosen_route": None,
                     "chosen_draw_index": None,
                     "result": "abstain",
                     "abstain_reason": (
-                        "probability_threshold" if probability_stop
+                        "oracle_no_remaining_success" if oracle_stop
+                        else "probability_threshold" if probability_stop
                         else "marginal_value" if marginal_stop
                         else "non_positive_action_value"
                     ),
+                    "oracle_has_remaining_success": oracle_has_remaining_success,
                 })
                 decision_trace.append(decision)
             return finish(False, True)
@@ -522,6 +552,8 @@ def replay_adaptive(
                     else "unavailable"
                 ),
             })
+            if oracle_stopping:
+                decision["oracle_has_remaining_success"] = oracle_has_remaining_success
             decision_trace.append(decision)
         if result is True:
             return finish(True, False)
@@ -706,6 +738,23 @@ def main() -> None:
             "drops. Empty disables the arms entirely."
         ),
     )
+    parser.add_argument(
+        "--oracle-stopping-family",
+        choices=["counts", "content", "sequential", "sequential_decay"],
+        help=(
+            "Diagnostic only: for this value-policy family, replace stopping with perfect "
+            "knowledge of whether any stored future draw succeeds. Routing is unchanged."
+        ),
+    )
+    parser.add_argument(
+        "--oracle-stopping-horizon",
+        type=int,
+        default=None,
+        help=(
+            "Bellman horizon whose calibration-frozen policy receives oracle stopping. "
+            "Omit for the myopic value policy."
+        ),
+    )
     parser.add_argument("--cost-mode", choices=["usd", "weights"], default="usd")
     parser.add_argument("--execution-cost-usd", type=float, default=0.0)
     parser.add_argument("--content-preds")
@@ -743,6 +792,10 @@ def main() -> None:
         raise ValueError("--execution-cost-usd must be non-negative")
     if args.execution_cost_usd and args.cost_mode != "usd":
         raise ValueError("--execution-cost-usd is only defined with --cost-mode usd")
+    if args.oracle_stopping_horizon is not None and args.oracle_stopping_family is None:
+        raise ValueError("--oracle-stopping-horizon requires --oracle-stopping-family")
+    if args.oracle_stopping_horizon is not None and args.oracle_stopping_horizon < 1:
+        raise ValueError("--oracle-stopping-horizon must be at least 1")
 
     tensor_dir = Path(args.tensors_dir)
     data = np.load(tensor_dir / "tensors.npz", allow_pickle=True)
@@ -831,6 +884,7 @@ def main() -> None:
         pseudo_count: float | None = None,
         exploration_bonus: bool = False,
         bellman_horizon: int | None = None,
+        oracle_stopping: bool = False,
     ) -> list[dict[str, Any]]:
         outputs = []
         for pi in indices:
@@ -854,6 +908,7 @@ def main() -> None:
                     decay_pseudo_count=args.decay_pseudo_count,
                     exploration_bonus=exploration_bonus,
                     mandatory_scout=args.start_protocol == "scout_first",
+                    oracle_stopping=oracle_stopping,
                 )
                 result["problem_id"] = pid
                 result["ordering_index"] = oi
@@ -865,6 +920,11 @@ def main() -> None:
         + (["content"] if content else [])
         + (["sequential", "sequential_decay"] if scorer else [])
     )
+    if args.oracle_stopping_family and args.oracle_stopping_family not in families:
+        raise ValueError(
+            f"Oracle family {args.oracle_stopping_family!r} is unavailable; "
+            "provide its required predictions/model"
+        )
     rows: list[dict[str, Any]] = []
     episode_rows: list[dict[str, Any]] = []
     action_summaries: list[dict[str, Any]] = []
@@ -964,11 +1024,18 @@ def main() -> None:
         [(family, None) for family in families]
         + [(family, h) for family in families for h in bellman_horizons]
     )
+    oracle_arm = (
+        (args.oracle_stopping_family, args.oracle_stopping_horizon)
+        if args.oracle_stopping_family else None
+    )
+    if oracle_arm is not None and oracle_arm not in value_arms:
+        value_arms.append(oracle_arm)
 
     def _value_policy(family: str, horizon: int | None) -> str:
         return f"{family}_value" if horizon is None else f"{family}_bellman_h{horizon}_value"
 
     frozen_rows: list[dict[str, Any]] = []
+    oracle_frozen_pairs: list[dict[str, Any]] = []
     for family, horizon in value_arms:
         cal_by_r = {
             r: _aggregate(run(cal_idx, unconstrained_budget, family, None, None, r,
@@ -982,10 +1049,12 @@ def main() -> None:
             if not ok:
                 continue
             r_star = min(ok)[1]
-            test_metrics = _aggregate(run(test_idx, unconstrained_budget, family, None, None,
-                                          r_star, bellman_horizon=horizon))
+            test_outputs = run(test_idx, unconstrained_budget, family, None, None,
+                               r_star, bellman_horizon=horizon)
+            test_metrics = _aggregate(test_outputs)
+            policy = f"{_value_policy(family, horizon)}_frozen"
             frozen_rows.append({
-                "policy": f"{_value_policy(family, horizon)}_frozen",
+                "policy": policy,
                 "budget": None, "tau": None, "min_success_per_cost": None,
                 "value_of_correct": r_star,
                 "bellman_horizon": horizon,
@@ -995,6 +1064,41 @@ def main() -> None:
                 "calibration_ceiling": cal_ceiling,
                 **test_metrics,
             })
+            if oracle_arm == (family, horizon):
+                oracle_outputs = run(
+                    test_idx, unconstrained_budget, family, None, None, r_star,
+                    bellman_horizon=horizon, oracle_stopping=True, capture_trace=True,
+                )
+                oracle_policy = f"{policy}_oracle_stop"
+                frozen_rows.append({
+                    "policy": oracle_policy,
+                    "budget": None, "tau": None, "min_success_per_cost": None,
+                    "value_of_correct": r_star,
+                    "bellman_horizon": horizon,
+                    "selection": "calibration_only_R_with_test_outcome_oracle",
+                    "retention_target": target,
+                    "calibration_correctness": cal_by_r[r_star]["correctness"],
+                    "calibration_ceiling": cal_ceiling,
+                    "diagnostic_only": True,
+                    "oracle_information": "any_remaining_stored_draw_succeeds",
+                    **_aggregate(oracle_outputs),
+                })
+                episode_rows.extend({
+                    "policy": oracle_policy,
+                    "budget": None, "tau": None, "min_success_per_cost": None,
+                    "value_of_correct": r_star,
+                    "bellman_horizon": horizon,
+                    "diagnostic_only": True,
+                    **output,
+                } for output in oracle_outputs)
+                oracle_frozen_pairs.append({
+                    "reference_policy": policy,
+                    "candidate_policy": oracle_policy,
+                    "retention_target": target,
+                    "value_of_correct": r_star,
+                    "reference_outputs": test_outputs,
+                    "candidate_outputs": oracle_outputs,
+                })
     rows.extend(frozen_rows)
 
     # Value-controlled frontier. One scalar R drives escalation and stopping jointly,
@@ -1085,6 +1189,21 @@ def main() -> None:
         } for output in outputs)
 
     paired_comparisons: list[dict[str, Any]] = []
+    for oi, comparison in enumerate(oracle_frozen_pairs):
+        paired_comparisons.append({
+            "reference_policy": comparison["reference_policy"],
+            "candidate_policy": comparison["candidate_policy"],
+            "budget": None,
+            "value_of_correct": comparison["value_of_correct"],
+            "retention_target": comparison["retention_target"],
+            "diagnostic_only": True,
+            **_paired_problem_bootstrap(
+                comparison["reference_outputs"],
+                comparison["candidate_outputs"],
+                samples=args.bootstrap_samples,
+                seed=args.seed + 1_500_000 + oi,
+            ),
+        })
     # Bellman vs myopic at matched R and matched beliefs: the only difference is
     # whether the continuation value is credited, so this isolates it directly.
     # Not gated on the scorer -- the counts family is the cleanest read on the
@@ -1184,6 +1303,13 @@ def main() -> None:
         "calibration_map": args.calibration_map,
         "state_layout": args.state_layout,
         "bellman_horizons": bellman_horizons,
+        "oracle_stopping_arm": (
+            None if oracle_arm is None else {
+                "family": oracle_arm[0],
+                "bellman_horizon": oracle_arm[1],
+                "diagnostic_only": True,
+            }
+        ),
         "execution_cost_usd_per_attempt": float(args.execution_cost_usd),
         "expected_decision_costs": dict(zip(slots, expected_costs.tolist())),
         "train_priors": dict(zip(slots, priors.tolist())),

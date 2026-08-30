@@ -2718,3 +2718,45 @@ represent the decay internally. The "why can't the model learn the hazard" threa
 proposed `log(s/(s+n))` feature basis) therefore drops from method-critical to diagnostic. It also
 explains why `structured` did not beat `counts_last`: those features asked the network to learn
 something that can simply be computed.
+
+---
+
+## Temporal Bellman readout and oracle-stopping headroom check (2026-08-30)
+
+The three H=2/4/8 temporal replays completed. Bellman continuation is **not** a large new source of
+gain under the current analytic future-belief model. On `counts_last`, H=2 is mildly helpful at a
+few matched-R points, while deeper H=4/8 is generally no better. For example, at R=0.1882,
+`sequential_decay` moves from 71.46% @ $0.09907 to H=2 at 71.70% @ $0.09481; the paired cost delta
+is significant but small (95% CI [-$0.00625, -$0.00224]) and the correctness interval includes
+zero. At the 73.10% ceiling, H=2 saves 1.8% and H=8 is effectively myopic.
+
+The calibration-frozen 95%-retention temporal point is the current conservative summary:
+
+| policy | correctness | mean realized cost |
+|---|---:|---:|
+| RoR-style `counts` frontier | 70.41% | $0.07930 |
+| stronger `counts_value_frozen` | 70.41% | $0.07762 |
+| `sequential_decay_bellman_h2_value_frozen` | 70.41% | $0.07057 |
+
+Thus the newest saving is **11.0% versus RoR-style counts, or 9.1% versus the stronger count+utility
+baseline**. The older 27% development point was a real dominance observation, but it used the old
+random/development protocol, miscalibrated `problem_first` model, and exploratory operating-point
+selection. Retain it only as superseded development evidence. The 51.5% random-split result likewise
+remains valid for its protocol but has not transferred to the strict later temporal block.
+
+### One-variable oracle diagnostic
+
+Before changing the loss, architecture, decay model, or portfolio, measure whether perfect stopping
+knowledge has material headroom. The diagnostic replaces **only** stop/continue with the leaked bit
+`any still-unseen stored draw succeeds`. If false, abstain immediately; if true, continue with the
+unchanged `sequential_decay` Bellman-H=2 route beliefs, ranking, costs, capacities, and
+calibration-frozen R. It is an upper-bound mechanism analysis, never a deployable policy or headline
+method.
+
+Implemented behind `--oracle-stopping-family` / `--oracle-stopping-horizon`, with problem-clustered
+paired bootstraps and explicit `diagnostic_only` metadata. Tests verify both immediate stopping on a
+doomed state and overriding a false value-stop until a stored success is reached (39 replay tests
+pass). The independent opt-in launcher is:
+
+```bash
+SUBMIT=1 bash launchers/abstention/launch_lcb_mdp_oracle_stopping_temporal.sh

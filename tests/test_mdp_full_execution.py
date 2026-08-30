@@ -715,3 +715,60 @@ def test_bellman_requires_the_value_control_and_a_positive_horizon() -> None:
         _bellman_replay(bellman_horizon=2)
     with pytest.raises(ValueError, match="at least 1"):
         _bellman_replay(value_of_correct=1.0, bellman_horizon=0)
+
+
+# --- Future-outcome stopping oracle (diagnostic upper bound only) -----------------
+
+
+def test_oracle_stopping_quits_immediately_when_no_success_remains() -> None:
+    slots = ["scout", "oss20", "oss120"]
+    result = replay_adaptive(
+        np.zeros((3, 2), dtype=bool),
+        np.ones((3, 2), dtype=bool),
+        np.ones((3, 2), dtype=float),
+        np.ones(3),
+        np.tile(np.arange(2), (3, 1)),
+        10.0,
+        np.ones(3) * 0.9,
+        2.0,
+        slots,
+        _records("p", slots, 2),
+        "p",
+        "problem",
+        capture_trace=True,
+        mandatory_scout=False,
+        oracle_stopping=True,
+    )
+    assert result["correct"] is False
+    assert result["abstained"] is True
+    assert result["attempts"] == 0
+    assert result["decision_trace"][0]["abstain_reason"] == \
+           "oracle_no_remaining_success"
+    assert result["decision_trace"][0]["oracle_has_remaining_success"] is False
+
+
+def test_oracle_stopping_overrides_value_stop_until_a_stored_success() -> None:
+    slots = ["scout", "oss20", "oss120"]
+    outcomes = np.zeros((3, 2), dtype=bool)
+    outcomes[0] = [False, True]
+    common = (
+        outcomes,
+        np.ones_like(outcomes),
+        np.ones((3, 2), dtype=float) * 0.1,
+        np.ones(3) * 0.1,
+        np.tile(np.arange(2), (3, 1)),
+        10.0,
+        np.array([0.01, 0.0, 0.0]),
+        2.0,
+        slots,
+        _records("p", slots, 2),
+        "p",
+        "problem",
+    )
+    ordinary = replay_adaptive(
+        *common, value_of_correct=1.0, capture_trace=True, mandatory_scout=False,
+    )
+    oracle = replay_adaptive(
+        *common, value_of_correct=1.0, capture_trace=True, mandatory_scout=False,
+        oracle_stopping=True,
+    )
