@@ -327,6 +327,7 @@ def replay_adaptive(
     bellman_horizon: int | None = None,
     learned_transitions: bool = False,
     oracle_routing: bool = False,
+    q_abstain: float | None = None,
     capture_trace: bool = False,
     apply_failure_decay: bool = False,
     mandatory_scout: bool = True,
@@ -403,6 +404,7 @@ def replay_adaptive(
         if not available:
             break
 
+        learned_q: float | None = None
         remaining = _remaining_draw_counts(valid, orderings, ptr, slots)
         route_capacities = {slot: int(valid[mi].sum()) for mi, slot in enumerate(slots)}
         latest_attempt = attempts[-1] if attempts else None
@@ -425,6 +427,13 @@ def replay_adaptive(
             if calibrator is not None:
                 all_probs = calibrator(all_probs, int(failures.sum()))
             p_each = all_probs[: len(slots)]
+            # The `nothing` head predicts that NO valid draw remains anywhere, so
+            # 1 - it is q(s) = P(some rescue exists). Kept whatever the family: the
+            # decay branch below overwrites p_any with an independence product and
+            # would otherwise discard the only head that answers the stopping
+            # question directly.
+            if len(all_probs) > len(slots):
+                learned_q = 1.0 - float(all_probs[len(slots)])
             # The undecayed prediction is the lattice prior: the Bellman solve
             # re-applies the decay itself at each future depth.
             bellman_pbar, bellman_decay_s = p_each, None
@@ -557,6 +566,8 @@ def replay_adaptive(
                     slot: float(p_each[mi]) for mi, slot in enumerate(slots)
                 },
                 "p_any_remaining": float(p_any),
+                "learned_q": learned_q,
+                "q_abstain": q_abstain,
                 "utility_per_expected_cost": {
                     slots[mi]: ratios[mi] for mi in available
                 },
@@ -590,10 +601,17 @@ def replay_adaptive(
             if oracle_stopping else None
         )
         oracle_stop = oracle_stopping and not oracle_has_remaining_success
+        # Replaces stopping only, exactly as the oracle arm does, so the two are
+        # directly comparable: how much of the oracle's headroom does the belief
+        # we already have actually recover? Routing is left to the value rule.
+        if q_abstain is not None and learned_q is None:
+            raise ValueError("q-based stopping requires a scorer with a `nothing` head")
+        q_stop = q_abstain is not None and learned_q <= q_abstain
         regular_stop = (
-            not oracle_stopping and (probability_stop or marginal_stop or value_stop)
+            not oracle_stopping and q_abstain is None
+            and (probability_stop or marginal_stop or value_stop)
         )
-        if oracle_stop or regular_stop:
+        if oracle_stop or q_stop or regular_stop:
             if decision is not None:
                 decision.update({
                     "chosen_route": None,
@@ -601,6 +619,7 @@ def replay_adaptive(
                     "result": "abstain",
                     "abstain_reason": (
                         "oracle_no_remaining_success" if oracle_stop
+                        else "learned_q_below_threshold" if q_stop
                         else "probability_threshold" if probability_stop
                         else "marginal_value" if marginal_stop
                         else "non_positive_action_value"
@@ -837,6 +856,22 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--q-stop-family",
+        choices=["counts", "content", "sequential", "sequential_decay"],
+        help=(
+            "Replace stopping for this family's frozen-R policy with a threshold on the "
+            "learned q(s) = 1 - P(nothing remains), sweeping --q-stop-grid. Routing is left to "
+            "the value rule, exactly as in the oracle arm, so the two are directly comparable: "
+            "this measures how much of the oracle's stopping headroom the beliefs we already "
+            "have can actually recover. Unlike the oracle arm this is deployable."
+        ),
+    )
+    parser.add_argument("--q-stop-horizon", type=int, default=None)
+    parser.add_argument(
+        "--q-stop-grid", default="0.02,0.05,0.08,0.12,0.16,0.20,0.25,0.30,0.40,0.50",
+        help="Abstain when learned q(s) <= threshold.",
+    )
+    parser.add_argument(
         "--oracle-stopping-family",
         choices=["counts", "content", "sequential", "sequential_decay"],
         help=(
@@ -890,6 +925,8 @@ def main() -> None:
         raise ValueError("--execution-cost-usd must be non-negative")
     if args.execution_cost_usd and args.cost_mode != "usd":
         raise ValueError("--execution-cost-usd is only defined with --cost-mode usd")
+    if args.q_stop_horizon is not None and args.q_stop_family is None:
+        raise ValueError("--q-stop-horizon requires --q-stop-family")
     if args.oracle_stopping_horizon is not None and args.oracle_stopping_family is None:
         raise ValueError("--oracle-stopping-horizon requires --oracle-stopping-family")
     if args.oracle_stopping_horizon is not None and args.oracle_stopping_horizon < 1:
@@ -985,6 +1022,7 @@ def main() -> None:
         learned_transitions: bool = False,
         oracle_stopping: bool = False,
         oracle_routing: bool = False,
+        q_abstain: float | None = None,
     ) -> list[dict[str, Any]]:
         outputs = []
         for pi in indices:
@@ -1011,6 +1049,7 @@ def main() -> None:
                     mandatory_scout=args.start_protocol == "scout_first",
                     oracle_stopping=oracle_stopping,
                     oracle_routing=oracle_routing,
+                    q_abstain=q_abstain,
                 )
                 result["problem_id"] = pid
                 result["ordering_index"] = oi
@@ -1141,6 +1180,12 @@ def main() -> None:
     )
     if oracle_arm is not None and (*oracle_arm, False) not in value_arms:
         value_arms.append((*oracle_arm, False))
+    q_stop_arm = (
+        (args.q_stop_family, args.q_stop_horizon) if args.q_stop_family else None
+    )
+    if q_stop_arm is not None and (*q_stop_arm, False) not in value_arms:
+        value_arms.append((*q_stop_arm, False))
+    q_stop_grid = [float(x) for x in args.q_stop_grid.split(",") if x.strip()]
 
     def _value_policy(family: str, horizon: int | None, learned: bool = False) -> str:
         if horizon is None:
@@ -1179,6 +1224,30 @@ def main() -> None:
                 "calibration_ceiling": cal_ceiling,
                 **test_metrics,
             })
+            if q_stop_arm == (family, horizon) and not learned:
+                for threshold in q_stop_grid:
+                    q_outputs = run(
+                        test_idx, unconstrained_budget, family, None, None, r_star,
+                        bellman_horizon=horizon, q_abstain=threshold, capture_trace=True,
+                    )
+                    q_policy = f"{policy}_qstop{threshold:g}"
+                    frozen_rows.append({
+                        "policy": q_policy,
+                        "budget": None, "tau": None, "min_success_per_cost": None,
+                        "value_of_correct": r_star,
+                        "bellman_horizon": horizon,
+                        "q_abstain": threshold,
+                        "selection": "calibration_only_R_with_swept_q_threshold",
+                        "retention_target": target,
+                        **_aggregate(q_outputs),
+                    })
+                    episode_rows.extend({
+                        "policy": q_policy, "budget": None, "tau": None,
+                        "min_success_per_cost": None, "value_of_correct": r_star,
+                        "bellman_horizon": horizon, "q_abstain": threshold,
+                        **output,
+                    } for output in q_outputs)
+
             # Full headroom decomposition: which of stopping, routing, or the
             # portfolio itself limits us. Stopping and routing are run separately
             # so their contributions are attributable, then jointly to expose any
@@ -1442,6 +1511,8 @@ def main() -> None:
         "state_layout": args.state_layout,
         "bellman_horizons": bellman_horizons,
         "learned_transition_horizons": learned_horizons,
+        "q_stop_arm": ({"family": args.q_stop_family, "bellman_horizon": args.q_stop_horizon}
+                      if args.q_stop_family else None),
         "oracle_stopping_arm": (
             None if oracle_arm is None else {
                 "family": oracle_arm[0],

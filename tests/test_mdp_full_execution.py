@@ -983,3 +983,51 @@ def test_oracle_routing_does_not_change_when_the_policy_abstains() -> None:
     kwargs = dict(value_of_correct=1e-4, capture_trace=True, mandatory_scout=False)
     assert replay_adaptive(*common, **kwargs)["abstained"] is True
     assert replay_adaptive(*common, oracle_routing=True, **kwargs)["abstained"] is True
+
+
+# --- Stopping on the learned q(s) --------------------------------------------------
+
+
+def _q_replay(nothing_prob, value_of_correct=1.0, **kwargs):
+    """Scorer's 4th output is the `nothing` head: P(no valid draw remains anywhere)."""
+    slots = ["scout", "oss20", "oss120"]
+    return replay_adaptive(
+        np.zeros((3, 3), dtype=bool), np.ones((3, 3), dtype=bool),
+        np.ones((3, 3), dtype=float), np.array([0.001, 0.004, 0.03]),
+        np.tile(np.arange(3), (3, 1)), 10.0, np.array([0.30, 0.20, 0.60]), 2.0,
+        slots, _records("p", slots, 3), "p", "problem",
+        scorer=lambda _: np.array([0.30, 0.20, 0.60, nothing_prob]),
+        apply_failure_decay=True, value_of_correct=value_of_correct,
+        capture_trace=True, mandatory_scout=False, **kwargs,
+    )
+
+
+def test_q_stopping_quits_when_the_learned_head_says_nothing_remains() -> None:
+    # nothing=0.95 -> q=0.05, below the threshold, so abstain at the root even
+    # though the value rule would happily spend.
+    assert _q_replay(0.05, q_abstain=0.10)["abstained"] is False
+    doomed = _q_replay(0.95, q_abstain=0.10)
+    assert doomed["abstained"] is True
+    assert doomed["attempts"] == 0
+    assert doomed["decision_trace"][0]["abstain_reason"] == "learned_q_below_threshold"
+    assert doomed["decision_trace"][0]["learned_q"] == pytest.approx(0.05)
+
+
+def test_q_stopping_replaces_rather_than_augments_the_value_stop() -> None:
+    """Mirrors the oracle arm: exactly one stopping source is active at a time."""
+    # R is tiny, so every action value is negative and the value rule would quit.
+    # A confident q keeps the policy going, proving q_abstain took over stopping.
+    kept_going = _q_replay(0.01, value_of_correct=1e-4, q_abstain=0.10)
+    assert kept_going["abstained"] is False
+    assert kept_going["attempts"] > 0
+
+
+def test_q_stopping_requires_a_nothing_head() -> None:
+    slots = ["scout", "oss20", "oss120"]
+    with pytest.raises(ValueError, match="`nothing` head"):
+        replay_adaptive(
+            np.zeros((3, 3), dtype=bool), np.ones((3, 3), dtype=bool),
+            np.ones((3, 3), dtype=float), np.ones(3), np.tile(np.arange(3), (3, 1)),
+            10.0, np.ones(3) * 0.5, 2.0, slots, _records("p", slots, 3), "p", "problem",
+            value_of_correct=1.0, q_abstain=0.1, mandatory_scout=False,
+        )
