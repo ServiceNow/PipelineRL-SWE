@@ -19,6 +19,10 @@ SCOUT_TRAIN_DIR=${SCOUT_TRAIN_DIR:-/mnt/llmd/results/exps/aristides/reason/lcb_m
 SUBMIT=${SUBMIT:-0}
 TIMESTAMP=${TIMESTAMP:-$(date +%s)}
 SEED=${SEED:-17}
+# Seed for sampling reachable failure histories. Defaults to 0 to reproduce every
+# artifact built before 2026-08-30. Set equal to SEED for a multi-seed run: holding
+# it fixed measures only optimizer variance, not variance of the whole pipeline.
+DATASET_SEED=${DATASET_SEED:-0}
 NPROC=${NPROC:-4}
 NUM_EPOCHS=${NUM_EPOCHS:-3}
 LR=${LR:-2e-5}
@@ -43,6 +47,7 @@ Prepared but not submitted.
   calibration: earliest half of later 341 problems
   test: latest half of later 341 problems
   state layout: ${STATE_LAYOUT}; state features: ${STATE_FEATURE_MODE}; pos weight: ${POS_WEIGHT}
+  train seed: ${SEED}; dataset-history seed: ${DATASET_SEED}
   route draws: ${ROUTE_DRAW_COUNTS}
 
 Submit explicitly with: SUBMIT=1 bash ${SCRIPT_DIR}/launch_lcb_mdp_temporal_551_341.sh
@@ -61,8 +66,11 @@ else
   TRAIN_LAUNCH="python"
 fi
 
-COMMAND="cd ${REPO_ROOT} && \
-python pipelinerl/swe/scripts/livecodebench/build_mdp_tensors_v2.py \
+# No `cd` into the live tree: SNAPSHOT=1 already sets --workdir and PYTHONPATH to the
+# snapshot, and this job chains build -> train -> replay, so its final stage starts
+# hours after launch. Prefixing with `cd ${REPO_ROOT}` made that stage load the live
+# entry script, which is how two jobs died on 2026-08-28.
+COMMAND="python pipelinerl/swe/scripts/livecodebench/build_mdp_tensors_v2.py \
   --collection-dir ${EXPERT_EVAL_DIR} --collection-dir ${EXPERT_TRAIN_DIR} \
   --collection-dir ${SCOUT_EVAL_DIR} --collection-dir ${SCOUT_TRAIN_DIR} \
   --source-collection-dir ${LCB_COLLECTION_DIR} --output-dir ${TENSORS_DIR} \
@@ -71,7 +79,7 @@ python pipelinerl/swe/scripts/livecodebench/build_mdp_tensors_v2.py \
 python pipelinerl/swe/scripts/livecodebench/build_mdp_reachable_dataset.py \
   --tensors-dir ${TENSORS_DIR} --output-dir ${DATASET_DIR} \
   --histories-per-problem ${HISTORIES_PER_PROBLEM} --start-protocol ${START_PROTOCOL} \
-  --state-layout ${STATE_LAYOUT} --seed 0 && \
+  --state-layout ${STATE_LAYOUT} --seed ${DATASET_SEED} && \
 ${TRAIN_LAUNCH} pipelinerl/swe/scripts/livecodebench/train_mdp_reachable_policy.py \
   --dataset-dir ${DATASET_DIR} --output-dir ${MODEL_DIR} --seed ${SEED} \
   --num-epochs ${NUM_EPOCHS} --lr ${LR} --max-seq-length 8192 --pos-weight ${POS_WEIGHT} \
