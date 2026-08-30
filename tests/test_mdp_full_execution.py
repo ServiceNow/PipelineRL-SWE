@@ -878,3 +878,57 @@ def test_learned_transitions_never_read_the_unseen_draw_outcome() -> None:
     assert any("total_failures: 1" in text for text in seen[:4]), "no successor was queried"
     for text in seen[:4]:
         assert "scout-" not in text and "oss20-" not in text and "oss120-" not in text
+
+
+# --- Rolling-origin fold selection -------------------------------------------------
+
+
+def _fold_manifest(tmp_path):
+    path = tmp_path / "folds.json"
+    path.write_text(json.dumps({
+        "schema_version": 1,
+        "folds": [{
+            "fold": 0,
+            "train_problem_ids": ["a"],
+            "calibration_problem_ids": ["b"],
+            "test_problem_ids": ["c"],
+        }],
+    }))
+    return path
+
+
+def test_fold_manifest_and_index_must_be_given_together(tmp_path, monkeypatch) -> None:
+    from pipelinerl.swe.scripts.livecodebench import build_mdp_tensors_v2
+
+    monkeypatch.setattr(sys, "argv", [
+        "build", "--collection-dir", str(tmp_path), "--source-collection-dir", str(tmp_path),
+        "--output-dir", str(tmp_path / "o"),
+        "--fold-manifest", str(_fold_manifest(tmp_path)),
+    ])
+    with pytest.raises(ValueError, match="must be given together"):
+        build_mdp_tensors_v2.main()
+
+
+def test_fold_index_must_exist_in_the_manifest(tmp_path, monkeypatch) -> None:
+    from pipelinerl.swe.scripts.livecodebench import build_mdp_tensors_v2
+
+    monkeypatch.setattr(sys, "argv", [
+        "build", "--collection-dir", str(tmp_path), "--source-collection-dir", str(tmp_path),
+        "--output-dir", str(tmp_path / "o"),
+        "--fold-index", "0",
+    ])
+    with pytest.raises(ValueError, match="must be given together"):
+        build_mdp_tensors_v2.main()
+
+
+def test_fold_shaped_manifest_satisfies_the_split_validator() -> None:
+    """A fold covers one date block, so the validator must see only those problems."""
+    manifest = {
+        "train_problem_ids": ["a", "b"],
+        "calibration_problem_ids": ["c"],
+        "test_problem_ids": ["d"],
+    }
+    validate_split_manifest(manifest, ["a", "b", "c", "d"])
+    # Problems outside the fold must not be silently tolerated.
+    with pytest.raises(ValueError, match="does not match tensors"):
+        validate_split_manifest(manifest, ["a", "b", "c", "d", "e"])

@@ -25,6 +25,7 @@ from pipelinerl.swe.scripts.livecodebench.collect_lcb_expert import (
 )
 from pipelinerl.swe.scripts.livecodebench.mdp_utils import (
     TENSOR_SCHEMA_VERSION,
+    validate_split_manifest,
     write_source_temporal_split_manifest,
     write_split_manifest,
 )
@@ -103,8 +104,20 @@ def main() -> None:
     parser.add_argument("--split-mode", choices=["random", "source_temporal"], default="random")
     parser.add_argument("--temporal-calibration-fraction", type=float, default=0.5,
                         help="Fraction of the later source-temporal split assigned to calibration.")
+    parser.add_argument(
+        "--fold-manifest",
+        help=(
+            "rolling_temporal_folds_v*.json. With --fold-index, restricts the tensors to that "
+            "fold's problems and adopts its train/calibration/test assignment verbatim, "
+            "overriding --split-mode. Each fold is a contiguous rolling-origin date block, so "
+            "training always precedes calibration, which always precedes test."
+        ),
+    )
+    parser.add_argument("--fold-index", type=int, default=None)
     parser.add_argument("--require-complete", action=argparse.BooleanOptionalAction, default=True)
     args = parser.parse_args()
+    if (args.fold_manifest is None) != (args.fold_index is None):
+        raise ValueError("--fold-manifest and --fold-index must be given together")
 
     route_draw_counts = {slot: int(args.num_draws) for slot in MODEL_SLOTS}
     if args.route_draw_counts:
@@ -204,6 +217,23 @@ def main() -> None:
         bad = [pids[i] for i in np.flatnonzero(~complete)[:10]]
         raise ValueError(f"{int((~complete).sum())} problems have invalid draws; examples={bad}")
     keep = complete if args.require_complete else valid.any(axis=(1, 2))
+    fold_split: dict[str, list[str]] | None = None
+    if args.fold_manifest is not None:
+        # A fold covers a contiguous date block, not all 892 problems, so the tensors
+        # must be restricted to it: validate_split_manifest requires the manifest to
+        # cover exactly the problems present.
+        folds = json.loads(Path(args.fold_manifest).read_text())["folds"]
+        matches = [f for f in folds if int(f["fold"]) == int(args.fold_index)]
+        if not matches:
+            available = sorted(int(f["fold"]) for f in folds)
+            raise ValueError(f"Fold {args.fold_index} not in manifest; available={available}")
+        fold = matches[0]
+        fold_split = {
+            name: [str(pid) for pid in fold[f"{name}_problem_ids"]]
+            for name in ("train", "calibration", "test")
+        }
+        in_fold = {pid for ids in fold_split.values() for pid in ids}
+        keep = keep & np.array([pid in in_fold for pid in pids], dtype=bool)
     kept_ids = [pids[i] for i in np.flatnonzero(keep)]
     kept_set = set(kept_ids)
 
@@ -228,7 +258,16 @@ def main() -> None:
         for row in records:
             if row["problem_id"] in kept_set:
                 handle.write(json.dumps(row) + "\n")
-    if args.split_mode == "source_temporal":
+    if fold_split is not None:
+        # Drop any fold member that failed the completeness gate, so the manifest and
+        # the tensors agree.
+        manifest = {
+            f"{name}_problem_ids": [pid for pid in ids if pid in kept_set]
+            for name, ids in fold_split.items()
+        }
+        validate_split_manifest(manifest, kept_ids)
+        (out / "split_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    elif args.split_mode == "source_temporal":
         manifest = write_source_temporal_split_manifest(
             out / "split_manifest.json",
             [source[pid] for pid in kept_ids],
@@ -251,7 +290,9 @@ def main() -> None:
         "model_slots": MODEL_SLOTS,
         "source_collection_dir": str(Path(args.source_collection_dir)),
         "collection_dirs": [str(root) for root in roots],
-        "split_mode": args.split_mode,
+        "split_mode": "rolling_fold" if fold_split is not None else args.split_mode,
+        "fold_manifest": args.fold_manifest,
+        "fold_index": args.fold_index,
         "split_seed": int(args.split_seed),
         "temporal_calibration_fraction": float(args.temporal_calibration_fraction),
         "num_train": len(manifest["train_problem_ids"]),
