@@ -91,9 +91,13 @@ def _read(path: Path) -> list[dict[str, Any]]:
         return [json.loads(line) for line in handle if line.strip()]
 
 
-def _collate_policy(batch: list[dict[str, Any]], pad_token_id: int) -> dict[str, Any]:
+def _collate_policy(
+    batch: list[dict[str, Any]], pad_token_id: int, *, include_state_features: bool = True
+) -> dict[str, Any]:
     collated = _collate(batch, pad_token_id)
-    if "state_features" in batch[0]:
+    # The dataset always carries state_features, but only StructuredStatePolicy
+    # accepts them; forwarding them to the plain router is a TypeError.
+    if include_state_features and "state_features" in batch[0]:
         collated["state_features"] = torch.tensor(
             [row["state_features"] for row in batch], dtype=torch.float32
         )
@@ -320,9 +324,12 @@ def main() -> None:
     # _collate_policy wraps _collate and forwards the optional per-row fields
     # (state_features, and the raw counts the factorized loss needs). The base
     # _collate drops them, so factorized runs must take this path too.
+    structured = args.state_feature_mode == STATE_FEATURE_VERSION
     collate = (
-        lambda batch: _collate_policy(batch, pad_token_id=int(pad_token_id))
-        if args.state_feature_mode == STATE_FEATURE_VERSION or args.factorized
+        lambda batch: _collate_policy(
+            batch, pad_token_id=int(pad_token_id), include_state_features=structured
+        )
+        if structured or args.factorized
         else _collate(batch, pad_token_id=int(pad_token_id))
     )
     train_loader = DataLoader(
