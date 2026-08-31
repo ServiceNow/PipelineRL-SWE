@@ -41,6 +41,11 @@ SNAPSHOT=${SNAPSHOT:-1}
 VLLM_PORT=${VLLM_PORT:-8000}
 
 SCOUT_MODEL="Qwen/Qwen3-4B-Instruct-2507"
+# Expert pool as "route_label:openrouter_model" pairs. Default is the original
+# capability ladder. The peer pool (Qwen3-Max / qwen3.5-plus / glm-5) is the
+# gate-1 experiment: CodeRouterBench measures those as 85.9% complementary on
+# LCB tasks single-draw, and this collection is what denoises that estimate.
+EXPERT_PAIRS=${EXPERT_PAIRS:-"oss20:openai/gpt-oss-20b oss120:openai/gpt-oss-120b"}
 JOB_NAME=${JOB_NAME:-lcb_multidraw_${MODE}_${SPLITS}_${TIMESTAMP}}
 OUTPUT_DIR=${OUTPUT_DIR:-/mnt/llmd/results/exps/aristides/reason/${JOB_NAME}}
 
@@ -99,20 +104,20 @@ elif [[ "${MODE}" == "experts" ]]; then
   OUTPUT_DIR=/mnt/llmd/results/exps/aristides/reason/${JOB_NAME}
   COMMAND="cd ${REPO_ROOT} && source pipelinerl/swe/scripts/livecodebench/ensure_lcb_runner.sh && export OPENROUTER_API_KEY=\$(cat ${OPENROUTER_API_KEY_FILE})"
   for DRAW in $(seq 0 $((EXPERT_DRAWS-1))); do
-    for PAIR in "oss20:openai/gpt-oss-20b" "oss120:openai/gpt-oss-120b"; do
+    for PAIR in ${EXPERT_PAIRS}; do
       ROUTE="${PAIR%%:*}"; MODEL="${PAIR##*:}"
       COMMAND="${COMMAND} && echo '=== ${ROUTE} draw ${DRAW} ===' && ${COLLECT} --route-label ${ROUTE} --model '${MODEL}' --temperature ${TEMP_PRIMARY} --output-suffix _d${DRAW} --api-key-file ${OPENROUTER_API_KEY_FILE}"
     done
   done
   for DRAW in $(seq 0 $((EXPERT_DRAWS-1))); do
-    for PAIR in "oss20:openai/gpt-oss-20b" "oss120:openai/gpt-oss-120b"; do
+    for PAIR in ${EXPERT_PAIRS}; do
       ROUTE="${PAIR%%:*}"; MODEL="${PAIR##*:}"
       COMMAND="${COMMAND} && echo '=== ${ROUTE} draw ${DRAW} ===' && ${COLLECT} --route-label ${ROUTE} --model '${MODEL}' --temperature ${TEMP_PRIMARY} --output-suffix _d${DRAW} --api-key-file ${OPENROUTER_API_KEY_FILE}"
     done
   done
   # Retry pass: resume reuses complete rows, retries timeouts
   for DRAW in $(seq 0 $((EXPERT_DRAWS-1))); do
-    for PAIR in "oss20:openai/gpt-oss-20b" "oss120:openai/gpt-oss-120b"; do
+    for PAIR in ${EXPERT_PAIRS}; do
       ROUTE="${PAIR%%:*}"; MODEL="${PAIR##*:}"
       COMMAND="${COMMAND} && echo '=== ${ROUTE} draw ${DRAW} ===' && ${COLLECT} --route-label ${ROUTE} --model '${MODEL}' --temperature ${TEMP_PRIMARY} --output-suffix _d${DRAW} --api-key-file ${OPENROUTER_API_KEY_FILE}"
     done
