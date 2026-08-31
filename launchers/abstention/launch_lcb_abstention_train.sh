@@ -27,6 +27,9 @@ LORA_ALPHA=${LORA_ALPHA:-64}
 NPROC=${NPROC:-4}
 MAX_SEQ_LENGTH=${MAX_SEQ_LENGTH:-24000}
 SNAPSHOT=${SNAPSHOT:-1}
+# The 0.5521 input-only vs 0.7693 post-scout gap is one seed. It is the spine of the
+# "scout before you route" claim, so it needs replication before anything is built on it.
+SEED=${SEED:-17}
 LABEL_ROUTE_IDX=3  # oracle = oss-120b
 
 if [[ "${INPUT_ONLY}" == "true" ]]; then
@@ -58,7 +61,7 @@ else
   TEST_FEEDBACK_SUFFIX=""
 fi
 
-JOB_NAME=${JOB_NAME:-lcb_corrected_abstention_route${LABEL_ROUTE_IDX}${THINKING_SUFFIX}${IO_SUFFIX}${TEST_FEEDBACK_SUFFIX}_${NUM_EPOCHS}epoch_${TIMESTAMP}}
+JOB_NAME=${JOB_NAME:-lcb_corrected_abstention_route${LABEL_ROUTE_IDX}${THINKING_SUFFIX}${IO_SUFFIX}${TEST_FEEDBACK_SUFFIX}_${NUM_EPOCHS}epoch_seed${SEED}_${TIMESTAMP}}
 OUTPUT_DIR=${OUTPUT_DIR:-/mnt/llmd/results/exps/aristides/reason/${JOB_NAME}}
 
 mkdir -p "${OUTPUT_DIR}"
@@ -99,6 +102,7 @@ ${TRAIN_CMD} \\
   --eval-batch-size    1 \\
   --gradient-accumulation-steps 8 \\
   --lr                 2e-5 \\
+  --seed               ${SEED} \\
   --lora-r             ${LORA_R} \\
   --lora-alpha         ${LORA_ALPHA} \\
   --lora-target-modules q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj \\
