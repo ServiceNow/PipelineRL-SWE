@@ -17,10 +17,16 @@ No conversion of the test payload is needed. TACO's `input_output` is already th
 `{"inputs", "outputs", "fn_name"}` JSON that LCB normalises to internally, so the
 existing generation, extraction and grading path consumes these rows unchanged.
 
-TACO has no public/private test split. We take a deterministic prefix as the
-"public" tests the router may see as feedback and hold the remainder back for
-grading, mirroring the LCB protocol rather than letting the router observe every
-test it is scored on.
+TACO ships one test suite with no public/private split, and none is manufactured
+here. LiveCodeBench's public tests are meaningful -- they are the examples shown in
+the problem statement -- whereas any prefix of TACO's tests would be arbitrary. It
+would also be inert: the MDP pipeline reads `final_outcome` (full grading) for
+outcomes and builds the router's feedback string from the full result codes, so
+`weak_verifier_outcome` is written into the tensors and never read.
+
+The consequence is that TACO cannot support the weak-verifier ablation. That is
+correct rather than a limitation: that ablation needs a verifier that is weak for a
+real reason, which only LiveCodeBench has here.
 """
 
 from __future__ import annotations
@@ -33,24 +39,17 @@ from typing import Any
 
 DIFFICULTY_MAP = {"EASY": "easy", "MEDIUM": "medium", "MEDIUM_HARD": "medium",
                   "HARD": "hard", "VERY_HARD": "hard", "UNKNOWN_DIFFICULTY": "unknown"}
-PUBLIC_TEST_FRACTION = 0.25
-MIN_PUBLIC_TESTS = 1
-MAX_PUBLIC_TESTS = 5
 
 
-def _split_tests(payload: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any], int, int]:
-    """Deterministic public prefix / private remainder, mirroring LCB's protocol."""
+def _tests(payload: dict[str, Any]) -> tuple[dict[str, Any], int]:
+    """The one suite TACO ships, truncated to matched input/output pairs."""
     inputs = list(payload.get("inputs") or [])
     outputs = list(payload.get("outputs") or [])
-    fn_name = payload.get("fn_name")
     pairs = min(len(inputs), len(outputs))
-    inputs, outputs = inputs[:pairs], outputs[:pairs]
-    n_public = max(MIN_PUBLIC_TESTS, min(MAX_PUBLIC_TESTS, int(pairs * PUBLIC_TEST_FRACTION)))
-    n_public = min(n_public, pairs)
-    public = {"inputs": inputs[:n_public], "outputs": outputs[:n_public], "fn_name": fn_name}
-    # Graded on everything, as LCB does: public tests are feedback, not a held-out set.
-    full = {"inputs": inputs, "outputs": outputs, "fn_name": fn_name}
-    return public, full, n_public, max(0, pairs - n_public)
+    return (
+        {"inputs": inputs[:pairs], "outputs": outputs[:pairs], "fn_name": payload.get("fn_name")},
+        pairs,
+    )
 
 
 def main() -> None:
@@ -89,8 +88,8 @@ def main() -> None:
         except (ValueError, TypeError):
             skipped_unparsable += 1
             continue
-        public, full, n_public, n_private = _split_tests(payload)
-        if n_public + n_private < args.min_tests:
+        suite, n_tests = _tests(payload)
+        if n_tests < args.min_tests:
             skipped_no_tests += 1
             continue
         source = str(record.get("source") or "taco")
@@ -103,10 +102,12 @@ def main() -> None:
             "contest_date": str(record.get("date") or "")[:10] or "1970-01-01",
             "starter_code": str(record.get("starter_code") or ""),
             "metadata": {"func_name": payload.get("fn_name"), "taco_source": source},
-            "_public_evaluation_sample": {"input_output": json.dumps(public)},
-            "_evaluation_sample": {"input_output": json.dumps(full)},
-            "_n_public_tests": n_public,
-            "_n_private_tests": n_private,
+            # Both fields carry the same suite: the shape is required downstream, the
+            # distinction is not real here and is not invented.
+            "_public_evaluation_sample": {"input_output": json.dumps(suite)},
+            "_evaluation_sample": {"input_output": json.dumps(suite)},
+            "_n_public_tests": n_tests,
+            "_n_private_tests": 0,
             "_taco_split": args.split,
         })
 
@@ -132,10 +133,10 @@ def main() -> None:
             min((r["contest_date"] for r in rows), default=None),
             max((r["contest_date"] for r in rows), default=None),
         ],
-        "median_total_tests": (
-            sorted(r["_n_public_tests"] + r["_n_private_tests"] for r in rows)[len(rows) // 2]
-            if rows else 0
+        "median_tests": (
+            sorted(r["_n_public_tests"] for r in rows)[len(rows) // 2] if rows else 0
         ),
+        "public_private_split": "none (TACO ships one suite; no split is manufactured)",
     }
     print(json.dumps(stats, indent=2))
     if args.stats_only:
