@@ -3028,3 +3028,97 @@ model*; it produced nothing because the myopic rule was already near-optimal und
 Three independent results say the beliefs are the binding constraint: lookahead makes the
 count-prior family monotonically worse, learned transitions change nothing, and q(s) cannot separate
 doomed from salvageable states at all.
+
+---
+
+## Data ceiling, dataset options, and the decay-rate question (2026-08-31)
+
+### LiveCodeBench is exhausted
+
+`livecodebench/code_generation_lite` holds six files, `test.jsonl`–`test6.jsonl`, **last modified
+2025-06-05** — over a year stale. The full `code_generation` repo is worse (one file, frozen
+2024-06). Coverage is 2023-05 → 2025-04, **1055 problems**. There is no v7 to wait for.
+
+Exact accounting of what we use:
+
+| | count |
+|---|---:|
+| available in release_v6 | 1055 |
+| excluded by `--min-date 2023-09-01` in the collection script | 163 |
+| eligible | 892 |
+| **actually used** | **892** |
+
+Nothing is lost to validity gates or collection failures. The 163 are excluded by a **date flag**,
+nothing more, and they are the *earliest* problems — so they would go straight into training with
+zero leakage risk and the temporal design would get strictly cleaner.
+
+But re-reading the dose-response with spacing in mind, the curve is already flattening:
+
+```
+177 -> 357 (+180 problems):   ~0% -> ~14%    +14 pts
+357 -> 536 (+179 problems):  ~14% -> ~17%     +3 pts
+```
+
+So 551 → 714 is +30% data on the flat part. Expect a few points, not a rescue. Worth collecting as
+hygiene, not as a fix. (Held loosely: each fold has a different test set and one seed.)
+
+### TACO as the scaling option
+
+**[TACO](https://huggingface.co/datasets/BAAI/TACO): 26,443 problems** with hidden tests, compiled
+from CodeContests + APPS plus other competitive sites. Same genre as LCB, **25× our data**.
+
+The contamination objection applies to the *models* (TACO is 2023, our models are 2025-era), not to
+the *router*. That suggests the design:
+
+> **Train the router on TACO, evaluate on held-out LCB.**
+
+If routing signal learned from contaminated problems transfers to clean ones, that is simultaneously
+a direct test of the data-scaling hypothesis and a useful standalone claim: **router training data
+need not be contamination-free — only evaluation does.** That would make a large stock of old
+benchmarks usable as router training data.
+
+**Gate before committing to a full collection**: if the scout solves most of TACO from memorization,
+the difficulty distribution collapses and there is no routing problem left to learn. Measurable with
+a few hundred scout draws.
+
+### SWE-Smith launched
+
+`launch_swe_smith_mdp_full_execution.sh` was fully prepared and never run; trace root and report root
+both exist on disk (150 instances, all three routes, multiple rollouts). Launched as
+`swe_smith_mdp_full_execution_seed17_1788198503`.
+
+n=150 sits *below* the 177 where fold savings were ~0%, so expect it to be underpowered as a
+headline. That is not what it is for: it tests whether the **decomposition** holds cross-domain —
+does routing stay worth ~3% and stopping ~60% in agentic SWE? That structural claim does not need
+large n, and it is the claim the reframed paper rests on.
+
+### The decay rate: we match RoR exactly, and their sensitivity analysis may be masking heterogeneity
+
+Confirmed from the RoR paper ([arXiv 2607.08665](https://arxiv.org/abs/2607.08665)):
+
+| | prior `p̄` | decay rate `s` |
+|---|---|---|
+| **RoR** | global scalar, calibrated once on train (50% of queries) | **hand-set, s = 2** |
+| **ours (to date)** | `p̄_m(x)`, learned per query | **hand-set, s = 2.0** |
+| **factorized (running)** | `θ_m(x)`, learned per query | **`s_m(x)`, learned per query** |
+
+RoR sweeps `s ∈ {0.5, 2, 8}` and reports ≤1.7pt change, concluding the policy "is insensitive to s
+over an order of magnitude." We swept `s ∈ {0.5, 1, 2, 5, 10, 20}` and found a 0.8% spread — a clean
+replication of their finding.
+
+**But a global sweep cannot detect heterogeneity.** If persistence varies across problems — some
+hopeless after one failure, others merely needing another draw — then every *global* value is a bad
+compromise and the sweep looks exactly this flat. RoR's flat curve is therefore fully consistent with
+strong per-query variation in `s`, and their sensitivity analysis cannot distinguish the two cases.
+
+This is a sharper motivation for the factorized model than the one recorded at launch, and it gives
+a claim with teeth: *global sensitivity analyses are not evidence a parameter does not matter.* We
+can demonstrate the masking directly, since we reproduced their flat curve on our own pool.
+
+### Launch note
+
+Both new pipeline jobs first died in accelerate startup: a bare `accelerate launch` reads the user
+default config, which names `/home/toolkit/icrl/configs/ds_config.json`, absent from the job image.
+`launch_lcb_mdp_temporal_551_341.sh` already passed
+`--config_file conf/accelerate/base_mp.yaml`, which is why the seed and fold jobs were unaffected.
+Both launchers now match that invocation.
