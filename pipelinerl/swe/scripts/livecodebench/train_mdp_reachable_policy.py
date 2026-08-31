@@ -251,6 +251,16 @@ def main() -> None:
     parser.add_argument("--lora-alpha", type=int, default=64)
     parser.add_argument("--lora-dropout", type=float, default=0.05)
     parser.add_argument(
+        "--frozen-encoder", action="store_true",
+        help=(
+            "Freeze the encoder and drop LoRA, training only the head. The LoRA recipe's "
+            "calibration loss is best at epoch 0 while train loss halves by epoch 1, so it is "
+            "memorizing 551 problems rather than learning them. If a probe on frozen features "
+            "matches it, the fine-tuning contributes nothing but overfitting, and the method "
+            "gets simpler. The base encoder is not saved: it is unmodified and reloadable by name."
+        ),
+    )
+    parser.add_argument(
         "--factorized", action="store_true",
         help=(
             "Read the problem statement alone and emit 6 numbers per problem -- a difficulty "
@@ -329,8 +339,8 @@ def main() -> None:
         mlp_hidden_size=args.mlp_hidden_size,
         torch_dtype=_dtype_from_name(args.torch_dtype),
         attn_implementation=args.attn_implementation,
-        encoder_frozen=False,
-        use_lora=True,
+        encoder_frozen=bool(args.frozen_encoder),
+        use_lora=not args.frozen_encoder,
         lora_r=args.lora_r,
         lora_alpha=args.lora_alpha,
         lora_dropout=args.lora_dropout,
@@ -369,6 +379,7 @@ def main() -> None:
     config = vars(args) | {
         "heads": HEADS,
         "factorized": bool(args.factorized),
+        "frozen_encoder": bool(args.frozen_encoder),
         "split_roles": {"fit": "train", "checkpoint": "calibration", "report": "test"},
         "n_train": len(datasets["train"]),
         "n_calibration": len(datasets["calibration"]),
@@ -436,7 +447,8 @@ def main() -> None:
                 best_epoch = epoch
                 checkpoint_dir.mkdir(parents=True, exist_ok=True)
                 _save_policy_components(unwrapped, checkpoint_dir)
-                unwrapped.encoder.save_pretrained(checkpoint_dir / "encoder")
+                if not args.frozen_encoder:
+                    unwrapped.encoder.save_pretrained(checkpoint_dir / "encoder")
         accelerator.wait_for_everyone()
 
     if best_trainable_state is None:
@@ -453,7 +465,8 @@ def main() -> None:
     if accelerator.is_main_process:
         unwrapped = accelerator.unwrap_model(model)
         _save_policy_components(unwrapped, output_dir)
-        unwrapped.encoder.save_pretrained(output_dir / "encoder")
+        if not args.frozen_encoder:
+            unwrapped.encoder.save_pretrained(output_dir / "encoder")
         tokenizer.save_pretrained(output_dir / "tokenizer")
         with open(output_dir / "test_predictions.jsonl", "w") as handle:
             for row in test_predictions:

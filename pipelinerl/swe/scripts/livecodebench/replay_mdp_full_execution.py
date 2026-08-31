@@ -80,8 +80,15 @@ class TorchSequentialScorer:
         if torch.cuda.is_available():
             kwargs["attn_implementation"] = config.get("attn_implementation", "flash_attention_2")
         base = AutoModel.from_pretrained(model_name, **kwargs)
-        adapter_dir = model_dir / "encoder" / "reward_adapter"
-        self.encoder = PeftModel.from_pretrained(base, str(adapter_dir), adapter_name="reward_adapter")
+        # A frozen-encoder probe has no adapter to load: the encoder is the unmodified
+        # base model, so only the head was trained and only the head was saved.
+        if bool(config.get("frozen_encoder", False)):
+            self.encoder = base
+        else:
+            adapter_dir = model_dir / "encoder" / "reward_adapter"
+            self.encoder = PeftModel.from_pretrained(
+                base, str(adapter_dir), adapter_name="reward_adapter"
+            )
         head_state = torch.load(model_dir / "reward_head.pt", map_location="cpu", weights_only=True)
         hidden_size = int(self.encoder.config.hidden_size)
         first_weight = head_state.get("1.weight")
