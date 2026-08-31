@@ -3332,3 +3332,117 @@ The chain is now: failures are shared (89% redundant) -> routing is worth 3%, st
 stopping is governed by the belief-decay rate -> that rate is a hand-set global constant, wrong by
 5x, and a global sweep cannot fix per-problem heterogeneity -> **learn it per problem**, which is
 exactly the running factorized experiment.
+
+---
+
+## "Scout before you route": the probe result, and what it does and does not explain (2026-08-31)
+
+### The probe claim, and the confound check it survives
+
+| predicting oss120 success, LCB corrected temporal | AUC |
+|---|---:|
+| problem text alone | **0.5521** |
+| after one scout draw | **0.7693** |
+
+Verified directly from `eval_predictions.jsonl` in both runs: **identical instance sets** (339 ids,
+set-equal), **identical labels**, same 66.1% positive rate. The comparison is clean — post-scout is
+not measured on an easier surviving subset.
+
+Cost of the probe: scout `$0.000553` against oss120 `$0.029725` = **1.86% of one expert call.**
+
+This is a direct challenge to the dominant paradigm. RouteLLM/RouterBench-style routers predict from
+**query text**, which here is near-chance. Running the cheap model and reading its attempt is what
+carries the signal.
+
+The mechanism comes from our own measurements: failures are ~89% redundant, so a *cheap* probe is
+informative about *expensive* routes. Under independence a scout failure would say nothing about
+oss120. Shared failure is what makes probing work — measurement (1) explains measurement (2).
+
+**Status: one seed.** Three-seed replication launched (`SEED` was never plumbed through
+`launch_lcb_abstention_train.sh`; the trainer accepted `--seed` but the launcher dropped it). Nothing
+should be built on this until it replicates.
+
+### Does +0.22 AUC drive the gains over RoR? Only partly, and here is the accounting
+
+Two reasons the AUC edge does not convert proportionally.
+
+**1. Ranking is not thresholding.** At comparable abstention rates:
+
+| | abstains | accuracy | cost |
+|---|---:|---:|---:|
+| oracle stopping | 26.9% | 73.10% | $0.02573 |
+| ours (calibrated q) | 30.1% | 68.89% | $0.05529 |
+
+The oracle abstains on exactly the doomed problems and loses nothing. We abstain on a similar
+fraction, overlap, and pay 4.2 accuracy points. AUC 0.77 is good *ranking*; abstention is a
+*threshold* decision, which overlap punishes far more.
+
+**2. RoR's budget is already a crude stopping rule.** Algorithm 1 exits on budget exhaustion, so on a
+doomed problem RoR spends exactly `B` and halts. Our advantage is not "we stop and they never do" but
+"we stop earlier and selectively, they stop at `B` unconditionally" — which is bounded by `B`.
+
+### Savings versus budget: non-monotone, peaking mid-range
+
+```
+  budget B  RoR acc   RoR cost   our cost   saving
+   0.00621   47.25%    0.00555    0.00443   +20.1%
+   0.02962   57.54%    0.02628    0.01795   +31.7%
+   0.03548   57.89%    0.02873    0.01869   +35.0%   <- peak
+   0.05304   57.89%    0.02873    0.01869   +35.0%
+   0.10177   70.41%    0.07930    0.07057   +11.0%
+   0.13880   71.46%    0.09350    0.09031    +3.4%   <- trough
+   0.24989   73.10%    0.17323    0.14742   +14.9%
+```
+
+**Retraction 4.** The earlier claim that larger `B` widens our margin is wrong. At `B = $0.25` RoR's
+*realised* cost is only $0.17323: above ~$0.17 the budget stops binding because RoR runs out of draws
+(10 per route) before it runs out of money, so its waste is capped by draw availability, not `B`.
+
+What actually drives the pattern is **granularity, not budget size**. RoR is steppy and we are smooth:
+budgets 0.03548–0.05304 give *identical* RoR results (57.89% @ $0.02873) because its next escalation
+step is not yet affordable, while a continuous value rule interpolates through that plateau. The
+trough at 0.1388 is where a RoR step happens to land efficiently.
+
+That is a better claim than "bigger budget helps us" — it is a mechanism, and mid budgets are the
+deployment-relevant regime.
+
+Caveat: computed with the mis-set `s = 2.0` decay; the corrected sweep may flatten the peak if a
+better-tuned RoR fills its own plateaus.
+
+### The contribution, restated
+
+> **Scout before you route.** Query-text routing is near-chance on competitive programming
+> (AUC 0.5521). Because model failures are ~89% redundant, a single draw from the cheapest model —
+> 1.86% of an expert call — raises solvability prediction to AUC 0.7693. And because pools are
+> capability ladders (90.8% consistent), that information is worth **3% for selecting a model** and
+> **63.5% for deciding whether to continue at all**.
+
+Three measurements, one causal chain, an actionable rule, and no dependence on beating RoR.
+
+### What SeqRoute contributes, and what it does not
+
+[SeqRoute](https://arxiv.org/html/2605.25424): binary action space (weak 8B / strong 70B),
+**single-use per query — no resampling**, **no abstention**, **no verifier or early stopping**.
+Budget is global across a *multi-turn session with unknown future turns*; the contribution is delayed
+gratification.
+
+|  | resampling | abstention | verifier | budget |
+|---|---|---|---|---|
+| SeqRoute | no | no | no | global, within a session |
+| RoR | yes | no | yes | per query |
+| ours | yes | yes | yes | per query |
+
+The unoccupied cell is **batch budget + verifier + resampling + abstention**. The importable lesson is
+the *setting*: budget should be global and the decision is allocation across queries. That also
+dissolves the mid-budget artifact — under a batch budget you allocate continuously across queries, so
+RoR's step-size plateaus stop being what our advantage is made of.
+
+Formulation: **knapsack with purchasable information.** N queries, one budget, unknown success
+probabilities, and the option to pay ~2% to sharpen the estimate of any query before allocating the
+rest. Every measurement above is a parameter of it.
+
+### Dropped
+
+Factorized/learned-decay (B), learned transitions, deeper Bellman horizons, cross-route belief
+updating, and anti-collapse objectives. All null, confounded, or already refuted on SWE-Smith, and
+none on the critical path.
