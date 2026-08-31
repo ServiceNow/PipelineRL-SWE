@@ -3515,3 +3515,72 @@ Our current pool costs **$0.0342** to run once and reaches union 77.7%. The 3-mo
 **$0.0087** — 4x cheaper — reaches union 85.3%, and is several times more complementary even after
 denoising. The expensive models are the ones to drop: claude-opus costs 39x Qwen3-Max and scores
 worse on these tasks.
+
+---
+
+## Plan: swap to a peer pool, gated on denoised complementarity (2026-08-31)
+
+### Why a pool swap rather than more method work
+
+Every method addition tried today is null: Bellman ≈ myopic, learned transitions ≈ analytic,
+q-stopping ≈ value rule, factorized decay (invalid as run, relaunched), cross-route updating refuted
+before building, anti-collapse objectives already at chance on SWE-Smith.
+
+The common explanation is structural rather than methodological: our pool is a capability ladder
+(90.8% consistent), so route ordering lies on a one-dimensional difficulty manifold, the continuation
+term cannot differentiate actions, and the DP degenerates to "climb, then stop". **Planning has no
+content when there is nothing to plan over.**
+
+A peer pool is the one condition under which the planning machinery could pay, and it is the single
+alternative explanation not yet ruled out.
+
+### The probe gets better, not worse
+
+|  | probe model | solve | cost rank | capability rank |
+|---|---|---:|---|---|
+| ladder pool (current) | Qwen3-4B | 27.8% | cheapest | **weakest** |
+| peer pool (proposed) | Qwen3-Max | 61.3% | cheapest | **strongest** |
+
+On the peer pool the natural probe is simultaneously cheapest and best. It costs $0.0008, carries
+essentially no opportunity cost — you would run it regardless — and its *failure* is the event that
+triggers routing among the complementary remainder, which is where the +24 points sit. "Scout before
+you route" becomes *probe with your best cheap model and route only its failures*, which is a
+stronger claim than probing with a weak 4B.
+
+### Design
+
+```
+pool     Qwen3-Max ($0.0008, 61.3%)  qwen3.5-plus ($0.0023, 54.4%)  glm-5 ($0.0056, 42.3%)
+tasks    ~600 LCB-sourced (statements and grader already in hand)
+draws    10 each  =~ 18k generations  =~ $55
+```
+
+Pool cost $0.0087 per full sweep against our current $0.0342 — **4x cheaper**, union 85.3% against
+77.7%.
+
+Everything already built is pool-agnostic: replay, oracle arms, Bellman horizons, q-stopping,
+paired bootstrap, matched-accuracy frontier. Only the tensors change.
+
+### Staged gates, each conditioning the next
+
+1. **Denoised complementarity.** Does CodeRouterBench's 85.9% survive multi-draw estimation? Our
+   correction factor predicts the 30s; it could land near our 7.4%. **If it does, stop** — the
+   pool-structure story is dead and the ladder paper is what we have.
+2. **Oracle decomposition.** Does routing 3% / stopping 63.5% shift? This is the load-bearing claim
+   and the peer pool is its hardest test.
+3. **Probe value.** Is best-and-cheapest-as-probe worth its ~2%?
+4. **Bellman.** With problem-dependent route ordering finally present, does planning pay?
+
+Gate 1 is cheap and can kill the line, which is the property today's experiments lacked.
+
+### Pre-registered failure condition
+
+If gate 1 passes and gates 2-4 come back null again, the conclusion is that **belief quality — not
+pool structure and not planning — was the binding constraint throughout**, and the paper is the
+measurement work: complementarity, the single-draw inflation correction, the oracle decomposition,
+and the probe result. Estimated at ~40% likely.
+
+### Checks before spending
+
+- Confirm Qwen3-Max, qwen3.5-plus and glm-5 are available on OpenRouter under usable model ids.
+- Confirm CodeRouterBench's LCB task ids map onto LiveCodeBench problems our grader accepts.
