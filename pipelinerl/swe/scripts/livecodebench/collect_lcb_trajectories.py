@@ -675,6 +675,16 @@ def main() -> None:
     ap.add_argument("--title", default="PipelineRL-LCB")
     ap.add_argument("--max-samples", type=int, default=0,
                     help="Max problems to use (0 = all)")
+    ap.add_argument(
+        "--problems-file", default="",
+        help=(
+            "JSONL of pre-built problems in this script's own record shape, bypassing the "
+            "LiveCodeBench download. Used to run the identical generation, extraction and "
+            "grading path over TACO, whose input_output payload is already the format LCB "
+            "normalises to. --min-date, --max-date, --difficulties and --release-version are "
+            "ignored when set; filter when building the file instead."
+        ),
+    )
     ap.add_argument("--release-version", default="release_latest",
                     help="Official LiveCodeBench release tag")
     ap.add_argument("--dataset-revision", default=LCB_DATASET_REVISION,
@@ -718,15 +728,24 @@ def main() -> None:
         raise ValueError(f"No API key for scout — pass --scout-api-key or ensure {args.api_key_file} exists")
 
     # Load dataset
-    all_rows = load_lcb(
-        max_samples=args.max_samples,
-        min_date=args.min_date,
-        max_date=args.max_date,
-        difficulties=args.difficulties,
-        seed=args.seed,
-        release_version=args.release_version,
-        dataset_revision=args.dataset_revision,
-    )
+    if args.problems_file:
+        with open(args.problems_file) as handle:
+            all_rows = [json.loads(line) for line in handle if line.strip()]
+        if not all_rows:
+            raise ValueError(f"No problems in {args.problems_file}")
+        if args.max_samples and len(all_rows) > args.max_samples:
+            all_rows = random.Random(args.seed).sample(all_rows, args.max_samples)
+        logger.info("Loaded %d problems from %s", len(all_rows), args.problems_file)
+    else:
+        all_rows = load_lcb(
+            max_samples=args.max_samples,
+            min_date=args.min_date,
+            max_date=args.max_date,
+            difficulties=args.difficulties,
+            seed=args.seed,
+            release_version=args.release_version,
+            dataset_revision=args.dataset_revision,
+        )
 
     if args.temporal_cutoff:
         train_rows = [r for r in all_rows if r["contest_date"] < args.temporal_cutoff]
