@@ -2930,3 +2930,101 @@ Raises the expected value of the running `learned_trans` jobs and drops the `q(s
 training program to second place, pending their result. The `q(s)` argument is untouched by this
 finding — it rests on the `nothing` head being the weakest (0.733) and on 43% of training gradient
 coming from depths 1–2, which is a separate defect.
+
+---
+
+## Overnight batch: 13 jobs, three nulls and one dose-response (2026-08-31)
+
+### 1. Oracle decomposition on the real learned prior
+
+`sequential_decay` Bellman H=2, frozen R at 0.95 retention, temporal test (n=171):
+
+| arm | correctness | mean cost | saving |
+|---|---:|---:|---:|
+| frozen baseline | 70.41% | $0.07057 | — |
+| + oracle routing | 70.99% | $0.06845 | +3.0% |
+| + oracle stopping | 73.10% | $0.02573 | **+63.5%** |
+| + oracle both | 73.10% | $0.02337 | +66.9% |
+
+Reproduces the counts-family CPU result on the real prior. **Routing is solved; stopping holds
+essentially all remaining headroom**, and the two barely interact.
+
+### 2. q(s) stopping fails, and the failure localizes the defect
+
+| threshold | correctness | cost | abstention |
+|---|---:|---:|---:|
+| q ≤ 0.30 | 73.10% | $0.17140 | **0.0%** |
+| q = 0.40 | 70.99% | $0.10522 | 14.6% |
+| q = 0.50 | 69.24% | $0.08920 | 18.6% |
+| value-rule baseline | 70.41% | $0.07057 | 29.6% |
+
+**The learned q(s) never drops below 0.30**, so every threshold at or below that abstains on
+nothing. Where it does abstain it is *strictly dominated* by the existing value stop — less accurate
+and more expensive. Current beliefs recover **none** of the 63.5%.
+
+The `nothing` head is therefore not merely unused, it is **worse than the rule we already have**. It
+has usable rank-ordering (AUC 0.733) but a **compressed range**: it never becomes confident a problem
+is doomed, though 83.8% of depth-10 states are. That is the concrete, localized defect.
+
+Caveat: the grid topped out at 0.50, reaching 18.6% abstention against the baseline's 29.6%, so a
+higher threshold is not formally excluded. Accuracy is already falling as the threshold rises
+(70.99 → 69.24), so the trajectory argues against it.
+
+### 3. Learned one-step transitions: null
+
+| layout | mean ΔCost | mean ΔAcc | significant of 24 R |
+|---|---:|---:|---|
+| counts_last | +$0.00010 | −0.01pt | cost 1, acc 0 |
+| problem_first | +$0.00020 | +0.04pt | cost 0, acc 0 |
+| structured | −$0.00003 | +0.05pt | cost 2, acc 1 |
+
+**Correction to the cross-route finding's interpretation.** That measurement compared states spanning
+**≥2 accumulated failures** — an aggregate — and was then treated as a per-step effect when
+predicting this arm would work. At H=2 the DP propagates exactly one step, and that marginal is too
+small to flip decisions. The signal is real; its per-step magnitude is not enough.
+
+### 4. Seed variance (5 seeds, counts_last, whole-pipeline seeding)
+
+| seed | nothing AUC | frozen@0.95 |
+|---|---:|---|
+| 1 | 0.7329 | 69.01% / $0.06085 |
+| 2 | 0.7313 | 67.95% / $0.05128 |
+| 3 | 0.7454 | 67.72% / $0.04886 |
+| 4 | 0.6648 | 66.67% / $0.04460 |
+| 17 | 0.7335 | 67.37% / $0.04951 |
+
+Accuracy sd 0.86pt; cost sd $0.00602 (**11.8% CV**), 36% min-to-max spread. Seed 17 — every previously
+reported number — sits essentially at the mean, so nothing was cherry-picked. But an 11.8% cost CV
+against an 18–28% claimed saving is material and must accompany the headline.
+
+### 5. Rolling folds: savings scale with training-set size
+
+Matched-accuracy savings versus RoR, point estimates:
+
+| fold | train n | savings across the overlap |
+|---|---:|---|
+| 0 | 177 | +6.0, +0.7, +0.0, +4.6, −12.2 → **~null** |
+| 1 | 357 | +12.9, +18.0, +12.2, −11.8, −6.3 → **mixed** |
+| 2 | 536 | +23.5, +20.0, +12.0, +24.5, +7.3 → **clearly positive** |
+| (551/341) | 551 | +18–28% |
+
+The strict-temporal result **does not replicate uniformly**, but the pattern is not noise: savings
+increase monotonically with training-set size. The rolling-origin design confounds *time period* with
+*training-set size*, and this says the second dominates.
+
+**This reframes the programme: we are data-limited, not method-limited.** It is consistent with
+`best_calibration_epoch: 0` — the model overfits before completing one pass on 551 problems — and it
+supplies a dose-response curve rather than a hunch.
+
+### What survives
+
+Every method addition attempted is null: Bellman ≈ myopic, learned transitions ≈ analytic, q-stopping
+worse than the existing rule. The contribution remains **learned query-conditioned prior plus
+abstention beats RoR**, now with the added, actionable result that the effect scales with training
+data.
+
+The planning machinery is not the bottleneck. The Bellman solve is exactly optimal *given the belief
+model*; it produced nothing because the myopic rule was already near-optimal under those beliefs.
+Three independent results say the beliefs are the binding constraint: lookahead makes the
+count-prior family monotonically worse, learned transitions change nothing, and q(s) cannot separate
+doomed from salvageable states at all.
