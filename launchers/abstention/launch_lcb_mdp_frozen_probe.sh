@@ -49,7 +49,9 @@ EOF
 fi
 
 if [[ "${NPROC}" -gt 1 ]]; then
-  TRAIN_LAUNCH="accelerate launch --num_processes ${NPROC} --mixed_precision bf16"
+  # Explicit --config_file: a bare `accelerate launch` picks up the user default,
+  # which points at a deepspeed config that does not exist in the job image.
+  TRAIN_LAUNCH="python -m accelerate.commands.launch --multi_gpu --mixed_precision bf16 --num_processes ${NPROC} --config_file conf/accelerate/base_mp.yaml"
 else
   TRAIN_LAUNCH="python"
 fi
