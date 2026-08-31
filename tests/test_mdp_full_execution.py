@@ -1092,3 +1092,24 @@ def test_factorized_training_requires_the_rebuilt_dataset() -> None:
     stale = [{"problem_id": "p", "failure_depth": 0, "text": "t", "targets": [0, 0, 0, 1]}]
     with pytest.raises(ValueError, match="rebuild the reachable dataset"):
         PolicyDataset(stale, _Tok(), 128, require_state_features=False, factorized=True)
+
+
+def test_factorized_scorer_rejects_the_analytic_decay() -> None:
+    """The guard must fire on the arm itself, so a mistake cannot pass silently."""
+    slots = ["scout", "oss20", "oss120"]
+
+    class _Factorized:
+        uses_raw_counts = True
+
+        def factorized_beliefs(self, statement, failures, remaining):
+            return np.array([0.3, 0.2, 0.6, 0.4])
+
+    with pytest.raises(ValueError, match="double-decays"):
+        replay_adaptive(
+            np.zeros((3, 3), dtype=bool), np.ones((3, 3), dtype=bool),
+            np.ones((3, 3), dtype=float), np.array([0.001, 0.004, 0.03]),
+            np.tile(np.arange(3), (3, 1)), 10.0, np.ones(3) * 0.5, 2.0,
+            slots, _records("p", slots, 3), "p", "problem",
+            scorer=_Factorized(), apply_failure_decay=True,
+            value_of_correct=1.0, mandatory_scout=False,
+        )

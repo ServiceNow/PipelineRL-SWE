@@ -1114,10 +1114,18 @@ def main() -> None:
                 outputs.append(result)
         return outputs
 
+    # A factorized scorer already returns theta_m * s_m/(s_m + n_m) with a learned
+    # s_m, so the sequential_decay family would apply the hand-set analytic decay on
+    # top of it. That arm is not meaningful for such models, so it is dropped rather
+    # than allowed to raise and abort the whole replay.
+    factorized_scorer = bool(getattr(scorer, "uses_raw_counts", False))
+    scorer_families = (
+        ["sequential"] if factorized_scorer else ["sequential", "sequential_decay"]
+    )
     families = (
         ["counts"]
         + (["content"] if content else [])
-        + (["sequential", "sequential_decay"] if scorer else [])
+        + (scorer_families if scorer else [])
     )
     if args.oracle_stopping_family and args.oracle_stopping_family not in families:
         raise ValueError(
@@ -1493,7 +1501,8 @@ def main() -> None:
                 ),
             })
     if scorer is not None:
-        candidate_families = ("sequential", "sequential_decay")
+        candidate_families = tuple(f for f in ("sequential", "sequential_decay")
+                                   if f in families)
         for fi, candidate_family in enumerate(candidate_families):
             for bi, budget in enumerate(budgets):
                 suffixes = ("", "_abstain") + (
