@@ -486,6 +486,15 @@ def replay_adaptive(
             # The undecayed prediction is the lattice prior: the Bellman solve
             # re-applies the decay itself at each future depth.
             bellman_pbar, bellman_decay_s = p_each, None
+            if apply_failure_decay and getattr(scorer, "uses_raw_counts", False):
+                # A factorized scorer already returns theta_m * s_m/(s_m + n_m) with a
+                # LEARNED s_m. Multiplying by the hand-set s/(s+n) again compounds the
+                # very constant the model was built to replace, and silently makes the
+                # arm untestable rather than failing.
+                raise ValueError(
+                    "apply_failure_decay double-decays a factorized scorer: its beliefs are "
+                    "already count-conditioned. Use the `sequential` family for these models."
+                )
             if apply_failure_decay:
                 decay_s = pseudo_count if decay_pseudo_count is None else decay_pseudo_count
                 bellman_decay_s = decay_s

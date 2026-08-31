@@ -21,6 +21,11 @@
 # It also makes the Bellman lattice exact at any horizon from a single forward pass,
 # since future beliefs are closed-form rather than needing a query per successor.
 #
+# The `sequential` family is the correct one here, NOT `sequential_decay`: a factorized
+# scorer already returns theta_m * s_m/(s_m + n_m) with a learned s_m, so applying the
+# hand-set analytic decay on top compounds the constant the model replaces. The replay
+# now raises rather than silently double-decaying.
+#
 # Stages are strictly dependent (dataset -> train -> replay), not independent runs.
 set -euo pipefail
 
@@ -84,8 +89,8 @@ python pipelinerl/swe/scripts/livecodebench/replay_mdp_full_execution.py \
   --num-orderings ${NUM_ORDERINGS} --start-protocol scout_first \
   --state-layout counts_last --cost-mode usd \
   --bellman-horizons 2 --retention-grid 0.90,0.95,0.98,1.0 \
-  --q-stop-family sequential_decay --q-stop-horizon 2 \
-  --oracle-stopping-family sequential_decay --oracle-stopping-horizon 2"
+  --q-stop-family sequential --q-stop-horizon 2 \
+  --oracle-stopping-family sequential --oracle-stopping-horizon 2"
 
 make -C "${REPO_ROOT}" job \
   JOB_NAME="${JOB_NAME}" ENV=pipeline-rl CONDA_EXE=/opt/conda/bin/conda \

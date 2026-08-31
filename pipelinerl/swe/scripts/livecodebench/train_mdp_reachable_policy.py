@@ -51,9 +51,13 @@ class PolicyDataset(Dataset):
             )
         self.rows: list[dict[str, Any]] = []
         for row in rows:
+            # Full state text even when factorized: the decay is imposed by the loss
+            # from the raw counts, so the encoder does not need a depth-free input, and
+            # dropping the latest attempt's code and feedback throws away signal the
+            # baseline gets. Reading problem text alone conflated "learned decay" with
+            # "less input" and cost 0.048 AUC on the scout head.
             encoded = tokenizer(
-                row["problem_text"] if factorized else row["text"],
-                add_special_tokens=True, truncation=True, max_length=max_length,
+                row["text"], add_special_tokens=True, truncation=True, max_length=max_length,
             )
             if not encoded.get("input_ids"):
                 continue
