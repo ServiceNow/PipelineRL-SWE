@@ -3584,3 +3584,58 @@ and the probe result. Estimated at ~40% likely.
 
 - Confirm Qwen3-Max, qwen3.5-plus and glm-5 are available on OpenRouter under usable model ids.
 - Confirm CodeRouterBench's LCB task ids map onto LiveCodeBench problems our grader accepts.
+
+---
+
+## What CodeRouterBench does and does not report, and why 2.6x is a floor (2026-08-31)
+
+### The source
+
+CodeRouterBench is the artifact released with **Agent-as-a-Router / ACRouter**
+([arXiv 2606.22902](https://arxiv.org/abs/2606.22902), Zhou et al.): ~10K task instances, 8 frontier
+LLMs, a complete task-by-model outcome matrix, used for regret-based router comparison.
+
+### The gap
+
+Checked against the paper directly:
+
+- **No decoding configuration is reported** — no temperature, no top_p.
+- Scoring is **pass@1**, one generation per (task, model).
+- **Variance is never discussed.** All routing comparisons treat a fixed outcome matrix `O` as
+  ground truth.
+
+So the critique does not depend on knowing what they did, which is the strong form:
+
+> A benchmark whose entire artifact is a per-(task, model) outcome matrix reports neither its
+> generation configuration nor any variance estimate. Routing headroom measured on it cannot be
+> separated from sampling noise — by construction, since no repeat draws exist.
+
+This is a statement about what the data can support, not an accusation about their protocol.
+
+### Our 2.6x is a lower bound, not an estimate
+
+Our multi-draw LCB collection runs at **temperature 0.2** (`TEMP_PRIMARY`), and the corrected
+baseline collection at **temperature 0.0** — literally greedy. So the 19.3% -> 7.4% inflation was
+measured under *near-deterministic* decoding. At the temperatures model cards recommend (Qwen ~0.7;
+DeepSeek explicitly warns greedy degrades reasoning models through repetition) the effect can only be
+larger.
+
+That closes the "but they may have used greedy" objection empirically rather than by argument.
+
+### Retraction 5: the price/capability inversion is greedy-conditional
+
+Earlier this session the claim that claude-opus's 35.0% was a harness artifact was retracted on the
+grounds that our own pipeline independently gives claude-opus-5 **43.0%** on LCB. But **our number is
+also greedy** (temperature 0.0). Two greedy harnesses agreeing tells us about greedy decoding, not
+about capability.
+
+Several of CodeRouterBench's eight models are reasoning-capable, and greedy decoding is known to
+degrade such models. So a third explanation is live and untested: **both harnesses may be measuring
+degraded behaviour rather than capability.**
+
+Consequently the price/capability inversion — Qwen3-Max at 61.3% beating claude-opus at 35.0% while
+costing 39x less — is established **only under greedy decoding**. That is materially weaker than the
+claim made earlier, which treated it as a property of the models.
+
+It does not affect the peer-pool gate: gate 1 collects at temperature 0.2 with four draws, so it
+measures the pool under our own known configuration either way.
