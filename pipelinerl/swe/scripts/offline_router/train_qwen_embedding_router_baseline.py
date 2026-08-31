@@ -555,6 +555,7 @@ class QwenEmbeddingRouter(torch.nn.Module):
         super().__init__()
         if bool(use_lora) and bool(encoder_frozen):
             raise ValueError("use_lora=true requires encoder_frozen=false")
+        self.use_lora = bool(use_lora)
         if cost_gradient_mode not in {"joint", "detached", "separate_adapter"}:
             raise ValueError(f"Unsupported cost_gradient_mode={cost_gradient_mode}")
         if embedding_input_layout not in {"single", "late_fusion", "late_fusion_prompt_only", "late_fusion_scout_only", "semantic_late_fusion", "semantic_problem_only", "semantic_code_only"}:
@@ -637,6 +638,11 @@ class QwenEmbeddingRouter(torch.nn.Module):
         return self
 
     def _set_active_adapter(self, adapter_name: str) -> None:
+        # A frozen-encoder probe loads no adapter at all. transformers still exposes
+        # set_adapter on the plain base model, which then raises "No adapter loaded",
+        # so presence of the method is not sufficient to call it.
+        if not self.use_lora:
+            return
         if hasattr(self.encoder, "set_adapter"):
             self.encoder.set_adapter(adapter_name)
 

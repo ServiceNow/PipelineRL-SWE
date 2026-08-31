@@ -28,8 +28,10 @@ TIMESTAMP=${TIMESTAMP:-$(date +%s)}
 SCOUT_MODEL=${SCOUT_MODEL:-Qwen/Qwen3-4B-Instruct-2507}
 ORACLE_MODEL=${ORACLE_MODEL:-openai/gpt-oss-120b}
 PROBLEMS_FILE=${PROBLEMS_FILE:?Set PROBLEMS_FILE to the built TACO problems JSONL}
-# The gate needs solve rates, not a split, so send everything to one side.
-TEMPORAL_CUTOFF=${TEMPORAL_CUTOFF:-2100-01-01}
+# The gate needs solve rates, not a split, but the collector requires both sides to
+# be non-empty. 2018-01-01 splits the 300-problem sample 132/168; the split itself is
+# not used for anything here.
+TEMPORAL_CUTOFF=${TEMPORAL_CUTOFF:-2018-01-01}
 MAX_SAMPLES=${MAX_SAMPLES:-300}
 TEMPERATURE=${TEMPERATURE:-0.0}
 CONCURRENCY=${CONCURRENCY:-16}

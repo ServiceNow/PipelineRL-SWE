@@ -317,9 +317,12 @@ def main() -> None:
         )
         accelerator.print(f"pos_weight per head: {pos_weight.tolist()}")
 
+    # _collate_policy wraps _collate and forwards the optional per-row fields
+    # (state_features, and the raw counts the factorized loss needs). The base
+    # _collate drops them, so factorized runs must take this path too.
     collate = (
         lambda batch: _collate_policy(batch, pad_token_id=int(pad_token_id))
-        if args.state_feature_mode == STATE_FEATURE_VERSION
+        if args.state_feature_mode == STATE_FEATURE_VERSION or args.factorized
         else _collate(batch, pad_token_id=int(pad_token_id))
     )
     train_loader = DataLoader(
