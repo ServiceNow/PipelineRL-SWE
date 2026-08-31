@@ -58,6 +58,11 @@ class TorchSequentialScorer:
         self.torch = torch
         self.F = F
         config = json.loads((model_dir / "train_config.json").read_text())
+        # A factorized model reads the problem statement alone and emits a difficulty
+        # and a learned persistence per route; every depth is then derived, so the
+        # replay must hand it raw counts instead of rendered state text.
+        self.factorized = bool(config.get("factorized", False))
+        self.uses_raw_counts = self.factorized
         self.state_feature_mode = str(config.get("state_feature_mode", "text_only"))
         self.uses_structured_state_features = self.state_feature_mode == STATE_FEATURE_VERSION
         self.state_feature_dim = int(config.get("state_feature_dim", 0))
@@ -145,9 +150,39 @@ class TorchSequentialScorer:
                 numeric = torch.from_numpy(feature_array).to(self.device).reshape(1, -1)
                 numeric = self.state_feature_encoder(numeric.to(dtype=pooled.dtype))
                 pooled = torch.cat([pooled, numeric], dim=1)
-            probs = torch.sigmoid(self.head(pooled)).cpu().numpy()[0]
+            raw = self.head(pooled)
+            probs = (
+                raw.float().cpu().numpy()[0] if self.factorized
+                else torch.sigmoid(raw).cpu().numpy()[0]
+            )
         self.cache[key] = probs
         return probs
+
+    def factorized_beliefs(
+        self, problem_statement: str, failures: np.ndarray, remaining: np.ndarray
+    ) -> np.ndarray:
+        """p_m(n) per route plus the derived P(nothing remains).
+
+        The six emitted numbers depend only on the problem, so the encoder runs once
+        per problem and every failure depth is then closed-form. That also makes the
+        Bellman lattice exact at any horizon from a single forward pass, rather than
+        needing a query per successor.
+        """
+        latent = self(problem_statement)
+        theta = 1.0 / (1.0 + np.exp(-latent[:3]))
+        persistence = np.log1p(np.exp(np.clip(latent[3:6], -30, 30))) + 1e-3
+        counts = np.asarray(failures, dtype=float)
+        p_next = theta * persistence / (persistence + counts)
+        log_survive = 0.0
+        for step in range(int(np.max(remaining)) if len(remaining) else 0):
+            p_step = theta * persistence / (persistence + counts + step)
+            active = (np.asarray(remaining, dtype=float) > step).astype(float)
+            log_survive += float(
+                (np.log1p(-np.clip(p_step, 1e-7, 1 - 1e-7)) * active).sum()
+            )
+        return np.clip(
+            np.concatenate([p_next, [np.exp(log_survive)]]), 1e-7, 1 - 1e-7
+        )
 
 
 def _load_calibrator(path: Path) -> Callable[[np.ndarray, int], np.ndarray]:
@@ -416,13 +451,20 @@ def replay_adaptive(
             if scorer is not None or capture_trace else None
         )
         if scorer is not None:
-            if state_text is None:
-                raise AssertionError("Sequential scoring requires rendered state text")
-            raw_probs = (
-                scorer(state_text, state_features)
-                if getattr(scorer, "uses_structured_state_features", False)
-                else scorer(state_text)
-            )
+            if getattr(scorer, "uses_raw_counts", False):
+                raw_probs = scorer.factorized_beliefs(
+                    problem_statement,
+                    failures,
+                    np.array([remaining[slot] for slot in slots], dtype=float),
+                )
+            else:
+                if state_text is None:
+                    raise AssertionError("Sequential scoring requires rendered state text")
+                raw_probs = (
+                    scorer(state_text, state_features)
+                    if getattr(scorer, "uses_structured_state_features", False)
+                    else scorer(state_text)
+                )
             all_probs = np.asarray(raw_probs, dtype=float)
             if calibrator is not None:
                 all_probs = calibrator(all_probs, int(failures.sum()))

@@ -208,12 +208,22 @@ def main() -> None:
                 route_capacities = {
                     slot: int(valid[pi, mi].sum()) for mi, slot in enumerate(slots)
                 }
+                failure_counts = [
+                    sum(a["model_slot"] == slot for a in attempts) for slot in slots
+                ]
                 rows.append({
                     "problem_id": pid,
                     "split": split_for[pid],
                     "history_index": history_index,
                     "failure_depth": len(attempts),
                     "text": _render_state(statement, attempts, remaining, args.state_layout),
+                    # The factorized model reads the problem alone and derives every
+                    # depth analytically, so it needs the statement separated from the
+                    # execution state and the counts as raw integers rather than the
+                    # normalized fractions in state_features.
+                    "problem_text": statement,
+                    "failure_counts": failure_counts,
+                    "remaining_counts": [int(remaining[slot]) for slot in slots],
                     "state_features": build_structured_state_features(
                         attempts, remaining, route_capacities, slots
                     ),

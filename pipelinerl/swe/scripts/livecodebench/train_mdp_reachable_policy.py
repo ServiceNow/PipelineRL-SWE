@@ -41,12 +41,19 @@ HEADS = ["scout_next", "oss20_fresh", "oss120_fresh", "nothing"]
 
 class PolicyDataset(Dataset):
     def __init__(
-        self, rows: list[dict[str, Any]], tokenizer: Any, max_length: int, *, require_state_features: bool
+        self, rows: list[dict[str, Any]], tokenizer: Any, max_length: int, *,
+        require_state_features: bool, factorized: bool = False
     ) -> None:
+        if factorized and rows and "failure_counts" not in rows[0]:
+            raise ValueError(
+                "Factorized training needs failure_counts/remaining_counts; rebuild the "
+                "reachable dataset with the current builder"
+            )
         self.rows: list[dict[str, Any]] = []
         for row in rows:
             encoded = tokenizer(
-                row["text"], add_special_tokens=True, truncation=True, max_length=max_length
+                row["problem_text"] if factorized else row["text"],
+                add_special_tokens=True, truncation=True, max_length=max_length,
             )
             if not encoded.get("input_ids"):
                 continue
@@ -60,6 +67,10 @@ class PolicyDataset(Dataset):
             self.rows.append({
                 "row_idx": len(self.rows),
                 "problem_id": row["problem_id"],
+                **({
+                    "failure_counts": [int(v) for v in row["failure_counts"]],
+                    "remaining_counts": [int(v) for v in row["remaining_counts"]],
+                } if "failure_counts" in row else {}),
                 "failure_depth": int(row["failure_depth"]),
                 "state_key": hashlib.sha256(row["text"].encode()).hexdigest(),
                 "target": [float(value) for value in row["targets"]],
@@ -86,7 +97,58 @@ def _collate_policy(batch: list[dict[str, Any]], pad_token_id: int) -> dict[str,
         collated["state_features"] = torch.tensor(
             [row["state_features"] for row in batch], dtype=torch.float32
         )
+    for key in ("failure_counts", "remaining_counts"):
+        if key in batch[0]:
+            collated[key] = torch.tensor([row[key] for row in batch], dtype=torch.float32)
     return collated
+
+
+FACTORIZED_DIM = 6  # 3 difficulties + 3 persistences
+
+
+def factorized_probs(
+    logits: torch.Tensor, failure_counts: torch.Tensor, remaining_counts: torch.Tensor
+) -> torch.Tensor:
+    """Derive all four head probabilities from six per-problem numbers.
+
+    The model reads the problem statement alone and emits a difficulty and a
+    persistence per route. Every depth then follows analytically:
+
+        p_m(n) = theta_m * s_m / (s_m + n_m)
+
+    so the decay is *learned* -- s_m(x) is an output, not the hand-set 2.0 -- while
+    staying monotone in n by construction. The state-conditioned model has to
+    discover that shape from data and demonstrably does not: it is flat for scout
+    (-0.0041 across its own failures) and its `nothing` head never falls below 0.30
+    when 83.8% of depth-10 states are doomed.
+
+    Fitting 6 numbers per problem instead of 4 per state is also the right medicine
+    for a model whose calibration loss is best at epoch 0: every state of a problem
+    now contributes evidence to the same six parameters.
+
+    The `nothing` probability is *derived* rather than predicted, as the chance that
+    no remaining draw of any route succeeds. That makes it consistent with the
+    per-route beliefs by construction; today the two are trained independently and
+    can contradict each other.
+    """
+    theta = torch.sigmoid(logits[:, :3].float())
+    persistence = F.softplus(logits[:, 3:].float()) + 1e-3
+    counts = failure_counts.float().to(logits.device)
+    remaining = remaining_counts.float().to(logits.device)
+    p_next = theta * persistence / (persistence + counts)
+
+    # P(no remaining draw of any route succeeds), stepping the decay draw by draw.
+    survive = torch.ones_like(p_next[:, :1]).squeeze(-1)
+    max_remaining = int(remaining.max().item()) if remaining.numel() else 0
+    log_survive = torch.zeros_like(p_next[:, 0])
+    for step in range(max_remaining):
+        p_step = theta * persistence / (persistence + counts + step)
+        active = (remaining > step).float()
+        log_survive = log_survive + (
+            torch.log1p(-p_step.clamp(1e-7, 1 - 1e-7)) * active
+        ).sum(dim=1)
+    survive = torch.exp(log_survive)
+    return torch.cat([p_next, survive.unsqueeze(1)], dim=1).clamp(1e-7, 1 - 1e-7)
 
 
 def _forward_policy(model: torch.nn.Module, batch: dict[str, Any]) -> torch.Tensor:
@@ -118,7 +180,11 @@ def _evaluate(
     collected: list[tuple[int, list[float], list[float]]] = []
     for batch in tqdm(loader, desc=desc, disable=not accelerator.is_main_process):
         logits = _forward_policy(model, batch)
-        probs = torch.sigmoid(logits.float())
+        probs = (
+            factorized_probs(logits, batch["failure_counts"], batch["remaining_counts"])
+            if "failure_counts" in batch and logits.shape[1] == FACTORIZED_DIM
+            else torch.sigmoid(logits.float())
+        )
         targets = batch["targets"].float().to(probs.device)
         indices = batch["row_indices"].to(probs.device)
         gathered_probs = accelerator.gather_for_metrics(probs).cpu().tolist()
@@ -185,6 +251,16 @@ def main() -> None:
     parser.add_argument("--lora-alpha", type=int, default=64)
     parser.add_argument("--lora-dropout", type=float, default=0.05)
     parser.add_argument(
+        "--factorized", action="store_true",
+        help=(
+            "Read the problem statement alone and emit 6 numbers per problem -- a difficulty "
+            "and a learned persistence per route -- deriving every depth as "
+            "theta_m * s_m/(s_m + n_m). The decay becomes a model output rather than the "
+            "hand-set pseudo-count, is monotone by construction, and the `nothing` head is "
+            "derived from the per-route beliefs instead of trained against them."
+        ),
+    )
+    parser.add_argument(
         "--pos-weight", choices=["none", "balanced"], default="none",
         help=(
             "balanced: per-head BCE pos_weight = neg/pos from the train split. The scout head "
@@ -211,6 +287,7 @@ def main() -> None:
         split: PolicyDataset(
             _read(Path(args.dataset_dir) / f"{split}.jsonl"), tokenizer, args.max_seq_length,
             require_state_features=args.state_feature_mode == STATE_FEATURE_VERSION,
+            factorized=args.factorized,
         )
         for split in ("train", "calibration", "test")
     }
@@ -247,7 +324,7 @@ def main() -> None:
 
     model_kwargs = dict(
         model_name=args.model_name,
-        target_dim=len(HEADS),
+        target_dim=FACTORIZED_DIM if args.factorized else len(HEADS),
         dropout=args.dropout,
         mlp_hidden_size=args.mlp_hidden_size,
         torch_dtype=_dtype_from_name(args.torch_dtype),
@@ -291,6 +368,7 @@ def main() -> None:
 
     config = vars(args) | {
         "heads": HEADS,
+        "factorized": bool(args.factorized),
         "split_roles": {"fit": "train", "checkpoint": "calibration", "report": "test"},
         "n_train": len(datasets["train"]),
         "n_calibration": len(datasets["calibration"]),
@@ -312,10 +390,18 @@ def main() -> None:
         for batch in tqdm(train_loader, desc=f"train {epoch}", disable=not accelerator.is_main_process):
             with accelerator.accumulate(model):
                 logits = _forward_policy(model, batch)
-                loss = F.binary_cross_entropy_with_logits(
-                    logits.float(), batch["targets"].float(),
-                    pos_weight=None if pos_weight is None else pos_weight.to(logits.device),
-                )
+                if args.factorized:
+                    probs = factorized_probs(
+                        logits, batch["failure_counts"], batch["remaining_counts"]
+                    )
+                    loss = F.binary_cross_entropy(
+                        probs, batch["targets"].float().to(probs.device)
+                    )
+                else:
+                    loss = F.binary_cross_entropy_with_logits(
+                        logits.float(), batch["targets"].float(),
+                        pos_weight=None if pos_weight is None else pos_weight.to(logits.device),
+                    )
                 accelerator.backward(loss)
                 optimizer.step()
                 scheduler.step()

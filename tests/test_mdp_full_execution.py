@@ -1031,3 +1031,64 @@ def test_q_stopping_requires_a_nothing_head() -> None:
             10.0, np.ones(3) * 0.5, 2.0, slots, _records("p", slots, 3), "p", "problem",
             value_of_correct=1.0, q_abstain=0.1, mandatory_scout=False,
         )
+
+
+# --- Factorized difficulty model ---------------------------------------------------
+
+
+def test_factorized_probs_decay_monotonically_and_derive_nothing() -> None:
+    import torch
+    from pipelinerl.swe.scripts.livecodebench.train_mdp_reachable_policy import (
+        factorized_probs,
+    )
+
+    # theta = sigmoid(0) = 0.5 per route; softplus(0)+1e-3 ~= 0.694 persistence.
+    logits = torch.zeros(3, 6)
+    counts = torch.tensor([[0.0, 0, 0], [1.0, 0, 0], [5.0, 0, 0]])
+    remaining = torch.tensor([[2.0, 0, 0], [2.0, 0, 0], [2.0, 0, 0]])
+    probs = factorized_probs(logits, counts, remaining)
+
+    # Decay is monotone in the route's own failure count, by construction.
+    assert probs[0, 0] > probs[1, 0] > probs[2, 0]
+    # Routes with no failures are unaffected by another route's count.
+    assert probs[0, 1] == pytest.approx(probs[2, 1])
+    # P(nothing remains) rises as the surviving route decays.
+    assert probs[0, 3] < probs[2, 3]
+
+
+def test_factorized_nothing_is_consistent_with_the_route_beliefs() -> None:
+    """The derived head equals the product of per-draw survivals, not a free output."""
+    import torch
+    from pipelinerl.swe.scripts.livecodebench.train_mdp_reachable_policy import (
+        factorized_probs,
+    )
+
+    logits = torch.tensor([[0.4, -0.2, 0.1, 0.3, 0.0, -0.1]])
+    counts = torch.tensor([[1.0, 0.0, 2.0]])
+    remaining = torch.tensor([[2.0, 1.0, 0.0]])
+    probs = factorized_probs(logits, counts, remaining)
+
+    theta = torch.sigmoid(logits[:, :3])
+    persistence = torch.nn.functional.softplus(logits[:, 3:]) + 1e-3
+    expected = 1.0
+    for route, draws in enumerate([2, 1, 0]):
+        for step in range(draws):
+            p = theta[0, route] * persistence[0, route] / (
+                persistence[0, route] + counts[0, route] + step
+            )
+            expected *= float(1.0 - p)
+    assert float(probs[0, 3]) == pytest.approx(expected, rel=1e-5)
+
+
+def test_factorized_training_requires_the_rebuilt_dataset() -> None:
+    from pipelinerl.swe.scripts.livecodebench.train_mdp_reachable_policy import (
+        PolicyDataset,
+    )
+
+    class _Tok:
+        def __call__(self, text, **kwargs):
+            return {"input_ids": [1, 2], "attention_mask": [1, 1]}
+
+    stale = [{"problem_id": "p", "failure_depth": 0, "text": "t", "targets": [0, 0, 0, 1]}]
+    with pytest.raises(ValueError, match="rebuild the reachable dataset"):
+        PolicyDataset(stale, _Tok(), 128, require_state_features=False, factorized=True)
