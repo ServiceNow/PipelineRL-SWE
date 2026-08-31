@@ -3122,3 +3122,129 @@ default config, which names `/home/toolkit/icrl/configs/ds_config.json`, absent 
 `launch_lcb_mdp_temporal_551_341.sh` already passed
 `--config_file conf/accelerate/base_mp.yaml`, which is why the seed and fold jobs were unaffected.
 Both launchers now match that invocation.
+
+---
+
+## Belief diagnosis, two retractions, and the ladder finding (2026-08-31)
+
+### A: q(s) stopping — the defect was calibration, not representation
+
+Per-(head, depth) Platt scaling on the calibration split turned a degenerate arm into a working one.
+Uncalibrated, every threshold ≤0.30 abstained on **nothing**, because `q(s)` never fell below 0.30.
+Calibrated, the arm sweeps 63.27% @ $0.026 to 73.10% @ $0.172 with abstention 0–37%.
+
+So the `nothing` head was never broken: its ranking was usable (AUC 0.733), its **range** was
+compressed by BCE against a base rate swinging 0.170 → 0.838 with 43% of the data at depths 1–2. We
+were one step from concluding it could not represent doom, which would have been wrong.
+
+**But it does not beat the value rule.** At matched accuracy, calibrated q-stopping costs ≈$0.0534
+against the baseline's $0.05227 — about 2% worse. And it recovers **none** of the oracle's headroom:
+at 73.10% it costs $0.17235 against the oracle's $0.02573; for the oracle's money it gets 10 points
+less accuracy.
+
+Conclusion: the stopping headroom is real but unreachable from current beliefs, and the binding
+constraint is **belief accuracy, not calibration or how beliefs are consumed.**
+
+### Learned one-step transitions: null, and a retraction
+
+| layout | mean ΔCost | mean ΔAcc | significant of 24 R |
+|---|---:|---:|---|
+| counts_last | +$0.00010 | −0.01pt | cost 1, acc 0 |
+| problem_first | +$0.00020 | +0.04pt | cost 0, acc 0 |
+| structured | −$0.00003 | +0.05pt | cost 2, acc 1 |
+
+**Retraction 1.** The cross-route measurement that motivated this arm compared states spanning **≥2
+accumulated failures** — an aggregate — and was then treated as a per-step effect. H=2 propagates one
+step, and that marginal is too small to move decisions.
+
+### Seeds and folds
+
+Five whole-pipeline seeds: accuracy sd 0.86pt, cost sd $0.00602 (**11.8% CV**), 36% min-to-max
+spread. Seed 17 — the source of every reported number — sits at the mean, so nothing was
+cherry-picked, but an 11.8% CV against an 18–28% claimed saving must accompany the headline.
+
+**Retraction 2.** The claim that savings scale with training-set size does not hold. Held-out AUC is
+flat and non-monotone across folds:
+
+```
+train n     scout    oss20   oss120  nothing
+    177    0.5665   0.7901   0.7405   0.6772
+    357    0.8124   0.7385   0.6989   0.6079
+    536    0.7184   0.7872   0.7374   0.7053
+    551    0.8166   0.8265   0.7529   0.7335
+```
+
+3× the data buys oss120 **+0.012 AUC**. The fold-to-fold savings differences were far more likely
+**test-set differences** than a data-size effect. The dose-response recorded earlier is withdrawn.
+
+### The model is roughly a difficulty score
+
+A **3-way human difficulty label** beats our fine-tuned 8B on two of three routes:
+
+| route | difficulty-only AUC | our model |
+|---|---:|---:|
+| scout | **0.8407** | 0.8166 |
+| oss20 | 0.7945 | **0.8265** |
+| oss120 | **0.7992** | 0.7529 |
+
+Predicted heads are near-identical (Spearman 0.93–0.98) while true per-problem rates are not
+(0.38–0.78).
+
+### But that is largely correct behaviour — the ladder
+
+LCB success patterns over 892 problems, thresholding per-problem rate at 0.5:
+
+```
+[1,1,1] 271   [0,1,1] 193   [0,0,1] 147   [0,0,0] 199    ladder-consistent = 810 (90.8%)
+[1,0,1]  71   [1,0,0]   6   [0,1,0]   4   [1,1,0]   1    non-ladder        =  82 ( 9.2%)
+```
+
+**90.8% of problems are monotone in capability** (`scout ⊂ oss20 ⊂ oss120`). Under monotonicity, a
+difficulty score plus per-route thresholds is the *correct* model — a rank-1 structure. So the
+"collapse" is appropriate, not a defect.
+
+**Retraction 3.** True ρ = 0.39 (scout↔oss120) was read as abundant route-specific signal. Scout
+solves 30% and oss120 59%; two binaries with base rates that far apart have a correlation ceiling
+well below 1 even under perfect nesting. Much of that 0.39 is a base-rate artifact. The honest
+measure is the non-ladder fraction, **9.2%** — which is exactly why oracle routing is worth only 3%.
+
+The causal story inverts: not "the model collapsed, so headroom is low", but **"the routes are nearly
+a capability ladder, headroom is genuinely low, and the model learned that correctly."**
+
+### Why the anti-collapse objectives already failed on SWE-Smith
+
+`analysis/oss20_vs_oss120_per_route_success_accuracy.csv`:
+
+```
+route_classifier_cheapest_success_r32   OSS120 0.4819   OSS20 0.5134   <- chance
+route_classifier_cheapest_success_r64   OSS120 0.4771   OSS20 0.4902   <- chance
+joint_outcome_oversample_r32            OSS120 0.5751   OSS20 0.6288
+plain per-route BCE (best, r128)        OSS120 0.7677   OSS20 0.7320   <- wins
+```
+
+Two causes, both of which also apply to LCB:
+
+1. **Degenerate labels.** On SWE-Smith 62.6% of instances are all-fail (44%) or all-pass (19%);
+   "cheapest successful route" is undefined on the former and constant on the latter. The learned
+   solution is "say cheapest", visible in the mean predictions (OSS20 0.587, OSS120 0.413).
+2. **Supervision loss.** Per-route BCE gives 4 labels per instance; the joint classifier gives 1 — a
+   4× reduction on ~1500 instances.
+
+LCB is somewhat better but not different in kind: decision-relevant fraction 47.3% versus SWE-Smith's
+37.4%.
+
+**Do not build the cross-route ranking objective.** It has been tried, it failed for reasons that
+transfer, and the structure it targets is 9% of problems.
+
+### Where this leaves the contribution
+
+The pool is the confound. `scout` = Qwen3-4B, `oss20` = gpt-oss-20B, `oss120` = gpt-oss-120B — three
+models, two families, monotone in size. A near-pure capability ladder **by construction**. RoR used 11
+models across 8 lineages precisely to obtain diversity. So "routing is one-dimensional" is a claim
+about *our pool*, not about routing, and must not be generalised.
+
+That makes the honest next experiment: **measure routing headroom as a function of pool diversity.**
+Qwen3-Coder-30B already appears in the SWE-Smith collection — a different family at a middling size.
+Adding a genuinely off-ladder model converts "our pool happens to be a ladder" into "here is how pool
+composition determines available routing headroom", which is a contribution with a knob rather than
+an artifact.
