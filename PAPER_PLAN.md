@@ -3639,3 +3639,101 @@ claim made earlier, which treated it as a property of the models.
 
 It does not affect the peer-pool gate: gate 1 collects at temperature 0.2 with four draws, so it
 measures the pool under our own known configuration either way.
+
+---
+
+## Status after the corrected-s sweep, and the open threads (2026-08-31)
+
+### The method contribution is real; the earlier "too thin" framing was wrong
+
+Two components, both architecturally distinct from RoR rather than tuning:
+
+- **Abstention.** RoR's Algorithm 1 exits only on verified success or budget exhaustion; it
+  *structurally cannot* give up. Largest measured effect we have: abstention on/off was 8.45% ->
+  51.5% on the development split.
+- **Learned query-conditioned prior.** RoR's `p̄_m` is a global scalar, so its per-query
+  discrimination is AUC 0.5 **by construction**. Ours is ~0.75.
+
+**And the margin survives correct baseline tuning**, which was the check most likely to sink it.
+
+| accuracy | best-tuned RoR | ours | saving |
+|---:|---:|---:|---:|
+| 60% | $0.02509 (s=0.3) | $0.01911 | **+23.8%** |
+| 65% | $0.04677 (s=0.3) | $0.03611 | **+22.8%** |
+| 70% | $0.07228 (s=0.3) | $0.06946 | +3.9% |
+| 73% | $0.16370 (s=0.3) | $0.13123 | **+19.8%** |
+
+The empirical optimum is **s = 0.3**, close to the 0.37 predicted from the decay fit, and well below
+RoR's published default of 2.0 — which was costing them ~26% at the cheap end.
+
+Components are not individually novel (learned per-query scoring is the routing literature;
+abstention exists in deferral and cascade work). What is plausibly unoccupied is the combination:
+**sequential multi-draw resample/reroute with a learned per-query prior and a real give-up action.**
+RoR is the nearest neighbour and lacks the third.
+
+The concern is **robustness, not originality**: 11.8% seed CV, folds that do not replicate uniformly,
+one pool, one domain, and a 70% operating point that nearly vanishes.
+
+### Measurement and method are one paper, not two
+
+They were being separated artificially. The measurement *explains* the method:
+
+> **Method:** sequential routing with a learned prior and abstention, +20-24% over correctly-tuned RoR.
+> **Explanation:** it works through *stopping*, not selection — perfect routing is worth 3% and
+> perfect stopping 63.5%, because model failures are ~89% redundant.
+
+The measurement makes the method credible rather than lucky; the method gives the measurement teeth.
+
+### Frozen probe: LoRA earns its keep
+
+| | scout | oss20 | oss120 | nothing |
+|---|---:|---:|---:|---:|
+| frozen encoder, head only | 0.7900 | 0.7069 | 0.6606 | 0.6614 |
+| LoRA baseline | **0.8166** | **0.8265** | **0.7529** | **0.7335** |
+
+LoRA wins on all four heads, so the `best_epoch: 0` overfitting is **not** LoRA memorising — the
+frozen features genuinely carry less. This removes "simplify the method" as an option and rules out
+one explanation for the belief-quality ceiling.
+
+### Open thread 1: does more data reduce seed variance?
+
+Our 11.8% cost CV is **pure training variance** — all five seeds share one test set, so none of it is
+test-set noise. That is the component more data could fix.
+
+Evidence points both ways:
+- **For:** `best_calibration_epoch: 0` everywhere is the signature of overfitting before one pass,
+  i.e. a model under-constrained by its data, which is exactly when seed variance is large.
+- **Against:** held-out AUC is flat in training size (177 -> 551 buys oss120 **+0.012 AUC**). A model
+  whose mean does not move with data is not obviously variance-limited by data either.
+
+**Gate before spending on TACO:** train 3 seeds on **half the data (275 problems)** with the same
+split and test set, and compare the spread against the 5 seeds at 551.
+
+```
+cost CV at 275 >> 11.8%  -> variance shrinks with data -> TACO helps
+cost CV at 275 ~= 11.8%  -> variance is capacity- or task-driven -> TACO will not fix it
+```
+
+Three jobs, no collection, no API spend.
+
+### Open thread 2: TACO sizing
+
+Budget is available, so the full MDP is viable. Two separable price tags:
+
+- **Abstention predictor**: needs one draw per problem. Cheap; TACO could expand its training set a
+  lot for little money.
+- **Full sequential MDP**: needs multiple draws per route per problem, and cost scales with draws.
+
+Draw-count evidence already collected argues for shrinking the budget rather than defaulting to 10:
+**scout draws 5-10 are worth 0.59 points**, **oss20 draws 2-10 are worth 0.00 points** (fully
+subsumed, though they retain cost value at $0.004 against $0.030), and only **oss120 1->10 is worth
+6.16 points and still climbing**. An asymmetric allocation — few scout and mid-tier draws, more on
+the top tier — is the efficient shape.
+
+### Open thread 3: clean-B, still unread after three attempts
+
+The learned-decay experiment has been blocked three times by scaffolding rather than by its
+hypothesis: (1) a bare `accelerate launch` picking up a stale deepspeed config, (2) double-decay plus
+problem-text-only input, (3) the double-decay guard firing unconditionally because `families` always
+contained `sequential_decay`. Now relaunched as `lcb_mdp_factorized_seed17_1788211558`. **There is
+still no clean read on whether a learned per-problem decay beats the hand-set constant.**
