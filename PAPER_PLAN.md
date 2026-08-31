@@ -3248,3 +3248,87 @@ Qwen3-Coder-30B already appears in the SWE-Smith collection — a different fami
 Adding a genuinely off-ladder model converts "our pool happens to be a ladder" into "here is how pool
 composition determines available routing headroom", which is a contribution with a knob rather than
 an artifact.
+
+---
+
+## Complementarity is the constraint, and the decay constant is wrong by 5x (2026-08-31)
+
+### The 15-model OpenRouter sweep answers the pool-diversity question
+
+`openrouter_sweep_collect_1785216501` (14 Daytona-graded models, 9 families, 143 common SWE-Smith
+instances) was already collected and analysed, and it settles the question directly.
+
+**Size-matched, our capability-ladder pool is *more* complementary than diverse ones:**
+
+| 3-model subsets of the diverse pool | ladder-consistency |
+|---|---|
+| mean | 95.4% |
+| median | 95.8% |
+| range | [88.1, 100.0] |
+| **our LCB 3-model pool** | **90.8%** |
+| diverse subsets at or above ours | 95.9% |
+
+Deliberate family diversity produces *more* ladder structure, not less: weaker models are dominated
+rather than complementary.
+
+**And the headline number:**
+
+```
+                      observed union   best single   if independent
+14 models, 9 families      44.8%          40.6%          98.8%
+LCB, our 3 models          77.7%          76.5%          93.2%
+
+realised complementarity   SWE-Smith 11.2% (mean over 3-model subsets)
+                           LCB        7.4%
+                        -> models are ~89% REDUNDANT relative to independence
+```
+
+Fourteen models across nine families beat the best single model by **4.2 points**; independence
+predicts 98.8% union. Two independent domains agree at ~7-11%.
+
+**LLM failures are overwhelmingly shared.** This retires the pool-diversity hypothesis, explains why
+oracle routing is worth 3% while oracle stopping is worth 63.5%, and converts every null recorded
+today into evidence for a single thesis rather than a list of failures.
+
+Caveats to state, not bury: n=143 common instances; sweep models are mid-tier (2.8-40.6% solve), so a
+frontier pool may differ; 3-model subset statistics are combinatorially dependent.
+
+### The decay constant is mis-specified by ~5x, in RoR and in us
+
+Measured on LCB, P(oss120 succeeds next) after n **own-route** failures, as a ratio to baseline:
+
+```
+model                     ratio at n=0..4                            SSE
+true                      1.0    0.2715 0.1037 0.0759 0.0501          -
+Beta-Bernoulli s=2.0      1.0    0.6667 0.5000 0.4000 0.3333       0.4986   <- RoR default AND ours
+Beta-Bernoulli s=0.5      1.0    0.3333 0.2000 0.1429 0.1111       0.0213   <- our sweep FLOOR
+Beta-Bernoulli s=0.37     1.0    0.2701 0.1561 0.1098 0.0847       0.0051   <- best
+two-component mixture     0.99   0.2897 0.0274 0.0021 0.0002       0.0142
+```
+
+`s = 2.0` fits 100x worse than `s ≈ 0.37`, and 0.37 lies **below our sweep floor of 0.5**. That is why
+`counts_s0.5` was the best RoR arm in every table today — pinned at the grid boundary, the classic
+sign the optimum is outside the grid, which was never followed up.
+
+Our `sequential_decay` arms default `decay_pseudo_count` to the same 2.0, so **our own method has been
+under-decaying too** — over-continuing on doomed problems, which is exactly the stopping failure the
+oracle puts at 63.5%.
+
+A two-component solvable/hopeless mixture was also fitted and is *worse* than a well-tuned
+Beta-Bernoulli (SSE 0.0142 vs 0.0051), so the functional form is fine; only the constant is wrong.
+
+### Cross-route belief updating: rejected before building it
+
+P(oss120 succeeds next) conditioned on **scout** failures: 0.7552, 0.6137, 0.5992, 0.5868, 0.5795.
+
+The first scout failure is worth −0.14, and it then **saturates at ~−0.01 per additional failure**.
+Under `scout_first` every reachable state has at least one scout failure, so that evidence is
+*constant across every state the router observes* and carries no discriminative signal. Own-route
+evidence is 4x stronger on the first observation (−0.55). Do not build cross-route updating.
+
+### Consequence for the method
+
+The chain is now: failures are shared (89% redundant) -> routing is worth 3%, stopping 63.5% ->
+stopping is governed by the belief-decay rate -> that rate is a hand-set global constant, wrong by
+5x, and a global sweep cannot fix per-problem heterogeneity -> **learn it per problem**, which is
+exactly the running factorized experiment.
