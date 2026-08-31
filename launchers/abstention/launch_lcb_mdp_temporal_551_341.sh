@@ -23,6 +23,9 @@ SEED=${SEED:-17}
 # artifact built before 2026-08-30. Set equal to SEED for a multi-seed run: holding
 # it fixed measures only optimizer variance, not variance of the whole pipeline.
 DATASET_SEED=${DATASET_SEED:-0}
+# Fraction of TRAIN problems kept, for the variance-vs-data test. Calibration and
+# test are untouched so runs at different fractions share one test set.
+TRAIN_PROBLEM_FRACTION=${TRAIN_PROBLEM_FRACTION:-1.0}
 # Rolling-origin folds. Set both to evaluate on contiguous date blocks instead of the
 # single 551/341 split: three folds give ~534 test problems against 171, which is what
 # the wide CIs on the current frontier need.
@@ -59,7 +62,7 @@ Prepared but not submitted.
   job: ${JOB_NAME}
 ${SPLIT_BANNER}
   state layout: ${STATE_LAYOUT}; state features: ${STATE_FEATURE_MODE}; pos weight: ${POS_WEIGHT}
-  train seed: ${SEED}; dataset-history seed: ${DATASET_SEED}
+  train seed: ${SEED}; dataset-history seed: ${DATASET_SEED}; train fraction: ${TRAIN_PROBLEM_FRACTION}
   fold: ${FOLD_INDEX:-none (single 551/341 split)}
   route draws: ${ROUTE_DRAW_COUNTS}
 
@@ -97,6 +100,7 @@ python pipelinerl/swe/scripts/livecodebench/build_mdp_reachable_dataset.py \
 ${TRAIN_LAUNCH} pipelinerl/swe/scripts/livecodebench/train_mdp_reachable_policy.py \
   --dataset-dir ${DATASET_DIR} --output-dir ${MODEL_DIR} --seed ${SEED} \
   --num-epochs ${NUM_EPOCHS} --lr ${LR} --max-seq-length 8192 --pos-weight ${POS_WEIGHT} \
+  --train-problem-fraction ${TRAIN_PROBLEM_FRACTION} \
   --state-feature-mode ${STATE_FEATURE_MODE} --state-feature-hidden-size ${STATE_FEATURE_HIDDEN_SIZE} && \
 python pipelinerl/swe/scripts/livecodebench/replay_mdp_full_execution.py \
   --tensors-dir ${TENSORS_DIR} --output-dir ${REPLAY_DIR} --sequential-model-dir ${MODEL_DIR} \

@@ -287,6 +287,16 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--train-problem-fraction", type=float, default=1.0,
+        help=(
+            "Keep this fraction of TRAIN problems, subsampled by problem id rather than by state, "
+            "so the unit matches the question 'would more problems help'. Calibration and test are "
+            "untouched, so runs at different fractions stay comparable on the same test set. Used "
+            "to test whether seed variance (11.8%% cost CV at 551 problems) shrinks with data "
+            "before paying to collect more."
+        ),
+    )
+    parser.add_argument(
         "--lora-target-modules",
         default="q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj",
     )
@@ -301,9 +311,24 @@ def main() -> None:
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_name, padding_side="left")
     pad_token_id = tokenizer.pad_token_id or tokenizer.eos_token_id or 0
+    def _split_rows(split: str) -> list[dict[str, Any]]:
+        rows = _read(Path(args.dataset_dir) / f"{split}.jsonl")
+        if split != "train" or args.train_problem_fraction >= 1.0:
+            return rows
+        pids = sorted({row["problem_id"] for row in rows})
+        keep = set(random.Random(args.seed).sample(
+            pids, max(1, int(round(len(pids) * args.train_problem_fraction)))
+        ))
+        kept = [row for row in rows if row["problem_id"] in keep]
+        accelerator.print(
+            f"train subsampled to {len(keep)}/{len(pids)} problems "
+            f"({len(kept)}/{len(rows)} states)"
+        )
+        return kept
+
     datasets = {
         split: PolicyDataset(
-            _read(Path(args.dataset_dir) / f"{split}.jsonl"), tokenizer, args.max_seq_length,
+            _split_rows(split), tokenizer, args.max_seq_length,
             require_state_features=args.state_feature_mode == STATE_FEATURE_VERSION,
             factorized=args.factorized,
         )
@@ -393,6 +418,7 @@ def main() -> None:
     config = vars(args) | {
         "heads": HEADS,
         "factorized": bool(args.factorized),
+        "train_problem_fraction": float(args.train_problem_fraction),
         "frozen_encoder": bool(args.frozen_encoder),
         "split_roles": {"fit": "train", "checkpoint": "calibration", "report": "test"},
         "n_train": len(datasets["train"]),
