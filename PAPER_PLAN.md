@@ -3446,3 +3446,72 @@ rest. Every measurement above is a parameter of it.
 Factorized/learned-decay (B), learned transitions, deeper Bellman horizons, cross-route belief
 updating, and anti-collapse objectives. All null, confounded, or already refuted on SWE-Smith, and
 none on the critical path.
+
+---
+
+## Single-draw benchmarks inflate measured complementarity ~2.6x (2026-08-31)
+
+### The measurement
+
+Same models, same problems, same metric; only the estimator changes.
+
+| draws used | complementarity | union | best single |
+|---:|---:|---:|---:|
+| 1 | **19.3%** | 78.8% | 75.5% |
+| 3 | 10.5% | 79.0% | 77.3% |
+| 10 | **7.4%** | 77.7% | 76.5% |
+
+(`k=2` and `k=4` are omitted: the "majority of k draws" rule is ill-defined at even k and
+depresses union and best-single together, so those rows are not comparable.)
+
+### Why it matters
+
+**Every routing benchmark is single-draw** — RouterBench, CodeRouterBench, RouterEval all record one
+response per (query, model). So every published complementarity and routing-headroom figure built on
+them inherits this inflation, and **it cannot be corrected from those datasets**, because the repeat
+draws do not exist in them.
+
+The mechanism: with one draw you cannot separate *"model A reliably solves this"* from *"model A got
+lucky here"*. Both present as specialisation. A measurable fraction of reported complementarity is
+therefore sampling noise wearing a specialisation costume.
+
+**Falsifiable consequence:** a router that exploits single-draw complementarity is partly exploiting
+noise, so its gains should shrink on redeployment — on a fresh draw the apparent specialist may
+simply fail. That is a concrete account of why routers underdeliver in practice.
+
+### It reframes the disagreement with the literature productively
+
+The earlier framing — "routing headroom is small, contra the field" — is combative and partly wrong.
+The better claim is:
+
+> Routing headroom is measured on single-draw benchmarks and is inflated ~2.6x by sampling noise.
+> The denoised headroom is what a deployed router can actually capture.
+
+We are not contradicting their numbers; we are supplying a correction factor they had no way to
+compute. **We have multi-draw data and the benchmarks do not.** That is uniquely ours.
+
+Consequence for CodeRouterBench: its 85.9%/93.3% figures are upper bounds. Denoised, the peer pool
+plausibly lands in the 30s — still far above our ladder pool's 7.4%, so the pool-structure effect
+survives the correction.
+
+### Retracted along the way
+
+The claim that claude-opus's 35.0% on CodeRouterBench's LCB tasks was a harness artifact. Our own
+independent pipeline puts claude-opus-5 at **43.0%** (n=100) on LiveCodeBench, and oss-120b at 59.1%.
+Two independent harnesses agree an Opus-class model underperforms mid-tier Qwen models on these
+tasks, so the score matrix is measuring capability, not extraction failure. The price/capability
+inversion is real.
+
+### The cheap peer pool
+
+Searching all subsets on the 1,869 LCB-sourced CodeRouterBench tasks:
+
+| k | comp | gain | union | pool $ | spread | models |
+|---:|---:|---:|---:|---:|---:|---|
+| 2 | 93.3% | +19.6pt | 81.0% | $0.0030 | 2.9x | Qwen3-Max(61%) qwen3.5-plus(54%) |
+| 3 | 84.3% | +24.0pt | 85.3% | $0.0087 | 7.3x | + glm-5(42%) |
+
+Our current pool costs **$0.0342** to run once and reaches union 77.7%. The 3-model peer pool costs
+**$0.0087** — 4x cheaper — reaches union 85.3%, and is several times more complementary even after
+denoising. The expensive models are the ones to drop: claude-opus costs 39x Qwen3-Max and scores
+worse on these tasks.
