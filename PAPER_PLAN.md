@@ -4033,3 +4033,55 @@ peer's successes are a subset of the other's.
 
 **This is the paper's central mechanism, and it is stated in one sentence:** *in a cost-ordered
 ladder, every lever except stopping is subsumed by resampling the top model.*
+
+### Cheap-route depth: the cost argument, priced (2026-09-01)
+
+The previous entry measured cheap-route depth by its contribution to the *accuracy* ceiling (+0.00pt)
+and called it worthless. That is the wrong yardstick, since all remaining headroom is cost. Priced
+properly, the cheap routes are worth a great deal — but their **depth** is not.
+
+**Cheap routes carry large cost value.** Ten scout draws cost $0.00553 = **19% of one oss120 call**.
+Oracle cheapest-solve cost per solved problem:
+
+| route set | solves | mean cost per solved problem |
+|---|---:|---:|
+| oss120 only | 71.93% | $0.04157 |
+| scout + oss20 + oss120 | 73.10% | **$0.01811** (2.3x cheaper) |
+
+**But the value is exhausted by draw 2.** Grinding a cheap route to depth k, then escalating:
+
+| k | scout->oss120 | vs k=0 | oss20->oss120 | vs k=0 |
+|---:|---:|---:|---:|---:|
+| 0 | $0.11334 | — | $0.11334 | — |
+| 1 | $0.10363 | +8.6% | $0.10357 | +8.6% |
+| **2** | **$0.10316** | **+9.0%** | **$0.10272** | **+9.4%** |
+| 4 | $0.10358 | +8.6% | $0.10512 | +7.3% |
+| 10 | $0.10474 | +7.6% | $0.11440 | **-0.9%** |
+
+Both minimise at **k=2** and get worse monotonically after. oss20 at k=10 is *worse than never using
+oss20 at all*, because ten oss20 draws cost 133% of one oss120 call. The reason is simple: extra
+draws are paid on the ~65% of problems where the cheap route never succeeds, and draws 3+ convert
+too rarely to cover that tax.
+
+**The hard ceiling on any per-problem depth policy.** Give an oracle perfect foreknowledge of every
+outcome and let it pick the depth *per problem*, against a single global constant:
+
+| route | best global k | oracle per-problem | **headroom for any depth policy** |
+|---|---:|---:|---:|
+| scout | 2 — $0.10316 | $0.10115 | **1.9%** |
+| oss20 | 2 — $0.10272 | $0.09678 | **5.8%** |
+
+Compare stopping: **63.5%**. And the oracle's own depth choices are concentrated at k in {0,1} —
+93% of problems for scout (111 at k=0, 48 at k=1), 83% for oss20.
+
+**This upgrades the decay result from an empirical null to a proved cap.** The learned decay is not
+failing because our belief model is weak — it is better than the baseline on every per-route head,
+on both ranking and calibration. It fails because **the quantity it controls has almost no variance
+worth predicting**: the cost-optimal cheap-route depth is 0 or 1 for ~90% of problems, and a
+perfect per-problem depth oracle beats one global constant by 1.9-5.8%. A decay competing for 2-6%
+cannot show up next to stopping competing for 63.5%.
+
+**Refined statement of the mechanism.** Cheap routes matter enormously, but as a **routing** decision
+(use them at all, one or two shots) rather than a **depth** decision. In a cost-ordered ladder the
+levers rank: stopping (63.5%) >> cheap-route routing (2.3x on oracle cost, captured at k<=2) >>
+per-problem depth (1.9-5.8%) > per-problem decay (0%, being a subset of depth).
