@@ -3939,3 +3939,60 @@ unable to touch the decision that carries the money. The lever is **`theta` on t
 — predicting whether the top model can solve this problem at all — not the belief dynamics. Every
 attempt to buy performance by improving the sequential belief has now failed, for a reason we can
 finally state precisely.
+
+### Would more draws (or hotter draws) give depth meaning? Measured: no (2026-09-01)
+
+**Retraction 5.** The recorded claim that *"oss120 1->10 is worth 6.16 points and still climbing"*
+is wrong. On the 171-problem test split:
+
+| k | scout | oss20 | oss120 | union | marginal oss120 |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 28.07% | 38.01% | 57.89% | 61.99% | — |
+| 2 | 30.99% | 47.95% | 65.50% | 67.25% | +7.60pt |
+| 4 | 32.16% | 52.63% | 69.59% | 70.76% | +1.75pt |
+| 6 | 32.16% | 54.39% | 71.93% | **73.10%** | +1.75pt |
+| 7 | 32.16% | 54.39% | 71.93% | 73.10% | **0.00pt** |
+| 8 | 32.16% | 55.56% | 71.93% | 73.10% | **0.00pt** |
+| 10 | 32.16% | 55.56% | 71.93% | 73.10% | **0.00pt** |
+
+oss120 **saturates completely at k=6**. Draws 7-10 add exactly zero. Same on the full 892 (draws 8
+and 10 both add 0.00pt). RoR-style deep resampling has nothing to buy here.
+
+**Temperature is not the cause.** We already collected a 10-draw scout arm at T=0.6 alongside T=0.2
+(`lcb_multidraw_scout_1787547502`), 341 shared problems:
+
+| | pass@1 | pass@10 | gain | mean distinct outcomes/problem |
+|---|---:|---:|---:|---:|
+| scout T=0.2 | 28.45% | 39.59% | +11.14pt | 1.185 |
+| scout T=0.6 | 29.62% | 39.88% | **+10.26pt** | 1.199 |
+
+Tripling the temperature changes the depth curve by **-0.9pt** and the outcome diversity by 0.014.
+The saturation is a property of the models, not of the sampling.
+
+**"Why can't we use all the expensive draws?" — we can, and we already beat doing so.**
+
+```
+best_of_10_oss120        71.93%   $0.16534
+our learned policy       73.10%   $0.15019    <- more accurate, 9% cheaper
+union ceiling of ALL collected draws          73.10%
+```
+
+`n* ≈ 0-1` at R=$0.05 is not a harness limitation. It is the policy correctly pricing that one
+oss120 shot is all a correct answer is worth when a correct answer is valued at $0.05, i.e. under
+two oss120 calls. Raise R and it *does* buy depth (mean `n*` = 3.08 at R=$0.25). Raise it further
+and it buys draws measured to be worth 0.00pt.
+
+**Consequence, and it reframes the paper.** Our best policy already sits *exactly at* the accuracy
+ceiling of the entire collected draw set (73.10% = 73.10%). **There is no accuracy headroom left in
+this pool — all remaining headroom is cost.** That is precisely what the oracle decomposition said
+(stopping = 63.5% of headroom): the prize is reaching 73.10% for far less than $0.15, not reaching
+higher. Every "collect more/deeper/hotter draws" lever is now measured and dead.
+
+Minor gap found and closed: the tensors ingest only 4 of the 10 collected scout draws. Adding the
+other six changes the union ceiling by **0.00pt** — **zero** test problems are uniquely solvable by
+scout draws 5-10. Not worth rebuilding.
+
+**The one lever left is pool composition, not pool depth.** Depth is exhausted; complementarity is
+not. Gate 1 measured glm5+qmax at **36% realized complementarity, flat in draws**, against this
+ladder's 7.4%. That is the only remaining direction that can raise the ceiling rather than just
+lower the bill.
