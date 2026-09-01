@@ -5442,3 +5442,34 @@ test-pass credit.
 Resampling oss20 is the largest single effect in the pool and every problem it buys is
 already inside oss120's coverage. Ten oss20 draws reach 76.12% against one oss120 draw at
 75.45%.
+
+### Per-test failure patterns: the short circuit invalidates two prior analyses (2026-09-01)
+
+The pinned LCB grader returns at the first failing test, so every `result_codes` array is a
+prefix and the tests after the first failure were never executed. Two analyses were computed
+on that encoding and neither is evidence about what it claimed to measure:
+
+1. **Partial credit.** "Fraction of tests passed" is the index of the first failure over the
+   suite size. Its measured signal content for pool-solvability was AUC 0.5314 / 0.5100 --
+   but that is the index, not the fraction of behaviours correct. Real partial credit has
+   never been observed on this data.
+2. **Cross-model failure agreement.** Computed today on the prefixes over the 186 problems
+   where all three routes fail on draw 0 (66.7% of which are pool-unsolved): same stopping
+   index 0.504, same error code 0.520, distinct error codes 0.562, index spread 0.548, mean
+   index 0.595. All far below the 0.75 already available and the 0.90 the gate needs.
+   **This null does not stand**: 59.1% of failed draws stop at index 0, so most of the
+   population is one indistinguishable bucket, and "same stopping index" is not "same failed
+   tests". Only 16 of 186 problems even agree on an index.
+
+**Fix, no API spend.** `regrade_full_patterns.py` calls the same pinned grader once per test
+with a single-test evaluation sample. With one test there is nothing to short-circuit, so
+the pinned semantics hold exactly and the complete pattern falls out. `fn_name` is emitted
+only when present, to avoid the null-key defect that mis-graded 14% of the TACO build.
+Launcher: `launch_lcb_full_pattern_regrade.sh`, draw 0 of all three routes over all 892
+problems, up to 30 tests each, serialized because the runner forks per call.
+
+**What it unlocks.** Real partial credit for the first time; failure-set agreement (Jaccard
+over failed tests) rather than stopping-index agreement; a continuous verifier-strength knob
+for the verifier-economics thread, since a verifier of any strength is the first k tests; and
+a test-level difficulty model. It also re-opens the retracted "3 tests reproduce the verdict"
+result, which was an artifact of prefix shape and can now be asked properly.
