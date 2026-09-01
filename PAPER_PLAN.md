@@ -3737,3 +3737,130 @@ hypothesis: (1) a bare `accelerate launch` picking up a stale deepspeed config, 
 problem-text-only input, (3) the double-decay guard firing unconditionally because `families` always
 contained `sequential_decay`. Now relaunched as `lcb_mdp_factorized_seed17_1788211558`. **There is
 still no clean read on whether a learned per-problem decay beats the hand-set constant.**
+
+---
+
+## 2026-09-01: three gates resolved
+
+### Gate 1 answered: seed variance does NOT shrink with data
+
+Three seeds trained on **half the problems (275)**, same split, same test set, scored on the same
+`sequential_decay_value_frozen @ retention 0.95` point as the five full-data seeds.
+
+| training set | n seeds | accuracy | cost | **cost CV** | min-max spread |
+|---|---:|---|---|---:|---:|
+| 551 problems | 5 | 67.74% (sd 0.86pt) | $0.05102 (sd $0.00602) | **11.8%** | 36% |
+| 275 problems | 3 | 68.85% (sd 0.55pt) | $0.05865 (sd $0.00450) | **7.7%** | 16% |
+
+The pre-registered gate was `CV at 275 >> 11.8% -> TACO helps`. We got **7.7%**, i.e. the point
+estimate moves the *wrong* way. With n=3 against n=5 the variance ratio (1.79, df 2 and 4) is
+nowhere near significant, so the honest claim is not "less data is better" — it is that **there is
+no evidence seed variance is data-limited**, and the direction of the point estimate rules out the
+optimistic reading.
+
+Half-data accuracy is also *higher* than full-data (68.85 vs 67.74; every half seed beats the full
+mean). Taken with the already-recorded flat AUC-vs-training-size curve (177 -> 551 buys +0.012),
+the consistent picture is that **551 problems is already past saturation for this recipe**. The
+11.8% CV is capacity- or task-driven, not sample-driven.
+
+**Consequence for TACO:** the "more problems -> tighter router" argument is dead. TACO is still
+defensible as a *second dataset* — external validity, does the method transfer off LiveCodeBench —
+but it should not be sold, or budgeted, as a variance fix. That is a much smaller collection than
+the full MDP at 10 draws.
+
+### Gate 2 answered: the decay is learnable and per-problem, and it buys nothing
+
+`lcb_mdp_factorized_seed17_1788211558` — fourth attempt, first clean read.
+
+Per-head test AUC, factorized (learned `theta_m` and `s_m` from problem text) vs the LoRA baseline:
+
+| head | factorized | LoRA baseline |
+|---|---:|---:|
+| scout_next | **0.8312** | 0.8166 |
+| oss20_fresh | **0.8454** | 0.8265 |
+| oss120_fresh | **0.7852** | 0.7529 |
+| nothing | 0.7199 | **0.7335** |
+
+The parameterization **improves every per-route head** and **loses on `nothing`** — the stopping
+head. The policy frontier follows the stopping head, not the routing heads:
+
+| matched accuracy | baseline (hand-set decay) | factorized (learned decay) | saving |
+|---:|---:|---:|---:|
+| 36.80% | $0.00235 | $0.00255 | **-8.7%** |
+| 45.87% | $0.00410 | $0.00410 | -0.1% |
+| 54.95% | $0.01064 | $0.01369 | **-28.6%** |
+| 64.02% | $0.03445 | $0.03321 | +3.6% |
+| 73.10% | $0.15019 | $0.16149 | **-7.5%** |
+
+Learned per-problem decay does not beat a single hand-set constant. (The baseline frontier is built
+from more families, which favours it; even granting that, there is no coherent gain.)
+
+**But the recovered parameters are the interesting part.** Inverting `p_m(n) = theta_m*s_m/(s_m+n)`
+from consecutive-count prediction pairs on the test split:
+
+| route | learned s (median) | IQR | implied theta_m |
+|---|---:|---|---:|
+| scout | 0.564 | [0.27, 0.88] | 0.428 |
+| oss20 | 0.682 | [0.20, 1.08] | 0.386 |
+| oss120 | 0.702 | [0.19, 0.99] | 0.542 |
+
+Three *independent* estimates of the decay now agree that it is far sharper than RoR assumes:
+
+- RoR's default (and our hand-set value): **s = 2.0**
+- s that makes RoR optimal on our data, by grid search: **s = 0.3**
+- s learned end-to-end from problem text alone: **median 0.56-0.70**
+
+And the wide IQR shows the model does learn genuine *per-problem* variation — answering the earlier
+"would per-problem s be a contribution?" question empirically: **it is learnable, it corroborates
+the sharp-decay finding, and conditioning the policy on it is worth nothing.**
+
+This is now the third independent confirmation of the same thing. Oracle decomposition put routing
+at +3.0% of headroom and stopping at +63.5%. Cross-route belief updating saturated after the first
+failure. And now a strictly better belief model — better on all three routing heads — produces no
+better policy, because it is slightly worse on the one head that governs stopping. **Belief
+refinement is saturated; only stopping carries value.**
+
+### Gate 3 (peer pool): complementarity survives resampling in a PEER pool
+
+`lcb_peerpool_gate1_eval_1788210194`, 341 held-out LCB problems, temp 0.2.
+
+**One model is void.** `qwen/qwen3.5-plus-20260420` returned **empty output on 336/341 problems**
+with median `completion_tokens` 4098 against a 4096 cap — a thinking model that spent its entire
+budget reasoning and emitted nothing visible. Its 1.6% pass@1 is a harness bug, not a capability
+measurement, and its complementarity with everything is exactly 0.0%. It must be re-collected with a
+larger cap and reasoning-field capture before it means anything. The valid reading is glm5 + qmax.
+
+| model | draws | pass@1 per draw | mean |
+|---|---:|---|---:|
+| qwen/qwen3-max | 4 | .469 .457 .466 .419 | 0.453 |
+| glm5 | 3 | .443 .405 .405 | 0.417 |
+| q35p (void) | 3 | .012 .026 .009 | 0.016 |
+
+Realized complementarity, glm5 + qmax:
+
+| draws per model | best single | observed union | independent union | realized comp |
+|---:|---:|---:|---:|---:|
+| 1 | 0.4692 | 0.5601 | 0.7077 | **38.7%** |
+| 2 | 0.5103 | 0.5982 | 0.7631 | ~35% |
+| 3 | 0.5455 | 0.6334 | 0.7955 | **36.3%** |
+
+(k=1 across the three individual draws: 38.1 / 32.1 / 33.5%, mean 34.6% — so the k=1 to k=3 movement
+is within single-draw noise.)
+
+**This is flat in the number of draws.** Our ladder (scout/oss20/oss120) collapses 19.3% -> 10.5% ->
+7.4% over the same sweep. The peer pool does not collapse at all.
+
+**This forces a correction to the single-draw-inflation claim.** The earlier framing —
+"CodeRouterBench's complementarity is inflated because it takes one draw per cell" — is too strong.
+Inflation is a property of **ladders**, not of benchmarking with one draw. In a ladder the weak
+model's successes are close to a subset of the strong model's, so resampling the strong model
+recovers most of what the weak one uniquely solved, and apparent complementarity evaporates. Between
+**peers of similar strength** the disjoint region is real and resampling does not recover it.
+CodeRouterBench pools eight frontier peers, so its numbers are in the regime where the critique does
+*not* bite. The defensible version of the finding is the conditional one: *complementarity measured
+at one draw is only meaningful when the pool is not a ladder, and every cost-routing pool is a
+ladder by construction.* We cannot test CRB's specific 93.3% qmax+q35p figure until q35p is
+re-collected.
+
+**Net:** the peer-pool line lives (36% >> 7.4%, and stable), but the "CRB complementarity is fake"
+paper idea does not survive in its strong form.
