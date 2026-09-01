@@ -3864,3 +3864,78 @@ re-collected.
 
 **Net:** the peer-pool line lives (36% >> 7.4%, and stable), but the "CRB complementarity is fake"
 paper idea does not survive in its strong form.
+
+### Why the better learned decay buys nothing — mechanism (2026-09-01)
+
+**Correction first.** The initial reading blamed the `nothing` head. That was wrong: `value_stop`
+fires on `max(action_values) <= 0`, computed from per-route `p_m`, costs and `R` alone — the
+`nothing` head is read *only* by the explicit `qstop` arms. Rebuilding both frontiers with every
+`nothing`-head arm deleted changes the comparison by <2pt anywhere; factorized stays uniformly
+3-11% worse. The stopping rule never touches that head.
+
+**The per-problem decay is real.** Splitting test problems at the median learned `s` and measuring
+the *ground-truth* hazard `p(n) = P(draw n+1 succeeds | first n failed)`:
+
+| route | p(1)/p(0), low-s group | high-s group |
+|---|---:|---:|
+| scout | 0.000 | 1.549 |
+| oss20 | 0.220 | 0.795 |
+| oss120 | 0.417 | 1.083 |
+
+Low-`s` problems genuinely decay faster. The model is learning something true. (Small n and a
+partial confound with `theta` — low-`s` problems are also harder at n=0 — so this is directional,
+not tight.) The factorized model is also better than the baseline on **every** per-route head, on
+both ranking (AUC .831/.845/.785 vs .817/.827/.753) and **calibration** (ECE .087/.135/.122 vs
+.172/.213/.231). It is a strictly better belief model by every measure we have.
+
+**And it still cannot pay, for a structural reason.** Under the myopic buy rule, route `m` is worth
+another draw while `theta*s/(s+n) >= c_m/R`, so the stopping depth is
+
+```
+n* = s * (theta*R/c_m - 1)
+```
+
+Two consequences, both fatal to the per-problem decay:
+
+1. **Whether you buy a route at all depends on `theta`, never on `s`.** The sign of
+   `(theta*R/c_m - 1)` has no `s` in it. At R=$0.05, **49% of problems never buy oss120 at any
+   depth** — and `s` cannot flip a single one of those.
+2. **Where `s` does move `n*`, it moves it only where depth is worthless.** Fraction of problems
+   whose `floor(n*)` changes between the learned per-problem `s` and a single constant:
+
+| R | scout | oss20 | oss120 |
+|---:|---:|---:|---:|
+| 0.05 | 98% | 50% | **0%** |
+| 0.08 | 98% | 82% | **11%** |
+| 0.12 | 99% | 86% | **21%** |
+
+   Scout: mean `n*` is 26 vs 24 — but only 10 scout draws exist, so both mean "exhaust the route."
+   oss20: a genuine 4.6-vs-3.0 change — on the route where **draws 2-10 are worth 0.00 accuracy
+   points**. oss120, the only route where depth pays (1->10 is worth 6.16 points): mean `n*` is
+   **0.07 vs 0.06**, both flooring to zero.
+
+**The expensive route is priced so you get one shot regardless, so the decay never gets to act on
+it.** All the money rides on "is oss120 worth even a single call on this problem," which is a
+`theta` question. The decay is a `theta`-independent multiplier on depth, and depth is free on
+scout, worthless on oss20, and clipped to zero on oss120.
+
+This also reconciles the two decay results that looked contradictory:
+
+| treatment | cost at matched accuracy vs no decay |
+|---|---|
+| no decay (s = inf) | — |
+| **constant s = 2.0** | **+12% to +30% (positive 5/6 points)** |
+| learned per-problem s | -2% to -13% (negative at every point) |
+
+*Having* a decay is worth a lot, because it changes the shape of the belief with depth for
+everything at once. *Tuning* the decay per problem is worth nothing, because per-problem shape only
+matters on a route whose depth is already clipped. The response surface in `s` is steep at
+`s = infinity` and flat everywhere near the optimum.
+
+**Implication for the paper.** This is the fourth independent arrival at the same place: routing is
++3.0% of oracle headroom and stopping +63.5%; cross-route updating saturates after one failure; a
+strictly better belief model yields a worse policy; and now the decay is shown to be structurally
+unable to touch the decision that carries the money. The lever is **`theta` on the expensive route**
+— predicting whether the top model can solve this problem at all — not the belief dynamics. Every
+attempt to buy performance by improving the sequential belief has now failed, for a reason we can
+finally state precisely.
