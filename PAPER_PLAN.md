@@ -4459,3 +4459,61 @@ and the real cause is unit scaling, not curvature.
 **Reporting rule for the paper:** state it once, in both units, in the same sentence — "+14-30% cost
 at matched accuracy, equivalently +0.4-3.7 accuracy points at matched budget, peaking at 60%
 accuracy." Never let the percentage carry rhetorical weight the point count does not support.
+
+## Search for a remaining method contribution, using data already on disk (2026-09-01)
+
+### Two more ideas killed
+
+**Seed ensembling of the `nothing` head.** Per-seed AUC 0.7781 / 0.6943 / 0.7424 / 0.7063 / 0.7219;
+the **5-seed ensemble reaches 0.7399** — above the mean (0.7286) but *below the best single seed*.
+Seed disagreement is not the bottleneck, so the 11.8% CV cannot be spent to buy AUC.
+
+**Partial test-pass credit.** Counts-based methods (RoR included) treat every failure identically: a
+14/15 failure and a 0/15 failure are the same event. That looked like discarded signal. It is not:
+among problems where all observed cheap draws failed, the test-pass fraction predicts pool-
+solvability at **AUC 0.5314 (max) / 0.5424 (mean)** after scout, and **0.5100 / 0.5326** after
+scout+oss20 — chance. Solvable and impossible problems produce near-identical partial credit
+(0.310 vs 0.259). **Graded execution feedback carries no solvability signal**, which is a clean
+negative worth reporting, since discarding it is a natural criticism of count-based methods.
+
+### One idea still live: decision-focused training
+
+Our strongest result is a textbook **predict-then-optimize mismatch, empirically demonstrated**: the
+factorized model improved every routing head on both AUC (.831/.845/.785 vs .817/.827/.753) *and*
+calibration (ECE .087/.135/.122 vs .172/.213/.231) and produced a **worse policy**. We have a clean
+case of better predictions yielding worse decisions.
+
+The mechanism is measurable. The value rule acts on `sign(p_m*R - c_m + ...)`, so a state whose
+`p_m` is far from `c_m/R` cannot change the action however wrong it is. Fraction of training states
+within 0.10 of a threshold on any head:
+
+| R | scout | oss20 | oss120 | **any head** |
+|---:|---:|---:|---:|---:|
+| 0.0155 | 43.0% | 38.1% | 0.0% | 63.8% |
+| 0.0546 | 32.5% | 29.2% | 49.7% | 85.3% |
+| 0.1240 | 25.1% | 0.0% | 31.9% | **33.6%** |
+| 0.2850 | 22.6% | 0.0% | 13.3% | 32.8% |
+| 0.6560 | 21.4% | 0.0% | 0.0% | 21.4% |
+
+At the reported operating points **66-79% of the BCE signal sits on states that cannot affect any
+action**. And the reweighting is not just class rebalancing — positive rates are near-identical
+between near (0.232) and far (0.236) states.
+
+**Proposal.** Replace the flat 4-head BCE with a decision-focused loss: weight each (state, head) by
+the dollar consequence of getting it wrong — cheaply approximated by proximity to `c_m/R`, swept
+over the same R grid the frontier already uses. No collection; the reachable dataset and the replay
+cost model already exist.
+
+This is the only remaining idea where **our null results are the setup rather than the obstacle**:
+the paper motivates decision-focused learning by first proving that ordinary belief improvement
+makes the policy worse, then fixing it. It may also be null, but it is untried, cheap, and
+theoretically grounded.
+
+### Fallback framing that needs no new result
+
+The oracle decomposition as a **diagnostic instrument**: given any pool and router, it reports where
+headroom lives (routing / stopping / depth) before any method work. We validated it by showing it
+correctly predicted four independent failures — the decay, deeper draws, higher temperature, and the
+solvability gate. "A diagnostic that tells you which cascade interventions are worth attempting,
+validated on four it correctly rejected" is a legitimate methods contribution that does not require
+beating a baseline.
