@@ -4426,3 +4426,36 @@ is and why it is unreachable** (stopping = 82.9%, gate needs AUC 0.90, cheap pro
 The anatomy is the honest limitations section, not the paper.
 
 Next action: launch the TACO collection at 6 draws.
+
+### The two axes agree; the apparent discrepancy was mine (2026-09-01)
+
+Computed for the *identical* contrast (learned `sequential*` vs `counts*`), 5 seeds:
+
+| accuracy | counts $ | learned $ | saving $ | saving % | acc gain | implied slope |
+|---:|---:|---:|---:|---:|---:|---:|
+| 55% | $0.01392 | $0.01155 | $0.00237 | +17.1% | +0.50pt | 212pt/$ |
+| **60%** | $0.03249 | $0.02273 | $0.00976 | **+30.0%** | **+3.69pt** | 378pt/$ |
+| 63% | $0.03786 | $0.03038 | $0.00748 | +19.8% | +1.77pt | 236pt/$ |
+| 65% | $0.04725 | $0.03906 | $0.00819 | +17.3% | +2.03pt | 248pt/$ |
+| 68% | $0.06118 | $0.05229 | $0.00889 | +14.5% | +1.01pt | 114pt/$ |
+| 70% | $0.07448 | $0.07061 | $0.00387 | +5.2% | +0.35pt | 91pt/$ |
+
+`accuracy_gain = saving_in_dollars x local slope`. **Both axes peak at 60% and both collapse by
+70%** — they agree exactly about where the method works.
+
+Three errors produced the illusion of a discrepancy, all in the analysis rather than the data:
+
+1. **Mismatched baselines.** The batch-axis table used a weaker "no-give-up counts only" baseline
+   *and* placed `counts_value` arms inside "ours". It was never the learned-vs-counts contrast. Done
+   correctly the range is +0.35 to +3.69pt, not +0.01 to +3.09pt.
+2. **Rhetoric.** Calling +14-17% "the headline" and +0.01-3.09pt "unflattering" was framing.
+3. **Percentages of small absolute numbers flatter.** 17% of $0.06 is $0.009, and at ~114pt/$ that
+   buys about one point.
+
+**Retraction 6.** The earlier explanation — "the frontier is steep in the mid-range, so a large cost
+saving is a small accuracy gain" — is backwards (a *flat* frontier gives a small gain per dollar),
+and the real cause is unit scaling, not curvature.
+
+**Reporting rule for the paper:** state it once, in both units, in the same sentence — "+14-30% cost
+at matched accuracy, equivalently +0.4-3.7 accuracy points at matched budget, peaking at 60%
+accuracy." Never let the percentage carry rhetorical weight the point count does not support.
