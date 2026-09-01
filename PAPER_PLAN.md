@@ -4233,3 +4233,53 @@ was never in ranking which route to use (routing is worth 3.0%); it is in decidi
 - **Peer pool**: gate 1 passed (36% complementarity, flat in draws) but `q35p` must be re-collected
   with a larger token cap and reasoning-field capture before the pool is usable.
 - **TACO**: demoted. Justified only as a second dataset for external validity, not as a variance fix.
+
+### Correction: we capture 24% of the stopping headroom, not 0%
+
+The previous entry compared our arm to the oracle without the no-give-up baseline, making the
+capture look like zero. At the 73.10% ceiling:
+
+| | cost |
+|---|---:|
+| no give-up, RoR-faithful (`counts_s0.3`) | $0.17109 |
+| **ours** (`sequential_decay_bellman_h2_value`) | **$0.13587** |
+| oracle stopping | $0.02440 |
+
+Headroom $0.14669; we capture $0.03522 = **24.0%**. Still $0.11147 on the table — 76% of headroom
+and 82% of our own bill — but the give-up arm is doing real work, and "none" was wrong.
+
+### We have been in the batch-budget setting all along
+
+**444 of our arms carry `budget: null`** — no per-query cap, spend allocated freely across the batch.
+That *is* the SeqRoute/batch framing. RoR's per-query cap `B` is the restrictive formulation, and
+removing it is already our main structural advantage. Nothing new needs to be run.
+
+**But we have never reported it on the natural axis, and doing so is unflattering.** Flipping cost-
+at-matched-accuracy to accuracy-at-matched-budget:
+
+| total budget ($/problem) | RoR-faithful | **ours** | gain | oracle stopping |
+|---:|---:|---:|---:|---:|
+| 0.005 | 45.70% | 48.22% | +2.52pt | n/a |
+| 0.010 | 52.95% | 53.54% | +0.59pt | n/a |
+| 0.020 | 56.92% | 60.01% | +3.09pt | n/a |
+| 0.030 | 63.42% | 63.89% | +0.47pt | **73.10%** |
+| 0.050 | 66.42% | 67.47% | +1.05pt | **73.10%** |
+| 0.080 | 70.62% | 71.10% | +0.48pt | 73.10% |
+| 0.120 | 72.42% | 72.69% | +0.27pt | 73.10% |
+| 0.170 | 73.08% | 73.10% | +0.01pt | 73.10% |
+
+**Our "+18-28% cost savings" headline is +0.01 to +3.09pt of accuracy at matched budget, mean about
++1pt.** A reviewer will perform this flip immediately; we must report it ourselves rather than be
+caught by it. On this axis the RoR comparison is not a headline.
+
+**And the same flip makes the real result legible.** At $0.03/problem, oracle stopping reaches
+73.10% where we reach 63.89% — **+9.21pt at identical budget** (+5.63pt at $0.05). That is the prize,
+and only the batch framing expresses it as accuracy rather than dollars.
+
+**Strategic consequence.** The paper should be presented on the batch axis, and its claim should be
+the 9.2pt gap and its mechanism, not the ~1pt margin over RoR. "We beat a single-author preprint by
+one point" is not a contribution; "26.9% of problems consume 82% of the budget, nobody detects them,
+and detecting them is worth +9.2pt at fixed spend" is.
+
+Multiple rollouts are already in this setting (10 draws/route), and depth is exhausted, so there is
+nothing extra to add there.
