@@ -38,6 +38,42 @@ from pipelinerl.swe.scripts.livecodebench.structured_state import (
 
 HEADS = ["scout_next", "oss20_fresh", "oss120_fresh", "nothing"]
 
+# Expected per-call cost in USD, estimated on the train split; the same numbers the
+# replay charges. Only the three route heads have a decision threshold: the value rule
+# stops on max(action_value) <= 0, which is computed from these three and never reads
+# the `nothing` head (that head is consumed only by the explicit q-stop arms).
+ROUTE_COSTS = [0.000553, 0.003963, 0.029725]
+
+
+def decision_weights(
+    probs: torch.Tensor, r_grid: list[float], sigma: float, floor: float
+) -> torch.Tensor:
+    """Per-(state, head) weight tracking proximity to a myopic decision threshold.
+
+    Route m is worth another draw while ``p_m >= c_m / R``. A state whose ``p_m`` sits far
+    from that threshold cannot change the chosen action however wrong it is, so its BCE
+    term is gradient spent on a decision that is already settled. Weight is the best
+    (closest) match over the swept R grid, floored so those states are downweighted
+    rather than discarded -- the value rule still needs them to stay calibrated.
+
+    The `nothing` head keeps weight 1.0: it has no threshold in the value rule, and
+    zeroing it would degrade the q-stop arms for no gain.
+    """
+    weights = torch.full_like(probs, 1.0)
+    detached = probs.detach()
+    for m, cost in enumerate(ROUTE_COSTS):
+        best = torch.zeros_like(detached[:, m])
+        for r in r_grid:
+            threshold = cost / r
+            if threshold > 1.0:  # unreachable probability: no decision to make here
+                continue
+            best = torch.maximum(
+                best, torch.exp(-(((detached[:, m] - threshold) / sigma) ** 2))
+            )
+        weights[:, m] = floor + (1.0 - floor) * best
+    # Preserve the overall gradient scale so the learning rate stays comparable.
+    return weights * (weights.numel() / weights.sum().clamp_min(1e-8))
+
 
 class PolicyDataset(Dataset):
     def __init__(
@@ -297,6 +333,32 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--decision-weighting", choices=["none", "boundary"], default="none",
+        help=(
+            "boundary: weight each (state, head) BCE term by how close its predicted probability "
+            "is to a decision threshold c_m/R, swept over --decision-r-grid. The value rule acts "
+            "on sign(p_m*R - c_m + ...), so a state far from c_m/R cannot change the action "
+            "however wrong it is: at the reported operating points 66-79%% of the flat BCE signal "
+            "sits on such states. This is the predict-then-optimize fix for the measured mismatch "
+            "in which a model better on every head's AUC *and* calibration produced a worse policy."
+        ),
+    )
+    parser.add_argument(
+        "--decision-r-grid", default="0.0155,0.0546,0.124,0.285,0.656",
+        help="Values of R (value of a correct answer, USD) whose thresholds c_m/R are targeted.",
+    )
+    parser.add_argument(
+        "--decision-sigma", type=float, default=0.10,
+        help="Width of the boundary band, in absolute probability. Matches the measured 0.10 band.",
+    )
+    parser.add_argument(
+        "--decision-floor", type=float, default=0.1,
+        help=(
+            "Minimum relative weight, so far-from-boundary states are downweighted rather than "
+            "dropped. A hard zero would discard the calibration signal the value rule also needs."
+        ),
+    )
+    parser.add_argument(
         "--lora-target-modules",
         default="q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj",
     )
@@ -349,6 +411,19 @@ def main() -> None:
             negatives / np.clip(positives, 1.0, None), dtype=torch.float32
         )
         accelerator.print(f"pos_weight per head: {pos_weight.tolist()}")
+
+    decision_r_grid = [float(x) for x in args.decision_r_grid.split(",") if x.strip()]
+    if args.decision_weighting == "boundary":
+        if not decision_r_grid:
+            raise ValueError("--decision-weighting boundary requires a non-empty --decision-r-grid")
+        accelerator.print(
+            "decision-focused weighting on route heads; thresholds c_m/R = "
+            + "; ".join(
+                f"{HEADS[m]}: "
+                + ",".join(f"{ROUTE_COSTS[m] / r:.4f}" for r in decision_r_grid if ROUTE_COSTS[m] / r <= 1.0)
+                for m in range(len(ROUTE_COSTS))
+            )
+        )
 
     # _collate_policy wraps _collate and forwards the optional per-row fields
     # (state_features, and the raw counts the factorized loss needs). The base
@@ -419,6 +494,10 @@ def main() -> None:
         "heads": HEADS,
         "factorized": bool(args.factorized),
         "train_problem_fraction": float(args.train_problem_fraction),
+        "decision_weighting": args.decision_weighting,
+        "decision_r_grid": decision_r_grid,
+        "decision_sigma": float(args.decision_sigma),
+        "decision_floor": float(args.decision_floor),
         "frozen_encoder": bool(args.frozen_encoder),
         "split_roles": {"fit": "train", "checkpoint": "calibration", "report": "test"},
         "n_train": len(datasets["train"]),
@@ -441,18 +520,30 @@ def main() -> None:
         for batch in tqdm(train_loader, desc=f"train {epoch}", disable=not accelerator.is_main_process):
             with accelerator.accumulate(model):
                 logits = _forward_policy(model, batch)
+                weighted = args.decision_weighting == "boundary"
                 if args.factorized:
                     probs = factorized_probs(
                         logits, batch["failure_counts"], batch["remaining_counts"]
                     )
                     loss = F.binary_cross_entropy(
-                        probs, batch["targets"].float().to(probs.device)
+                        probs, batch["targets"].float().to(probs.device),
+                        reduction="none" if weighted else "mean",
                     )
+                    scores = probs
                 else:
                     loss = F.binary_cross_entropy_with_logits(
                         logits.float(), batch["targets"].float(),
                         pos_weight=None if pos_weight is None else pos_weight.to(logits.device),
+                        reduction="none" if weighted else "mean",
                     )
+                    scores = torch.sigmoid(logits.float())
+                if weighted:
+                    loss = (
+                        loss
+                        * decision_weights(
+                            scores, decision_r_grid, args.decision_sigma, args.decision_floor
+                        )
+                    ).mean()
                 accelerator.backward(loss)
                 optimizer.step()
                 scheduler.step()

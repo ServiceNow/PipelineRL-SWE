@@ -1113,3 +1113,55 @@ def test_factorized_scorer_rejects_the_analytic_decay() -> None:
             scorer=_Factorized(), apply_failure_decay=True,
             value_of_correct=1.0, mandatory_scout=False,
         )
+
+
+def test_decision_weights_peak_at_the_threshold_and_floor_far_away():
+    """Weight must track proximity to c_m/R, not the probability's magnitude."""
+    import torch
+
+    from pipelinerl.swe.scripts.livecodebench.train_mdp_reachable_policy import (
+        ROUTE_COSTS,
+        decision_weights,
+    )
+
+    r_grid = [0.124]
+    # oss120 threshold at R=0.124 is 0.029725/0.124 = 0.2397.
+    threshold = ROUTE_COSTS[2] / r_grid[0]
+    probs = torch.tensor(
+        [
+            [0.5, 0.5, threshold, 0.5],  # oss120 exactly on its boundary
+            [0.5, 0.5, 0.99, 0.5],       # oss120 far above: decision already settled
+        ]
+    )
+    weights = decision_weights(probs, r_grid, sigma=0.10, floor=0.1)
+    assert weights[0, 2] > weights[1, 2] * 3, "on-boundary state must dominate a settled one"
+    # Floor keeps settled states in the loss rather than dropping them.
+    assert weights[1, 2] > 0.0
+    # The `nothing` head has no threshold in the value rule and stays neutral, so it is
+    # never suppressed relative to itself across states.
+    assert torch.allclose(weights[0, 3], weights[1, 3])
+
+
+def test_decision_weights_preserve_gradient_scale():
+    """Reweighting must not silently change the effective learning rate."""
+    import torch
+
+    from pipelinerl.swe.scripts.livecodebench.train_mdp_reachable_policy import decision_weights
+
+    torch.manual_seed(0)
+    probs = torch.rand(64, 4)
+    weights = decision_weights(probs, [0.0155, 0.124, 0.656], sigma=0.10, floor=0.1)
+    assert abs(float(weights.mean()) - 1.0) < 1e-5
+
+
+def test_decision_weights_skip_unreachable_thresholds():
+    """c_m/R above 1.0 is not a probability; it must not pull weight toward p=1."""
+    import torch
+
+    from pipelinerl.swe.scripts.livecodebench.train_mdp_reachable_policy import decision_weights
+
+    # At R=0.0155 the oss120 threshold is 1.918 -- unreachable, so no state is near it
+    # and every oss120 weight must sit at the floor (before rescaling).
+    probs = torch.tensor([[0.01, 0.01, 0.95, 0.5], [0.01, 0.01, 0.05, 0.5]])
+    weights = decision_weights(probs, [0.0155], sigma=0.10, floor=0.1)
+    assert torch.allclose(weights[0, 2], weights[1, 2])
