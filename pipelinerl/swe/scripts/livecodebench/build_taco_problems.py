@@ -46,10 +46,16 @@ def _tests(payload: dict[str, Any]) -> tuple[dict[str, Any], int]:
     inputs = list(payload.get("inputs") or [])
     outputs = list(payload.get("outputs") or [])
     pairs = min(len(inputs), len(outputs))
-    return (
-        {"inputs": inputs[:pairs], "outputs": outputs[:pairs], "fn_name": payload.get("fn_name")},
-        pairs,
-    )
+    suite: dict[str, Any] = {"inputs": inputs[:pairs], "outputs": outputs[:pairs]}
+    # Emit `fn_name` ONLY when there is one. The LiveCodeBench evaluator selects
+    # call-based grading on the PRESENCE of the key, so writing `"fn_name": null` for a
+    # stdin problem sends it down the call-based path and every submission fails with
+    # "module 'tmp_sol' has no attribute 'Solution'". That mis-graded 228 of 1,627 TACO
+    # train problems (14%) as failures when the generations were fine.
+    fn_name = payload.get("fn_name")
+    if fn_name:
+        suite["fn_name"] = fn_name
+    return suite, pairs
 
 
 def main() -> None:

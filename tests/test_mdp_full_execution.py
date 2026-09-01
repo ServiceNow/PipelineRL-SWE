@@ -1165,3 +1165,19 @@ def test_decision_weights_skip_unreachable_thresholds():
     probs = torch.tensor([[0.01, 0.01, 0.95, 0.5], [0.01, 0.01, 0.05, 0.5]])
     weights = decision_weights(probs, [0.0155], sigma=0.10, floor=0.1)
     assert torch.allclose(weights[0, 2], weights[1, 2])
+
+
+def test_taco_suite_omits_fn_name_for_stdin_problems():
+    """A null fn_name must not appear: the grader picks call-based mode on key presence."""
+    from pipelinerl.swe.scripts.livecodebench.build_taco_problems import _tests
+
+    stdin_suite, n = _tests({"inputs": ["1\n"], "outputs": ["2\n"], "fn_name": None})
+    assert n == 1
+    assert "fn_name" not in stdin_suite, "null fn_name routes stdin problems to Solution-class grading"
+
+    call_suite, _ = _tests({"inputs": ["[1]"], "outputs": ["1"], "fn_name": "solve"})
+    assert call_suite["fn_name"] == "solve"
+
+    # Absent key behaves like an explicit null.
+    bare, _ = _tests({"inputs": ["1\n"], "outputs": ["2\n"]})
+    assert "fn_name" not in bare

@@ -151,6 +151,11 @@ async def collect_split(
                 "model": model,
                 "full_output": out["full_output"],
                 "code": code,
+                # Reasoning models can spend the whole token budget here and emit nothing
+                # visible: qwen3.5-plus returned 336/341 empty outputs at a 4096 cap. The
+                # call already fetched this; dropping it made that failure undiagnosable.
+                "thinking_text": out.get("thinking_text", ""),
+                "thinking_chars": len(out.get("thinking_text", "") or ""),
                 "prompt_tokens": out["prompt_tokens"],
                 "completion_tokens": out["completion_tokens"],
                 "latency_s": out["latency_s"],
@@ -232,6 +237,13 @@ def main() -> None:
                         help="Comma-separated splits to collect (default: train,eval)")
     parser.add_argument("--max-invalid-frac", type=float, default=0.0,
                         help="Tolerate this fraction of invalid rows at validation (0.0 = strict)")
+    parser.add_argument("--max-problems", type=int, default=0,
+                        help=(
+                            "Screen mode: keep only this many problems per split, sampled "
+                            "deterministically by problem id. The source-id check still runs "
+                            "against the FULL split first, so a broken source collection is "
+                            "caught before any spend; only the generation set is trimmed."
+                        ))
     args = parser.parse_args()
 
     source_dir = Path(args.source_collection_dir)
@@ -255,6 +267,16 @@ def main() -> None:
             raise ValueError(
                 f"{split} source IDs {len(source_ids)} do not match dataset IDs {len(actual_ids)}"
             )
+    if args.max_problems:
+        # Deterministic by sorted id so every model in a screen sees the SAME problems --
+        # otherwise the models are not comparable and the screen is worthless.
+        splits = {
+            k: sorted(v, key=problem_id)[: args.max_problems] for k, v in splits.items()
+        }
+        logger.info(
+            "screen mode: %s problems per split",
+            {k: len(v) for k, v in splits.items()},
+        )
 
     if args.validate_only:
         for split, split_rows in splits.items():

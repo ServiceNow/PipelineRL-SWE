@@ -5270,3 +5270,72 @@ Pool properties on CodeRouterBench:
    higher — measure it in the screen rather than trusting these.
 4. Budget: 4 models x ~2,892 problems (LCB 892 + TACO 2,000) x 1 draw. Nominal ~$52;
    realistically **$100-200** once reasoning tokens are counted.
+
+## Job check-in and the peer-pool screen (2026-09-01)
+
+### Decision-focused training: FAILED (-9.3pt)
+
+Learned-vs-counts savings, boundary weighting against the flat-BCE baseline:
+
+| accuracy | baseline (5 seeds) | decision-focused (3 seeds) | delta |
+|---:|---:|---:|---:|
+| 55% | +17.1% | -0.2% | **-17.3pt** |
+| 60% | +29.8% | +13.5% | -16.3pt |
+| 63% | +18.4% | +10.6% | -7.9pt |
+| 65% | +17.3% | +5.8% | -11.5pt |
+| 68% | +14.5% | +11.4% | -3.2pt |
+| 70% | +5.2% | +5.2% | +0.0pt |
+| **overall** | **+17.1%** | **+7.7%** | **-9.3pt** |
+
+Per-seed means: baseline [16.7, 14.7, 24.6, 18.6, 10.7] vs decision-focused [13.1, 5.0, 5.0].
+
+The head AUCs show the mechanism: seed 17 improved the `nothing` head a lot (0.7892 vs the
+baseline's 0.7335) but seeds 1 and 2 collapsed to **0.547 and 0.484 on the scout head** —
+near chance. The weighting destabilised training.
+
+**This does not refute the Schervish argument; it refutes my approximation of it.** The
+weight uses the model's own detached prediction to decide which examples matter, which is a
+feedback loop: early mistakes about where the boundary is get reinforced. A correct
+implementation weights by the *induced measure over thresholds* (a fixed function of costs
+and the R grid), not by proximity to the current prediction. The `--decision-floor 0.1`
+also shrinks 66-79% of the signal by 10x, which on 551 problems is a large effective data
+loss. If retried, both need fixing.
+
+### TACO stage 1: complete, with a real bug found and fixed
+
+2,000 problems built (727 easy / 425 medium / 458 hard / 390 unknown, median 62 tests).
+
+| split | n | scout | oss120 |
+|---|---:|---:|---:|
+| train | 1,627 | 14.5% | 25.4% |
+| eval | 373 | 30.0% | 64.1% |
+
+**Bug: `"fn_name": null` mis-graded 14% of train.** `build_taco_problems.py` wrote the
+`fn_name` key even when TACO had no function name. The LiveCodeBench evaluator selects
+call-based grading on the **presence** of that key, so stdin problems were graded as if they
+needed a `Solution` class — **228 of 1,627 train rows (14%)** failed with
+`module 'tmp_sol' has no attribute 'Solution'` despite fine generations. Fixed: the key is
+now omitted unless there is a real function name, with a regression test. **The generations
+are valid; only the grading is wrong, so this is recoverable by re-grading with no new API
+spend.**
+
+Two further problems to resolve before this data is used:
+
+1. A further **290 of 1,627 (17.8%)** train rows fail with
+   `invalid syntax (<string>, line 1)` — not yet diagnosed, possibly the same wrapper path.
+2. **The train/eval split is not temporal in any meaningful sense.** Most TACO rows carry no
+   date and the builder writes `1970-01-01`, so the 2018-01-01 cutoff put all undated rows
+   in train and all dated rows in eval — two different populations, which is why oss120
+   scores 25.4% on one and 64.1% on the other. Re-split at random, or by source.
+
+### Peer-pool screen: ready to launch
+
+`launchers/abstention/launch_peer_pool_screen.sh` + `analyze_peer_screen.py`.
+50 problems x 4 models, `max_tokens=32768` (the 4096 default is exactly what broke q35p),
+~$1. Reads out empty-output rate, code-extraction rate, **real** tokens and cost per call,
+reasoning-token share, and solve rate, then reports whether the survivors form a peer band
+and what a full collection would cost.
+
+Also patched `collect_lcb_expert.py`: it fetched `thinking_text` from the API and then
+**discarded it**, which is precisely why the q35p failure could not be diagnosed. It is now
+persisted, along with `--max-problems` for screen runs.
