@@ -4517,3 +4517,72 @@ correctly predicted four independent failures — the decay, deeper draws, highe
 solvability gate. "A diagnostic that tells you which cascade interventions are worth attempting,
 validated on four it correctly rejected" is a legitimate methods contribution that does not require
 beating a baseline.
+
+## Last sweep for a method, and a methodological finding (2026-09-01)
+
+Three more ideas tested against data already on disk. All three fail, but the third
+fails in a way that is itself worth reporting.
+
+### Cheap observable features: strong AUC, exactly zero policy gain
+
+Built a solvability predictor from features costing **4 scout draws = $0.00221** (1.5% of
+the bill): self-consistency across draws (result-pattern and code diversity), test-pass
+fractions, generation length, problem length, and LiveCodeBench's own difficulty label.
+Fit on the 721 train+calibration problems, evaluated on the 171 test problems.
+
+Single-feature test AUC:
+
+| feature | AUC |
+|---|---:|
+| mean scout completion tokens (inverted) | **0.7979** |
+| **LCB `difficulty` label (inverted)** | **0.7776** |
+| prompt tokens (inverted) | 0.7525 |
+| max test-pass fraction | 0.7376 |
+| scout solved it | 0.7200 |
+| code diversity (inverted) | 0.6671 |
+| result-pattern diversity | 0.5156 |
+
+**Two free features beat our trained `nothing` head (0.7335): a metadata string LCB ships,
+and the length of the scout's output.** Combined logistic regression: **AUC 0.8591**.
+
+And it buys **nothing**:
+
+| budget | no gate | real gate (AUC 0.859) | oracle gate | oracle, free probe |
+|---:|---:|---:|---:|---:|
+| $0.020 | 57.66% | **57.66%** | 64.80% | 67.37% |
+| $0.030 | 61.99% | **61.99%** | 73.10% | 73.10% |
+| $0.050 | 67.37% | **67.37%** | 73.10% | 73.10% |
+| $0.080 | 70.64% | **70.64%** | 73.10% | 73.10% |
+
+Oracle gating moves the number by up to 11pt, so the harness is sound and **+0.00pt is a
+real measurement**, not a bug.
+
+### The methodological finding: AUC on all problems overstates gate quality
+
+The 0.8591 is carried by problems **the scout already solved** — where no gating decision
+exists. On the subset the gate must actually rank (scout failed all four draws, 116 of
+171 problems, 60.3% still solvable) the AUC is **0.7491**, and refitting on that subset
+alone gives 0.7478.
+
+**The correct metric for an abstention gate is AUC conditional on the decision being
+live, not AUC over the problem set.** The unconditional number is inflated by exactly the
+cases where the gate is irrelevant. This retroactively explains the whole abstention line:
+our post-scout 0.7629, the `nothing` head's 0.7335, and this 0.8591 are all unconditional
+numbers, and every one of them collapses toward ~0.75 once conditioned. That is why four
+successive predictors looked reasonable and converted nothing. It is a reporting error
+this subfield makes generally, and we can demonstrate it with a controlled measurement.
+
+### Also dead this round
+
+- **Seed ensembling** of the `nothing` head: 5-seed ensemble 0.7399, *below* the best
+  single seed (0.7781).
+- **Partial test-pass credit**: among problems whose observed draws all failed, pass
+  fraction predicts pool-solvability at AUC 0.5314 / 0.5100 — chance. A 14/15 failure
+  says no more than a 0/15 failure.
+
+### Verdict
+
+The gate line is closed with a real predictor rather than a simulation. Proceed with the
+two launches as planned: **decision-focused training** (untouched by this — it targets the
+routing/value decisions, not the stopping gate) and the **TACO 6-draw collection**
+(justified by the scaling evidence, which is independent of all of the above).
