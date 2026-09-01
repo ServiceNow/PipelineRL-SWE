@@ -4769,3 +4769,88 @@ out ladder spend), so this is not "we added two more models".
 The peer-pool collection is now justified for a **cost** reason, not just accuracy: peers
 supply cheap high-LLR first draws. Required next: measured peer pricing from token counts,
 the q35p re-collection with a larger cap, and seed replication of the breadth-probe gate.
+
+## Candidate theoretical contributions, with feasibility measured (2026-09-01)
+
+### FINDING (not a proposal): the adaptivity gap is ~0 — the cascade needs no router
+
+A **fixed schedule** is a problem-independent purchase order over (model, draw) pairs,
+fitted on train by greedy marginal-coverage-per-dollar, executed identically on every
+problem, stopping only on observed success. It has no router, no beliefs, no per-problem
+decision of any kind. Greedy order fitted on train:
+
+```
+scout#0 -> oss20#0 -> scout#1 -> oss20#1 -> oss20#2 -> oss20#3 -> scout#2
+       -> scout#3 -> oss20#4 -> oss20#5 -> oss120#0 -> oss120#1 -> ...
+```
+
+oss120 enters **eleventh**, because it costs 54x the scout. Against 700 adaptive arms
+(all families, all knobs) on the same 171 test problems, with the fixed schedule averaged
+over 30 draw-order permutations to match the replay's 5:
+
+| budget | FIXED (30 perms) | ADAPTIVE (learned) | gap | P(adaptive > fixed) |
+|---:|---:|---:|---:|---:|
+| $0.010 | 53.41% +/- 1.12 | 53.92% | +0.51pt | 22% |
+| $0.020 | 55.52% +/- 1.06 | 61.05% | **+5.53pt** | **95%** |
+| $0.030 | 63.96% +/- 1.29 | 63.51% | -0.45pt | 35% |
+| $0.050 | 68.99% +/- 1.51 | 67.37% | -1.62pt | 31% |
+| $0.080 | 72.20% +/- 0.66 | 70.88% | -1.32pt | 12% |
+| $0.120 | 73.10% +/- 0.00 | 72.63% | -0.47pt | **0%** |
+
+**Cost to reach the 73.10% ceiling: oracle stopping $0.0244, FIXED schedule $0.0792,
+learned ADAPTIVE $0.1359.** Removing the router is worth **42%**.
+
+Adaptivity wins in exactly one narrow band ($0.020, +5.53pt, 95% bootstrap). That is
+where the fixed schedule's **granularity** binds: oss120 is worth buying for a strict
+subset of problems, and a fixed schedule can only buy it for everyone or no one.
+
+This is the unifying explanation for every null in this project, and it is theoretically
+grounded: the adaptivity gap for stochastic submodular coverage is small when the
+coverage structure is near-one-dimensional, which is exactly what `c_inf` measures.
+
+### Ranked candidates
+
+**1. Adaptivity gap as the paper.** Formalise the above: draws are a ground set, expected
+union is submodular, cost is additive, so greedy is (1-1/e) for the static problem; then
+bound the adaptivity gap by a function of `c_inf`. Predict the granularity band where
+adaptivity pays from the cost ratios alone and verify against the measured $0.020 spike.
+Replicate on SWE-Smith (14 models, 9 families) and the peer pool. *Feasible now, measured.*
+
+**2. The Schervish-correct scoring rule.** Every proper scoring rule is a mixture of
+threshold-specific cost functions under a weight measure (Schervish, 1989). A cascade's
+cost structure *induces* a measure over thresholds — the `c_m/R` swept along the frontier
+— so there is a uniquely correct scoring rule for training its beliefs, and log-loss is
+not it. This explains our measured mismatch (better AUC *and* calibration -> worse policy)
+in one line, and the `--decision-weighting boundary` job now running is a crude
+approximation of it. Deliverable: derive the induced measure, train with it, show it
+dominates BCE. *Feasible now, no collection.*
+
+**3. Verifier economics: the exchange rate between verification and generation.** We hold
+something rare — a **real** weak verifier with a **real** asymmetric error profile
+(**5.09% false accept, 0.09% false reject** over 21,408 draws) and per-test result codes
+on 17,011 draws with median suite size 16, so a verifier of *any* strength is obtained by
+using the first k tests. That is a continuous, real quality knob; RoR degrades its
+verifier synthetically. Deliverable: price verification against generation in dollars —
+*is it cheaper to run more tests or to call a bigger model?* — and derive the optimal
+three-way split of a budget across generation, verification and escalation. *Feasible now.*
+
+**4. A Wald lower bound on learnable stopping.** We have the LLR profile; formalise that
+any policy inferring solvability from failures alone needs probe cost exponential in
+confidence, and combine with the measured 24% headroom capture to say how much of the
+remaining 76% is unreachable in principle. *Medium risk: the formal bound needs care.*
+
+**5. The success-count distribution is a mixture, not a beta-binomial.** Fitting
+beta-binomial to per-problem success counts is **rejected** (chi2 = 162.6 on df 8 for
+oss20; 93.5 for oss120) despite matching the mean. The excess is inflation at the
+extremes — direct evidence for the latent binary solvable/impossible variable the Wald
+framing assumes. Deliverable: a two-component model whose mixing weight *is* the
+impossible fraction, identifiable from counts alone, predicting the abstention ceiling.
+
+**6. `c_inf` as a pool-design statistic.** Extend the ladder/peer dichotomy to SWE-Smith
+and CodeRouterBench-shaped pools.
+
+**7. The price of per-query budgeting.** RoR caps spend per query; we do not. Quantify the
+loss exactly — a direct, cheap critique of the standard evaluation protocol.
+
+**8. A scaling law for router savings.** savings(n) at 177 / 275 / 357 / 536 / 551, plus
+the TACO points when they land. Fit and extrapolate.
