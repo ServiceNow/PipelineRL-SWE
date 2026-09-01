@@ -5339,3 +5339,43 @@ and what a full collection would cost.
 Also patched `collect_lcb_expert.py`: it fetched `thinking_text` from the API and then
 **discarded it**, which is precisely why the q35p failure could not be diagnosed. It is now
 persisted, along with `--max-problems` for screen runs.
+
+## Plan-then-execute: is "large plans, small implements" a rung or a dimension? (2026-09-01)
+
+**Prior art.** COPE (2506.11578, TMLR) runs exactly this cascade (small plans+executes ->
+large plans, small executes -> large does both) with test-based escalation, on MBPP with a
+2.4B executor and GPT-4o: 66.4% vs 64.0% at ~1/4 the API cost. It is single-draw, excludes
+local compute from cost, and lives in the saturated regime. "Revision or Re-Solving" (2604.01029)
+finds on LCB that a weak *draft's content* hurts a strong reviser (-3 to -8pt) while the
+review *scaffold* helps (+26 to +43pt), with no execution feedback and no cost. Nobody has
+asked whether the composite is a new point on the cost ladder (c_inf ~ 0 vs oss120: cost only)
+or off-ladder (real complementarity), and nobody has trained the executor.
+
+**Stage 1 (inference only, LCB eval 341, before any RL).** `launchers/abstention/launch_lcb_plan_execute.sh`:
+
+- `MODE=plan` (CPU): gpt-oss-120b writes a <300-word plan, no code, T=0.2, cap 8192 so hidden
+  reasoning is bounded and billed. Output `plan120_eval.jsonl` with real token counts.
+- `MODE=execute PLAN_DIR=<plan job dir>` (GPU): local Qwen3-4B executes each plan, 4 draws at
+  T=0.2, graded public + full. Two controls in the same job: `planscout_scout` (scout writes its
+  own plans, then executes them = COPE stage 1) and `nullplan_scout` (content-free scaffold =
+  the 2604.01029 null control). Then `analyze_plan_execute.py` reports, per arm, pass@k, hazard,
+  c_inf vs oss120 at matched k, composite-only solves, plan tokens as a fraction of an oss120
+  call, and $/solved for stop-on-pass policies {oss120 x1, composite x k, scout x k}.
+
+Collector: `collect_lcb_plan_execute.py` (rows share the expert-collector schema plus plan
+provenance, so the composite drops into `build_mdp_tensors_v2.py` as one more route later).
+Tests: `tests/test_plan_execute.py`. Analysis smoke-tested on the real oss20 draws (reproduces
+41.9 -> 63.0 pass@k and c_inf 2.64 -> 0.59).
+
+**Pre-registered predictions.** (a) plan is 15-30% of an oss120 call's tokens; (b) composite
+pass@1 lands between scout (28%) and oss120 (58%); (c) c_inf vs oss120 at k=4 is under 2pt
+and composite-only solves are near zero, i.e. a cheap dominated rung; (d) planscout_scout ~
+nullplan_scout ~ scout alone, so any gain is plan *content*, not format. If (c) fails and the
+composite solves problems oss120 never does, that is the interesting outcome and the RL
+executor-training stage (train the scout to follow expert plans, expert emits plans only) is
+justified on the 551 train split; if (c) holds, the composite is priced into the compiled
+schedule as a rung and the RL stage is not worth running.
+
+**Stage 2 (only if stage 1 passes).** PipelineRL: scout trained to solve from problem + expert
+plan vs ordinary solution distillation at a matched expert-token budget; metric is expert
+tokens per solved problem on the 341 held-out problems.
