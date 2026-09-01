@@ -5222,3 +5222,51 @@ one that failed our collection with 336/341 empty outputs at a 4096 cap.
 2. All CodeRouterBench numbers are **single-draw** and therefore carry the inflation we
    documented. They are the right basis for *choosing* a pool, not for reporting a result.
 3. Thinking models need a large token cap and reasoning-field capture before collection.
+
+## SELECTED PEER POOL for the probe-conditioned routing experiment (2026-09-01)
+
+Chosen by measured code performance on CodeRouterBench (9,999 tasks x 8 models, real
+per-task cost), maximising **routable excess** (specialisation over a Rasch null) subject
+to being a genuine peer band and spanning distinct pretraining lineages.
+
+| model | OpenRouter id | lab | CRB acc | est $/call | mode |
+|---|---|---|---:|---:|---|
+| Qwen3-Max | `qwen/qwen3-max` | Alibaba | 36.38% | $0.00745 | plain |
+| GLM-5 | `z-ai/glm-5` | Zhipu | 36.14% | $0.00379 | **reasoning** |
+| Kimi K2.5 | `moonshotai/kimi-k2.5` | Moonshot | 34.43% | $0.00430 | **reasoning** |
+| MiniMax M2.7 | `minimax/minimax-m2.7` | MiniMax | 34.61% | $0.00232 | **reasoning** |
+
+Pool properties on CodeRouterBench:
+
+- **routable excess +4.98pt (z=24.9)** — ~1.8x RouterBench's mbpp (+2.76pt)
+- oracle 55.47%, best single 36.38%
+- **accuracy spread 1.95pt** — a genuine peer band, not a ladder
+- **disagreement rate 40.29%** — fraction of tasks where a router changes the outcome; this
+  is the effective sample size for the experiment, and it is ~1.7x what a 2-model pool gives
+- mean $0.00305/call on CRB tasks; ~$0.00447 at our longer token profile
+
+### Why not the alternatives
+
+| pool | routable | disagree | note |
+|---|---:|---:|---|
+| Qwen3-Max + MiniMax (2) | **+6.27pt** | 25.2% | highest excess, but binary routing and a small decision set |
+| Qwen3-Max + GLM-5 + Kimi (3) | +5.67pt | 32.2% | cheaper ($0.00234); good fallback |
+| **selected (4)** | **+4.98pt** | **40.3%** | best balance of structure, power and lineage spread |
+| + qwen3.5-plus (5) | +4.46pt | 43.1% | q35p is the model that broke our collection |
+| gpt-5.4 + opus + sonnet | **+3.22pt** | 20.9% | LOWEST -- opus and sonnet share a lineage. Confirms the diversity principle, at 3x the cost |
+| Qwen3-Max + gpt-5.4 + opus | +3.64pt | 28.5% | 6.26pt spread = a ladder, which has nothing to route on |
+
+### Operational warnings
+
+1. **Three of the four are reasoning models.** `qwen3.5-plus` produced **336/341 empty
+   outputs** at a 4096-token cap because the entire budget went to hidden reasoning. Set
+   `max_tokens >= 32768` and capture the reasoning field. **Screen on ~50 problems before
+   the full run** and check for empty `code` extraction.
+2. **Our existing "glm5" data is `z-ai/glm-5.3`**, a different and 2.3x pricier model
+   ($0.00869/call). Do not pool it with `z-ai/glm-5`; either re-collect or switch the pool
+   to glm-5.3 deliberately.
+3. Costs above assume 550 prompt / 1800 completion tokens. Reasoning models on LCB/TACO
+   competitive programming will far exceed 1800 completion tokens, so the real bill will be
+   higher — measure it in the screen rather than trusting these.
+4. Budget: 4 models x ~2,892 problems (LCB 892 + TACO 2,000) x 1 draw. Nominal ~$52;
+   realistically **$100-200** once reasoning tokens are counted.
