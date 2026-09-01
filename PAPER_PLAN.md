@@ -4180,3 +4180,56 @@ solve this problem at all — which is fixed at n=0 by the problem text and has 
 is exactly why the factorized model lost: it improved all three per-route heads (the resampling
 question) and degraded the `nothing` head from 0.7335 to 0.7199 (the quitting question). It traded
 accuracy on the one head that carries the money for accuracy on three that do not.
+
+## The next step: 26.9% of problems eat 82% of the bill
+
+Splitting realized spend at our $0.15019 / 73.10% operating point by whether the problem is solvable
+by **anything** in the pool (any route, any depth):
+
+| | episodes | mean spend | share of total bill |
+|---|---:|---:|---:|
+| solvable | 625 | $0.03701 | 18.0% |
+| **impossible** | 230 | **$0.45772** | **82.0%** |
+
+46 of 171 test problems (**26.90%**) are solvable by no route at any depth. The policy grinds every
+route to exhaustion on them at **12.4x** the spend of a solvable problem. That 82.0% of the bill
+matches the 82.9% oracle-stopping headroom almost exactly — **the entire headroom is this one
+waste**. Oracle stopping reaches the same 73.10% at $0.02573 purely by refusing to start on them.
+
+**We currently capture none of it.** At 73.10% the best real arm is the value rule at $0.15019; the
+learned q-stop arm at the same accuracy costs **$0.17140 — worse**. Every stopping mechanism we have
+tried is at or below the value rule.
+
+### Why this target has never actually been trained
+
+The `nothing` head is (a) per-reachable-state, (b) one of four heads sharing a loss with three
+routing heads now shown to be irrelevant, (c) trained on mid-episode states. The quantity that
+carries the money is different: **a problem-level binary label, "will any of the 24 available draws
+succeed", evaluated at n=0 before any money is spent.** We have never trained a predictor for it.
+
+### Proposed next experiment — pre-commitment solvability gate
+
+1. **Train the target directly.** Single-head problem-level classifier for `solvable_by_pool`. Two
+   variants: input-only (problem text) and **post-scout** (problem text + one scout draw and its
+   test results). One scout draw costs $0.000553 = **0.4% of the bill** — if it can classify the
+   26.9%, it is the cheapest possible probe.
+2. **Gate first, then replay.** Report AUC before building any policy. Prior evidence is encouraging
+   but not decisive: the abstention line got input-only 0.6009 -> post-scout **0.7629** (+0.1620,
+   replicated 4/4 seeds) on the related "will oss120 succeed" target, and the jointly-trained
+   `nothing` head reaches 0.7335. **Risk: if problem-level solvability tops out near 0.75 AUC, the
+   gate will not convert, because at the 73.10% end no solvable problem may be abstained on.**
+3. Only if the AUC clears, replay it as a pre-commitment abstain gate.
+
+No collection required — the draws, labels and scout outputs all exist.
+
+**This also rehabilitates "scout before you route" as "scout before you spend".** The probe's value
+was never in ranking which route to use (routing is worth 3.0%); it is in deciding whether to spend
+**anything at all**, which is worth 82.9%.
+
+### Secondary queue
+
+- **Seed variance**: 11.8% cost CV against an 18-28% headline. Half-data showed it is not
+  data-limited, so the fix is more seeds or ensembling, not more problems. Cheap, no collection.
+- **Peer pool**: gate 1 passed (36% complementarity, flat in draws) but `q35p` must be re-collected
+  with a larger token cap and reasoning-field capture before the pool is usable.
+- **TACO**: demoted. Justified only as a second dataset for external validity, not as a variance fix.
