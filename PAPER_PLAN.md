@@ -4903,3 +4903,81 @@ verifier compression result here. Retracted before use.
 A caution worth one paragraph in a paper about reward design, not a paper. Recorded so it
 is not re-derived, and so the prefix-shape check is run before any future analysis touches
 `full_result_codes`.
+
+## The contribution, located against the 2026 literature (2026-09-01)
+
+### What the literature has, and what it is missing
+
+| paper | pool | draws/cell | cost model | routing form | code? |
+|---|---|---|---|---|---|
+| LLMRouterBench (2601.07206) | 33 models, 21 datasets | **1** | yes (OpenRouter) | single-commit | mixed, no per-domain split |
+| The Routing Plateau (2606.07587) | multi | **1** | — | single-commit | mixed |
+| How Much of the Routing Gap Is Real? (2607.03436) | 11 **peer** models, 8 lineages | **k>=30** | **no** | single-commit | **explicitly excluded** |
+| **ours** | cost-ordered **ladder** | **10** | **yes, USD** | **sequential resample + escalate + abstain** | **yes** |
+
+Two independent papers report the same phenomenon without explaining it: routers sit close
+to a *dataset-level* oracle and "capture coarse, global patterns of model capability, but
+struggle to recover fine-grained, instance-specific correctness signals". That is the
+**routing plateau**. Nobody has explained it, and nobody has turned it into a design rule.
+
+**We are not scooped**, but the framing must change. 2607.03436 already decomposes the
+router-oracle gap using multi-draw regeneration and finds 12-36% is single-draw label
+noise. Their pools are **peers** on **math/science with no costs**; ours is a **cost-ordered
+ladder** on **code with real dollars and sequential actions**. Their result and our `c_inf`
+result are complementary, not competing: they show peer pools retain genuine specialist
+advantage; we show ladders do not (`c_inf` 3.52 -> 0.88pt with draws, versus a peer pool
+flat at 9.09 -> 8.80pt on the same problems).
+
+### The granularity curve — and a leak I caught
+
+Method under test: **compile the cascade into K schedules** instead of learning a router.
+Cluster queries on pre-spend features only (LiveCodeBench's free `difficulty` string,
+prompt tokens, statement length), fit a greedy purchase schedule per cluster on train,
+execute with no per-instance decision. K=1 is one fixed schedule; K=n_train is fully
+fine-grained (nearest-neighbour).
+
+**First run was leaked.** The Lagrangian chose each cluster's truncation length using the
+*test* curve, which at large K degenerates into per-test-problem oracle stopping. It
+reported K=12 beating the router by +4pt and monotone gains to K=551. Corrected protocol:
+the truncation length is chosen on **train** for each lambda and executed on test, so no
+test outcome touches any decision. Corrected, over 12 draw-order permutations:
+
+| K | train problems/cluster | $0.030 | $0.050 |
+|---:|---:|---:|---:|
+| **1** | 551 | **64.72 +/- 2.09** | **68.42 +/- 2.13** |
+| 3 | 184 | 64.57 | 68.13 |
+| 6 | 92 | 64.72 | 68.32 |
+| 12 | 46 | 64.62 | 67.64 |
+| 25 | 22 | 62.67 | 65.01 |
+| 50 | 11 | 61.06 | 62.43 |
+| 100 | 5.5 | 56.92 | 56.92 |
+| 200 | 2.8 | 49.90 | 49.90 |
+| 551 | 1.0 | **38.21** | 38.21 |
+| *learned neural router* | — | *63.51* | *67.37* |
+
+**Adaptivity is not merely useless here — it is actively harmful, monotonically in
+granularity.** Flat from K=1 to K=12, then a collapse to 38.21% at full granularity, a
+**26-point** loss versus no adaptivity at all. And K=1, a single compiled schedule with no
+model and no per-instance decision, **beats the trained neural router** at both budgets
+(+1.21pt, +1.05pt).
+
+### The contribution
+
+**Claim.** For cost-ordered LLM cascades, the optimal specialisation granularity is K=1:
+compile one schedule, do not learn a router.
+
+**Theory, two measured ingredients:**
+1. `c_inf ~ 0` for a ladder — the best model dominates pointwise, so there is no
+   instance-level *bias* to remove by specialising.
+2. Wald — evidence about instance solvability accumulates as `theta*s*log k`, so
+   instance-level correctness is not estimable at any affordable probe cost. Specialising
+   therefore buys **variance with no signal**, which is exactly the measured collapse.
+
+**This explains the routing plateau that two 2026 papers document and neither explains,**
+and it converts the explanation into a design rule with a measured granularity curve.
+
+**Scope, stated honestly.** One pool, one dataset, one split. The claim is about
+cost-ordered ladders on code. The natural test is whether the curve inverts on peer pools
+and non-code domains — where 2607.03436's result predicts genuine specialist advantage
+does exist, so K>1 should pay. That contrast is the paper's second experiment, and our
+peer-pool data (`c_inf` flat at 8.80pt) already suggests it will come out the other way.
