@@ -116,7 +116,7 @@ chmod +x "${RUNNER}"
 
 make -C "${REPO_ROOT}" job \
   JOB_NAME="${JOB_NAME}" ENV=pipeline-rl CONDA_EXE=/opt/conda/bin/conda \
-  SNAPSHOT="${SNAPSHOT}" NPROC=1 GPU=0 CPU=8 CPU_MEM=32 \
+  SNAPSHOT="${SNAPSHOT}" NPROC=1 GPU=0 GPU_MEM=0 CPU=8 CPU_MEM=32 \
   COMMAND="bash ${RUNNER}"
 
 echo "Job:        ${JOB_NAME}"
