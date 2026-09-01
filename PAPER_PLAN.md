@@ -4358,3 +4358,71 @@ is a rigorous, well-instrumented **anatomy of why sequential routing on code has
 paper.** TMLR's criteria are correctness of claims and interest to some audience, not novelty or
 SOTA, which is exactly the shape of this work. The alternative — continuing to hunt a positive
 result on a pool where every measured lever is under 2 points — is not a good use of the budget.
+
+## Major correction: the learned model IS the result, and data DOES scale it (2026-09-01)
+
+### Correction of an inference error
+
+The "data is saturated" conclusion earlier today was wrong, and wrong for a specific reason: **the
+half-data experiment measured seed *variance* (CV), not *savings*.** Variance did not shrink, and I
+inferred performance was not data-limited. That does not follow. The same mistake was compounded by
+citing flat AUC (177 -> 551 buys +0.012): AUC is a global ranking metric, while savings depend on
+decision quality at specific cost thresholds. The two can and do diverge.
+
+### The headline result, computed properly for the first time
+
+Learned scorer versus **plain counts** (train priors only, nothing problem-specific), cost at matched
+accuracy, all five full-data seeds:
+
+| accuracy | s1 | s2 | s3 | s4 | s17 | **mean** | sd |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 55% | +14.6% | +3.6% | +24.6% | +22.5% | +20.1% | **+17.1%** | 8.4 |
+| 60% | +26.5% | +20.0% | +41.2% | +40.0% | +21.4% | **+29.8%** | 10.2 |
+| 63% | +23.6% | +22.8% | +33.7% | +18.3% | -6.2% | **+18.4%** | 14.9 |
+| 65% | +18.9% | +24.5% | +26.4% | +5.7% | +11.1% | **+17.3%** | 8.8 |
+| 68% | +15.5% | +17.0% | +15.6% | +13.4% | +11.2% | **+14.5%** | **2.3** |
+| 70% | +0.8% | +0.6% | +6.2% | +12.0% | +6.5% | +5.2% | 4.7 |
+| 72% | -0.5% | -7.6% | -5.2% | +5.2% | -6.7% | -2.9% | 5.3 |
+
+Pooled over 35 (seed, accuracy) cells: **+14.2%**, and the learned model loses in only **5/35**. The
+gains are mid-range and vanish at the ceiling — which is exactly right, because at the ceiling you
+cannot abstain on anything. The 68% row is the tightest in the whole project: **+14.5% ± 2.3**.
+
+**This is the contribution, and it survives the 11.8% seed CV.** The earlier framing that "every
+lever is small" was measuring levers *on top of* the learned model, and missed that the learned
+model itself over the naive baseline is the result.
+
+### Savings scale with training data — TACO is re-justified
+
+| training set | per-seed mean savings vs counts | n |
+|---|---|---:|
+| 275 problems | 16.9, 5.9, 11.4 -> **11.4%** (sd 5.5) | 3 |
+| 551 problems | 16.7, 14.7, 24.6, 18.6, 10.7 -> **17.1%** (sd 5.1) | 5 |
+
+**Doubling the training set is worth +5.7 percentage points of savings**, positive at **6/6**
+accuracy levels. Not significant on its own (t=1.47, p=0.192 at n=5 vs 3) — but it is the second
+independent design pointing the same way. The rolling folds already on file:
+
+```
+fold 0, n=177 -> ~null | fold 1, n=357 -> mixed | fold 2, n=536 -> clearly positive | 551 -> +17-18%
+```
+
+Two independent experiments, monotone in the same direction. **TACO is re-promoted**: justified as a
+savings driver, not as a variance fix. Collection should cap depth at **6 draws** (past which oss120
+adds 0.00pt) rather than 10, which cuts the bill by ~40% against the original plan.
+
+### Both axes must be reported
+
+Cost-at-matched-accuracy gives **+14-17%**; accuracy-at-matched-budget gives **+0.01 to +3.09pt**.
+Both are true — the frontier is steep in the mid-range, so a large cost saving is a small accuracy
+gain. The cost axis is the literature's convention (RoR's own headline is cost-quality) so it is
+legitimate to lead with, but the accuracy axis must appear alongside it, not be omitted.
+
+### Revised recommendation
+
+Not a negative-results paper. The structure is: **a real +14-17% result over the naive baseline, a
+scaling curve showing it improves with data, and a rigorous anatomy of where the remaining headroom
+is and why it is unreachable** (stopping = 82.9%, gate needs AUC 0.90, cheap probes give 0.73-0.76).
+The anatomy is the honest limitations section, not the paper.
+
+Next action: launch the TACO collection at 6 draws.
