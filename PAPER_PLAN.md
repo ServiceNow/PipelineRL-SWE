@@ -4666,3 +4666,106 @@ what the field's single-draw complementarity numbers hide.
 This is the theoretical basis the project was missing: a definition, a proposition with a
 one-line proof, a test statistic, a validated prediction on two pools that behave in
 opposite ways, and an actionable prescription — all from data already collected.
+
+## A theory for the COST side: cascade stopping is a sequential hypothesis test
+
+`c_inf` bounds *accuracy*. The cost question needs a different theory, and Wald supplies it.
+
+### Setup
+
+H1: the problem is solvable by the pool. H0: it is not. Under H0 every draw fails with
+probability exactly 1, so a failure at depth j carries evidence
+
+```
+  LLR_j  =  -log P(draw j fails | first j-1 failed, solvable)
+```
+
+Measured on 892 problems (nats):
+
+| j | scout | oss20 | oss120 |
+|---:|---:|---:|---:|
+| 0 | **0.662** | **0.827** | **2.090** |
+| 1 | 0.063 | 0.499 | 0.642 |
+| 2 | 0.050 | 0.262 | 0.274 |
+| 3 | 0.029 | 0.181 | 0.380 |
+| cumulative (all draws) | 0.80 | 2.16 | 4.34 |
+
+### The proposition
+
+Under the Beta-Bernoulli decay `p(j) = theta*s/(s+j)` that governs these beliefs,
+
+```
+  LLR_j = -log(1 - p(j))  ~  theta*s / j
+```
+
+so cumulative evidence after k draws is **Theta(theta*s * log k)** — logarithmic. The draws
+needed for posterior confidence `1-delta` are therefore **exponential** in the confidence,
+and so is the probe cost. Fitting `LLR_j ~ c/j` and solving for 95% confidence
+(4.768 nats required):
+
+| route | LLR_0 | fitted c | draws needed | probe cost |
+|---|---:|---:|---:|---:|
+| scout | 0.662 | 0.083 | 4.0e21 | $2.2e18 |
+| oss20 | 0.827 | 0.439 | 8,000 | $31.70 |
+| oss120 | 2.090 | 1.200 | 9.3 | $0.277 |
+
+**No route can pay for itself**: the waste being prevented is $0.12313 per impossible
+problem, and even the best probe costs $0.277 — 2.25x the value it protects.
+
+**The mechanism is that the same decay which makes the belief model work makes failures
+self-explaining.** After the first, a failure is exactly what a solvable problem is
+expected to produce, so it carries almost no evidence. This is an information-theoretic
+ceiling, not a modelling failure, and it explains why four independent stopping
+predictors all topped out near AUC 0.75.
+
+### The constructive corollary: probe BREADTH, not DEPTH
+
+Only the *first* draw of a route is informative (0.66 / 0.83 / 2.09 nats); everything
+after collapses. So evidence per dollar is maximised by one draw from each of several
+models rather than many draws from one. Measured jointly (correlation included, not
+assumed away):
+
+| probe | nats | cost | **nats/$** |
+|---|---:|---:|---:|
+| scout | 0.456 | $0.00055 | **824** |
+| scout+glm5 | 0.995 | $0.00265 | 375 |
+| scout+qmax+glm5 | 1.317 | $0.00565 | 233 |
+| all 5 breadth | 2.402 | $0.03934 | 61 |
+| oss120 depth-1 | 1.751 | $0.02973 | 59 |
+| oss120 depth-3 | 2.535 | $0.08918 | 28 |
+
+Cheap breadth is **14x** more evidence-efficient than oss120 depth.
+
+### And it converts -- the first positive stopping result in the project
+
+`scout+qmax+glm5` first draws ($0.00565), score = how many probe models succeeded (an
+untrained 3-level count), AUC 0.8506, decomposed against the confound that sank the
+earlier batch-allocation experiment:
+
+| budget | ladder | probe, no gate | probe+gate | SOLVER | **INFO** |
+|---:|---:|---:|---:|---:|---:|
+| $0.030 | 61.99% | 62.69% | 63.98% | +0.70pt | **+1.29pt** |
+| $0.050 | 67.37% | 66.08% | 67.49% | -1.29pt | **+1.40pt** |
+| $0.080 | 70.64% | 69.47% | 71.58% | -1.17pt | **+2.11pt** |
+| $0.120 | 72.28% | 73.22% | 73.22% | +0.94pt | +0.00pt |
+| $0.170 | 73.10% | 73.68% | 73.68% | +0.58pt | +0.00pt |
+
+The information component is **positive at every budget that binds** (+1.29, +1.40,
++2.11pt) and zero where it does not — exactly the right pattern, since gating can only
+pay when money is scarce. Solver value is *negative* at $0.05-0.08 (the probe fee crowds
+out ladder spend), so this is not "we added two more models".
+
+### Caveats before this is a result
+
+1. **Peer prices are estimates** ($0.0030 qmax, $0.0021 glm5), not derived from measured
+   token counts. The whole calculation is sensitive to them.
+2. **One test split, 171 problems, no seeds.** The project's headline carries an 11.8% CV;
+   1-2pt on a single split is inside that.
+3. The probe score is an untrained 3-level count. That it works untuned is encouraging,
+   but nothing has been fit, so nothing has been validated either.
+
+### Revised plan
+
+The peer-pool collection is now justified for a **cost** reason, not just accuracy: peers
+supply cheap high-LLR first draws. Required next: measured peer pricing from token counts,
+the q35p re-collection with a larger cap, and seed replication of the breadth-probe gate.
