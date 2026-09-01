@@ -4981,3 +4981,83 @@ cost-ordered ladders on code. The natural test is whether the curve inverts on p
 and non-code domains — where 2607.03436's result predicts genuine specialist advantage
 does exist, so K>1 should pay. That contrast is the paper's second experiment, and our
 peer-pool data (`c_inf` flat at 8.80pt) already suggests it will come out the other way.
+
+## THE CONTRIBUTION GAP, located and measured (2026-09-01)
+
+### The field's central metric is mostly fiction, and nobody has audited it
+
+Every routing paper — RouterBench, LLMRouterBench, the Routing Plateau's 21 methods —
+reports the **per-query oracle gap**: how far the best router sits below an oracle that
+picks, per query, whichever model happened to be correct. The Plateau paper's whole
+contribution is that 21 methods converge 10-30pp below this oracle, which it attributes to
+a "correctness-prediction bottleneck" and attacks with more data and bigger encoders
+(+2.13pp, closing 14.6% of the gap).
+
+**Nobody asks how much of that oracle is reachable even in principle.** We ran the audit on
+public RouterBench (36,497 queries x 11 models x 7 task families, with costs).
+
+**Null model.** Fit a 1-D Rasch model `p_im = sigmoid(ability_m - difficulty_i)`. It
+preserves every model's ability and every query's difficulty, but contains **zero
+specialisation** — the model ranking is identical on every query, so there is nothing for a
+router to learn at the instance level. Simulate the per-query oracle under it.
+
+| task | kind | reported oracle gap | **routable excess over the null** |
+|---|---|---:|---:|
+| arc-challenge | MCQ | 2.86pt | **+0.64pt** (z=3.7) |
+| hellaswag | MCQ | 13.63pt | **+2.22pt** (z=17.1) |
+| mmlu (57 subj.) | MCQ | 14.29pt | **+3.51pt** (z=25.4) |
+| winogrande | MCQ | 18.07pt | **+1.12pt** (z=4.0) |
+| grade-school-math | short-ans | 3.18pt | **+0.65pt** (z=7.3) |
+| **mbpp** | **GEN (code)** | **18.03pt** | **+2.76pt** (z=3.8) |
+| consensus_summary | GEN | 8.84pt | +0.65pt (z=1.7) |
+| bias_detection | GEN | 24.21pt | +4.74pt (z=4.2) |
+| chinese-misc | GEN | 20.00pt | +7.79pt (z=9.9) |
+
+**Mean reported gap 12.31pt; mean routable excess ~2pt. About 84% of the routing headroom
+the field chases is reproduced by a model with no specialisation whatsoever** — it is the
+arithmetic of eleven models against per-query difficulty, not evidence that different
+models are good at different things. Winogrande's 18.07pt gap contains **1.12pt** of
+routable structure.
+
+The excesses are all statistically real (large z) — specialisation exists. It is just an
+order of magnitude smaller than the number the field optimises against.
+
+### This resolves the routing plateau
+
+Routers are not failing. **They sit near the achievable ceiling, and the target is wrong.**
+That is why 21 heterogeneous methods land within 0.23pp of each other, why kNN is
+competitive with everything, and why scaling data 10x and the encoder 3x buys 2.13pp.
+
+### Two independent inflations, neither ever reported
+
+1. **No-specialisation structure** — measured above on public data, ~84% of the gap.
+2. **Single-draw label noise** — every benchmark above uses ONE draw per (query, model).
+   Our 10-draw LiveCodeBench tensor measures this directly: realised complementarity
+   19.3% -> 7.4%, a **2.6x** overstatement; 2607.03436 independently finds 12-36% on
+   math/science peer pools. This inflation is largest exactly where generation is
+   stochastic — code and free text — i.e. where routing actually matters commercially.
+
+### The paper
+
+**"The Routing Oracle Is Mostly Fiction: a null-model audit of LLM routing headroom."**
+
+1. Audit: the Rasch null on public RouterBench (above). Reproducible by anyone.
+2. Second inflation: single-draw noise, quantified with our unique multi-draw cascade data.
+3. Diagnostics, both cheap: the **Rasch-null-adjusted oracle** (no extra generation) and
+   **`c_inf`** (needs k draws). Report these instead of the raw oracle.
+4. Prescription: when adjusted headroom is ~2pt, do not build a router. We show on our
+   cascade that a single compiled schedule (K=1) **beats** a trained neural router, and
+   that specialisation is monotonically harmful — a 26-point collapse at full granularity.
+5. Theory for why: `c_inf ~ 0` for cost-ordered ladders (no bias to remove) and Wald
+   (`LLR_j ~ theta*s/j`, so instance-level correctness is not estimable at any affordable
+   probe cost). Specialisation buys variance with no signal.
+
+### Caveats to handle before writing
+
+- The Rasch null is a *model*; a 2-D null would absorb more, strengthening the claim but
+  needing care about overfitting. Report the 1-D result as a **lower bound** on fiction.
+- `grade-school-math` has 99.25% non-binary correctness cells; binarising at 0.5 is
+  questionable there and that row should be re-derived or dropped.
+- RouterBench is single-draw, so its oracle also carries inflation (2), which the Rasch
+  audit does not remove. The two corrections compose and we currently measure them on
+  different datasets.
