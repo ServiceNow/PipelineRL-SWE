@@ -4085,3 +4085,41 @@ cannot show up next to stopping competing for 63.5%.
 (use them at all, one or two shots) rather than a **depth** decision. In a cost-ordered ladder the
 levers rank: stopping (63.5%) >> cheap-route routing (2.3x on oracle cost, captured at k<=2) >>
 per-problem depth (1.9-5.8%) > per-problem decay (0%, being a subset of depth).
+
+### Correction: the "grind then escalate" family is restricted, and the policy is not
+
+The depth pricing in the previous entry used a **restricted policy class** — "buy k draws of cheap
+route m, then escalate to oss120" — and reported the oracle-per-problem-k headroom (1.9% scout,
+5.8% oss20) as "the hard ceiling on any per-problem depth policy". That was an overclaim: the
+family forbids interleaving, and the real policy interleaves freely.
+
+The action set is `{abstain, scout, oss20, oss120}` at the root and **after every failed attempt**
+(`--start-protocol scout_first` only pins the first action). `scout-scout-oss20-oss20-oss120` is
+legal, and chains like it dominate. From `replay_tier1_v1/episode_traces.jsonl`,
+`sequential_decay_value` at R=5.265 (the $0.15 / 73.10% operating region):
+
+```
+  285  oss120
+   63  oss120-oss20-oss120-oss120-oss20-oss120-oss20
+   51  oss120-oss120-oss20-oss120-oss20-oss120-oss120
+   32  oss120-oss20-oss120-oss120-oss20-oss120-oss120
+```
+
+| R | uses oss120 | **steps back to a cheaper route after escalating** | mean chain length |
+|---:|---:|---:|---:|
+| 5.265 | 100% | **50.0%** | 9.79 |
+| 0.656 | 100% | 51.9% | 9.87 |
+| 0.0155 | 0% | **60.7%** | — |
+
+Route switches per episode reach 21. The policy uses oss20 as cheap filler between oss120 calls.
+
+**What this changes and what it does not.** The correct unrestricted bound was already computed and
+already allows full interleaving — the oracle-routing arm picks, at every step, the cheapest route
+whose next draw succeeds:
+
+- **oracle routing: +3.0%** of headroom — this subsumes every escalation, interleaving and depth choice
+- **oracle stopping: +63.5%**
+
+So the decay null stands, bounded by the +3.0% unrestricted routing headroom. The grind-family
+numbers are a mechanistic illustration of *why* depth is cheap to get right, not the bound. Report
+them as illustration only, and never as a ceiling.
