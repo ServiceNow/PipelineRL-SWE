@@ -36,7 +36,51 @@ PRICES = {
     "z-ai/glm-5.3": (1.40e-6, 4.40e-6),
     "moonshotai/kimi-k2.5": (0.45e-6, 2.25e-6),
     "minimax/minimax-m2.7": (0.30e-6, 1.20e-6),
+    "openai/gpt-oss-120b": (0.03e-6, 0.17e-6),
 }
+
+
+def routable_structure(rows_by_label: dict[str, list[dict]], labels: list[str]) -> None:
+    """Rank candidate sub-pools by the only thing that decides whether routing can pay.
+
+    A peer band is a proxy; the quantity itself is c(1) = union minus best single, the
+    accuracy a router could gain over always calling the pool's strongest member. Alongside
+    it, the disagreement rate is the fraction of problems on which any routing decision
+    changes the outcome, and hence the effective sample size for training one.
+
+    Single draw and ~50 problems, so these are coarse. They are for choosing a pool, never
+    for reporting: single-draw complementarity is inflated in a ladder, which is exactly the
+    correction this project measured (19.3% -> 7.4% over ten draws).
+    """
+    from itertools import combinations
+
+    solved: dict[str, dict[str, bool]] = {
+        label: {str(r["problem_id"]): bool(r.get("resolved")) for r in rows}
+        for label in labels
+        for rows in [rows_by_label[label]]
+    }
+    print(f"\n{'sub-pool':<34} {'n':>4} {'best':>7} {'union':>7} {'c(1)':>8} {'disagree':>9}")
+    ranked = []
+    for size in range(2, len(labels) + 1):
+        for combo in combinations(sorted(labels), size):
+            shared = sorted(set.intersection(*[set(solved[m]) for m in combo]))
+            if len(shared) < 10:
+                continue
+            per_model = {m: [solved[m][p] for p in shared] for m in combo}
+            best = max(sum(v) for v in per_model.values()) / len(shared)
+            union = sum(any(per_model[m][i] for m in combo) for i in range(len(shared))) / len(shared)
+            disagree = sum(
+                len({per_model[m][i] for m in combo}) > 1 for i in range(len(shared))
+            ) / len(shared)
+            ranked.append((100 * (union - best), "+".join(combo), len(shared), best, union, disagree))
+    for c1, name, n, best, union, dis in sorted(ranked, reverse=True):
+        print(f"{name:<34} {n:4d} {100*best:6.1f}% {100*union:6.1f}% {c1:+7.2f}pt {100*dis:8.1f}%")
+    if ranked:
+        top = max(ranked)
+        print(f"\n  best routable structure: {top[1]} at {top[0]:+.2f}pt over its strongest member, "
+              f"{100*top[5]:.1f}% of problems contested")
+        print("  reference: this project's cost ladder holds +0.88pt at ten draws; "
+              "RouterBench's typical task ~+2.8pt")
 
 
 def main() -> None:
@@ -98,6 +142,9 @@ def main() -> None:
                   f"~${len(good)*n_problems*mean_cost:.2f}")
     else:
         print("  fewer than two models survived: re-screen before spending anything.")
+
+    if len(good) >= 2:
+        routable_structure(rows_by_label, sorted(good))
 
 
 if __name__ == "__main__":
