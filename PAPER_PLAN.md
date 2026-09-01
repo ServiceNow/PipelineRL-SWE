@@ -3996,3 +3996,40 @@ scout draws 5-10. Not worth rebuilding.
 not. Gate 1 measured glm5+qmax at **36% realized complementarity, flat in draws**, against this
 ladder's 7.4%. That is the only remaining direction that can raise the ceiling rather than just
 lower the bill.
+
+### Why an +11pt depth gain still leaves the decay worthless (2026-09-01)
+
+Scout gains +7.02pt from 10 draws, oss20 gains **+17.54pt**. Those are large. They are also worth
+exactly nothing to a router. Route-alone gain versus marginal contribution to the union with the
+other routes at k=10, test split:
+
+| route | alone k=1 | alone k=10 | alone gain | **marginal to union** | problems only its draws 2-10 solve |
+|---|---:|---:|---:|---:|---:|
+| scout | 28.07% | 35.09% | +7.02pt | **+0.00pt** | **0** |
+| oss20 | 38.01% | 55.56% | **+17.54pt** | **+0.00pt** | **0** |
+| oss120 | 57.89% | 71.93% | +14.04pt | **+8.19pt** | 14 |
+
+Every problem that scout or oss20 solves only on draws 2-10 is *already solved by oss120*. Their
+depth is entirely subsumed.
+
+**The decay needs two conditions to earn money, and no route satisfies both:**
+
+| route | (1) `n*` inside [1,10], so depth is a real decision | (2) depth adds something other routes don't |
+|---|---|---|
+| scout | **FAIL** — `n*` ≈ 26, always exhaust | **FAIL** — +0.00pt |
+| oss20 | ok — `n*` ≈ 4.6, genuinely in range | **FAIL** — +0.00pt |
+| oss120 | **FAIL** — `n*` ≈ 0.07, one shot or none | ok — +8.19pt |
+
+A perfect diagonal. The only route whose depth is worth buying (oss120) is priced so you never get
+to *choose* a depth; the only route where depth is a live decision (oss20) buys nothing the top
+route hasn't already delivered. The decay is never in a position to act on anything that matters.
+
+**This is the same mechanism as the complementarity collapse.** In a ladder, resampling the strong
+model recovers what the weak models uniquely produced — that is why realized complementarity falls
+19.3% -> 7.4% with draws, why cheap-route depth is subsumed, why routing is only +3.0% of oracle
+headroom, and why the decay cannot pay. One fact explains all four. And it is a fact about *ladders*
+specifically: the peer pool (glm5+qmax) holds 36% complementarity flat in draws, because neither
+peer's successes are a subset of the other's.
+
+**This is the paper's central mechanism, and it is stated in one sentence:** *in a cost-ordered
+ladder, every lever except stopping is subsumed by resampling the top model.*
