@@ -237,6 +237,14 @@ def main() -> None:
                         help="Comma-separated splits to collect (default: train,eval)")
     parser.add_argument("--max-invalid-frac", type=float, default=0.0,
                         help="Tolerate this fraction of invalid rows at validation (0.0 = strict)")
+    parser.add_argument("--problem-ids-file", default="",
+                        help=(
+                            "Collect only the problem ids listed in this file, one per line. "
+                            "The source-id check still runs against the FULL split first, so a "
+                            "broken source collection is caught before any spend; only the "
+                            "generation set is trimmed. Used by the truncation audit to "
+                            "re-collect the pool-unsolved problems at a larger token cap."
+                        ))
     parser.add_argument("--max-problems", type=int, default=0,
                         help=(
                             "Screen mode: keep only this many problems per split, sampled "
@@ -267,6 +275,24 @@ def main() -> None:
             raise ValueError(
                 f"{split} source IDs {len(source_ids)} do not match dataset IDs {len(actual_ids)}"
             )
+    if args.problem_ids_file:
+        wanted = {
+            line.strip()
+            for line in Path(args.problem_ids_file).read_text().splitlines()
+            if line.strip()
+        }
+        if not wanted:
+            raise ValueError(f"{args.problem_ids_file} is empty")
+        splits = {k: [r for r in v if problem_id(r) in wanted] for k, v in splits.items()}
+        found = sum(len(v) for v in splits.values())
+        if not found:
+            raise ValueError(
+                f"none of the {len(wanted)} requested ids are in splits {sorted(splits)}"
+            )
+        logger.info(
+            "id-filtered: %s problems per split (%d of %d requested ids present)",
+            {k: len(v) for k, v in splits.items()}, found, len(wanted),
+        )
     if args.max_problems:
         # Deterministic by sorted id so every model in a screen sees the SAME problems --
         # otherwise the models are not comparable and the screen is worthless.

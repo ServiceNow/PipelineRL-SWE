@@ -5386,3 +5386,59 @@ result (off-ladder complementarity from a protocol rather than a model).
 **Stage 2 (only if stage 1 passes).** PipelineRL: scout trained to solve from problem + expert
 plan vs ordinary solution distillation at a matched expert-token budget; metric is expert
 tokens per solved problem on the 341 held-out problems.
+
+## Truncation audit: is the pool-unsolved set real? (2026-09-01)
+
+**The defect.** The multi-draw LCB collection ran at `--max-tokens 4096`. Measured on
+`tensors_v3`, the share of failed draws ending within 50 tokens of that cap is 22.9% for
+scout, 52.7% for oss20 and 62.7% for oss120. On the **124 of 892 problems (13.9%) that no
+route solves at any depth**, it is 47.6% / 83.0% / 73.0%, at mean completion lengths of
+2582 / 4003 / 3604. A truncated generation has no extractable program and is graded failed
+regardless of what the model was about to write.
+
+**Why it is load-bearing rather than cosmetic.** The pool-unsolved set carries the largest
+measured quantity in the project: those problems consume ~82% of realized spend, and oracle
+stopping -- declining to start on them -- is ~63% of all oracle headroom and 82.9% of the
+cost at matched accuracy. If a large share of that set is capped rather than unsolvable, the
+stopping result is a property of the collection and not of the models, and the oracle
+decomposition, the 26.9%-eats-82% finding and the AUC-0.90 gate requirement all need
+re-deriving. External support: the peer screen measured 8k-18k completion tokens for these
+model classes once the cap was raised, and published work recovers 10-23% of pass@k=0
+problems under cheap decoding changes (arXiv 2606.19636).
+
+**The test.** Re-run gpt-oss-120b on exactly those 124 ids at a 32768-token cap, 3 draws,
+T=0.2, same pinned grader; count how many fall. 372 calls. Nothing is overwritten: the
+re-collection lands in its own directory and is joined against the old labels.
+`launchers/abstention/launch_lcb_truncation_audit.sh`, analysis in `audit_truncation.py`
+(`--dump-unsolved` freezes the id list before submission; `--compare` reports rescues and
+the corrected impossible fraction). `collect_lcb_expert.py` gained `--problem-ids-file`.
+Tests in `tests/test_truncation_audit.py`.
+
+**Pre-registered reading**, so the verdict is not chosen after seeing it:
+
+| share of the 124 that fall | conclusion |
+|---|---|
+| >= 20% | labels are cap-limited; re-derive every stopping number before writing |
+| 5-20% | modest artifact; report the corrected impossible fraction, conclusions likely survive |
+| < 5% | the pool-unsolved set is real; every existing stopping result stands as measured |
+
+**Related finding, recorded so it is not re-derived.** Length is *not* a within-problem
+failure signal. Pooled, failed draws cost 2.3-3.1x successful ones, but that is a
+between-problem confound (hard problems are long and also fail). Within problem and model,
+the AUC of completion length for predicting draw failure is 0.508 / 0.541 / 0.682
+(scout/oss20/oss120), and excluding capped draws it falls to 0.411 / 0.432 / 0.499 -- at or
+below chance. The entire within-problem association is truncation. This is the third signal
+to survive pooling and die under a within-problem control, after token entropy and partial
+test-pass credit.
+
+**Multi-rollout accounting** (892 problems, all splits), which sharpens the ladder claim:
+
+| model | pass@1 | pass@10 | gain | problems added by draws 2-10 | also solved by oss120 |
+|---|---:|---:|---:|---:|---:|
+| scout | 41.70% | 47.53% | +5.83pt | 52 | 51 |
+| oss20 | 48.43% | 76.12% | +27.69pt | 247 | **247 of 247** |
+| oss120 | 75.45% | 85.31% | +9.87pt | 88 | -- |
+
+Resampling oss20 is the largest single effect in the pool and every problem it buys is
+already inside oss120's coverage. Ten oss20 draws reach 76.12% against one oss120 draw at
+75.45%.
