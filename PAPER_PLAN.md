@@ -4283,3 +4283,78 @@ and detecting them is worth +9.2pt at fixed spend" is.
 
 Multiple rollouts are already in this setting (10 draws/route), and depth is exhausted, so there is
 nothing extra to add there.
+
+## Both remaining levers measured, both negative (2026-09-01)
+
+### Lever 1: the solvability gate needs AUC 0.90, and we are at 0.7335
+
+Simulated a pre-commitment gate on real per-problem spend from 80 batch arms x 171 test problems:
+rank problems by a classifier of the true `solvable_by_pool` label at a target AUC, abstain on the
+lowest-ranked before spending anything, let the freed money fund the rest.
+
+| gate AUC | $0.02 | $0.03 | $0.05 | $0.08 |
+|---:|---:|---:|---:|---:|
+| none | 57.66% | 61.99% | 67.37% | 70.64% |
+| 0.70 | 57.66% | 62.20% | 67.37% | 70.64% |
+| **0.7335 (what we have)** | **57.66%** | **62.20%** | **67.37%** | **70.64%** |
+| 0.80 | 57.92% | 62.78% | 67.37% | 70.64% |
+| 0.85 | 58.88% | 63.13% | 67.51% | 70.78% |
+| 0.90 | 60.26% | 64.35% | 68.54% | 71.70% |
+| 0.95 | 62.13% | 66.18% | 70.67% | 72.65% |
+| 1.00 | 67.49% | 73.10% | 73.10% | 73.10% |
+
+**The response is sharply convex: flat to AUC 0.85, then rising.** At our 0.7335 the gate is worth
+**+0.21pt at $0.03 and +0.00pt everywhere else**. Even +2.4pt requires **AUC 0.90**. The best related
+predictor we have ever trained is post-scout abstention at **0.7629**.
+
+The reason it is convex is structural: the gate is pre-commitment, so every false abstain costs
+accuracy directly. Below near-perfect separation you cannot abstain on much of the 26.9% without
+taking solvable problems with it. And the gate is **constrained to cheap models by construction** —
+a probe that costs an oss120 call defeats its own purpose, so the scout probe at 0.4% of the bill is
+roughly the budget available. That caps the achievable AUC in a way no amount of tuning removes.
+
+**This retires the abstention/stopping line.** Not "it did not work again" — "here is the threshold,
+and it is out of reach for a probe we can afford."
+
+### Lever 2: peer-pool complementarity adds +1.47pt to the ceiling
+
+On the 341 problems where both the ladder and the peer pool have draws:
+
+| pool | solvable | impossible |
+|---|---:|---:|
+| ladder (scout+oss20+oss120, 10 draws each) | 77.71% | 22.29% |
+| qmax (4 draws) | 56.01% | 43.99% |
+| glm5 (3 draws) | 53.37% | 46.63% |
+| qmax + glm5 | 64.52% | 35.48% |
+| **ladder + qmax + glm5** | **79.18%** | **20.82%** |
+
+Adding two frontier peers rescues **5 of 341** problems — a **+1.47pt** ceiling gain, 6.6% of the
+impossible set. Meanwhile **the ladder solves 50 problems neither peer can**.
+
+The 36% realized complementarity from gate 1 is real, but it is complementarity *between the peers*,
+who are individually far weaker than oss120 at depth. Against an existing strong ladder they are
+nearly redundant. (Caveat: the peers had 3-4 draws against the ladder's 10, so this understates them
+somewhat; but the incremental question — does adding peers to our ladder help — is answered at
++1.47pt.)
+
+### Where this leaves the paper
+
+Every lever is now measured and small: depth (0.00pt past k=6), temperature (-0.9pt), data
+(saturated at 551), belief refinement (capped at +3.0% routing headroom), the solvability gate
+(+0.21pt at achievable AUC), the peer pool (+1.47pt), and the RoR margin on the honest axis (~+1pt).
+
+The constructive result is not going to appear from more experiments on this pool. What we do have
+is a rigorous, well-instrumented **anatomy of why sequential routing on code has little room**:
+
+1. a mechanism — in a cost-ordered ladder, resampling the top model subsumes every other lever;
+2. a decomposition — 26.9% of problems consume 82% of the budget; stopping is 82.9% of headroom and
+   everything else is under 3%;
+3. a quantified requirement and a proof it is unreachable — the gate needs AUC 0.90, cheap probes
+   deliver 0.73-0.76;
+4. a falsifiable prediction that discriminates ladders from peer pools — single-draw complementarity
+   collapses 19.3% -> 7.4% in a ladder and holds 38.7% -> 36.3% in a peer pool.
+
+**Recommendation: stop searching for a win and write this as a TMLR empirical/negative-results
+paper.** TMLR's criteria are correctness of claims and interest to some audience, not novelty or
+SOTA, which is exactly the shape of this work. The alternative — continuing to hunt a positive
+result on a pool where every measured lever is under 2 points — is not a good use of the budget.
