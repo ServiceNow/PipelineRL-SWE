@@ -4123,3 +4123,60 @@ whose next draw succeeds:
 So the decay null stands, bounded by the +3.0% unrestricted routing headroom. The grind-family
 numbers are a mechanistic illustration of *why* depth is cheap to get right, not the bound. Report
 them as illustration only, and never as a ceiling.
+
+### Why "better resampling estimates" cannot pay, and quitting can (2026-09-01)
+
+The natural objection: *if we better estimate when resampling beats escalating, shouldn't that save
+a lot?* Measured, no — and the reason is that the resample-vs-escalate decision is almost never a
+close call.
+
+**The decision boundary is crossed by a cliff, not a drift.** The myopic rule resamples cheap route
+m rather than escalating iff `p_m(n) > p_120 * c_m/c_120`. With `p_120 = 0.5789`:
+
+| route | cost ratio | break-even `p_m` |
+|---|---:|---:|
+| scout | 53.8x | **1.08%** |
+| oss20 | 7.5x | **7.72%** |
+
+Empirical conditional hazard `P(draw n+1 succeeds | first n failed)`, test split:
+
+| n | scout | | oss20 | |
+|---:|---:|---|---:|---|
+| 0 | 28.07% | RESAMPLE | 38.01% | RESAMPLE |
+| 1 | 4.07% | RESAMPLE | 16.04% | RESAMPLE |
+| 2 | **0.85%** | escalate | 7.87% | RESAMPLE |
+| 3 | 0.85% | escalate | **1.22%** | escalate |
+
+scout falls from 26x above its threshold to below it in two draws; oss20 drops 6.5x in a single
+step. A belief only has to be right to within a factor of ~5 to get these calls right, and ours is
+far better than that. The optimal rule is effectively a **constant**: resample the cheap route about
+twice, then escalate. There is no per-problem variation left for a decay to predict.
+
+**And the total prize is tiny.** Problems whose first cheap-route success arrives at draw >= 4:
+
+| route | late successes | oss120 also solves them | **genuinely unique** | money at stake if predicted perfectly |
+|---|---:|---:|---:|---:|
+| scout | 6 | 6 | **0** | $0.00114/problem (0.76%) |
+| oss20 | 6 | 6 | **0** | $0.00132/problem (0.88%) |
+
+Deep cheap resampling uniquely rescues **0 of 171** problems. Perfect resample-vs-escalate decisions
+at depth are worth **1.6%** of our $0.15019 operating cost, combined.
+
+**Against quitting:**
+
+| | accuracy | cost |
+|---|---:|---:|
+| our policy | 73.10% | $0.15019 |
+| **oracle stopping** | 73.10% | **$0.02573** — same accuracy, **82.9% cheaper** |
+| oracle routing | 70.99% | $0.06845 |
+
+**1.6% versus 82.9% — a 50x ratio.** (Oracle stopping leaks future outcomes and is a diagnostic
+bound, not a deployable policy; it locates the headroom, it is not an achievable target.)
+
+**The clean statement.** The decay answers *"will the next draw of route m succeed?"* Quitting
+requires *"will nothing on any route at any remaining depth succeed?"* Those are different
+questions, and the second is dominated by `theta` on the expensive route — whether the top model can
+solve this problem at all — which is fixed at n=0 by the problem text and has no decay in it. This
+is exactly why the factorized model lost: it improved all three per-route heads (the resampling
+question) and degraded the `nothing` head from 0.7335 to 0.7199 (the quitting question). It traded
+accuracy on the one head that carries the money for accuracy on three that do not.
