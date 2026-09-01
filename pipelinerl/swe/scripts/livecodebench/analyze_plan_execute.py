@@ -102,6 +102,46 @@ def stop_on_pass_cost(outcome: np.ndarray, per_draw_cost: np.ndarray, fixed_cost
     return float(total.mean()), float(solved.mean())
 
 
+def cascade_frontier(
+    stages: list[tuple[str, np.ndarray, np.ndarray, np.ndarray, int]],
+) -> list[dict]:
+    """Enumerate stop-on-pass cascades over ordered stages.
+
+    Each stage is (name, outcome[P,K], per_draw_cost[P,K], fixed_cost[P], max_draws). A
+    schedule takes n_s draws of stage s in order, paying fixed_cost once if n_s > 0 (the plan),
+    stopping the episode on the first pass. Returns every (schedule, solve, cost) point.
+    """
+    import itertools
+
+    P = stages[0][1].shape[0]
+    points = []
+    for counts in itertools.product(*[range(mx + 1) for *_, mx in stages]):
+        if sum(counts) == 0:
+            continue
+        alive = np.ones(P, bool)
+        solved = np.zeros(P, bool)
+        cost = np.zeros(P)
+        for (name, outcome, per_draw, fixed, _), n in zip(stages, counts):
+            if n == 0:
+                continue
+            cost[alive] += fixed[alive]
+            for j in range(min(n, outcome.shape[1])):
+                cost[alive] += per_draw[alive, j]
+                solved |= alive & outcome[:, j]
+                alive &= ~outcome[:, j]
+        points.append({"schedule": {s[0]: n for s, n in zip(stages, counts) if n},
+                       "solve": float(solved.mean()), "cost": float(cost.mean())})
+    return points
+
+
+def cheapest_at_accuracy(points: list[dict], targets: list[float]) -> dict[str, dict | None]:
+    out = {}
+    for t in targets:
+        ok = [p for p in points if p["solve"] + 1e-12 >= t]
+        out[f"{100*t:.0f}"] = min(ok, key=lambda p: p["cost"]) if ok else None
+    return out
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--tensors-dir", required=True, help="dir with tensors.npz + problems.jsonl")
@@ -189,6 +229,30 @@ def main() -> None:
         policies[f"{args.reference_slot}_x{k}"] = {"cost": c, "solve": s, "cost_per_solved": c / max(s, 1e-9)}
     report["stop_on_pass_policies"] = policies
 
+    # THE decision: does a cascade that includes the composite reach the same accuracy for
+    # less money than one without it? A cost win with zero new solves is still a win --
+    # all remaining headroom on this pool is cost, and the composite earns its place by
+    # absorbing problems before the reference fallback runs.
+    scout_stage = (args.executor_slot, exe_out, exe_alone_usd, zero, min(4, exe_out.shape[1]))
+    comp_stage = ("composite", outcome, exec_usd, plan_usd, K)
+    ref_stage = (args.reference_slot, ref_out, ref_usd, zero, min(6, ref_out.shape[1]))
+    with_comp = cascade_frontier([scout_stage, comp_stage, ref_stage])
+    without = cascade_frontier([scout_stage, ref_stage])
+    targets = [0.50, 0.55, 0.60, 0.65, 0.70, 0.73, 0.75]
+    best_with = cheapest_at_accuracy(with_comp, targets)
+    best_without = cheapest_at_accuracy(without, targets)
+    report["cascade_matched_accuracy"] = {
+        t: {
+            "without_composite": best_without[t],
+            "with_composite": best_with[t],
+            "saving_pct": (
+                None if not best_with[t] or not best_without[t]
+                else round(100 * (1 - best_with[t]["cost"] / best_without[t]["cost"]), 1)
+            ),
+        }
+        for t in best_with
+    }
+
     # Verdict heuristics, stated as numbers not adjectives.
     print(f"\n== {args.route_label} on {len(pids_all)} {args.split} problems  (plan: {meta['plan_route_label']} / {meta['plan_model']}) ==")
     print(f"plan: {meta['mean_plan_words']:.0f} words, {meta['mean_plan_completion_tokens']:.0f} completion tok "
@@ -204,6 +268,16 @@ def main() -> None:
     print(f"{'policy':16s} {'solve':>7s} {'$/problem':>10s} {'$/solved':>10s}")
     for name, v in policies.items():
         print(f"{name:16s} {100*v['solve']:6.1f}% {v['cost']:10.5f} {v['cost_per_solved']:10.5f}")
+    print(f"\ncascade cost at matched accuracy ({args.executor_slot} -> composite -> {args.reference_slot}, stop on pass)")
+    print(f"{'target':>7s} {'without $':>10s} {'with $':>10s} {'saving':>8s}  schedule with composite")
+    for t, v in report["cascade_matched_accuracy"].items():
+        wo, wi = v["without_composite"], v["with_composite"]
+        if wo is None and wi is None:
+            print(f"{t:>6s}%  unreachable"); continue
+        sv = "" if v["saving_pct"] is None else f"{v['saving_pct']:+7.1f}%"
+        wo_cost = wo["cost"] if wo else float("nan")
+        wi_cost = wi["cost"] if wi else float("nan")
+        print(f"{t:>6s}% {wo_cost:10.5f} {wi_cost:10.5f} {sv:>8s}  {wi['schedule'] if wi else ''}")
 
     out = Path(args.out) if args.out else Path(args.exec_dir) / f"analysis_{args.route_label}_{args.split}.json"
     out.write_text(json.dumps(report, indent=2))

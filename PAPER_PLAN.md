@@ -5369,12 +5369,19 @@ Tests: `tests/test_plan_execute.py`. Analysis smoke-tested on the real oss20 dra
 
 **Pre-registered predictions.** (a) plan is 15-30% of an oss120 call's tokens; (b) composite
 pass@1 lands between scout (28%) and oss120 (58%); (c) c_inf vs oss120 at k=4 is under 2pt
-and composite-only solves are near zero, i.e. a cheap dominated rung; (d) planscout_scout ~
-nullplan_scout ~ scout alone, so any gain is plan *content*, not format. If (c) fails and the
-composite solves problems oss120 never does, that is the interesting outcome and the RL
-executor-training stage (train the scout to follow expert plans, expert emits plans only) is
-justified on the 551 train split; if (c) holds, the composite is priced into the compiled
-schedule as a rung and the RL stage is not worth running.
+and composite-only solves are near zero, i.e. no accuracy headroom; (d) planscout_scout ~
+nullplan_scout ~ scout alone, so any gain is plan *content*, not format.
+
+**The decision is cost, not c_inf.** A composite that solves half of oss120's problems at a
+fraction of the price wins with zero new solves: it absorbs problems before the oss120
+fallback runs. All remaining headroom on this pool is cost, so (c) holding is expected and is
+not a stop condition. The go/no-go is the cascade comparison in `analyze_plan_execute.py`:
+cheapest stop-on-pass schedule over {scout x a, composite x b, oss120 x c} versus
+{scout x a, oss120 x c} at matched accuracy (50-75%). **Go if the composite saves >= 10% at
+two or more accuracy targets, and self-plan does not.** A cost win also justifies the RL
+stage directly, since a better plan-follower absorbs more problems before the fallback. If
+the composite additionally solves problems oss120 never does, that is a second, separate
+result (off-ladder complementarity from a protocol rather than a model).
 
 **Stage 2 (only if stage 1 passes).** PipelineRL: scout trained to solve from problem + expert
 plan vs ordinary solution distillation at a matched expert-token budget; metric is expert

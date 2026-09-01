@@ -59,3 +59,21 @@ def test_analysis_statistics_on_synthetic_outcomes():
     cost, solve = ape.stop_on_pass_cost(comp, per_draw, fixed, 3)
     # spends: p0: 1+1, p1: 1+2, p2: 1+3, p3: 1+3 -> mean 3.25; solves 3/4
     assert abs(cost - 3.25) < 1e-9 and solve == 0.75
+
+
+def test_cascade_can_win_on_cost_with_zero_new_solves():
+    # Composite solves a strict subset of what the reference solves, but cheaply. Including
+    # it must lower the cost of reaching the reference's accuracy.
+    ref = np.array([[1], [1], [1], [0]], bool)  # 75% at $10 per problem
+    comp = np.array([[1], [1], [0], [0]], bool)  # 50%, plan $1 + draw $1
+    ref_stage = ("ref", ref, np.full((4, 1), 10.0), np.zeros(4), 1)
+    comp_stage = ("composite", comp, np.ones((4, 1)), np.ones(4), 1)
+    with_comp = ape.cascade_frontier([comp_stage, ref_stage])
+    without = ape.cascade_frontier([ref_stage])
+    best_with = ape.cheapest_at_accuracy(with_comp, [0.75])["75"]
+    best_without = ape.cheapest_at_accuracy(without, [0.75])["75"]
+    assert best_without["cost"] == 10.0
+    # composite pays 2 on all four, then ref pays 10 on the two it did not solve: (8 + 20) / 4
+    assert abs(best_with["cost"] - 7.0) < 1e-9 and best_with["solve"] == 0.75
+    assert best_with["schedule"] == {"composite": 1, "ref": 1}
+    assert ape.c_inf(comp, ref, 1) == 0.0  # zero new solves, and still a 30% saving
