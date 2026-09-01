@@ -4586,3 +4586,83 @@ The gate line is closed with a real predictor rather than a simulation. Proceed 
 two launches as planned: **decision-focused training** (untouched by this — it targets the
 routing/value decisions, not the stopping gate) and the **TACO 6-draw collection**
 (justified by the scaling evidence, which is independent of all of the above).
+
+## A theoretical basis: asymptotic complementarity c_inf (2026-09-01)
+
+### The quantity
+
+For a pool of models and a per-model draw budget k, define
+
+```
+  c_inf(k)  =  P(some model solves within k draws)  -  max_m P(model m solves within k draws)
+```
+
+**This is the accuracy a router can gain over simply always calling the single best model.**
+It is model-free, and it is two lines of code on a (problem x model x draw) tensor.
+
+### The proposition
+
+Suppose the pool is *monotone in a single latent ability*: `p_mi = f(a_m, d_i)` with f
+increasing in the model parameter `a_m` and `d_i` a per-problem difficulty. Then for the
+best model, `p_best,i >= p_mi` **pointwise in i**, so every model's success set is
+contained in the best model's in the limit and
+
+```
+  c_inf(k)  ->  0   as k -> infinity.
+```
+
+Complementarity measured at k=1 is then **entirely reclaimable by resampling the top
+model**: it reflects the overlap structure of a single difficulty ordering, not genuine
+diversity. Positive `c_inf` at large k therefore *falsifies* one-dimensionality, and its
+**decay rate in k is a test statistic for the dimensionality of the ability space**.
+
+**Corollary.** Routing's achievable *accuracy* gain is bounded above by `c_inf(k)` at the
+deployed k. Cost savings are unaffected — they remain available even when `c_inf = 0`.
+
+### The validation, at matched draw budgets
+
+| k | ladder (scout/oss20/oss120) | peer pool (qmax/glm5) |
+|---:|---:|---:|
+| 1 | +3.52pt | +9.09pt |
+| 2 | +1.76pt | +8.80pt |
+| 3 | +1.17pt | **+8.80pt** |
+| 5 | +1.17pt | — |
+| 10 | **+0.88pt** | — |
+
+**The ladder's `c_inf` collapses 4x (3.52 -> 0.88). The peer pool's is flat (9.09 -> 8.80).**
+At the matched k=3 budget the peers' is **7.5x** the ladder's. Exactly the predicted
+dichotomy: a cost-ordered ladder is near-1-D and resampling reclaims its apparent
+complementarity; peers of similar strength are genuinely off-diagonal and it cannot.
+
+Corroborating model fit: a 1-parameter Rasch model `p_mi = sigmoid(a_m - d_i)` fitted to
+the ladder (fitted abilities scout -2.596, oss20 -1.937, oss120 +0.883) predicts
+normalized complementarity decaying 12.8% -> 0.8% over k=1..10, against an observed
+19.3% -> 7.3%. One dimension captures the *direction* of the collapse and under-predicts
+its floor, which is the residual multidimensional component that `c_inf` isolates
+directly. (A 2-D fit was attempted and the objective was miscoded; it is not reported and
+must be redone before any 2-D claim is made. The `c_inf` results above are model-free and
+unaffected.)
+
+### What it explains
+
+One quantity accounts for four separate empirical findings:
+
+1. **Oracle routing is worth only +3.0% of headroom** — bounded by `c_inf ~ 1pt`.
+2. **CodeRouterBench's single-draw complementarity is misleading** — it reports `c(1)`,
+   not `c_inf`, and every cost-routing pool is a ladder by construction. This is the
+   rigorous version of the claim we earlier had to soften.
+3. **Cheap-route depth is fully subsumed** (0 problems uniquely solved by scout or oss20
+   draws 2-10) — the pointwise-dominance statement, directly observed.
+4. **Per-problem decay is worthless** — it modulates depth within a route, and depth
+   within a dominated route cannot cross `c_inf`.
+
+### The prescription
+
+**Measure `c_inf` before building a router.** It costs one collection sweep and no
+training. If it is small, no router can buy accuracy on that pool and only cost savings
+are available — which is precisely the regime we spent this project in, and precisely
+what the field's single-draw complementarity numbers hide.
+
+This is the theoretical basis the project was missing: a definition, a proposition with a
+one-line proof, a test statistic, a validated prediction on two pools that behave in
+opposite ways, and an actionable prescription — all from data already collected.
