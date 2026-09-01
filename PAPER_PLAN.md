@@ -4854,3 +4854,52 @@ loss exactly — a direct, cheap critique of the standard evaluation protocol.
 
 **8. A scaling law for router savings.** savings(n) at 177 / 275 / 357 / 536 / 551, plus
 the TACO points when they land. Fit and extrapolate.
+
+## Outside the routing frame: what the per-test-case codes say (2026-09-01)
+
+We hold per-test pass/fail codes on 17,011 draws — a layer almost no benchmark release
+publishes. Three questions, two artifacts, one solid finding.
+
+### SOLID: the grader short-circuits, so "fraction of tests passed" is not partial credit
+
+**4373 of 4373 failed attempts (100.0%) have strictly prefix-shaped result codes**
+(T...T F...F). The evaluator stops at the first failing test. Therefore
+
+```
+  fraction of tests passed  ==  (index of the FIRST failure) / (suite size)
+```
+
+which measures *how far execution got before the first error*, not how much of the
+problem was solved. 66.7% of failures fail test 1 outright; there is literally **nothing**
+in the 1-50% band, because the quantity is not a graded measure at all.
+
+This matters beyond this project: **dense rewards built from test-pass fraction are widely
+used in RLVR for code**, and wherever the grader short-circuits (a standard efficiency
+choice) that reward is a first-failure position, not partial correctness.
+
+### Its signal content is nil (an honest null, not a reversal)
+
+Pooled, the association looks strikingly *negative* — next-draw success after an attempt
+that passed 0 tests is **24.67%**, after 50-90% is 18.97%, after >90% is **16.32%**,
+pooled AUC 0.4593 with oss120 significantly below chance (permutation P=0.0%).
+
+**But it does not survive a within-problem control.** Comparing only draws of the same
+model on the same problem: 65 concordant vs 56 discordant pairs, Kendall tau =
+**+0.0744** — indistinguishable from zero and pointing the other way. The pooled negative
+is therefore a **between-problem confound**: problems whose failures get further through
+the suite are simply harder problems. The correct claim is the weaker one — partial test
+credit is *uninformative*, not anti-informative. (It is also uninformative about
+problem-level solvability: AUC 0.5314 / 0.5100, measured earlier.)
+
+### ARTIFACT, retracted: "3 tests reproduce the full verdict"
+
+Held-out test-subset selection reported 100% verdict accuracy from a **single** test. That
+is entirely an artifact of prefix-shaping: with T...TF...F codes the verdict equals "did
+the last test pass", so one well-chosen test reproduces it by construction. There is no
+verifier compression result here. Retracted before use.
+
+### Standing
+
+A caution worth one paragraph in a paper about reward design, not a paper. Recorded so it
+is not re-derived, and so the prefix-shape check is run before any future analysis touches
+`full_result_codes`.
