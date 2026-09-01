@@ -5138,3 +5138,87 @@ plateau becomes an information limit rather than an engineering gap.
 **Blocker**: `q35p` must be re-collected with a larger token cap and reasoning-field
 capture (336/341 empty outputs at a 4096 cap), and we need 2-4 more peers priced from
 measured token counts rather than my estimates.
+
+## Peer-pool selection from CodeRouterBench, and a cost-model problem (2026-09-01)
+
+### WARNING: our cost model is ~2 orders of magnitude above current list prices
+
+Recomputing our own recorded per-call costs from OUR measured token counts at today's
+OpenRouter prices:
+
+| slot | mean prompt tok | mean completion tok | our cost | today | ratio |
+|---|---:|---:|---:|---:|---:|
+| oss20 | 570 | 2037 | $0.003963 | $0.000282 | **14x** |
+| oss120 | 569 | 1648 | $0.029725 | $0.000301 | **99x** |
+
+At today's prices `gpt-oss-120b` ($0.00030/call) is **20x cheaper than qwen3-max**
+($0.0062). Our "53.8x cost ladder" **inverts** at current prices. Every dollar figure in
+this project rests on this model, and ladder-vs-peer is *defined* by cost ratios, so the
+cost basis must be dated and justified explicitly in any writeup — or re-derived.
+
+### Selecting the pool on measured code performance
+
+CodeRouterBench (`Lance1573/CodeRouterBench`) gives **9,999 code tasks x 8 models** with
+per-task score, `cost_usd`, tokens and latency across 9 dimensions (code_generation,
+bug_fixing, algorithm, test_generation, ...).
+
+| model | provider | accuracy | $/call | single-model status |
+|---|---|---:|---:|---|
+| Qwen3-Max | Alibaba | 36.38% | $0.00053 | **PARETO** |
+| kimi-k2.5 | Moonshot | 34.43% | $0.00082 | dominated |
+| qwen3.5-plus | Alibaba | 35.07% | $0.00170 | dominated |
+| MiniMax-M2.7 | MiniMax | 34.61% | $0.00518 | dominated |
+| glm-5 | Zhipu | 36.14% | $0.00568 | dominated |
+| gpt-5.4 | OpenAI | 42.32% | $0.00589 | **PARETO** |
+| claude-sonnet-4-6 | Anthropic | 41.12% | $0.00886 | dominated |
+| claude-opus-4-6 | Anthropic | 42.64% | $0.01216 | **PARETO** |
+
+Two clean tiers: a **peer band at 34-37%** (five models, five labs) and a **high band at
+41-43%** (three models, two labs). Note the single-model Pareto frontier —
+Qwen3-Max / gpt-5.4 / claude-opus — is itself a **ladder**, i.e. exactly the structure with
+no routable value. Dominance only disqualifies a model if you must pick one; for routing a
+dominated model earns its place through complementarity.
+
+### Routable excess SHRINKS with pool size
+
+| k | best routable excess | pool |
+|---:|---:|---|
+| 2 | **+6.27pt** | MiniMax-M2.7 + Qwen3-Max |
+| 3 | +5.99pt | MiniMax-M2.7 + Qwen3-Max + qwen3.5-plus |
+| 4 | +5.24pt | MiniMax + Qwen3-Max + kimi-k2.5 + qwen3.5-plus |
+| 5 | +4.49pt | + glm-5 |
+| 8 | **+2.60pt** | everything |
+
+The Rasch null rises faster than the oracle, so **adding models destroys routable
+structure**. This is a design rule, and it contradicts the field's instinct to route over
+large pools (LLMRouterBench uses 33 models, RouterEval 8,500).
+
+### Recommended pool for the probe-conditioned experiment
+
+**Four models, four distinct lineages, tight accuracy band:**
+
+| model | lab | acc | $/call |
+|---|---|---:|---:|
+| Qwen3-Max | Alibaba | 36.38% | $0.00053 |
+| glm-5 | Zhipu | 36.14% | $0.00568 |
+| kimi-k2.5 | Moonshot | 34.43% | $0.00082 |
+| MiniMax-M2.7 | MiniMax | 34.61% | $0.00518 |
+
+Accuracy spread 1.95pt (genuine peers, not a ladder); four separate pretraining lineages,
+which is where off-diagonal ability comes from; routable ceiling ~+5.2 to +5.7pt.
+Drop `qwen3.5-plus` despite good numbers — it is a second Alibaba model *and* it is the
+one that failed our collection with 336/341 empty outputs at a 4096 cap.
+
+**Cross-validation of the statistic**: our own LCB measurement of qmax+glm5 gave
+**+5.11pt** routable; CodeRouterBench's independent tasks give Qwen3-Max+glm-5 at
+**+5.99pt**. Same magnitude on different problems and a different harness.
+
+### Caveats before collection
+
+1. CodeRouterBench tasks are HumanEval/bug-fix style, **not** LCB/TACO competitive
+   programming. Absolute accuracies will not transfer (our qmax scored 46.9% on LCB vs
+   36.4% here); the complementarity *structure* is the transferable part and must be
+   re-measured on our problems.
+2. All CodeRouterBench numbers are **single-draw** and therefore carry the inflation we
+   documented. They are the right basis for *choosing* a pool, not for reporting a result.
+3. Thinking models need a large token cap and reasoning-field capture before collection.
