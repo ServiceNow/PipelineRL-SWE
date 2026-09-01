@@ -5061,3 +5061,80 @@ competitive with everything, and why scaling data 10x and the encoder 3x buys 2.
 - RouterBench is single-draw, so its oracle also carries inflation (2), which the Rasch
   audit does not remove. The two corrections compose and we currently measure them on
   different datasets.
+
+## Probe-conditioned routing: the experiment we have NOT run (2026-09-01)
+
+### Why this is the right target
+
+Every one of the 21 routers surveyed in the Routing Plateau paper decides from the **query
+text alone**. None runs a cheap model first and conditions on what it produced. The paper
+diagnoses the plateau as a *correctness-prediction bottleneck* — routers cannot infer
+instance-level correctness from the query — and attacks it with more data and bigger
+encoders (+2.13pp). **Nobody has tried giving the router an actual attempt at the problem.**
+
+We have never run this either. Every post-scout result in this project targets
+**abstention** ("will the expensive model succeed / is this solvable"), never
+**discrimination among peers** ("which of these models will succeed"). Those are different
+prediction problems and only the second is routing.
+
+### The routable ceiling says the experiment is worth running
+
+Rasch-null audit of our own pools at **single draw** (the literature's protocol):
+
+| pool | best | oracle | Rasch null | **routable ceiling** |
+|---|---:|---:|---:|---:|
+| **peers: qmax + glm5** | 46.92% | 56.01% | 50.90% | **+5.11pt** (z=+5.1) |
+| ladder: scout+oss20+oss120 | 64.22% | 67.74% | 64.91% | +2.83pt (z=+3.2) |
+| peers + oss120 | 64.22% | 69.21% | 65.82% | +3.39pt (z=+3.8) |
+| all five | 64.22% | 70.97% | 67.32% | +3.65pt (z=+4.0) |
+| *RouterBench mbpp* | | | | *+2.76pt* |
+
+**The peer pool has the most routable structure of anything we have measured** — 1.8x the
+ladder and roughly 2x RouterBench's typical task. This is the one setting in the whole
+project where routing can buy accuracy rather than only cost.
+
+### Pilot: suggestive, badly underpowered
+
+Disagreement set (exactly one peer succeeds) = **71 of 341 problems (20.8%)**. That is the
+only set where a router changes anything. Predicting *which* peer wins:
+
+| feature from the scout probe | AUC |
+|---|---:|
+| **scout solved it** | **0.5980** (permutation p = 0.087) |
+| scout code length | 0.5710 (inverted) |
+| problem length | 0.5633 |
+| scout test-pass fraction | 0.5367 |
+
+At n=71 the 95% CI on AUC is about +/-0.17. **This is a go/no-go, not a result** — and it
+says go, weakly.
+
+### The proper experiment
+
+- **Pool**: 4-6 *peers* (similar cost and capability, NOT a ladder — c_inf and the audit
+  both say ladders have nothing to route on). qmax + glm5 + 2-4 more.
+- **Protocol**: single draw per model, matching the routing literature so numbers are
+  directly comparable. This is the one place multi-draw should be dropped.
+- **Probe**: one scout generation plus its execution feedback. Local vLLM, so the compute
+  is free, but it is **not free in the cost accounting** — $0.000553 against peers at
+  ~$0.002-0.003 is a **20-25% surcharge**, and the comparison must be cost-matched. The
+  probe partly repays this by solving some problems outright, which must be separated from
+  its information value exactly as in the batch-allocation decomposition.
+- **Problems**: LCB 892 + TACO 2000 (already collecting). Power: detecting AUC 0.60 needs
+  roughly 600-700 disagreement problems; at a ~21% disagreement rate that is ~3,000
+  problems, which this supplies.
+- **Comparison**: query-text-only router (the literature's setting) vs probe-conditioned
+  router, both scored against the **Rasch-null routable ceiling** rather than the raw
+  oracle.
+- **Cost**: ~2,900 problems x 4 peers x ~$0.003 = **~$35**. Trivial.
+
+### Why this would be a real method contribution
+
+It targets a documented open problem with information no existing router uses, in the only
+regime where routing can pay, measured against a ceiling that we can compute. If it works
+it is "scout before you route", properly earned. If it fails, the failure is
+informative and bounded — we will know the probe cannot break the bottleneck, and the
+plateau becomes an information limit rather than an engineering gap.
+
+**Blocker**: `q35p` must be re-collected with a larger token cap and reasoning-field
+capture (336/341 empty outputs at a 4096 cap), and we need 2-4 more peers priced from
+measured token counts rather than my estimates.
