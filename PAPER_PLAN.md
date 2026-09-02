@@ -5562,3 +5562,142 @@ beats every prior channel and warrants a policy replay; <= 0.76 closes the chann
 information-limit claim stops having an obvious hole. Expect the last outcome. Note the
 label is now 90/10 imbalanced, which both makes the AUC noisy and is itself evidence that
 LiveCodeBench is the wrong domain for an abstention claim.
+
+---
+
+# THE PLAN, RESTATED (2026-09-02)
+
+Supersedes earlier roadmaps where they conflict. Written after a session that reproduced two
+recorded headline claims and found neither survived, so the operating rule below is that
+nothing enters the paper by citation from this file.
+
+## The thread, in one sentence
+
+> Get a clean read on how much a learned query-conditioned prior plus abstention improves
+> over count-only beliefs in the sequential MDP, on a dataset whose labels are not corrupted
+> by generation caps and which is hard enough that the oracle abstention rate is substantial.
+
+## What that sentence has to be expanded to include
+
+**1. The baseline set is not just count-only.** A training-free compiled schedule -- a
+problem-independent greedy purchase order over (model, draw) pairs, stopping only on success
+-- beats RoR-style counts in several regimes and needs no model at all. A reviewer will
+construct it if we do not. Report against the best of {counts, fixed schedule, one-pass
+cascade}. The learned arm already survives this on current data (see the uniform-truncation
+entry above), which is the single most reassuring result of the session.
+
+**2. "Clean" means three defects, not one.**
+
+| defect | measured impact | fix |
+|---|---|---|
+| 4096-token cap truncating generations | 24.2% of "impossible" problems fall at 32k; 40% of LCB failures are empty generations; 29-30% of TACO draws at the cap | re-collect at 32k (API spend, small) |
+| null `fn_name` key routing stdin problems to call-based grading | 1,774/2,000 TACO problems carry it; 7.2% of med/hard draws show the signature | re-grade, free |
+| code extractor takes the FIRST fenced block | 14.0% of TACO med/hard draws; ~11% of LCB failures | re-extract + re-grade, free |
+
+The third is shared by both datasets and was found only because a TACO failure was inspected
+by hand. Assume more of these exist and budget for looking.
+
+**3. Enough draws that "impossible" is a measurement.** Single-draw impossibility is mostly
+bad luck: LCB reads 22.6% at one draw and 13.9% at ten. Any abstention headroom computed
+from a shallow collection is not a real number.
+
+**4. Seeds propagated through the frontier, and the cost basis swept.** Seed CV is 11.8%
+against a margin in the teens, so per-head AUC is not sufficient. And the scout has no market
+price at all (not served on OpenRouter), while pool gain ranged 0%-69% across cost bases, so
+the result must be reported as a function of the price ratio rather than at one point.
+Measure the scout's serving cost on the hardware that already runs it.
+
+**5. Both axes, always.** Cost at matched accuracy and accuracy at matched budget, stated in
+the same sentence.
+
+**6. A confirmation split touched once.** The current test problems have informed development
+for weeks.
+
+## Domain choice: TACO medium+hard is the primary candidate
+
+Contested fraction and impossible fraction at matched one draw, two routes:
+
+| domain | n | scout | oss120 | neither | contested |
+|---|---:|---:|---:|---:|---:|
+| LiveCodeBench | 892 | 41.7% | 75.4% | 22.6% | 37.6% |
+| SWE-Smith | 143 | 36.4% | 55.2% | 42.7% | 23.1% |
+| **TACO medium+hard** | **883** | 15.2% | 35.0% | **61.5%** | 26.8% |
+
+- **LCB is being cleaned into a worse testbed.** The truncation fix moves problems from
+  impossible to *easy* -- 58% of rescued problems are solved on the first new draw -- so the
+  distribution becomes more polarised and the abstention headroom shrinks from 13.9% toward
+  ~10%. Expect the method's margin there to fall, not rise.
+- **SWE-Smith has the headroom (37.8% impossible at 3 draws) but 143 problems, 35 in test.**
+  One test problem moves accuracy 2.9pt. Usable only if scaled; it is a synthetic generator
+  so scaling is possible, and an untouched eval300 bundle already exists.
+- **TACO medium+hard has both difficulty and size**, is the same genre and grader as LCB so
+  all machinery transfers, and scales to 26,443 problems. Its contested fraction of 26.8% is
+  a floor, since both grading defects deflate it. Gap: only 2 routes and 1 draw exist; the
+  MDP needs oss20 and depth. ~36k calls for all 2,000 problems x 3 routes x 6 draws, on the
+  order of $40 and a day of parallel jobs.
+- Caveat to check: TACO is 2023 against 2025-era models, so some apparent easiness may be
+  memorisation. Sanity-check difficulty structure against post-cutoff LCB at matched labels.
+
+## What goes in the paper, and the sorting principle
+
+**Include a discovery if the main result would be untrustworthy without it.** That converts
+the incidental findings from a dump into the reason to believe the headline.
+
+**Body, load-bearing for the method claim:**
+1. Oracle decomposition: routing 3% of headroom, stopping 63%. Explains that the method works
+   through giving up, not through selection.
+2. Asymptotic complementarity `c_inf`: 3.52 -> 0.88pt with draws on the ladder, flat 9.09 ->
+   8.80pt on a peer pool. Explains why routing cannot buy accuracy on a cost-ordered pool.
+3. Uniform truncation vs learned abstention: the hardest baseline, and the learned arm wins
+   at 4/6 matched-accuracy targets with problem-clustered paired intervals.
+4. Beliefs-vs-mechanism attribution: both give-up rules beat the fixed schedule with learned
+   priors and both lose with count priors, so query-conditioning is what carries it.
+
+**Own section -- three grading defects in execution-graded code benchmarks.** Framed as "why
+our labels are trustworthy and published ones may not be," not as a miscellany. The
+short-circuit finding reaches furthest: dense test-pass rewards are common in RLVR for code
+and, wherever the grader short-circuits, measure first-failure position rather than partial
+correctness, and depend on arbitrary test order.
+
+**Methodological, cheap to include:** gate AUC over all problems is inflated by cases
+carrying no decision and collapses toward 0.75 once conditioned; single-draw complementarity
+overstates a ladder's routable structure ~2.6x.
+
+**Leave out:** the cost-basis sweep until the scout has a measured price; the Rasch null audit
+of RouterBench, now that a 67-model paper (2606.27288) occupies that ground; peer-pool
+measurements unless they become their own experiment.
+
+## Standing corrections from this session
+
+- **The 0.90 gate bar is soft.** It comes from one table with synthetic scores at a target
+  AUC, under pre-commitment with reallocation, on the accuracy-at-matched-budget axis, and
+  has no committed code. AUC does not determine threshold behaviour. Sequential abstention
+  demonstrably converts at ~0.75 because it conditions on observed failures, which the
+  pre-commitment gate never sees. Do not quote 0.90 as a general requirement.
+- **"Removing the router is worth 42%" does not reproduce** and has no committed code. A
+  fresh greedy schedule needs $0.15858 to reach the ceiling, not $0.0792.
+- **"No policy without a give-up arm finds a cheap ceiling point" is contradicted** by the
+  fixed schedule, which reaches the ceiling without one.
+- **Retraction 7**: the "current list prices" comparison was two-thirds invented; the scout
+  has no OpenRouter price because it is not served there.
+- **Scout completion tokens are NOT a truncation proxy.** Rescued and still-unsolved problems
+  have indistinguishable token counts (1079 vs 1018 scout); both are ~3x solvable problems.
+  The feature tracks difficulty and truncation is downstream of it.
+- **Cross-model failure-index agreement is a null (AUC 0.50-0.60), but the null does not
+  stand**, because it was computed on short-circuited prefixes where 59.1% of draws stop at
+  index 0. Re-run on full patterns.
+
+## Operating rule
+
+Two recorded headline claims failed to reproduce in one session, neither with committed code
+behind it. **Nothing enters the paper by citation from this file.** Every number carried
+forward must be re-derived from a committed script. Each inclusion therefore has a real cost,
+which is the argument for the sorting principle above rather than against including things.
+
+## Confidence
+
+Roughly two thirds that a defensible TMLR paper comes out of this with TACO medium+hard as
+primary and the fixed-schedule baseline included. Around 40% on corrected LiveCodeBench
+alone, for the specific reason that cleaning it removes the abstention headroom the result
+lives on. The single fact that would move this most is whether the abstention advantage holds
+where the impossible set is real rather than inflated.
