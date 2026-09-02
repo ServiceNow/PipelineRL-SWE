@@ -133,14 +133,19 @@ def learned_points(traces_path: Path, policies: set[str], test_pids: list[str]):
                 continue
             r = json.loads(line)
             pol = r.get("policy")
-            if pol not in policies or r.get("value_of_correct") is None:
+            if pol not in policies:
                 continue
-            agg[(pol, float(r["value_of_correct"]))][str(r["problem_id"])].append(
+            # Two knob schemes coexist: the utility arms sweep R (abstention falls out of
+            # p*R - c <= 0), while the tau arms sweep a budget and an explicit threshold on
+            # the `nothing` head. Key on whichever this row carries so both are comparable.
+            knob = (float(r["value_of_correct"]),) if r.get("value_of_correct") is not None \
+                else (float(r.get("budget") or 0.0), float(r["tau"]) if r.get("tau") is not None else -1.0)
+            agg[(pol, knob)][str(r["problem_id"])].append(
                 (float(r["realized_spend"]), bool(r["correct"]), bool(r.get("abstained")))
             )
     idx = {p: i for i, p in enumerate(test_pids)}
     points = []
-    for (pol, R), per_p in agg.items():
+    for (pol, knob), per_p in agg.items():
         if set(per_p) != set(test_pids):
             continue
         c = np.zeros(len(test_pids))
@@ -151,7 +156,7 @@ def learned_points(traces_path: Path, policies: set[str], test_pids: list[str]):
             c[i] = np.mean([v[0] for v in vals])
             a[i] = np.mean([v[1] for v in vals])
             ab[i] = np.mean([v[2] for v in vals])
-        points.append({"policy": pol, "R": R, "cost": c, "acc": a, "abstain": float(ab.mean())})
+        points.append({"policy": pol, "R": knob, "cost": c, "acc": a, "abstain": float(ab.mean())})
     return points
 
 
@@ -219,7 +224,7 @@ def main() -> None:
               f"{(boots>0).mean():18.2f}")
         report["comparisons"].append({
             "target": tgt, "uniform_k": bu["k"], "uniform_cost": float(bu["cost"].mean()),
-            "learned_policy": bl["policy"], "learned_R": bl["R"],
+            "learned_policy": bl["policy"], "learned_knob": list(bl["R"]),
             "learned_cost": float(bl["cost"].mean()), "learned_abstain_rate": bl["abstain"],
             "uniform_saving_pct": float(rel), "ci95": [float(rel_lo), float(rel_hi)],
             "p_uniform_cheaper": float((boots > 0).mean()),
