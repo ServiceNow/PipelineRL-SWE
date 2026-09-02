@@ -5530,3 +5530,35 @@ overstates their true cost ratio regardless of basis.
 the hardware that already runs it (tokens/sec on local vLLM divided by the GPU hourly rate),
 and look up rather than assume every API price used. This is the second time invented cost
 parameters have reached this document.
+
+### Scout activation probe for the abstention gate (2026-09-02)
+
+The gate is the last live lever (oracle stopping ~63% of headroom) and its response to
+predictor quality is convex: flat below AUC 0.85, +2.4pt at 0.90. Every affordable channel,
+conditioned on the decision being live: `nothing` head 0.7335, post-scout abstention 0.7629,
+cheap observables 0.7491, scout failure-mode taxonomy 0.7030, token entropy at or below
+chance, verbalized confidence 0.5700, kNN retrieval 0.6690. Activations are the one channel
+never tried in this repo.
+
+Prior art is arXiv 2602.09924, which probes pre-generation activations for a model's OWN
+success and routes a pool at up to -70% cost on MATH. The question here is different: whether
+a 4B model's internal state predicts **pool solvability** -- will anything in the portfolio
+solve this at any depth. Because failures are ~89% shared, that is largely a difficulty
+question, which is what activations plausibly encode better than surface text.
+
+`scout_activation_probe.py` + `launch_scout_activation_probe.sh`. One GPU job, no collection.
+Last-token hidden states at eight depths, both before generation and after the scout's
+completed attempt, linear probes fit on the 551 train problems, evaluated on the 341 eval.
+Reports AUC unconditionally and conditional on the scout having failed; only the second
+counts and the bar is 0.90.
+
+**Labels are de-contaminated with the truncation audit**: 24.2% of "impossible" problems fall
+at a 32k cap, so those are relabelled solvable before fitting. Without it the probe would be
+trained to predict a collection artifact. After relabelling, pool solvability is 90.0% and
+468 of 892 problems have a live decision.
+
+**Pre-registered:** >= 0.90 conditional clears the bar and the gate line reopens; 0.77-0.90
+beats every prior channel and warrants a policy replay; <= 0.76 closes the channel and the
+information-limit claim stops having an obvious hole. Expect the last outcome. Note the
+label is now 90/10 imbalanced, which both makes the AUC noisy and is itself evidence that
+LiveCodeBench is the wrong domain for an abstention claim.
