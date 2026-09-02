@@ -5473,3 +5473,60 @@ over failed tests) rather than stopping-index agreement; a continuous verifier-s
 for the verifier-economics thread, since a verifier of any strength is the first k tests; and
 a test-level difficulty model. It also re-opens the retracted "3 tests reproduce the verdict"
 result, which was an artifact of prefix shape and can now be asked properly.
+
+### Per-problem abstention beats uniform truncation, and the fixed-schedule claim does not reproduce (2026-09-02)
+
+A truncated fixed schedule is itself a give-up rule -- a constant one -- so the recorded
+finding that a fixed schedule reaches the ceiling at $0.0792 against the learned abstaining
+policy's $0.1359 would mean uniform give-up outperforms per-problem give-up, contradicting
+the headline mechanism. `compare_uniform_truncation.py` tests this directly: a greedy
+marginal-coverage-per-dollar schedule fitted on the 551 train problems, executed identically
+on every test problem and truncated at each length, against the value-rule arms from the
+existing replay traces. 171 temporal test problems, 30 permutations, 5,000 problem-clustered
+paired bootstrap resamples.
+
+| accuracy | uniform | learned | learned abstain | uniform vs learned | 95% CI | P(uniform cheaper) |
+|---:|---:|---:|---:|---:|---|---:|
+| 55% | $0.01639 | $0.01808 | 42.3% | +9.4% | [-4.3, +23.9] | 0.91 |
+| 60% | $0.03693 | $0.03303 | 36.6% | **-11.8%** | [-23.5, -0.6] | 0.02 |
+| 65% | $0.05425 | $0.04951 | 32.6% | -9.6% | [-21.4, +1.5] | 0.05 |
+| 68% | $0.07736 | $0.07454 | 29.4% | -3.8% | [-13.4, +5.5] | 0.21 |
+| 70% | $0.09181 | $0.07454 | 29.4% | **-23.2%** | [-34.2, -12.7] | 0.00 |
+| 73% | $0.15858 | $0.15019 | 12.9% | **-5.6%** | [-11.1, -0.2] | 0.02 |
+
+**The give-up arm earns its keep.** Learned wins at four of six targets, significantly at
+three; uniform leads only at 55% with an interval spanning zero. This is the first clean
+evidence in the project that per-problem stopping prediction beats a constant depth, and it
+answers the objection that abstention is just "pick a good truncation".
+
+**But the 42% fixed-schedule claim does not reproduce.** My greedy schedule needs $0.15858 to
+reach the 73.10% ceiling, not $0.0792, and the learned arm gets there for less. There is no
+committed code for the original computation, so the two implementations cannot be diffed.
+**Do not use "removing the router is worth 42%" until it is reconciled or re-derived.**
+
+Caveats: one router training seed; the schedule is greedy rather than optimal; both arms are
+priced on the recorded USD_PER_M_TOKENS basis, so the comparison is internally consistent but
+its robustness to the cost basis is untested.
+
+### Retraction 7: the "current list prices" row was two-thirds invented (2026-09-02)
+
+An earlier entry this session compared cost bases and reported a "current OpenRouter list"
+row showing the ladder inverting. Only `openai/gpt-oss-120b` at $0.03/$0.17 per M was
+actually looked up. The scout and oss20 prices in that row were assumed.
+
+**The scout has no list price at all.** `Qwen/Qwen3-4B-Instruct-2507` is not served on
+OpenRouter -- this repo already established that with a direct API test that returned HTTP
+400 for every row, which is why it runs on local vLLM -- and a search confirms it is still
+absent. So for the cheap end of the ladder there is no market price to compare against, and
+any "list prices" basis is necessarily part self-host estimate.
+
+This strengthens rather than weakens the case for a self-host basis: the models you would
+actually self-host are the ones with no market price. What survives from that entry is the
+architectural argument, which does not depend on prices -- gpt-oss-120b activates 5.1B
+parameters against gpt-oss-20b's 3.6B, so pricing them 8.6x apart by total parameter count
+overstates their true cost ratio regardless of basis.
+
+**Required before any cost-basis claim is made again:** measure the scout's serving cost on
+the hardware that already runs it (tokens/sec on local vLLM divided by the GPU hourly rate),
+and look up rather than assume every API price used. This is the second time invented cost
+parameters have reached this document.
