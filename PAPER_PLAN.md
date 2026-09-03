@@ -6837,6 +6837,12 @@ obvious objection. The two are in mild tension. Cheapest resolution: report the 
 unchanged. That is a re-scaling of the cost tensor, not a re-collection, so it costs nothing
 but a second table.
 
-Note the labels now come from locally served MXFP4 gpt-oss rather than an API provider. gpt-oss
-ships MXFP4 natively so these are very likely the same weights, but the mismatch should be
-stated rather than assumed away.
+Note on local vs API serving: this is **not** a weights question. gpt-oss ships MXFP4 natively,
+so a provider is serving the same tensors we are. The limitation worth stating is serving
+*configuration* -- gpt-oss has a configurable reasoning effort whose default we never controlled
+on the OpenRouter side, and our own data shows the serving path moves outcomes: identical model
+and identical 32768 cap, EmptyGeneration 22.6% -> 0.0% and oss20's solve rate up 17 points.
+
+One line in limitations covers it: outcomes were collected under our own serving configuration,
+and another provider's defaults could shift absolute solve rates. Every comparison in the paper
+is within-collection, so the frontier and transfer results are unaffected.
