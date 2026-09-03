@@ -964,6 +964,12 @@ def main() -> None:
         ),
     )
     parser.add_argument("--cost-mode", choices=["usd", "weights"], default="usd")
+    parser.add_argument("--prices", default="", help=(
+        "Override USD per million tokens, e.g. 'scout=0.278,oss20=1.299,oss120=11.13'. The "
+        "default basis is self-hosted AWS-node cost. Subsidised API list prices compress the "
+        "ladder sharply -- gpt-oss-120b is ~$0.17/M output on OpenRouter against a self-hosted "
+        "4B at $0.278/M -- so the spread the method exploits is basis-dependent and must be "
+        "swept rather than asserted."))
     parser.add_argument("--execution-cost-usd", type=float, default=0.0)
     parser.add_argument("--content-preds")
     parser.add_argument("--cost-preds", help=(
@@ -1031,8 +1037,16 @@ def main() -> None:
 
     if args.cost_mode == "usd":
         total_tokens = data["prompt_tokens"].astype(float) + data["completion_tokens"].astype(float)
+        price_table = dict(USD_PER_M_TOKENS)
+        if args.prices:
+            for kv in args.prices.split(","):
+                k, _, v = kv.partition("=")
+                if k.strip() not in price_table:
+                    raise SystemExit(f"unknown route in --prices: {k}")
+                price_table[k.strip()] = float(v)
+            print(f"price basis overridden: {price_table}")
         realized_costs = np.stack([
-            total_tokens[:, mi, :] * USD_PER_M_TOKENS[slot] / 1_000_000.0
+            total_tokens[:, mi, :] * price_table[slot] / 1_000_000.0
             for mi, slot in enumerate(slots)
         ], axis=1)
     else:
