@@ -930,7 +930,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--q-stop-family",
-        choices=["counts", "content", "content_decay", "sequential", "sequential_decay"],
+        choices=["counts", "content", "content_decay", "sequential", "sequential_decay",
+                 "counts_qcost", "content_qcost", "content_decay_qcost"],
         help=(
             "Replace stopping for this family's frozen-R policy with a threshold on the "
             "learned q(s) = 1 - P(nothing remains), sweeping --q-stop-grid. Routing is left to "
@@ -946,7 +947,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--oracle-stopping-family",
-        choices=["counts", "content", "content_decay", "sequential", "sequential_decay"],
+        choices=["counts", "content", "content_decay", "sequential", "sequential_decay",
+                 "counts_qcost", "content_qcost", "content_decay_qcost"],
         help=(
             "Diagnostic only: for this value-policy family, replace stopping with perfect "
             "knowledge of whether any stored future draw succeeds. Routing is unchanged."
@@ -964,6 +966,12 @@ def main() -> None:
     parser.add_argument("--cost-mode", choices=["usd", "weights"], default="usd")
     parser.add_argument("--execution-cost-usd", type=float, default=0.0)
     parser.add_argument("--content-preds")
+    parser.add_argument("--cost-preds", help=(
+        "JSONL of per-problem expected costs: {problem_id, expected_costs:[c_m ...]} in USD, "
+        "same units as the training-set constant they replace. Enables the `_qcost` families, "
+        "which are identical to their base family except that c_m in `p_m*R - c_m` is "
+        "query-conditioned instead of a per-route training-set mean. Every routing system we "
+        "know of -- RoR and the prefill-activation routers alike -- uses the constant."))
     parser.add_argument("--sequential-model-dir")
     parser.add_argument(
         "--state-layout", choices=["problem_first", "counts_last"], default="counts_last",
@@ -1046,6 +1054,11 @@ def main() -> None:
     if args.content_preds:
         for row in _read_jsonl(Path(args.content_preds)):
             content[str(row["problem_id"])] = np.asarray(row["p_successes"][: len(slots)], dtype=float)
+    cost_preds: dict[str, np.ndarray] = {}
+    if args.cost_preds:
+        for row in _read_jsonl(Path(args.cost_preds)):
+            cost_preds[str(row["problem_id"])] = np.asarray(
+                row["expected_costs"][: len(slots)], dtype=float)
     scorer = TorchSequentialScorer(Path(args.sequential_model_dir)) if args.sequential_model_dir else None
     calibrator = _load_calibrator(Path(args.calibration_map)) if args.calibration_map else None
 
@@ -1100,15 +1113,19 @@ def main() -> None:
         outputs = []
         for pi in indices:
             pid = pids[int(pi)]
+            # `_qcost` is orthogonal to the belief source: same beliefs, same decay, only the
+            # cost term changes. Strip it before any belief-source test so the arms stay paired.
+            base = family[:-6] if family.endswith("_qcost") else family
+            ec = cost_preds.get(pid, expected_costs) if family.endswith("_qcost") else expected_costs
             for oi in range(args.num_orderings):
                 result = replay_adaptive(
-                    outcomes[int(pi)], valid[int(pi)], realized_costs[int(pi)], expected_costs,
+                    outcomes[int(pi)], valid[int(pi)], realized_costs[int(pi)], ec,
                     orderings[int(pi), oi], budget, priors,
                     args.pseudo_count if pseudo_count is None else pseudo_count, slots,
                     records, pid, str(problems[pid]["problem_statement"]),
                     content_prior=(content.get(pid)
-                                   if family in ("content", "content_decay") else None),
-                    scorer=scorer if family in ("sequential", "sequential_decay") else None,
+                                   if base in ("content", "content_decay") else None),
+                    scorer=scorer if base in ("sequential", "sequential_decay") else None,
                     calibrator=calibrator,
                     state_layout=args.state_layout,
                     tau_abstain=tau,
@@ -1117,7 +1134,7 @@ def main() -> None:
                     bellman_horizon=bellman_horizon,
                     learned_transitions=learned_transitions,
                     capture_trace=capture_trace,
-                    apply_failure_decay=family in ("sequential_decay", "content_decay"),
+                    apply_failure_decay=base in ("sequential_decay", "content_decay"),
                     decay_pseudo_count=args.decay_pseudo_count,
                     exploration_bonus=exploration_bonus,
                     mandatory_scout=args.start_protocol == "scout_first",
@@ -1141,6 +1158,8 @@ def main() -> None:
     families = (
         ["counts"]
         + (["content", "content_decay"] if content else [])
+        + (["counts_qcost"] if cost_preds else [])
+        + (["content_qcost", "content_decay_qcost"] if (content and cost_preds) else [])
         + (scorer_families if scorer else [])
     )
     if args.oracle_stopping_family and args.oracle_stopping_family not in families:
