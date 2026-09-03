@@ -6585,3 +6585,46 @@ becomes "one 4B prefill", which holds in deployments that would never run a smal
 Comparison in flight: (a) per-route constant, (b) scalar x observed scout length,
 (c) pre-generation activation probe, (d) both together. (d) minus (b) is the honest measure of
 what the activations add.
+### The baseline falls: the probe beats the scout's OBSERVED length, and subsumes it
+
+The sceptical question was whether per-problem cost is just a scalar times the scout's realised
+length, which the mandatory-scout protocol already hands us for free. Log-lengths do correlate
+strongly across the pool -- 0.7521 scout-to-oss20, 0.7764 scout-to-oss120 -- so this is a real
+competitor. Layer chosen on calibration, reported on the 171-problem test split:
+
+| target | model | Spearman | R2 | MAE(log) |
+|---|---|---|---|---|
+| oss20 | (a) per-route constant *(what prior work uses)* | -- | 0.0000 | 1.028 |
+| oss20 | (b) scalar x **observed** scout length | 0.7016 | 0.5876 | 0.583 |
+| oss20 | **(c) pre-generation probe, prefill only** | 0.8019 | **0.7956** | 0.413 |
+| oss20 | (d) probe + observed scout length | 0.8016 | 0.7981 | 0.411 |
+| oss120 | (a) per-route constant | -- | 0.0000 | 1.076 |
+| oss120 | (b) scalar x **observed** scout length | 0.7314 | 0.6293 | 0.549 |
+| oss120 | **(c) pre-generation probe, prefill only** | 0.8177 | **0.8335** | 0.378 |
+| oss120 | (d) probe + observed scout length | 0.8169 | 0.8419 | 0.371 |
+
+1. **The probe beats the rescaling by ~20 points of R2** on both expert routes.
+2. **(d) - (c) is +0.002 and +0.008.** The probe *subsumes* the observed length: everything the
+   scout's realised generation tells us about an expert's cost is already in the prefill state.
+3. **(c) needs only a prefill; (b) needs the scout's full generation.** $0.000149 against
+   $0.000436, plus the entire latency of a decode.
+
+**Mechanism, and it is the interesting part.** The realised length is a noisy one-dimensional
+*sample* of difficulty -- only 62-90% of length variance is between-problem, the rest is
+draw-to-draw noise. The activations are a 2560-dimensional read of the same latent *before*
+that noise is added. **The prediction is a better instrument than the observation it predicts.**
+That inverts the natural intuition and is worth stating plainly: lengths correlate across the
+pool at 0.75, and the realised length is still the weaker signal.
+
+**This also frees the method from the mandatory-scout protocol.** Every cost and success number
+here comes from the last prompt token, before any generation. The claim is not "free because we
+were running the scout anyway" but "one 4B prefill", which holds in deployments that would never
+run a small model first. A protocol variant that prefills the scout and never decodes it is now
+measurable: it costs $0.000149 instead of $0.000436 and forfeits the scout's 34.3% solve rate,
+which is a trade the frontier can evaluate rather than a claim to assert.
+
+**Is cross-model length correlation itself a contribution?** Supporting evidence, not a
+standalone result -- that harder problems are longer for everyone is intuitive. It earns its
+place because it is the length analogue of the ~89% shared-failure finding, so shared difficulty
+now holds across two independent observables, and because it makes baseline (b) credible enough
+that beating it means something.
