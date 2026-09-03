@@ -6462,3 +6462,76 @@ What could still break it, listed so it cannot be quietly forgotten:
 - **The second domain may not replicate.** Shared difficulty is a claim about pools; a
   repo-level pool may not behave like a competitive-programming one.
 - **Priority.** Two papers read properly. A real related-work sweep is still owed.
+
+## Query-conditioned COST: the half of the utility rule nobody conditions (2026-09-03)
+
+The rule is `argmax_m (p_m(x)*R - c_m)`. Every paper in this space, ours included, conditions
+the numerator on the query and leaves `c_m` a **per-route constant estimated from the training
+set** -- 2602.09924 says so explicitly ("expected costs based on average output cost from the
+train set"). If generation length is predictable per problem, the cost term can be conditioned
+too, and the rule becomes query-conditioned on both sides.
+
+### Is there anything to predict? Yes, and most of it is between problems
+
+| route | mean tok | sd | CV | **between-problem share of variance** | at 4096 cap |
+|---|---|---|---|---|---|
+| scout | 1031 | 1382 | 1.34 | **84.8%** | 13.5% |
+| oss20 | 2037 | 2012 | 0.99 | **62.3%** | 26.9% |
+| oss120 | 1648 | 1419 | 0.86 | **90.1%** | 15.6% |
+
+The between-problem share is the ceiling on what any per-problem cost model can explain; the
+rest is draw-to-draw noise. At 62-90% the ceiling is high. Per-problem mean cost spans
+**p90/p10 of 37x (scout), 16x (oss20), 17x (oss120)** -- a per-route constant is a poor summary
+of a distribution that wide.
+
+Failed draws also cost far more than successful ones: **5.34x (scout), 2.61x (oss20), 3.00x
+(oss120)**. So cost and success are coupled, and the current rule models them as independent.
+
+### Can the scout's activations predict it? Better than they predict success
+
+Ridge on the scout's pre-generation state, layer chosen on calibration, reported on the
+171-problem test split, against the train-set per-route constant as baseline:
+
+| target route | Spearman | R2 vs constant | MAE ratio | constant's typical error |
+|---|---|---|---|---|
+| scout | 0.7676 | **0.6523** | 0.546 | 3.96x |
+| oss20 | 0.8019 | **0.7956** | 0.402 | 2.80x |
+| oss120 | 0.8177 | **0.8335** | 0.351 | 2.93x |
+
+**The constant-cost assumption is wrong by a factor of ~3 on a typical problem, and a linear
+probe on the same free activations cuts that error by 45-65%.** Cost is a *cleaner* signal than
+success here: R2 up to 0.83 and Spearman 0.82, against success AUCs of 0.79-0.89.
+
+This is intuitive in hindsight. Length is a graded quantity -- reasoning models spend more
+tokens on harder problems, continuously -- while success is a thresholded one. The same shared
+difficulty axis reads more precisely through the graded variable.
+
+### Why this could matter more than the success result
+
+1. **It sharpens abstention.** `max_m (p_m*R - c_m) <= 0` currently fires on p alone, since c is
+   constant. With per-problem c, a problem that is both unlikely *and* expensive becomes
+   clearly abstain-worthy -- and the two predictors reinforce, because failed draws are the
+   long ones.
+2. **It is free.** Same forward pass, same activations, one more linear head. 0.16 CPU-seconds
+   of training becomes maybe 0.2.
+3. **Nobody does it.** Both papers read so far use a train-set constant. This is a gap in the
+   formulation rather than in the engineering.
+
+### Required next steps, in order
+
+1. **The collinearity check** -- if predicted cost is merely predicted success rescaled, it adds
+   nothing to the argmax. Partial correlation of true length on predicted cost, after
+   residualising on predicted success, decides this. Running.
+2. **Wire `c_m(x)` into the replay.** `expected_costs` is currently a global array in
+   `replay_adaptive`; it must become per-problem. Then re-run the frontier: does a
+   query-conditioned cost term move it?
+3. **Re-do on clean data.** 13.5-26.9% of these draws sit at the 4096 cap, so lengths are
+   right-censored and the upper tail is compressed. The local 32k collection removes that, and
+   the signal should get *stronger*, not weaker -- treat the numbers above as a lower bound.
+
+### Local collection: the serving-path diagnosis confirmed
+
+First rows from the local pool: **0.0% EmptyGeneration on all three routes**, against 22.6% for
+gpt-oss-20b through OpenRouter at the identical 32768 cap. `finish_reason` is now recorded on
+every row. The defect was the serving path, exactly as the scout-versus-expert asymmetry
+implied.
