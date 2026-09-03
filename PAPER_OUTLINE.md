@@ -177,12 +177,35 @@ ordering; gpt-oss-120b's own probe improves 0.7743 -> 0.8313 from pooling alone.
 the scout probe is significantly worse per route (-0.061, -0.049) and tied on pool solvability
 (-0.028 [-0.075, +0.015]).
 
-### 6.5 Capacity ablation
+### 6.5 Per-candidate probing buys no frontier advantage
+`lcb_replay_scout_mean_*` vs `lcb_replay_percandidate_mean_*`, mean-pooled readout,
+content_decay family, no qcost:
+
+| target | scout probe | per-candidate | per-candidate advantage |
+|---|---|---|---|
+| 50% | 0.00803 | 0.00752 | +6.4% |
+| 60% | 0.01777 | 0.01795 | -1.0% |
+| 65% | 0.02578 | 0.02413 | +6.4% |
+| 70% | 0.03751 | 0.03074 | +18.0% |
+| 75% | 0.04147 | 0.04513 | -8.8% |
+| 80% | 0.06863 | 0.07056 | -2.8% |
+
+Signs alternate, mean ~ +3%, all magnitudes inside the +/-15-30% intervals typical of
+comparisons at this n. **This is the result that matters more than the AUC table in 6.4.**
+Per-candidate probes are significantly better predictors (+0.05-0.06 AUC) and it converts into
+nothing downstream, which is the convex-gate argument playing out: in the 0.73-0.85 range better
+beliefs do not move the frontier.
+
+Claim to make: one probe on one cheap model **matches** probing every model on cost-at-accuracy,
+while needing weights for one model rather than all of them. Report the AUC deficit openly as
+the mechanism-level caveat rather than hiding it. TODO: CI on the +18% at 70%.
+
+### 6.6 Capacity ablation
 Linear vs MLP on the same activations, 535 pooled test problems over rolling-origin folds:
 linear wins pool solvability (P(MLP better)=0.029) and all three cost targets. "Linear
 suffices" is measured, not assumed.
 
-### 6.6 Price-ratio sensitivity — the method needs a real cost ladder
+### 6.7 Price-ratio sensitivity — the method needs a real cost ladder
 Sweeping the oss120:scout price ratio (`lcb_replay_price_*`), full method vs RoR:
 
 | ratio | 60% | 70% | 80% |
@@ -209,14 +232,14 @@ everything to a single-model policy. On TACO it solves 43-49%, so no single-mode
 good and routing should retain value as the ladder flattens. If the TACO sweep degrades
 markedly more gracefully, the limitation is about benchmark saturation rather than the method.
 
-### 6.7 TODO
+### 6.8 TODO
 - [ ] TACO medium+hard (883 problems) — collecting
 - [ ] SWE-Smith -> SWE-bench Verified cross-dataset transfer
 - [x] Query-conditioned cost wired into the utility rule and measured — §6.3
-- [ ] Per-candidate frontier (does the AUC deficit cost anything downstream?) — replays done,
-      not yet analysed
+- [x] Per-candidate frontier — §6.5, no advantage
+- [ ] Truncation sensitivity (at-cap draws excluded) — running
+- [ ] Seed variance, 4 seeds — running
 - [x] Fixed-schedule comparison against the full qcost method — §6.3
-- [ ] Seed variance on the frontier (everything is currently one seed)
 - [ ] Writing — nothing drafted yet
 - [ ] Both cost bases (self-hosted node vs API list) — cheap, not run
 - [ ] 8B LoRA retrained on clean labels — optional
