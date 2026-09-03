@@ -5895,3 +5895,84 @@ Pre-registered reading, so this cannot be rationalised afterwards:
 Either way the cost accounting stays open: the replay charges routing spend only and the
 belief model's own compute is free by construction for both arms. A measured serving price
 for the 4B and the 8B would move the comparison, and we still do not have one.
+## The cross-model activation claim, measured and stress-tested (2026-09-03)
+
+The framing worth testing: arXiv 2602.09924 probes a model's own pre-generation activations
+for its own success. To route a pool that way you must run a forward pass **on each candidate**
+before knowing whether to call it -- including the expensive ones. We probe once, on the
+cheapest model, and predict what the expensive ones will do.
+
+### Cross-model prediction is not merely possible, it is better than same-model
+
+Linear probe on the 4B scout's layer-18 pre-generation last-token state, fit on 551 train
+problems, evaluated on the 341-problem temporal eval split:
+
+| target | AUC | base rate |
+|---|---|---|
+| SAME-MODEL: scout solves at any depth | 0.8113 | 34.3% |
+| CROSS-MODEL: gpt-oss-20b solves at any depth | 0.8238 | 63.0% |
+| CROSS-MODEL: gpt-oss-120b solves at any depth | **0.8306** | 76.8% |
+| pool solvability (any route, any depth) | **0.8496** | 77.7% |
+
+**The 4B's internal state predicts the 120B's success better than it predicts its own.** That
+is the quotable result, and it is not what the same-model framing would lead you to expect.
+The likely reason is mundane and worth saying plainly: these probes are reading *problem
+difficulty*, which is a property of the problem rather than of the prober, and difficulty
+transfers across a pool whose failures are ~89% shared. Same-model prediction is harder
+because it must also encode the scout's own idiosyncratic competence.
+
+Restricted to the 224 test problems where the scout actually failed -- the only set where a
+decision exists -- the signal survives: P(oss20 solves) AUC 0.7389, P(oss120 solves) 0.7566.
+So the activation carries information beyond the binary fact that the scout failed.
+
+### The economic argument, quantified
+
+Mean tokens per call on this dataset, and what a single probe forward pass costs:
+
+| route | prompt | completion | prefill share | prefill cost | full call |
+|---|---|---|---|---|---|
+| scout | 537 | 1031 | 34.2% | $0.000149 | $0.000436 |
+| oss20 | 570 | 2037 | 21.9% | $0.000741 | $0.003387 |
+| oss120 | 569 | 1648 | 25.7% | **$0.006338** | $0.024679 |
+
+Probing gpt-oss-120b directly costs 25.7% of just calling it, and probing all three to decide
+costs $0.0072 before any answer is produced. Probing via the scout costs $0.000149 -- 0.60% of
+a single oss120 call, **42.5x cheaper**, and under the mandatory-scout protocol the prefill is
+already paid for, so the marginal cost is zero.
+
+The larger obstacle is not token cost at all: activations require the weights. You must hold
+the 120B resident to probe it, which defeats the purpose if the routing question is whether to
+pay for the 120B; and no API provider exposes hidden states, so the same-model method is
+simply inapplicable to the served models people actually route between. Ours needs weights
+only for the one model we already self-host.
+
+Internal ablation supporting that this is not just the scout's text in disguise: activations
+reach 0.7947 conditional on pool solvability against 0.7491 for cheap observables and 0.7030
+for the scout's failure-mode taxonomy, both computed from the scout's generated output.
+
+### The honest problem: SuperScout already does cross-model activation routing
+
+Our own literature notes carry **SuperScout / "Scrouting" (arXiv 2608.04804): 7B searcher
+explores repo, hidden states feed an N-way frontier-fixer router on SWE-bench Pro**. That is
+cross-model activation routing, and it dissolves "nobody predicts other models from a small
+model's activations" as a headline. This must be read carefully before any claim is drafted;
+right now we are relying on a one-line note.
+
+What plausibly survives contact with it:
+
+1. **The target is abstention, not selection.** SuperScout picks *which* fixer. We predict
+   whether *anything* in the pool will succeed at *any* depth -- the stop decision, which is
+   ~63% of the oracle headroom here and has no analogue in an N-way router.
+2. **Sequential depth.** SuperScout is a one-shot handoff. Ours sits in an MDP with
+   resampling, belief decay with failure count, and abstention falling out of `p_m*R - c_m`
+   rather than being a separate classifier with a threshold.
+3. **The scout's output is discarded.** SuperScout's searcher does work the fixer consumes,
+   which confounds "the handoff helped" with "the routing decision helped". Our scout's
+   answer is thrown away, so the activation is the only channel and the claim is clean.
+4. **Cross-model beats same-model** is, as far as our notes go, unreported by either paper.
+
+What does not survive: any claim of being first to route from a small model's hidden states.
+Drop it.
+
+**Next check before this becomes a paper claim:** read 2608.04804 and 2602.09924 properly and
+record what each actually measures, rather than extending a one-line note.
