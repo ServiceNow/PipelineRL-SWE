@@ -509,10 +509,25 @@ def replay_adaptive(
                 )
                 belief_source = "sequential"
         elif content_prior is not None:
-            p_each = np.asarray(content_prior, dtype=float)
-            bellman_pbar, bellman_decay_s = p_each, None
+            # A content prior is a per-problem theta with no depth dependence: one vector
+            # per problem, emitted before any draw. Left undecayed it is frozen at depth 0,
+            # so p_m*R - c_m never falls and the stop action can never fire -- the `content`
+            # arm was measured abstaining 0.0% at every operating point above 55%, i.e.
+            # competing with the give-up mechanism structurally disabled. `content_decay`
+            # applies the same analytic s/(s+n) the count family uses, which isolates
+            # belief QUALITY from the state-conditioning a re-queried encoder also buys.
+            theta = np.asarray(content_prior, dtype=float)
+            bellman_pbar = theta
+            if apply_failure_decay:
+                decay_s = pseudo_count if decay_pseudo_count is None else decay_pseudo_count
+                bellman_decay_s = decay_s
+                p_each = theta * decay_s / (decay_s + failures)
+                belief_source = "content_decay"
+            else:
+                bellman_decay_s = None
+                p_each = theta
+                belief_source = "content"
             p_any = 1.0 - float(np.prod(1.0 - p_each))
-            belief_source = "content"
         else:
             p_each = np.asarray([
                 pseudo_count * prior[mi] / (pseudo_count + failures[mi])
@@ -915,7 +930,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--q-stop-family",
-        choices=["counts", "content", "sequential", "sequential_decay"],
+        choices=["counts", "content", "content_decay", "sequential", "sequential_decay"],
         help=(
             "Replace stopping for this family's frozen-R policy with a threshold on the "
             "learned q(s) = 1 - P(nothing remains), sweeping --q-stop-grid. Routing is left to "
@@ -931,7 +946,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--oracle-stopping-family",
-        choices=["counts", "content", "sequential", "sequential_decay"],
+        choices=["counts", "content", "content_decay", "sequential", "sequential_decay"],
         help=(
             "Diagnostic only: for this value-policy family, replace stopping with perfect "
             "knowledge of whether any stored future draw succeeds. Routing is unchanged."
@@ -1091,7 +1106,8 @@ def main() -> None:
                     orderings[int(pi), oi], budget, priors,
                     args.pseudo_count if pseudo_count is None else pseudo_count, slots,
                     records, pid, str(problems[pid]["problem_statement"]),
-                    content_prior=content.get(pid) if family == "content" else None,
+                    content_prior=(content.get(pid)
+                                   if family in ("content", "content_decay") else None),
                     scorer=scorer if family in ("sequential", "sequential_decay") else None,
                     calibrator=calibrator,
                     state_layout=args.state_layout,
@@ -1101,7 +1117,7 @@ def main() -> None:
                     bellman_horizon=bellman_horizon,
                     learned_transitions=learned_transitions,
                     capture_trace=capture_trace,
-                    apply_failure_decay=family == "sequential_decay",
+                    apply_failure_decay=family in ("sequential_decay", "content_decay"),
                     decay_pseudo_count=args.decay_pseudo_count,
                     exploration_bonus=exploration_bonus,
                     mandatory_scout=args.start_protocol == "scout_first",
@@ -1124,7 +1140,7 @@ def main() -> None:
     )
     families = (
         ["counts"]
-        + (["content"] if content else [])
+        + (["content", "content_decay"] if content else [])
         + (scorer_families if scorer else [])
     )
     if args.oracle_stopping_family and args.oracle_stopping_family not in families:
