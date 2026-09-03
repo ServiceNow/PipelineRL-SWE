@@ -6759,3 +6759,37 @@ the existing 2000-problem base collection, so no new base pass is needed.
 
 Pre-flighted before spending: source IDs match the base exactly on both splits (1627/373) and
 all 883 requested ids are present. Three jobs, four GPUs, six draws, same local serving path.
+
+### Folds resolve it: capacity is not the bottleneck, and hurts where it matters
+
+Same comparison, 535 pooled test problems instead of 171, on the CLEAN tensors. AUCs computed
+within fold and pooled as a size-weighted mean; the bootstrap resamples problems within folds.
+
+| target | linear | MLP-64 | diff | 95% CI | P(MLP better) |
+|---|---|---|---|---|---|
+| scout | 0.7859 | 0.8099 | +0.0240 | [+0.0015, +0.0475] | 0.979 |
+| oss20 | 0.7652 | 0.7446 | -0.0206 | [-0.0508, +0.0091] | 0.092 |
+| oss120 | 0.7678 | 0.8073 | +0.0395 | [-0.0128, +0.0932] | 0.936 |
+| **pool** | **0.8295** | 0.7728 | **-0.0567** | [-0.1175, +0.0021] | **0.029** |
+
+Cost, pooled R2 against each fold's own constant: ridge beats the MLP on **all three routes**
+(0.5452/0.5382, 0.6596/0.5940, 0.7634/0.6944).
+
+**On pool solvability -- the target that drives the stop decision -- the LINEAR head wins by
+0.057 with the sign significant in its favour.** Cost favours linear 3/3. The MLP wins only on
+scout success, marginally, and non-significantly on oss120.
+
+The signs flipping across targets is itself a noise signature, but the two quantities the
+method actually consumes -- pool solvability and per-route cost -- both favour linear, and pool
+does so significantly. **"A linear probe suffices" is now measured rather than assumed**, which
+answers the "why not more capacity?" objection for these features.
+
+Caveat kept: fold 0 trains on only 177 problems, so fold AUCs trade training data for
+evaluation data and are not comparable in absolute terms to the main split. The comparison
+between heads is valid; the absolute numbers are not the headline ones.
+
+**Effect on the LoRA decision.** Weakened but not eliminated. The LoRA changes the
+*representation* (Qwen3-Embedding-8B over rendered state text) as well as the capacity, so this
+does not predict it. What it does establish is that the objection "you only tried a linear
+model" is answered on the frozen-activation features, which is the objection most likely to be
+raised. The LoRA retrain stays optional, below TACO and SWE in priority.
