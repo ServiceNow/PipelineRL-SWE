@@ -5810,7 +5810,8 @@ is a reminder that belief quality stops mattering as the target approaches the c
 
 The one argument that could still favour activations is not in this table: **routing spend is
 all that is charged here, and the belief model's own compute is free by construction.** The
-LoRA needs ~6.4 calls to an 8B encoder per episode; the scout activation is one 4B prefill
+LoRA is re-queried at every decision node -- a measured 5.94 to 9.47 forward passes of an
+8B encoder per episode across its arms -- while the scout activation is a single 4B prefill
 that the mandatory-scout protocol already pays for. Charging both would plausibly close or
 invert the gap. That comparison requires a measured serving price for the 4B and the 8B,
 which we do not have -- the same gap that killed the cost-basis sweep. Until then the
@@ -5838,3 +5839,59 @@ answer was, and that turns out to be nearly uninformative about whether *some ot
 some depth* will succeed. The thread is closed; the re-grade's remaining value is the
 short-circuit finding itself and the cross-model comparison (scout/oss120 failing-test
 Jaccard 0.574 on the 45 problems where both fail, n too small to lean on).
+
+
+### Addendum: the activation arm was handicapped, and the gap is partly an artifact
+
+Two things were confounded in the table above, and only one is about belief quality.
+
+**The `content` arm has no depth dependence at all.** `activation_content_preds.py` emits
+three numbers per problem, and the replay's content branch set `bellman_decay_s = None` and
+never applied a decay. Its beliefs are frozen at depth 0 forever: after five failed oss120
+draws it still believes what the probe said before the first one. The count family, by
+contrast, decays with a global `s`, and the LoRA is re-queried at every node with the failure
+counts rendered into its state text.
+
+The consequence is not subtle. Because `p_m` never falls, `p_m*R - c_m` never crosses zero
+and **the stop action can never fire**: the winning content arms at 60% and 65% abstain
+**0.0%**, against 32.9% and 20.0% for the arms they lose to. The activation probe was being
+scored with the give-up mechanism structurally disabled while its competitors kept theirs,
+and it still beat count beliefs at six of seven targets. A unit test now pins the mechanism:
+undecayed content buys all 18 draws on a hopeless problem and never abstains; decayed content
+gives up.
+
+**Problem-clustered paired bootstrap over 171 test problems**, content minus the better of the
+two LoRA arms, positive meaning the LoRA is cheaper:
+
+| target | content $ | best LoRA $ | gap | 95% CI | P(LoRA cheaper) |
+|---|---|---|---|---|---|
+| 40% | 0.00387 | 0.00252 | +53.2% | [+35.1, +72.1] | 1.000 |
+| 45% | 0.00387 | 0.00456 | **-15.3%** | [-24.9, -5.8] | 0.002 |
+| 50% | 0.00741 | 0.00620 | +19.6% | [+4.0, +35.7] | 0.994 |
+| 55% | 0.01646 | 0.01442 | +14.1% | [-4.9, +33.1] | 0.931 |
+| 60% | 0.03421 | 0.02588 | +32.2% | [+11.4, +54.4] | 0.998 |
+| 65% | 0.04988 | 0.04569 | +9.2% | [-10.6, +29.5] | 0.817 |
+| 68% | 0.08138 | 0.07454 | +9.2% | [-0.2, +19.5] | 0.973 |
+
+So the LoRA wins decisively at 40/50/60, content wins decisively at 45, and 55/65/68 are
+inconclusive. Not a uniform verdict in either direction even before the handicap is removed.
+
+**`content_decay` is the fair arm** and is now implemented: the same analytic `s/(s+n)` the
+count family uses, applied to the activation theta. It separates the two things the LoRA buys
+at once -- a better per-problem prior, and beliefs that move with the state -- and asks
+whether the second one is worth 5.9-9.5 forward passes of an 8B encoder per episode. Launched
+as `lcb_replay_content_decay_1788395289`.
+
+Pre-registered reading, so this cannot be rationalised afterwards:
+- If `content_decay` reaches parity with `sequential`/`sequential_decay`, the encoder's
+  state-conditioning buys nothing that an analytic decay does not, and the belief model
+  collapses to one free 4B prefill plus a closed form. That is the strong result, and it
+  is consistent with the four prior findings that per-problem decay is learnable and
+  worthless, that belief refinement is saturated, and that route choice depends on theta
+  and never on s.
+- If a gap survives, state-conditioning is doing real work and the activation probe is an
+  ablation, not a replacement -- report it as such and stop pursuing it.
+
+Either way the cost accounting stays open: the replay charges routing spend only and the
+belief model's own compute is free by construction for both arms. A measured serving price
+for the 4B and the 8B would move the comparison, and we still do not have one.
