@@ -41,7 +41,14 @@ echo "  all $((DRAWS*6)) files complete"
 echo "=== 1. tensors from clean labels ==="
 ${PY} pipelinerl/swe/scripts/livecodebench/build_mdp_tensors_v2.py \
   --collection-dir "${POOL}" --source-collection-dir "${SOURCE_DIR}" \
-  --output-dir "${OUT}/tensors_v3" --num-draws "${DRAWS}" --split-mode source_temporal
+  --output-dir "${OUT}/tensors_v3" --num-draws "${DRAWS}" --split-mode source_temporal \
+  --no-require-complete
+# --no-require-complete keeps every problem with at least one valid draw and marks the rest
+# valid=False, which is what the valid tensor is for and what _next_valid_draw already skips.
+# The local run lost 3 of 16,056 rows to transient ClientOSErrors against the local server
+# (0.019%, all "Can not write request body", none of them model failures). Requiring every
+# draw would discard three whole problems over three dropped HTTP requests; the losses are
+# not outcome-correlated, so marking the cells invalid is both cheaper and more honest.
 
 echo "=== 2. serving-path comparison: EmptyGeneration, local vs OpenRouter ==="
 ${PY} - "${POOL}" <<'PYEOF'
@@ -73,7 +80,7 @@ ${PY} pipelinerl/swe/scripts/livecodebench/pool_activation_probe.py --phase matr
 echo "=== 4. content predictions for the replay ==="
 ${PY} pipelinerl/swe/scripts/livecodebench/activation_content_preds.py \
   --activations "${ACTS}/scout.npz" --tensors-dir "${OUT}/tensors_v3" \
-  --output "${OUT}/content_preds.jsonl" || \
+  --out "${OUT}/content_preds.jsonl" || \
   echo "  (check activation_content_preds.py args if this failed)"
 
 cat <<EOM
