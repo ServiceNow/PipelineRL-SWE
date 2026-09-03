@@ -5586,16 +5586,22 @@ construct it if we do not. Report against the best of {counts, fixed schedule, o
 cascade}. The learned arm already survives this on current data (see the uniform-truncation
 entry above), which is the single most reassuring result of the session.
 
-**2. "Clean" means three defects, not one.**
+**2. "Clean" means a data-hygiene checklist for us, not a result for anyone else.**
 
-| defect | measured impact | fix |
+These are our own collection bugs. They belong in an internal checklist and, at most, a
+reproducibility appendix. They are not findings, and the entries below are corrected to say
+what re-running actually showed rather than what the failure signature suggested.
+
+| suspected defect | signature that suggested it | what re-running measured |
 |---|---|---|
-| 4096-token cap truncating generations | 24.2% of "impossible" problems fall at 32k; 40% of LCB failures are empty generations; 29-30% of TACO draws at the cap | re-collect at 32k (API spend, small) |
-| null `fn_name` key routing stdin problems to call-based grading | 1,774/2,000 TACO problems carry it; 7.2% of med/hard draws show the signature | re-grade, free |
-| code extractor takes the FIRST fenced block | 14.0% of TACO med/hard draws; ~11% of LCB failures | re-extract + re-grade, free |
+| 4096-token cap truncating generations | 29-30% of TACO draws and 73.1% of re-collected LCB draws exceed 4096 | **real and large.** 39/124 (31.5%) of pool-unsolved LCB problems fall at 32k; impossible set 13.9% -> 9.5% from oss120 alone. Needs re-collection |
+| empty answer channel recorded as a wrong answer | 43.1% of oss20 eval draws vs 0.0% for the locally served scout | **real and larger than the cap.** At 4096 it is 87-99% budget exhaustion; at 32768 16-19% of all oss20 draws survive as empty responses well below the cap. Fixed in the collector |
+| null `fn_name` key routing stdin problems to call-based grading | 1,774/2,000 TACO problems carry it; 7.2% of med/hard draws show the signature | **zero effect.** Re-grading 4,000 draws rescued 0 and lost 0 |
+| code extractor takes the FIRST fenced block | 14.0% of TACO med/hard draws show the signature | **zero effect**, same re-grade |
 
-The third is shared by both datasets and was found only because a TACO failure was inspected
-by hand. Assume more of these exist and budget for looking.
+The lesson worth keeping is only for us: a failure *signature* is not a measured effect. Two
+of these four looked like large defects from the error text and changed nothing when actually
+re-run. The two that mattered were both about generations being cut off or never returned.
 
 **3. Enough draws that "impossible" is a measurement.** Single-draw impossibility is mostly
 bad luck: LCB reads 22.6% at one draw and 13.9% at ten. Any abstention headroom computed
@@ -5653,11 +5659,18 @@ the incidental findings from a dump into the reason to believe the headline.
 4. Beliefs-vs-mechanism attribution: both give-up rules beat the fixed schedule with learned
    priors and both lose with count priors, so query-conditioning is what carries it.
 
-**Own section -- three grading defects in execution-graded code benchmarks.** Framed as "why
-our labels are trustworthy and published ones may not be," not as a miscellany. The
-short-circuit finding reaches furthest: dense test-pass rewards are common in RLVR for code
-and, wherever the grader short-circuits, measure first-failure position rather than partial
-correctness, and depend on arbitrary test order.
+**Not a section: our own collection bugs.** A null `fn_name`, a first-fenced-block extractor,
+a token cap set too low and an unretried empty response are mistakes in our harness. Fixing
+them is what makes the dataset usable; it is not a contribution and no reviewer owes us credit
+for it. Reproducibility appendix at most, in the passive voice, with the re-grade numbers that
+show two of the four changed nothing.
+
+The one adjacent finding that is *not* ours and does generalise is the evaluator short-circuit:
+the pinned LiveCodeBench runner stops at the first failing test, so `result_codes` is a prefix
+rather than a per-test verdict. Dense test-pass rewards are common in RLVR for code, and
+wherever the grader short-circuits they measure first-failure position and depend on arbitrary
+test order rather than on partial correctness. That is a property of a widely used evaluator,
+and it earns a short subsection -- on its own, not bundled with our bugs.
 
 **Methodological, cheap to include:** gate AUC over all problems is inflated by cases
 carrying no decision and collapses toward 0.75 once conditioned; single-draw complementarity
@@ -5701,3 +5714,127 @@ primary and the fixed-schedule baseline included. Around 40% on corrected LiveCo
 alone, for the specific reason that cleaning it removes the abstention headroom the result
 lives on. The single fact that would move this most is whether the abstention advantage holds
 where the impossible set is real rather than inflated.
+
+## Everything that was "running" was dead; what the wreckage taught us (2026-09-03)
+
+A status check found that all eight jobs reported as in-flight the previous evening had in
+fact stopped at 09:12 the previous morning. Roughly fifteen hours of assumed progress did not
+happen. Two of the four causes were our own configuration errors, one is an external block,
+and one is a genuine data defect larger than the token cap.
+
+### The external block: the OpenRouter key is at its ceiling
+
+`GET /api/v1/key` returns `limit: 200, usage: 200.11, limit_remaining: 0`. Every expert call
+now returns `403 Key limit exceeded (total limit)`. This is a per-key spend cap, not an
+account balance, and it is what killed all six re-collection shards mid-run. No expert
+collection of any kind can proceed until the cap is raised or a new key issued. Nothing in
+the method depends on more data being collected *today*, but everything downstream of the
+32k re-collection is parked until this is cleared.
+
+Partial salvage from before the 403 wave: **gpt-oss-20b re-collected cleanly at 32k for both
+splits and all six draws** (train 3,306 rows, eval 2,046 rows). gpt-oss-120b is mostly lost
+-- 314/341 of eval draw 0 are empty, 8.4% apparent solve rate against a true ~80%.
+
+### Our bug 1: the scout re-collection could never have worked
+
+`--max-model-len 32768` with `--max-tokens 32768` leaves zero room for the prompt, so vLLM
+returned `400 Bad Request` on all 551 requests. 100% invalid. Fixed by raising the served
+context to 65536 in `launch_lcb_multidraw_mdp_collect.sh`; Qwen3-4B-Instruct-2507 supports
+262144 natively, so this costs nothing but KV cache.
+
+### Our bug 2, and the real finding: an empty answer was scored as a wrong answer
+
+`_is_complete` treated `EmptyGeneration` as a completed generation, so every draw where the
+provider returned no answer entered the tensors as `valid=True, resolved=False` -- an
+observed failure of the model. The rates:
+
+| collection | route | EmptyGeneration | of those, at the token cap | non-truncated, as % of all draws |
+|---|---|---|---|---|
+| 4096 | oss20 eval | 43.1% | 86.5% | 5.8% |
+| 4096 | oss20 train | 31.7% | 52.6% | 15.0% |
+| 4096 | oss120 eval | 21.1% | 99.9% | 0.0% |
+| 4096 | oss120 train | 8.2% | 94.9% | 0.4% |
+| 32768 | oss20 eval | 22.6% | 29.2% | **16.0%** |
+| 32768 | oss20 train | 21.1% | 11.6% | **18.7%** |
+| any | scout (local vLLM) | **0.0%** | -- | 0.0% |
+
+Two distinct phenomena sit under one error string. At 4096 it is overwhelmingly *budget
+exhaustion*: the model reasons until it runs out and never reaches the answer channel, 87-99%
+of the time at the cap. That is the truncation defect already known, and re-collection fixes
+it. At 32768 a second thing remains: **16-19% of all gpt-oss-20b draws come back with
+reasoning that stops mid-thought and a completely empty answer, far below the cap.** A
+typical row has `completion_tokens=363`, reasoning ending `"...Return dp[target] if >0 else
+-1. Let's code."`, and nothing after it.
+
+The 0.0% for the locally served scout against 8-43% for the two OpenRouter-served models is
+what gives the artifact away: it tracks the serving path, not the model.
+
+**Direction of the damage.** It is route-asymmetric and lands hardest on gpt-oss-20b, the
+middle rung the entire cascade argument depends on: oss20's prior, its cost-per-success, and
+its belief decay are all measured against draws where it was never given the chance to
+answer. It does *not*, however, manufacture impossible problems -- 21.0% of pool-unsolved
+problems carry a non-truncated empty draw against 58.9% of solved ones, so the artifact is
+spread across easy problems that other draws rescue. Abstention headroom survives; the
+ladder's middle rung does not.
+
+**Fixed.** `openrouter_call` now records `finish_reason` and `provider` and retries an empty
+answer up to twice, but only when `finish_reason != "length"` -- a budget-exhausted empty is
+a true outcome and retrying it would buy the same truncation again. `_is_complete` now treats
+a non-length empty answer as an invalid row rather than a wrong answer, so it is excluded
+from the tensors instead of being scored; rows collected before `finish_reason` existed keep
+the old permissive reading, so no historical dataset silently changes shape. Seven tests in
+`tests/test_empty_generation.py` cover both halves; 13 tests pass across the three suites.
+
+### Activations versus the 8B LoRA, paired on identical draw orderings
+
+The first content-preds replay compared activations only against count beliefs. This one
+carries both belief sources, so the question "can a free forward pass replace the encoder"
+finally has an answer. Cheapest cost at matched accuracy, temporal test split, USD:
+
+| target | counts | activation probe | LoRA 8B | LoRA + decay |
+|---|---|---|---|---|
+| 40% | 0.00555 | 0.00387 | 0.00358 | **0.00252** |
+| 45% | 0.00555 | **0.00387** | 0.00555 | 0.00456 |
+| 50% | 0.00830 | 0.00741 | **0.00620** | 0.00660 |
+| 55% | 0.01633 | 0.01646 | 0.01599 | **0.01442** |
+| 60% | 0.04352 | 0.03421 | 0.02747 | **0.02588** |
+| 65% | 0.06422 | 0.04988 | **0.04569** | 0.04951 |
+| 68% | **0.06422** | 0.08138 | 0.07994 | 0.07454 |
+
+All four families reach the same 73.10% ceiling at ~$0.173.
+
+**The honest reading: activations beat count-only beliefs almost everywhere but do not
+replace the encoder.** At 60% they cost 25% more than LoRA+decay; at 65%, 9% more than LoRA.
+They win outright only at 45%. And at 68% the count baseline is cheapest of all four, which
+is a reminder that belief quality stops mattering as the target approaches the ceiling.
+
+The one argument that could still favour activations is not in this table: **routing spend is
+all that is charged here, and the belief model's own compute is free by construction.** The
+LoRA needs ~6.4 calls to an 8B encoder per episode; the scout activation is one 4B prefill
+that the mandatory-scout protocol already pays for. Charging both would plausibly close or
+invert the gap. That comparison requires a measured serving price for the 4B and the 8B,
+which we do not have -- the same gap that killed the cost-basis sweep. Until then the
+activation result stands as "a free signal that beats counts and nearly matches a paid
+encoder", which is a legitimate ablation and not a headline.
+
+### The per-test pattern is a dead end for abstention
+
+The full-pattern re-grade completed: 892 problems x 3 routes at draw 0, each test graded as
+its own single-test suite to defeat the evaluator's short circuit. Predicting pool
+solvability from the scout's pattern, same labels, same split, same truncation-audit
+de-contamination as the activation probe:
+
+| feature | AUC uncond | AUC given the scout failed |
+|---|---|---|
+| scout fraction of tests passed | 0.7674 | 0.6574 |
+| scout number of tests passed | 0.7692 | 0.6509 |
+| scout first-failure index | 0.7707 | 0.6463 |
+| *scout activations, layer 18, pre-generation* | *0.8453* | *0.7947* |
+
+**Negative, and clearly so.** The richer per-test signal is the *weakest* abstention channel
+yet measured here -- below the `nothing` head (0.7335), below post-scout abstention (0.7629),
+below cheap observables (0.7491). Partial credit on the public tests says how close a wrong
+answer was, and that turns out to be nearly uninformative about whether *some other model at
+some depth* will succeed. The thread is closed; the re-grade's remaining value is the
+short-circuit finding itself and the cross-model comparison (scout/oss120 failing-test
+Jaccard 0.574 on the 45 problems where both fail, n too small to lean on).

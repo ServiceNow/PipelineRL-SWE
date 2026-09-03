@@ -336,6 +336,7 @@ async def openrouter_call(
     title: str = "PipelineRL-LCB",
     semaphore: asyncio.Semaphore | None = None,
     gen_timeout: int = 120,
+    empty_retries: int = 2,
 ) -> dict:
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -363,7 +364,8 @@ async def openrouter_call(
             resp.raise_for_status()
             data = await resp.json()
         latency = time.monotonic() - t0
-        msg = data["choices"][0]["message"]
+        choice = data["choices"][0]
+        msg = choice["message"]
         content = msg.get("content") or ""
         reasoning = msg.get("reasoning") or ""
         usage = data.get("usage", {})
@@ -373,12 +375,39 @@ async def openrouter_call(
             "prompt_tokens": usage.get("prompt_tokens", 0),
             "completion_tokens": usage.get("completion_tokens", 0),
             "latency_s": latency,
+            # Needed to tell a model that burned its budget mid-reasoning apart from a
+            # provider that ended the turn without ever emitting the final channel.
+            "finish_reason": choice.get("finish_reason") or "",
+            "provider": data.get("provider") or "",
         }
+
+    async def _call_with_retry():
+        """Retry an empty answer, but only when the budget was NOT the cause.
+
+        gpt-oss returns reasoning on one channel and the answer on another. Roughly 16-19%
+        of gpt-oss-20b draws come back with reasoning that ends mid-thought ("Let's code.")
+        and a completely empty `content`, far below the token cap -- a failed response, not
+        a failed attempt. Those were being recorded as genuine wrong answers: 43.1% of
+        oss20 eval draws at the 4096 cap, against 0.0% for the locally served scout, which
+        is what gives the artifact away.
+
+        finish_reason == "length" is the opposite case and must be preserved: the model
+        really did spend its whole budget thinking. That is a true outcome and retrying it
+        would just buy the same truncation again.
+        """
+        out = None
+        for attempt in range(1 + max(0, empty_retries)):
+            out = await _call()
+            if (out["full_output"] or "").strip() or out.get("finish_reason") == "length":
+                return out
+            if attempt < empty_retries:
+                await asyncio.sleep(1.0 * (attempt + 1))
+        return out
 
     if semaphore:
         async with semaphore:
-            return await _call()
-    return await _call()
+            return await _call_with_retry()
+    return await _call_with_retry()
 
 
 # ── Phase 1: Scout ───────────────────────────────────────────────────────────

@@ -80,7 +80,7 @@ export HF_HUB_DISABLE_IMPLICIT_TOKEN=1
 echo '[vllm] Starting vLLM server for ${SCOUT_MODEL}...'
 python -m vllm.entrypoints.openai.api_server \\
   --model ${SCOUT_MODEL} --port ${VLLM_PORT} --tensor-parallel-size 1 \\
-  --gpu-memory-utilization 0.90 --max-model-len 32768 --trust-remote-code \\
+  --gpu-memory-utilization 0.90 --max-model-len 65536 --trust-remote-code \\
   --served-model-name ${SCOUT_MODEL} > ${OUTPUT_DIR}/vllm_server.log 2>&1 &
 VLLM_PID=\$!
 for i in \$(seq 1 120); do

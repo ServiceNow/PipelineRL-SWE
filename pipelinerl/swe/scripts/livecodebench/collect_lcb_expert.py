@@ -51,9 +51,17 @@ def _source_ids(source_dir: Path, split: str) -> set[str]:
 
 def _is_complete(row: dict[str, Any], dataset_revision: str) -> bool:
     message = str((row.get("eval_metadata") or {}).get("error_message", ""))
-    completed_generation = bool(str(row.get("full_output") or "").strip()) or (
-        message == "EmptyGeneration"
-    )
+    has_text = bool(str(row.get("full_output") or "").strip())
+    # An empty generation is a real outcome only when the token budget caused it. When the
+    # provider simply returned no content, the draw carries no evidence about the model and
+    # must not enter the tensors as a failure -- that is what made gpt-oss-20b look 16-19pt
+    # worse than it is, on the middle rung of the ladder the cascade argument rests on.
+    # Rows collected before finish_reason was recorded keep the old, permissive reading.
+    finish = row.get("finish_reason")
+    if message == "EmptyGeneration" and not has_text and finish is not None:
+        completed_generation = finish == "length"
+    else:
+        completed_generation = has_text or message == "EmptyGeneration"
     return (
         completed_generation
         and row.get("_lcb_evaluator_commit") == LCB_EVALUATOR_COMMIT
@@ -138,6 +146,8 @@ async def collect_split(
                     "prompt_tokens": 0,
                     "completion_tokens": 0,
                     "latency_s": 0.0,
+                    "finish_reason": "",
+                    "provider": "",
                 }
                 code = ""
                 public_report = full_report = {
@@ -159,6 +169,11 @@ async def collect_split(
                 "prompt_tokens": out["prompt_tokens"],
                 "completion_tokens": out["completion_tokens"],
                 "latency_s": out["latency_s"],
+                # Without these an empty answer is undiagnosable: "length" means the model
+                # burned its budget reasoning, anything else means the provider returned
+                # nothing. Those are opposite outcomes and were being scored identically.
+                "finish_reason": out.get("finish_reason", ""),
+                "provider": out.get("provider", ""),
                 "public_resolved": public_report["resolved"],
                 "public_result_codes": public_report["result_codes"],
                 "public_eval_metadata": public_report["metadata"],
