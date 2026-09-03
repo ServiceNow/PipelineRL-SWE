@@ -6380,3 +6380,85 @@ an OpenRouter provider served are not interchangeable, so mixing draws across th
 the same nominal model would be unsound. All 892 problems x 6 draws x 3 routes are recollected
 from scratch; the OpenRouter data is retained only as a serving-path comparison, which is
 itself the evidence for defect (2).
+
+## Roadmap: LCB -> TACO -> SWE-Smith/Verified (2026-09-03)
+
+### Correction to the previous entry
+
+The SWE audit above generalised from SWE-bench Verified to "no SWE-Smith side with real
+labels". That was wrong, and the estimate built on it ("a build comparable to the LCB
+pipeline") was wrong with it. What actually exists:
+
+- `offline_router_swe_smith_multi_rollout_trace_collect_1781382734/eval150` holds multi-rollout
+  traces for **four routes**: `qwen3_4b_instruct_2507`, `gpt_oss_20b`, `gpt_oss_120b`,
+  `qwen3_coder_30b_a3b`.
+- `router_analysis/uploaded_eval_full_20260617/.../logs/run_evaluation` holds **real evaluation
+  reports**, 3 rollouts per route (r0/r1/r2) over **151 instances**.
+- `launchers/abstention/launch_swe_smith_mdp_full_execution.sh` already runs the whole protocol
+  v2 chain on it: collection -> tensors_v2 -> reachable_dataset -> model -> replay.
+
+**The scout is the same model.** `qwen3_4b_instruct_2507` is exactly the LCB scout, so the
+activation probe transfers with no retraining of anything conceptual -- only new activations on
+new prompts. And since the extraction script's prompt building was already decoupled into its
+own phase, pointing it at SWE-Smith is a prompts-file change, not a rewrite.
+
+The Verified-side audit stands: 6 of 10 `verified_real_label_eval_*` runs returned all-`error`
+or all-`patch_failed`, and the usable set is route_0 (24.1%), route_1 (40.9%), route_2 (41.5%),
+route_3 partial (36.3%), plus Opus 5 at 86.4% -- all single-draw. That harness failure is real
+and must be fixed before spending on Verified collection.
+
+### Phase 1 -- LCB on clean labels (in flight)
+
+Local collection running: 3 jobs, 4 GPUs, 6 draws, both splits, `quantization=mxfp4`,
+`tensor_parallel_size=2` for the 120b, 40960 context against a 32768 cap. On completion:
+
+1. Rebuild tensors from local draws; confirm EmptyGeneration falls to ~0 and compare against
+   the OpenRouter rates as the serving-path evidence.
+2. Re-extract activations for all three routes; refit probes; re-run the transfer matrix with
+   layer chosen on calibration.
+3. Re-run the `content_decay` replay and the full baseline sweep (RoR, fixed schedule, LoRA).
+4. Derive the measured serving cost from the bracketing timestamps, GPU count and token totals
+   -- the cost basis both prior papers hand-wave.
+
+Deliverable: every number in this document, on uncorrupted labels, with seeds.
+
+### Phase 2 -- TACO medium+hard
+
+`taco_mdp_base_2000` already holds `taco_problems.jsonl` and a scout pass. Same LCB evaluator,
+same collector, same replay. Reuses the Phase 1 local launcher with a different problems file.
+
+Honest weight: TACO is competitive programming again. It defends against "you got lucky on one
+benchmark", not against "this only works on short self-contained code". Cheap, so worth doing,
+but it is not the generalisation result.
+
+### Phase 3 -- SWE-Smith -> SWE-bench Verified
+
+This is the one that carries the claim: a different modality (repo-level agentic patches),
+different prompt scale, different cost ratios, and a genuine **cross-dataset** transfer test
+rather than a temporal split.
+
+Already present: traces, real reports, the MDP chain, the same scout, and a four-route ladder
+that includes a 30B the LCB pool lacks.
+
+To build:
+1. Activation extraction on SWE-Smith prompts -- prompts-file change to the existing phase.
+2. More rollouts. Three per route is thin for a resample action; the depth argument needs more.
+3. Verified collection with the Daytona harness fixed, for the cross-dataset test.
+
+### Where this actually stands
+
+Conceptually close, and the closeness is real rather than optimistic: the thesis has a
+mechanism (shared difficulty), a measured baseline sweep it wins, a prior-art position that
+survives two careful readings, and a cost argument nobody else has made. The remaining work is
+mostly confirmation rather than discovery.
+
+What could still break it, listed so it cannot be quietly forgotten:
+
+- **Clean labels move the numbers.** The entire reason for re-collecting is that the current
+  ones are corrupted; the frontier could shift.
+- **The chat-template position confound.** If the transfer-matrix result is about which token
+  ends a prompt rather than what the model encodes, the headline weakens sharply. The
+  mean-pooled control is not yet run.
+- **The second domain may not replicate.** Shared difficulty is a claim about pools; a
+  repo-level pool may not behave like a competitive-programming one.
+- **Priority.** Two papers read properly. A real related-work sweep is still owed.
