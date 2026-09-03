@@ -4,7 +4,8 @@
 Every number here is either measured and cited to a run, or marked TODO. Nothing enters by
 recollection.
 
-**Status:** LCB complete on clean labels. TACO collecting. SWE-Smith not started.
+**Status:** LCB complete on clean labels, C1 demonstrated end to end. TACO collecting.
+SWE-Smith not started.
 **Last updated:** 2026-09-03
 
 ---
@@ -30,7 +31,7 @@ matched accuracy.
 Each is annotated with what prior work already owns, because three claims have already been
 retracted this project for insufficient checking.
 
-**C1. Query-conditioned cost in the decision rule.** *(strongest novel piece)*
+**C1. Query-conditioned cost in the decision rule.** *(strongest novel piece; DEMONSTRATED)*
 The utility rule `argmax_m (p_m(x)*R - c_m)` is conditioned only in the numerator by every
 system we found. RoR (2607.08665) uses count-based costs; NVIDIA's prefill router (2603.20895)
 explicitly uses "each model's median training output tokens as a verbosity proxy." We predict
@@ -39,7 +40,10 @@ explicitly uses "each model's median training output tokens as a verbosity proxy
   hidden state (2607.05316) and hidden states are already used for length prediction in serving
   (2602.11812). **Neither operationalises it in a routing or abstention decision** — 2607.05316
   explicitly names prompt-end early termination as an idea it does not pursue.
-- *Ours:* cross-model (a 4B predicting a 120B's length), and inside the rule.
+- *Ours:* cross-model (a 4B predicting a 120B's length), inside the rule, and **measured to
+  help**: swapping the constant for c_m(x) and changing nothing else saves 12.9-45.9% on count
+  beliefs (6/7 targets significant) and 15.4-26.0% on activation beliefs (5/7). Because it helps
+  on count beliefs too, it is an orthogonal improvement any router can adopt.
 
 **C2. Abstention and resampling depth over a routed pool.**
 RoR has resample-vs-reroute but count beliefs and no stop action. 2603.20895 has activation
@@ -58,8 +62,9 @@ and switching to mean-pooling reverses the ordering (see §6.4).
 - *Scope honestly:* our pool is 3 models on one benchmark; theirs is 11-20 across three. This is
   a caution and a proposed control, **not** a refutation of their result.
 
-**C4. Empirical: the policy wins on clean labels.** Beats RoR at six of seven accuracy targets
-(up to +41.4%) and a compiled fixed schedule with three clear wins and no losses (§6.3).
+**C4. Empirical: the policy wins on clean labels.** The full method is cheaper than RoR at
+**all seven** accuracy targets, +18.1% to +56.2%, every one significant (P >= 0.996), and beats
+a compiled fixed schedule with three clear wins and no losses (§6.3).
 
 **C5. Data-hygiene findings that are ours to own but are not contributions.** Appendix only.
 
@@ -140,10 +145,27 @@ failed draws cost 5.3x/2.6x/3.0x more than solved. Probe vs the per-route consta
 0.834 vs 0.629) and subsumes it (+0.002/+0.008 when combined) — while needing only a prefill.
 Not collinear with predicted success: partial rho 0.46-0.75.
 
-### 6.3 Frontier  *(C4)*
-vs RoR: six of seven targets significant, +41.4/+27.5/+15.4/+18.9/+27.4/+24.8%.
-vs compiled fixed schedule: three clear wins, two marginal, two ties, no losses.
-Abstention 10.5% at the 70% operating point.
+### 6.3 Frontier  *(C1, C4)*  — `lcb_replay_qcost_1788470886`
+Problem-clustered paired bootstrap, 171 test problems, 5000 resamples.
+
+**Cost conditioning in isolation** (same beliefs, same decay, only c_m changes):
+
+| target | RoR beliefs: const -> qcost | activation beliefs: const -> qcost |
+|---|---|---|
+| 50% | +45.9% [+30.6, +62.1] | +19.7% [+1.5, +40.0] |
+| 55% | +18.8% [+4.3, +33.8] | +15.4% [-0.5, +34.1] |
+| 60% | +35.1% [+21.5, +48.8] | +26.0% [+1.4, +52.7] |
+| 65% | +5.8% [-8.4, +20.9] | +15.9% [+2.0, +31.3] |
+| 70% | +13.3% [+1.4, +26.8] | +16.7% [+1.8, +32.7] |
+| 75% | +26.7% [+14.5, +40.3] | -5.8% [-19.2, +6.9] |
+| 80% | +12.9% [+1.0, +25.4] | +0.0% [-11.3, +11.3] |
+
+**Full method vs RoR**: +56.2 / +29.6 / +43.9 / +21.9 / +20.5 / +32.5 / +18.1%, all seven
+significant, every P >= 0.996.
+
+vs compiled fixed schedule (pre-qcost arm): three clear wins, two marginal, two ties, no losses.
+Abstention 10.5% at the 70% operating point -- low because clean labels lifted the pool
+(oss120 81.9% per draw), which is why the harder pools matter for the stopping story.
 
 ### 6.4 Readout control  *(C3)*
 Four readouts from one forward pass. Last-token vs mean-pooled reverses the cross-model
@@ -159,7 +181,10 @@ suffices" is measured, not assumed.
 ### 6.6 TODO
 - [ ] TACO medium+hard (883 problems) — collecting
 - [ ] SWE-Smith -> SWE-bench Verified cross-dataset transfer
-- [ ] Per-candidate frontier (does the AUC deficit cost anything downstream?) — replays running
+- [x] Query-conditioned cost wired into the utility rule and measured — §6.3
+- [ ] Per-candidate frontier (does the AUC deficit cost anything downstream?) — replays done,
+      not yet analysed
+- [ ] Re-run the fixed-schedule comparison against the qcost arm (currently pre-qcost)
 - [ ] Both cost bases (self-hosted node vs API list) — cheap, not run
 - [ ] 8B LoRA retrained on clean labels — optional
 - [ ] Seeds/CV on the frontier
