@@ -163,7 +163,11 @@ Problem-clustered paired bootstrap, 171 test problems, 5000 resamples.
 **Full method vs RoR**: +56.2 / +29.6 / +43.9 / +21.9 / +20.5 / +32.5 / +18.1%, all seven
 significant, every P >= 0.996.
 
-vs compiled fixed schedule (pre-qcost arm): three clear wins, two marginal, two ties, no losses.
+**vs the compiled fixed schedule**, full method, same bootstrap: five clear wins, one marginal,
+one tie, no losses (50%: -80.2% [-111.5,-48.9]; 60%: -43.5% [-67.4,-22.2]; 65%: -20.6%
+[-37.1,-5.3]; 70%: -64.9% [-89.5,-42.2]; 75%: -17.4% [-31.2,-3.6]; 80%: -10.8% [-23.4,+1.2];
+55% tie). Up from three clear wins for the pre-qcost arm -- the schedule was our closest
+competitor, and cost conditioning is what separated us from it.
 Abstention 10.5% at the 70% operating point -- low because clean labels lifted the pool
 (oss120 81.9% per draw), which is why the harder pools matter for the stopping story.
 
@@ -184,7 +188,9 @@ suffices" is measured, not assumed.
 - [x] Query-conditioned cost wired into the utility rule and measured — §6.3
 - [ ] Per-candidate frontier (does the AUC deficit cost anything downstream?) — replays done,
       not yet analysed
-- [ ] Re-run the fixed-schedule comparison against the qcost arm (currently pre-qcost)
+- [x] Fixed-schedule comparison against the full qcost method — §6.3
+- [ ] Seed variance on the frontier (everything is currently one seed)
+- [ ] Writing — nothing drafted yet
 - [ ] Both cost bases (self-hosted node vs API list) — cheap, not run
 - [ ] 8B LoRA retrained on clean labels — optional
 - [ ] Seeds/CV on the frontier
