@@ -5976,3 +5976,105 @@ Drop it.
 
 **Next check before this becomes a paper claim:** read 2608.04804 and 2602.09924 properly and
 record what each actually measures, rather than extending a one-line note.
+
+## Both papers read properly, and the positioning that survives (2026-09-03)
+
+Replacing the one-line notes with what the papers actually say.
+
+### arXiv 2602.09924, "LLMs Encode Their Failures" (Lugoloobi, Foster, Bankes, Russell)
+
+Linear probes on pre-generation activations predict *policy-specific* success on math and
+code, beating surface features. Pool routing uses
+
+    M(x) = argmax_i ( p_i(x) - lambda * c_i )
+
+which is, up to notation, **the myopic utility rule this project already runs** -- their
+lambda is our 1/R. Three facts matter for us, all confirmed in the paper's own text:
+
+1. **"This rule requires training separate probes for each model in the pool."** Routing a
+   K-model pool means a forward pass on all K candidates, expensive ones included.
+2. **Probe forward passes are not charged.** Costs are "average output cost from the train
+   set" -- generation tokens only. The probe is treated as free overhead.
+3. **No abstention.** Every query is routed to exactly one model; there is no stop action.
+
+(2) is a real and quantifiable gap rather than a quibble. On our data a prefill is 21.9-34.2%
+of a full call, so probing gpt-oss-120b costs $0.006338 against $0.024679 to just call it, and
+probing a 3-model pool costs $0.0072 before any answer exists. Their headline is a 70% cost
+reduction on MATH; an unaccounted per-candidate prefill on the expensive models eats into
+that, and nobody has measured by how much.
+
+### arXiv 2608.04804, "Scrouting" (Bhola, Krishnan, NS)
+
+A 7B searcher explores the repo and emits a sandbox-verified handoff; its layer -4 pre-decode
+hidden state plus embedded task text feed two logistic regressors that predict P(solve) per
+fixer, dispatching to one of four frontier fixers. So cross-model activation prediction **has**
+been attempted. What it found is the important part:
+
+- **The hidden state separates solved from failed tasks at AUC 0.600**, against 0.561 for task
+  text. Barely above chance.
+- **The no-router ablation ties the routed system**: always Kimi K2.5 with the handoff solves
+  159/266, exactly what the router achieves. The authors' own words: *"the handoff carries the
+  result and routing collapses to cost allocation."*
+- **No abstention** -- unrouted tasks fall through to an anchor model (Claude Opus 4.6).
+- **Single shot.** One searcher pass, one routing decision, one fixer attempt. No depth.
+
+So the nearest prior work does not establish that cross-model activation routing works. It
+establishes that its authors tried it, got AUC 0.600, and could not distinguish the routing
+decision from the handoff that accompanied it.
+
+### The measurement that ties this together: the signal is a SHARED difficulty axis
+
+Probe fit on one route's labels, scored zero-shot against another's, layer 18, temporal split:
+
+| probe trained on | -> scout | -> oss20 | -> oss120 |
+|---|---|---|---|
+| scout | 0.8113* | 0.8236 | 0.7911 |
+| oss20 | 0.8147 | 0.8238* | 0.8031 |
+| oss120 | **0.8178** | 0.8216 | 0.8306* |
+
+\* = same-model diagonal. **The matrix is nearly flat.** A probe trained only on scout labels
+predicts oss20 at 0.8236 against a refit probe's 0.8238 -- a loss of 0.0002. A probe trained on
+*gpt-oss-120b's* labels predicts the *scout's own* success at 0.8178, **better than the
+scout's own-label probe at 0.8113**. Score correlations run rho 0.72-0.88.
+
+The direction these probes read is difficulty, and difficulty is a property of the problem.
+It is not the model-specific competence axis that the phrase "policy-specific success"
+suggests, at least on this domain.
+
+**This explains Scrouting's 0.600 and our 0.83 as the same fact seen from two sides.** A
+signal that is shared across the pool is nearly useless for deciding *which* model to call --
+it barely separates them -- and is exactly right for deciding *whether to call anything at
+all*. Scrouting pointed a shared-difficulty signal at the selection problem and got a null
+routing ablation. This project independently measured, long before any of this, that routing
+is ~3% of oracle headroom and stopping is ~63%. The activation result and the headroom
+decomposition are the same finding.
+
+### The claim we can actually make
+
+Not "first to route from a small model's activations" -- Scrouting has that. Rather:
+
+1. **One cheap probe replaces K expensive ones.** 2602.09924 requires a probe per pool member
+   and does not charge for them; we show the probe transfers across models nearly losslessly,
+   so a single 4B prefill -- already paid for under the mandatory-scout protocol, 0.60% of one
+   oss120 call -- substitutes for probing the pool.
+2. **The right target is abstention, not selection.** Neither paper has a stop action. The
+   shared-difficulty structure says why selection was the wrong target for this signal, and
+   the 3%/63% headroom split says why stopping is the right one.
+3. **Sequential depth.** Both papers are single-shot. Ours sits in an MDP with resampling,
+   belief decay with failure count, and abstention falling out of the same utility rule
+   2602.09924 uses myopically -- their rule is our depth-0, no-abstain special case.
+4. **Cross-model transfer measured directly**, including the inversion where another model's
+   labels beat own-labels. Neither paper reports a transfer matrix.
+
+### Caveats to carry, not to bury
+
+- **Not a controlled comparison with Scrouting.** AUC 0.600 on repo-level SWE-bench Pro
+  against 0.83 on competitive programming differs in domain, difficulty, pool and target
+  (their single-attempt solve vs our solves-at-any-depth). The contrast motivates; it does
+  not adjudicate.
+- **Label correlation inflates transfer.** Failures are ~89% shared across this pool, so some
+  of the flat matrix is correlated labels rather than a shared representation. The honest
+  statement is that per-model probes buy almost nothing *here*; on a pool with genuinely
+  complementary members they might.
+- **These numbers sit on the 4096-cap tensors**, de-contaminated only by the truncation audit.
+  Every one must be re-run on the 32k re-collection before it is quotable.
