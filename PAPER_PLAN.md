@@ -6078,3 +6078,69 @@ Not "first to route from a small model's activations" -- Scrouting has that. Rat
   complementary members they might.
 - **These numbers sit on the 4096-cap tensors**, de-contaminated only by the truncation audit.
   Every one must be re-run on the 32k re-collection before it is quotable.
+
+## The per-candidate baseline, finally run (2026-09-03)
+
+arXiv 2602.09924 "requires training separate probes for each model in the pool" and does not
+charge for those forward passes. That baseline was unrunnable here because the experts are
+API-served and OpenRouter exposes no hidden states. Self-hosting them closes it.
+
+**Setup.** `vllm-env` already carries transformers 4.57.6 with `gpt_oss` support, so no new
+environment and no upgrade to `pipeline-rl` (which would have broken vllm 0.8.5 under the
+training loop). The 892 prompts are frozen to a file by a `prompts` phase under `pipeline-rl`,
+where the LiveCodeBench runner is importable, so the GPU job needs only torch, transformers
+and numpy and every route provably embeds byte-identical text. `accelerate` was missing from
+`vllm-env` and is supplied `--no-deps` from a side directory rather than installed into the
+shared env. Without `triton_kernels` transformers dequantizes MXFP4 to bf16, so gpt-oss-120b
+takes 4x80GB and gpt-oss-20b one card.
+
+**Protocol.** Layer chosen on the 170-problem calibration split, AUC reported on the
+171-problem test split. Selecting the layer on test inflated both sides by 0.01-0.03 and is
+not used. Every source model is given its own best depth, so the baseline is not handicapped
+the way the undecayed content arm was.
+
+### Result, with gpt-oss-120b's own row still pending
+
+| activations from | -> scout | -> oss20 | -> oss120 | -> pool |
+|---|---|---|---|---|
+| **scout** (Qwen3-4B, ours) | 0.8403 (L29)* | **0.8892** (L32) | 0.7929 (L25) | 0.8045 (L22) |
+| **oss20** (own weights) | 0.8083 (L17) | 0.7997 (L12)* | 0.7905 (L14) | 0.7976 (L14) |
+
+\* = own activations predicting own success, i.e. 2602.09924's method.
+
+Paired bootstrap over the 171 test problems, 5000 resamples:
+
+| target | scout | gpt-oss-20b | difference | 95% CI | P(scout better) |
+|---|---|---|---|---|---|
+| oss20's own success | 0.8892 | **0.7997** | **+0.0895** | [+0.0299, +0.1527] | **0.998** |
+| pool solvability | 0.8045 | 0.7976 | +0.0069 | [-0.0699, +0.0838] | 0.578 |
+| oss120 success | 0.7929 | 0.7905 | +0.0025 | [-0.0888, +0.0918] | 0.521 |
+
+**In the one cell where the prior method is directly instantiated, the cheap 4B scout beats
+it, significantly.** A 4B dense model's pre-generation state predicts gpt-oss-20b's success
+better than gpt-oss-20b's own pre-generation state does, by 0.09 AUC with an interval clear of
+zero. Elsewhere the two tie. Nowhere is the scout worse.
+
+This is the strong branch of the pre-registration: per-candidate probing buys nothing here,
+and costs $0.00723 per problem against the scout's $0.000149 -- 48x -- which under the
+mandatory-scout protocol is already bought.
+
+### Four confounds that must be closed before this is a claim
+
+1. **gpt-oss-120b's own row is not in yet.** It is the cell that matters most, since oss120 is
+   the model whose cost the routing decision is actually about. Everything above is provisional
+   until it lands.
+2. **Last-token position is not comparable across chat templates.** Qwen ends its generation
+   prompt with `<|im_start|>assistant\n`; gpt-oss harmony ends on a channel marker. The probe
+   reads whatever token ends the prompt, so part of the gap may be positional rather than
+   representational. **Required control: re-extract with mean-pooling over prompt tokens and
+   check the gap survives.** Until then the finding is "last-token states", not "activations".
+3. **Dense vs MoE is confounded with cheap vs expensive.** gpt-oss-20b activates 3.6B of 20.9B
+   parameters; the scout is dense 4B. "A small dense model reads difficulty better than a
+   larger sparse one" is a different claim from "a cheap model reads it better than an
+   expensive one", and this design cannot separate them. A dense expert in the pool would.
+4. **bf16 dequantization** of natively-MXFP4 weights, and **labels still from the 4096-cap
+   collection**. Both push the same direction as every other number here: redo on clean data.
+
+n = 171 is small. The oss20 result survives its bootstrap; the two ties are underpowered and
+should be reported as ties, not as parity.
