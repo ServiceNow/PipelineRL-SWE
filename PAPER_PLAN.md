@@ -6846,3 +6846,60 @@ and identical 32768 cap, EmptyGeneration 22.6% -> 0.0% and oss20's solve rate up
 One line in limitations covers it: outcomes were collected under our own serving configuration,
 and another provider's defaults could shift absolute solve rates. Every comparison in the paper
 is within-collection, so the frontier and transfer results are unaffected.
+
+## RETRACTION: the cross-model superiority result was a readout artifact (2026-09-03)
+
+The chat-template control fired. Extracting four readouts from one forward pass and rescoring
+the transfer matrix at ~50% depth on clean labels:
+
+| readout | scout->oss20 | oss20's own | scout->oss120 | oss120's own |
+|---|---|---|---|---|
+| **last** (original) | **0.8196** | 0.7824 | **0.8415** | 0.7743 |
+| content_last | 0.7775 | 0.7757 | 0.7999 | 0.7326 |
+| **mean** | 0.7702 | **0.7995** | 0.8181 | **0.8313** |
+| content_mean | 0.7684 | **0.7992** | 0.8181 | **0.8323** |
+
+**The experts were being handicapped by the readout, exactly as predicted.** gpt-oss-120b's own
+probe improves 0.7743 -> 0.8313 purely by pooling instead of reading position N-1, because
+harmony's last prompt token is the word "assistant" mid-header while Qwen's is a newline after a
+completed one. Under position-neutral readouts the ordering **reverses**.
+
+Mean-pooled, with problem-clustered bootstrap over the 171 test problems:
+
+| target | scout | own/best | diff | 95% CI | P(scout worse) |
+|---|---|---|---|---|---|
+| oss20 | 0.7305 | 0.7917 | **-0.0611** | [-0.1214, -0.0030] | 0.981 |
+| oss120 | 0.8008 | 0.8501 | **-0.0493** | [-0.0981, -0.0063] | 0.987 |
+| pool | 0.8088 | 0.8367 | -0.0279 | [-0.0747, +0.0148] | 0.894 |
+
+**Retracted:** "in both checkable columns a model's own activations are the WORST predictor of
+its own success." That was an artifact of comparing incomparable readout positions across chat
+templates. Every statement resting on it -- including the framing that per-candidate probing
+"buys nothing" -- must go.
+
+**This is the pre-registered weak branch**, fired as written: *diagonal >> scout row -> the
+claim weakens to a cost/quality tradeoff and must be reported as one.* Per-route, the scout
+probe is significantly WORSE, so even non-inferiority fails there; it survives only on pool
+solvability, where the interval spans zero.
+
+**What survives untouched.** Every frontier result already used the scout probe: it beat RoR at
+six of seven targets and the fixed schedule with three clear wins and no losses, on clean
+labels. The transfer matrix was explaining *why* that works, not establishing *that* it works. A
+weaker predictor that still wins the frontier is a perfectly good outcome; we simply cannot also
+claim it is the better predictor.
+
+The cost argument is likewise untouched and remains categorical: probing a model needs its
+weights, no API exposes hidden states, and our method needs weights for one cheap model only.
+
+**Methodological lesson worth keeping.** Cross-model activation comparisons are not
+well-defined without fixing the readout. Two models' "last prompt token" are different objects,
+and the difference here was worth up to 0.06 AUC -- larger than every effect we were trying to
+measure. Any paper comparing activations across model families needs this control, and neither
+2602.09924 nor 2608.04804 reports one, because neither compares across models.
+
+**Next experiment, which is now the decisive one.** Does the 0.05 AUC cost anything downstream?
+Build content predictions from each model's OWN mean-pooled activations, re-run the frontier,
+and compare cost-at-accuracy against the scout-probe frontier. If per-candidate probing does not
+buy a better frontier, the cheap probe is vindicated where it actually matters -- and a frontier
+result is a stronger claim than an AUC table. If it does buy a better frontier, the paper is a
+cost/quality tradeoff and should say so plainly.
