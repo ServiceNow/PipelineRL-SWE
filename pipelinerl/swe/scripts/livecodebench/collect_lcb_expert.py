@@ -252,6 +252,10 @@ def main() -> None:
                         help="Comma-separated splits to collect (default: train,eval)")
     parser.add_argument("--max-invalid-frac", type=float, default=0.0,
                         help="Tolerate this fraction of invalid rows at validation (0.0 = strict)")
+    parser.add_argument("--problems-file", default="",
+                        help=("JSONL of pre-built problems in this script's record shape, "
+                              "bypassing the LiveCodeBench download (used for TACO). "
+                              "--min-date and --release-version are ignored when set."))
     parser.add_argument("--problem-ids-file", default="",
                         help=(
                             "Collect only the problem ids listed in this file, one per line. "
@@ -272,11 +276,22 @@ def main() -> None:
     source_dir = Path(args.source_collection_dir)
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    rows = load_lcb(
-        min_date=args.min_date,
-        release_version=args.release_version,
-        dataset_revision=args.dataset_revision,
-    )
+    if args.problems_file:
+        # Same escape hatch collect_lcb_trajectories.py already has: a JSONL of pre-built
+        # problems in this script's record shape, bypassing the LiveCodeBench download. TACO's
+        # input_output payload is already the format LCB normalises to, so the generation,
+        # extraction and grading path is byte-identical -- only the problem source differs.
+        with open(args.problems_file) as handle:
+            rows = [json.loads(line) for line in handle if line.strip()]
+        if not rows:
+            raise ValueError(f"No problems in {args.problems_file}")
+        logger.info("loaded %d problems from %s", len(rows), args.problems_file)
+    else:
+        rows = load_lcb(
+            min_date=args.min_date,
+            release_version=args.release_version,
+            dataset_revision=args.dataset_revision,
+        )
     splits = {
         "train": [row for row in rows if row["contest_date"] < args.temporal_cutoff],
         "eval": [row for row in rows if row["contest_date"] >= args.temporal_cutoff],

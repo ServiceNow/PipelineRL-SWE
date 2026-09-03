@@ -45,6 +45,17 @@ EVAL_TIMEOUT=${EVAL_TIMEOUT:-10}
 MAX_INVALID_FRAC=${MAX_INVALID_FRAC:-0.05}
 SPLITS=${SPLITS:-train,eval}
 PORT=${PORT:-8000}
+# Set these to run the identical pipeline over TACO instead of LiveCodeBench. PROBLEMS_FILE
+# bypasses the LCB download; PROBLEM_IDS_FILE narrows to a subset (e.g. medium+hard only);
+# TEMPORAL_CUTOFF must match the cutoff the base collection was split on, or the source-ID
+# check fails before any spend.
+PROBLEMS_FILE=${PROBLEMS_FILE:-}
+PROBLEM_IDS_FILE=${PROBLEM_IDS_FILE:-}
+TEMPORAL_CUTOFF=${TEMPORAL_CUTOFF:-}
+EXTRA=""
+[[ -n "${PROBLEMS_FILE}" ]] && EXTRA="${EXTRA} --problems-file ${PROBLEMS_FILE}"
+[[ -n "${PROBLEM_IDS_FILE}" ]] && EXTRA="${EXTRA} --problem-ids-file ${PROBLEM_IDS_FILE}"
+[[ -n "${TEMPORAL_CUTOFF}" ]] && EXTRA="${EXTRA} --temporal-cutoff ${TEMPORAL_CUTOFF}"
 SNAPSHOT=${SNAPSHOT:-1}
 SUBMIT=${SUBMIT:-0}
 
@@ -66,7 +77,7 @@ for SPEC in ${ROUTES}; do
  --splits ${SPLITS} --concurrency ${CONCURRENCY} --temperature ${TEMPERATURE} \
  --max-tokens ${MAX_TOKENS} --eval-timeout ${EVAL_TIMEOUT} --gen-timeout ${GEN_TIMEOUT} \
  --max-invalid-frac ${MAX_INVALID_FRAC} --api-key-file ${BASE}/local_key.txt \
- --base-url http://localhost:${PORT} --route-label ${LABEL} --model '${MODEL}'"
+ --base-url http://localhost:${PORT} --route-label ${LABEL} --model '${MODEL}'${EXTRA}"
 
   INNER=""
   for DRAW in $(seq 0 $((DRAWS-1))); do
