@@ -100,7 +100,7 @@ standard greedy knapsack rule and is exactly the RoR baseline's allocation
 is a stopping theory, not a correct ordering: RoR stops only when the budget is
 exhausted. The budget-swept `counts` family is therefore kept on by default as the
 RoR-faithful cell, and the value sweep is offered as the Lagrangian dual of the same
-problem rather than as a correction to it. See `PAPER_PLAN.md` for the primal/dual
+problem rather than as a correction to it. See `RESEARCH_LOG.md` for the primal/dual
 table and the caveats.
 
 Using the value difference for *selection* as well dissolves the conflict,
