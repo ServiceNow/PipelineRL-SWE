@@ -6213,3 +6213,66 @@ evidence for the same claim. The method result rests on (1) and (2).
 **Still required before any of this is quotable**: the mean-pooled control for the chat-template
 position confound, gpt-oss-120b's dense/MoE confound, and re-running everything on the 32k
 re-collection.
+
+## The fair arm lands: a free probe matches a finetuned 8B encoder (2026-09-03)
+
+`content_decay` -- the activation prior given the same analytic `s/(s+n)` the count family
+already uses -- removes the handicap that made the earlier comparison unfair. Cheapest cost at
+matched accuracy, temporal test split, with a problem-clustered paired bootstrap against the
+better of the two LoRA arms:
+
+| target | counts | content (undecayed) | **content_decay** | best LoRA | diff vs LoRA | 95% CI | P(LoRA cheaper) |
+|---|---|---|---|---|---|---|---|
+| 40% | 0.00555 | 0.00387 | 0.00288 | 0.00252 | +14.1% | [-6.9, +35.9] | 0.906 |
+| 45% | 0.00555 | 0.00387 | **0.00369** | 0.00456 | **-19.0%** | [-28.3, -9.7] | **0.000** |
+| 50% | 0.00830 | 0.00741 | 0.00702 | 0.00620 | +13.4% | [-1.6, +28.6] | 0.958 |
+| 55% | 0.01633 | 0.01646 | 0.01643 | 0.01442 | +13.9% | [-5.1, +32.9] | 0.926 |
+| 60% | 0.04352 | 0.03421 | **0.02486** | 0.02588 | -3.9% | [-20.0, +12.1] | 0.324 |
+| 65% | 0.06422 | 0.04988 | 0.04978 | 0.04569 | +9.0% | [-11.2, +29.7] | 0.810 |
+| 68% | 0.06422 | 0.08138 | **0.06158** | 0.07454 | **-17.4%** | [-28.4, -7.3] | **0.001** |
+
+**Five of seven targets are statistical ties; the free probe wins decisively at two; the LoRA
+never wins with an interval clear of zero.** Compare the undecayed arm, where the LoRA won
+decisively at 40, 50 and 60. Supplying the analytic decay erased the entire advantage, which
+confirms the diagnosis: the gap was the missing stop action, not belief quality.
+
+Abstention also now works as designed. At the cheapest arm reaching 60%, `content_decay`
+abstains 24.3% using **4.78 attempts** -- the fewest of any family -- against 5.57 for
+`sequential_decay` and 6.61 for the undecayed content arm that could not abstain at all.
+
+### The cost ledger, which the accuracy table does not show
+
+| | LoRA encoder | scout activation probe |
+|---|---|---|
+| backbone | Qwen3-Embedding-8B, LoRA r=32 on 7 projections | none; reuses the scout's own prefill |
+| training data | **10,665** state-level examples | **551** problem-level labels |
+| data construction | reachable-state enumeration, 111MB dataset | none, one label per problem |
+| training | **~83 min on an 80GB GPU** (3 epochs) | **0.16 s on CPU** (all 4 heads) |
+| overfitting | best epoch was 0; epochs 1-2 raised calibration loss 0.448 -> 0.547, needing a 5,633-example calibration split to catch | C=0.05 ridge, no epoch selection |
+| artifact | 334 MB adapter | ~40 KB weight matrix |
+| inference | **5.94-9.47 forward passes of an 8B per episode** | one 4B prefill, already bought under mandatory-scout |
+
+Roughly 19x less training data, ~31,000x less training compute, ~8,500x smaller artifact, and
+no marginal inference cost -- for performance that is a statistical tie at five of seven
+operating points and better at two.
+
+The probe's training set does need activations for the 551 train problems: 551 prefills of a
+4B, about $0.082 total. That is the entire training cost.
+
+### What this does and does not establish
+
+It establishes the practical claim cleanly: **on this pool, a linear probe on a cheap model's
+frozen activations replaces a finetuned 8B encoder in a sequential routing MDP, at no
+inference cost and negligible training cost.** Together with the transfer matrix -- where each
+model's own activations are the worst predictor of its own success -- the belief model
+collapses to one free forward pass plus a closed form, which is the strong branch of both
+pre-registrations.
+
+It does not rescue the gate. The abstention AUC conditional on a live decision remains
+0.735-0.754 from every probe source, unchanged and unimproved. The saving here comes from
+better per-route priors driving the utility rule, not from better stopping.
+
+Caveats unchanged and still binding: 171 test problems, labels from the 4096-cap collection,
+the layer-18 content predictions were themselves chosen by looking at the eval split (the
+layer sweep shows 14/18/22 within 0.005, so the effect is small but not zero), and the
+chat-template position confound is still open.
