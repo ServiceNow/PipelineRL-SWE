@@ -6628,3 +6628,78 @@ standalone result -- that harder problems are longer for everyone is intuitive. 
 place because it is the length analogue of the ~89% shared-failure finding, so shared difficulty
 now holds across two independent observables, and because it makes baseline (b) credible enough
 that beating it means something.
+
+## Clean labels: the result holds, and the predicted compression happened (2026-09-03)
+
+Local collection finished all 36 route x split x draw files; tensors rebuilt at 892 problems,
+551/170/171. Per-draw over all six draws:
+
+| route | EmptyGeneration | solved | at 32k cap | (OpenRouter EmptyGen, same cap) |
+|---|---|---|---|---|
+| scout | **0.0%** | 42.0% | 4.1% | 0.0% |
+| oss20 | **3.2%** | 65.3% | 3.6% | 22.6% |
+| oss120 | **0.0%** | 81.9% | 0.0% | 8.2% |
+
+oss20's residual 3.2% now tracks its 3.6% cap rate: what remains is genuine budget exhaustion,
+not a provider returning nothing. The serving-path diagnosis is confirmed end to end.
+
+### Transfer matrix on clean labels -- the effect widens
+
+Layer ~50% depth, 892 problems, train 551 / test 341:
+
+| activations from | -> scout | -> oss20 | -> oss120 | -> pool |
+|---|---|---|---|---|
+| **scout** (ours) | 0.7680* | **0.8196** | **0.8415** | **0.8387** |
+| oss20 (own weights) | 0.6967 | 0.7824* | 0.7633 | 0.7567 |
+| oss120 (own weights) | 0.7417 | 0.7668 | 0.7743* | 0.7781 |
+
+The scout row dominates **every column**, including each expert's own diagonal (+0.037 over
+oss20's own probe, +0.067 over oss120's). Conditional on the scout failing (n=203): scout
+0.7307/0.7866/0.7854 against 0.65-0.73 for the expensive probes. The central claim --
+per-candidate probing buys nothing, at 48.5x the cost -- survives clean labels and strengthens.
+
+### Frontier vs RoR: holds
+
+| target | RoR $ | ours $ | saving | 95% CI | P(ours cheaper) |
+|---|---|---|---|---|---|
+| 50% | 0.01471 | 0.00861 | **+41.4%** | [+24.8, +58.4] | 1.000 |
+| 55% | 0.01471 | 0.01383 | +6.0% | [-18.9, +29.0] | 0.702 |
+| 60% | 0.02344 | 0.01699 | **+27.5%** | [+16.3, +40.3] | 1.000 |
+| 65% | 0.02776 | 0.02349 | **+15.4%** | [+3.3, +29.7] | 0.996 |
+| 70% | 0.03930 | 0.03188 | **+18.9%** | [+6.1, +33.9] | 0.999 |
+| 75% | 0.06498 | 0.04718 | **+27.4%** | [+11.8, +44.9] | 1.000 |
+| 80% | 0.08379 | 0.06299 | **+24.8%** | [+8.6, +44.2] | 0.999 |
+
+Six of seven significant. Stronger and more consistent than on corrupted labels.
+
+### Frontier vs the fixed schedule: still winning, but the margins narrowed
+
+| target | schedule $ | ours $ | our saving | 95% CI | P(schedule cheaper) |
+|---|---|---|---|---|---|
+| 50% | 0.01162 | 0.00861 | **-34.9%** | [-59.4, -9.4] | 0.00 |
+| 55% | 0.01162 | 0.01383 | +16.0% | [-7.1, +42.0] | 0.90 |
+| 60% | 0.01887 | 0.01699 | -11.1% | [-25.6, +2.3] | 0.05 |
+| 65% | 0.02615 | 0.02349 | -11.3% | [-27.1, +2.7] | 0.06 |
+| 70% | 0.05151 | 0.03188 | **-61.6%** | [-85.8, -39.2] | 0.00 |
+| 75% | 0.05151 | 0.04718 | -9.2% | [-29.2, +9.1] | 0.18 |
+| 80% | 0.07600 | 0.06299 | **-20.7%** | [-43.3, -0.3] | 0.02 |
+
+Three clear wins, two marginal (60/65, intervals just crossing zero), two ties, **no losses
+with an interval clear of zero**. On corrupted labels this was six of seven clear.
+
+**The compression was predicted and it happened.** Cleaning the labels lifted the pool --
+oss120 now solves 81.9% per draw and best-of-6 reaches 85.4% -- so fewer problems are hopeless
+and there is less for abstention to avoid. Abstention rates fell accordingly: 10.5% at the
+70% operating point, against 24-33% on the corrupted data. The method still wins, but a
+meaningful part of the earlier margin was avoiding problems that were only impossible because
+the collection had broken them.
+
+**What this means for the paper.** The two claims that do not depend on abstention headroom --
+cross-model transfer beating per-candidate probing, and query-conditioned cost -- came through
+clean and got stronger. The frontier claim survives but is now a narrower win on LCB
+specifically, which raises rather than lowers the value of TACO medium+hard and SWE-Smith,
+where the pools are genuinely harder.
+
+**Not yet run:** the LoRA comparison. That encoder was trained on the corrupted reachable
+dataset, and scoring a probe fit on clean labels against it would bias the result in our
+favour. It needs retraining on the clean dataset before the parity claim can be restated.
