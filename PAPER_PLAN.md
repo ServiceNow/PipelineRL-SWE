@@ -6793,3 +6793,50 @@ between heads is valid; the absolute numbers are not the headline ones.
 does not predict it. What it does establish is that the objection "you only tried a linear
 model" is answered on the frozen-activation features, which is the objection most likely to be
 raised. The LoRA retrain stays optional, below TACO and SWE in priority.
+
+## Reframing: non-inferiority plus cost, and the API deployment property (2026-09-03)
+
+### The claim should be non-inferiority, not superiority
+
+The headline has been "the scout's activations BEAT each model's own activations." That is
+surprising, which is why it was attractive, and fragile, which is why it was a liability -- the
+chat-template confound threatens exactly that gap.
+
+The claim the contribution actually needs is weaker and far more robust: **one cheap probe is
+not significantly worse than probing every candidate, at a fraction of the cost.** Under a
+superiority framing, a control that shrinks the gap to parity kills the headline. Under
+non-inferiority, parity *is* the headline, and only a significant reversal breaks it.
+
+Restructure accordingly:
+- **Primary:** non-inferiority to per-candidate probing, at 48.5x lower probe cost and without
+  weight access to the pool.
+- **Secondary:** the scout in fact scored higher in every column, reported with the readout
+  caveat attached rather than led with.
+
+### The cost argument is categorical, not a ratio
+
+48.5x understates it, because it counts only prefill tokens. **Probing a model requires its
+weights.** Per-candidate probing needs every pool member resident so its hidden states can be
+read -- and no API provider exposes hidden states at all. On an API-served pool the prior
+method is not expensive, it is *impossible*.
+
+Our method needs weights for exactly one model, the cheapest, a 4B on a single small GPU.
+Every other route can be a black-box API: we need its outcomes at training time and its price
+at decision time, never its activations. That matches how people deploy -- self-host something
+small, call APIs for the expensive things.
+
+It also makes the pool **extensible without weight access**: adding an expert needs its
+outcomes on the training set and a price, not its internals. That is what the flat transfer
+matrix buys, and it is a property per-candidate probing cannot have.
+
+### The tension this creates, and the fix
+
+If the deployment story is "experts on API", pricing them with AWS-node token costs invites the
+obvious objection. The two are in mild tension. Cheapest resolution: report the frontier under
+**both** cost bases -- self-hosted node costs and API list prices -- and show the ordering is
+unchanged. That is a re-scaling of the cost tensor, not a re-collection, so it costs nothing
+but a second table.
+
+Note the labels now come from locally served MXFP4 gpt-oss rather than an API provider. gpt-oss
+ships MXFP4 natively so these are very likely the same weights, but the mismatch should be
+stated rather than assumed away.
