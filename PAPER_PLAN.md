@@ -6703,3 +6703,59 @@ where the pools are genuinely harder.
 **Not yet run:** the LoRA comparison. That encoder was trained on the corrupted reachable
 dataset, and scoring a probe fit on clean labels against it would bias the result in our
 favour. It needs retraining on the clean dataset before the parity claim can be restated.
+
+## Capacity ablation: inconclusive, and it weakens the case for skipping the LoRA (2026-09-03)
+
+Cheap test of "is a linear probe leaving anything on the table" -- more capacity on the SAME
+frozen activations, layer and hyperparameters chosen on calibration, reported on the 171-problem
+test split.
+
+| target | linear | MLP-256 | MLP-64 |
+|---|---|---|---|
+| **SUCCESS (AUC)** | | | |
+| scout | 0.7656 | 0.7992 | **0.8030** |
+| oss20 | **0.8098** | 0.8062 | 0.8083 |
+| oss120 | 0.8282 | 0.8397 | **0.8545** |
+| pool | 0.8305 | 0.8402 | **0.8493** |
+| **COST (R2)** | | | |
+| scout | **0.6010** | 0.5723 | 0.5942 |
+| oss20 | **0.7329** | 0.6680 | 0.7214 |
+| oss120 | **0.8029** | 0.7640 | 0.7628 |
+
+Point estimates say capacity helps for success (+0.02 to +0.04 on three of four) and hurts for
+cost (linear wins 3/3). But on the target that matters, the interval is useless:
+
+**pool solvability: MLP-64 0.8493 vs linear 0.8305, diff +0.0188, 95% CI [-0.0661, +0.1120],
+P(MLP better) = 0.656.**
+
+**Verdict: underpowered, not negative.** 171 test problems cannot resolve a 0.02 AUC gap. The
+honest statement is that the capacity question is open, NOT that linear suffices.
+
+**This retracts the reasoning given for deprioritising the 8B LoRA.** The argument was that the
+capacity question had a cheap answer; the cheap answer is inconclusive at this sample size, so
+"why a linear probe?" remains a live methodological objection.
+
+**Better next step than either:** the rolling temporal folds
+(`lcb_mdp_temporal_551_341_prepared_v1/rolling_temporal_folds_v1.json`) already exist. Pooling
+the linear-vs-MLP comparison across folds multiplies effective n at no collection cost, and
+would settle capacity properly before spending a reachable-dataset rebuild plus ~83 GPU-minutes
+on the LoRA. If capacity genuinely does not help across folds, the linear choice is justified
+and the LoRA becomes optional. If it does help, the LoRA is worth running and the current
+"ties a finetuned 8B for free" line needs restating.
+
+The cost side is the one clean signal here: ridge beats both MLPs on all three routes, in the
+same direction, which fits the earlier finding that length is a graded quantity read well by a
+linear direction. Intervals still needed.
+
+## TACO medium+hard launched (2026-09-03)
+
+`collect_lcb_expert.py` hardcoded `load_lcb()`, so the multi-draw expert layer could only run on
+LiveCodeBench. Added the `--problems-file` escape hatch `collect_lcb_trajectories.py` already
+had: TACO's `input_output` payload is already the format LCB normalises to, so generation,
+extraction and grading stay byte-identical and only the problem source changes.
+
+Scale: 425 medium + 458 hard = **883** (677 train / 206 eval), against LCB's 892. Runs against
+the existing 2000-problem base collection, so no new base pass is needed.
+
+Pre-flighted before spending: source IDs match the base exactly on both splits (1627/373) and
+all 883 requested ids are present. Three jobs, four GPUs, six draws, same local serving path.
