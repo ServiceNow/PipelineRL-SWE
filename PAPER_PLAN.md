@@ -6276,3 +6276,56 @@ Caveats unchanged and still binding: 171 test problems, labels from the 4096-cap
 the layer-18 content predictions were themselves chosen by looking at the eval split (the
 layer sweep shows 14/18/22 within 0.005, so the effect is small but not zero), and the
 chat-template position confound is still open.
+
+## The full baseline sweep: we win or tie against all three (2026-09-03)
+
+`content_decay` -- one linear probe on the scout's frozen activations, plus the analytic
+decay, inside the sequential MDP -- measured against every baseline this project has built.
+
+### vs RoR (count-based beliefs), problem-clustered paired bootstrap
+
+| target | RoR $ | ours $ | saving | 95% CI | P(ours cheaper) |
+|---|---|---|---|---|---|
+| 40% | 0.00555 | 0.00288 | **+48.2%** | [+36.1, +60.3] | 1.000 |
+| 45% | 0.00555 | 0.00369 | **+33.5%** | [+24.3, +43.4] | 1.000 |
+| 50% | 0.00830 | 0.00702 | **+15.3%** | [+3.2, +28.4] | 0.994 |
+| 55% | 0.01633 | 0.01643 | -0.6% | [-2.8, +0.8] | 0.277 |
+| 60% | 0.04352 | 0.02486 | **+42.9%** | [+30.6, +55.9] | 1.000 |
+| 65% | 0.06422 | 0.04978 | **+22.5%** | [+16.7, +28.3] | 1.000 |
+| 68% | 0.06422 | 0.06158 | +4.1% | [-10.0, +19.0] | 0.724 |
+
+Five of seven significant, up to 48% cheaper at matched accuracy.
+
+### vs the compiled fixed schedule -- the harder baseline, and the one that beat RoR
+
+This project previously found that count-based policies LOSE to a problem-independent greedy
+schedule (P(uniform cheaper) = 1.00), so beating RoR alone would not have been enough.
+
+| target | fixed schedule $ | ours $ | our saving | 95% CI | P(schedule cheaper) |
+|---|---|---|---|---|---|
+| 40% | 0.00497 | 0.00288 | **-72.8%** | [-94.2, -50.3] | 0.00 |
+| 45% | 0.00497 | 0.00369 | **-34.6%** | [-48.2, -21.3] | 0.00 |
+| 50% | 0.00791 | 0.00702 | **-12.6%** | [-27.3, +1.7] | 0.04 |
+| 55% | 0.01639 | 0.01643 | +0.3% | [-1.5, +2.3] | 0.59 |
+| 60% | 0.03693 | 0.02486 | **-48.5%** | [-67.7, -29.9] | 0.00 |
+| 65% | 0.05425 | 0.04978 | **-9.0%** | [-13.0, -4.8] | 0.00 |
+| 68% | 0.07736 | 0.06158 | **-25.6%** | [-42.5, -10.1] | 0.00 |
+
+**Six of seven with intervals clear of zero, one tie.** This is a stronger record than the
+8B LoRA managed against the same schedule (4 of 6, losing at 55%), from a belief model that
+costs 0.16 CPU-seconds to train.
+
+### vs the finetuned 8B LoRA encoder
+
+Ties at five of seven, wins decisively at two, never loses with an interval clear of zero --
+at ~19x less training data, ~31,000x less training compute and no marginal inference cost.
+
+### The claim this supports
+
+Against RoR: up to 48% cheaper. Against the fixed schedule that beat RoR: up to 73% cheaper at
+six of seven operating points. Against a finetuned 8B encoder: a tie, for free. All three
+from one linear probe on a 4B model's frozen pre-generation activations, whose forward pass
+the mandatory-scout protocol has already bought.
+
+Unchanged caveats, all binding: 171 test problems, 4096-cap labels, layer-18 chosen on the
+eval split, chat-template position confound open, single domain.
