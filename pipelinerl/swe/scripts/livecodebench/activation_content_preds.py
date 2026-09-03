@@ -20,15 +20,36 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 
 ap = argparse.ArgumentParser(description=__doc__)
-ap.add_argument("--activations", required=True)
+ap.add_argument("--activations", help="one file used for every route (the cheap scout probe)")
+ap.add_argument("--activations-file", action="append", default=[], metavar="ROUTE=PATH",
+                help=("Per-candidate mode: each route's head is fit on its OWN activations, "
+                      "i.e. arXiv 2602.09924's method. Requires weights for every pool member, "
+                      "so it is not deployable on an API-served pool -- run for completeness."))
+ap.add_argument("--readout", default="pre",
+                help="which stored readout to use; 'mean' is the template-neutral one")
 ap.add_argument("--tensors-dir", required=True)
-ap.add_argument("--layer", type=int, default=18)
+ap.add_argument("--layer", type=int, default=18,
+                help="absolute layer for the single-file mode")
+ap.add_argument("--layer-frac", type=float, default=0.0,
+                help=("pick each model's layer by RELATIVE depth instead. Required in "
+                      "per-candidate mode: gpt-oss-20b has 24 layers and no layer 18, so "
+                      "absolute indices do not transfer across model families."))
 ap.add_argument("--C", type=float, default=0.05)
 ap.add_argument("--out", required=True)
 a = ap.parse_args()
 
-d = np.load(a.activations, allow_pickle=True)
-pids = [str(p) for p in d["problem_ids"]]; layers = list(d["layers"])
+def _load(path):
+    z = np.load(path, allow_pickle=True)
+    key = a.readout if a.readout in z.files else "pre"
+    return [str(p) for p in z["problem_ids"]], z[key], list(z["layers"])
+
+per_route = {}
+for spec in a.activations_file:
+    r, _, path = spec.partition("=")
+    per_route[r] = _load(path)
+if not per_route and not a.activations:
+    raise SystemExit("need --activations or --activations-file")
+pids, Xall, layers = _load(a.activations) if a.activations else next(iter(per_route.values()))
 t = np.load(Path(a.tensors_dir) / "tensors.npz", allow_pickle=True)
 tp = [str(p) for p in t["problem_ids"]]; ti = {p: i for i, p in enumerate(tp)}
 probs = {str(json.loads(l)["problem_id"]): json.loads(l)
@@ -37,7 +58,12 @@ ok = t["final_outcome"] & t["valid"]; slots = [str(s) for s in t["model_slots"]]
 
 keep = [i for i, p in enumerate(pids) if p in ti]
 pk = [pids[i] for i in keep]
-X = d["pre"][keep][:, layers.index(a.layer)]
+def _pick(ls):
+    if a.layer_frac:
+        return min(range(len(ls)), key=lambda i: abs(ls[i] / max(ls) - a.layer_frac))
+    return ls.index(a.layer)
+
+X = Xall[keep][:, _pick(layers)]
 tr = np.array([probs[p].get("source_temporal_split") == "train" for p in pk])
 print(f"{len(pk)} problems, fitting on {tr.sum()} train, layer {a.layer}")
 
@@ -45,9 +71,15 @@ P = np.zeros((len(pk), len(slots)))
 for j, s in enumerate(slots):
     # pass@1 is the next-draw prior the replay decays; it is the theta the policy acts on.
     y = ok[[ti[p] for p in pk], j, 0]
-    sc = StandardScaler().fit(X[tr])
-    clf = LogisticRegression(max_iter=2000, C=a.C).fit(sc.transform(X[tr]), y[tr])
-    P[:, j] = clf.predict_proba(sc.transform(X))[:, 1]
+    if s in per_route:
+        rp, rX, rl = per_route[s]
+        ridx = {q: i for i, q in enumerate(rp)}
+        Xr = rX[[ridx[q] for q in pk]][:, _pick(rl)]
+    else:
+        Xr = X
+    sc = StandardScaler().fit(Xr[tr])
+    clf = LogisticRegression(max_iter=2000, C=a.C).fit(sc.transform(Xr[tr]), y[tr])
+    P[:, j] = clf.predict_proba(sc.transform(Xr))[:, 1]
     print(f"  {s:8s} train base rate {y[tr].mean():.3f}  mean predicted {P[:, j].mean():.3f}")
 
 with open(a.out, "w") as f:
