@@ -103,24 +103,57 @@ def extract(args) -> None:
     layers = sorted({int(round(f * n_layers)) for f in LAYER_FRACTIONS})
     logger.info("%d layers; probing %s; hidden %d", n_layers, layers, model.config.hidden_size)
 
-    pre = np.zeros((len(pids), len(layers), model.config.hidden_size), dtype=np.float32)
+    # FOUR readouts per layer, from ONE forward pass. The last prompt token is not comparable
+    # across models: Qwen's chat template ends on a newline after "<|im_start|>assistant",
+    # gpt-oss harmony ends on the word "assistant" mid-header. Reading position N-1 therefore
+    # compares different things, and could by itself explain the cross-model result. The
+    # content readouts cut the scaffolding off at the same SEMANTIC position in both models,
+    # and the means remove position dependence altogether. The forward pass is the expensive
+    # part; extra aggregations of hidden states we already computed are free.
+    H = model.config.hidden_size
+    reads = {k: np.zeros((len(pids), len(layers), H), dtype=np.float32)
+             for k in ("last", "content_last", "mean", "content_mean")}
+    n_no_offsets = 0
     with torch.no_grad():
         for i, pid in enumerate(pids):
             msgs = [{"role": "system", "content": SYSTEM},
                     {"role": "user", "content": prompts[pid]}]
             text = tok.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
-            ids = tok(text, return_tensors="pt", truncation=True, max_length=args.max_len)
-            ids = {k: v.to(model.device) for k, v in ids.items()}
+            enc = tok(text, return_tensors="pt", truncation=True, max_length=args.max_len,
+                      return_offsets_mapping=tok.is_fast)
+            offsets = enc.pop("offset_mapping", None)
+            ids = {k: v.to(model.device) for k, v in enc.items()}
             hs = model(**ids).hidden_states
+            n_tok = ids["input_ids"].shape[1]
+            # index of the last token belonging to the user's problem text
+            c_idx = n_tok - 1
+            if offsets is not None:
+                end_char = text.rfind(prompts[pid])
+                if end_char >= 0:
+                    end_char += len(prompts[pid])
+                    starts = offsets[0, :, 0].tolist()
+                    cand = [k for k, a in enumerate(starts) if a < end_char]
+                    if cand:
+                        c_idx = max(cand)
+            else:
+                n_no_offsets += 1
             for j, L in enumerate(layers):
-                pre[i, j] = hs[L][0, -1, :].float().cpu().numpy()
+                h = hs[L][0]
+                reads["last"][i, j] = h[-1, :].float().cpu().numpy()
+                reads["content_last"][i, j] = h[c_idx, :].float().cpu().numpy()
+                reads["mean"][i, j] = h.mean(0).float().cpu().numpy()
+                reads["content_mean"][i, j] = h[: c_idx + 1].mean(0).float().cpu().numpy()
             if (i + 1) % 50 == 0:
                 logger.info("%d/%d", i + 1, len(pids))
+    if n_no_offsets:
+        logger.warning("%d prompts had no offset mapping; content readouts fell back to the "
+                       "last token for those", n_no_offsets)
     out = Path(args.activations)
     out.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(out, pre=pre, problem_ids=np.array(pids), layers=np.array(layers),
-                        model=args.model, route_label=args.route_label)
-    logger.info("wrote %s", out)
+    np.savez_compressed(out, pre=reads["last"], problem_ids=np.array(pids),
+                        layers=np.array(layers), model=args.model,
+                        route_label=args.route_label, **reads)
+    logger.info("wrote %s (readouts: %s)", out, sorted(reads))
 
 
 def auc(scores, labels) -> float:
@@ -171,8 +204,9 @@ def matrix(args) -> None:
     for spec in args.activations_file:
         label, _, path = spec.partition("=")
         d = np.load(path, allow_pickle=True)
+        key = args.readout if args.readout in d.files else "pre"
         acts[label] = {"pids": [str(p) for p in d["problem_ids"]],
-                       "pre": d["pre"], "layers": list(d["layers"])}
+                       "pre": d[key], "layers": list(d["layers"])}
         logger.info("%s: %s, layers %s", label, acts[label]["pre"].shape, acts[label]["layers"])
 
     labels, prob_split, slots = build_labels(Path(args.tensors_dir), args.audit_dir)
@@ -253,6 +287,10 @@ def main() -> None:
     ap.add_argument("--min-date", default="2023-09-01")
     ap.add_argument("--release-version", default="release_v6")
     ap.add_argument("--layer-fracs", default="0.5,1.0")
+    ap.add_argument("--readout", default="pre",
+                    choices=["pre", "last", "content_last", "mean", "content_mean"],
+                    help="Which pooled readout to score. 'last' is the original last-prompt-"
+                         "token; the others are the chat-template controls.")
     ap.add_argument("--max-len", type=int, default=8192)
     ap.add_argument("--C", type=float, default=0.05)
     ap.add_argument("--limit", type=int, default=0)
