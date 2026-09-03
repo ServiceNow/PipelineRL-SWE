@@ -6514,8 +6514,8 @@ difficulty axis reads more precisely through the graded variable.
    long ones.
 2. **It is free.** Same forward pass, same activations, one more linear head. 0.16 CPU-seconds
    of training becomes maybe 0.2.
-3. **Nobody does it.** Both papers read so far use a train-set constant. This is a gap in the
-   formulation rather than in the engineering.
+3. **Nobody puts it in the decision rule.** Both routing papers use a train-set constant.
+   (Length prediction from activations itself is NOT new -- see the correction below.)
 
 ### Required next steps, in order
 
@@ -6535,3 +6535,53 @@ First rows from the local pool: **0.0% EmptyGeneration on all three routes**, ag
 gpt-oss-20b through OpenRouter at the identical 32768 cap. `finish_reason` is now recorded on
 every row. The defect was the serving path, exactly as the scout-versus-expert asymmetry
 implied.
+
+
+### Correction: predicting length from activations is established prior art
+
+The claim that nobody predicts generation length from activations is **false**. Two papers do
+exactly this:
+
+- **"How Much is Left? LLMs Linearly Encode Their Remaining Output Length"** (arXiv 2607.05316).
+  Linear probes on residual-stream hidden states predict remaining output length across
+  Llama-3.1-8B, Olmo-3-7B and Mistral-7B. Critically, **total response length is linearly
+  decodable from the prompt's last hidden state before any output is emitted** -- the same
+  probe, feature and position used above. MAE ~30-40 tokens on 400-token completions.
+- **"Predicting LLM Output Length via Entropy-Guided Representations"** (arXiv 2602.11812,
+  ICLR 2026). Reuses the model's internal hidden states with Entropy-Guided Token Pooling for
+  static length prediction plus a progressive per-step variant, aimed at serving throughput and
+  RL sampling efficiency.
+
+So the mechanism is established and should be **cited, not claimed**. What those papers leave
+open maps precisely onto what we have:
+
+1. **Cross-model transfer is untested.** 2607.05316 tests cross-*dataset* transfer extensively
+   -- probes trained on GSM8K evaluated on MMLU-Pro and TriviaQA -- but every probe reads the
+   model whose length it predicts. A cheap model's activations predicting an *expensive* model's
+   length is the untested cell, and it is the same twist as our success result.
+2. **The prediction is never operationalised.** The paper states the work is investigative and
+   the length is not used in any routing or abstention decision. It even names the idea and
+   declines it: *"a prompt-end estimate T-hat_0 exceeding a budget is a cheap early-termination
+   signal."* Putting c_m(x) inside `argmax_m (p_m(x)*R - c_m(x))` is the open move.
+
+This is a better position than the one it replaces. The foundation is no longer ours to defend;
+the evidence budget goes to the two things that are.
+
+### The baseline that must be beaten first: rescaling the scout's OBSERVED length
+
+Under the mandatory-scout protocol the scout actually runs, so its true generation length is
+already known at decision time. Log-lengths correlate strongly across the pool -- **0.7521**
+scout-to-oss20 and **0.7764** scout-to-oss120 -- so a two-parameter fit
+`log len_m = a_m + b_m * log len_scout` is a serious competitor that needs no activations at
+all. If it matches the probe, the cost story is a scalar per route and the activations add
+nothing.
+
+The probe still has one structural advantage that survives even a tie: **it needs only a
+prefill, while the baseline needs the scout's full generation.** That is $0.000149 against
+$0.000436 per problem, plus the entire latency of a decode. It also decouples the method from
+the mandatory-scout protocol -- the "free because we were running the scout anyway" argument
+becomes "one 4B prefill", which holds in deployments that would never run a small model first.
+
+Comparison in flight: (a) per-route constant, (b) scalar x observed scout length,
+(c) pre-generation activation probe, (d) both together. (d) minus (b) is the honest measure of
+what the activations add.
