@@ -6329,3 +6329,54 @@ the mandatory-scout protocol has already bought.
 
 Unchanged caveats, all binding: 171 test problems, 4096-cap labels, layer-18 chosen on the
 eval split, chat-template position confound open, single domain.
+
+## Where the paper stands, and the decision to go fully local (2026-09-03)
+
+### The thesis, now supported end to end
+
+**In sequential test-time model selection, the belief that matters is problem difficulty. It is
+shared across the pool, so one linear probe on the cheapest model's frozen activations replaces
+the per-candidate probing prior work requires and does not charge for -- and it belongs on the
+stop decision, where the headroom is, not on selection, where it is not.**
+
+Every leg is now measured rather than asserted:
+
+| leg | evidence |
+|---|---|
+| the signal is shared, not model-specific | zero-shot transfer matrix is nearly flat; a probe fit on scout labels predicts oss20 at 0.8236 vs 0.8238 refit |
+| own activations are not privileged | in both checkable columns a model's OWN state is the WORST predictor of its OWN success (oss20: 0.8892 scout > 0.8080 oss120 > 0.7997 itself; oss120: 0.7929 > 0.7905 > 0.7862) |
+| per-candidate probing is waste | scout beats oss20's own probe +0.0895, CI [+0.030,+0.153]; ties oss120's; costs 48.5x less |
+| it beats RoR | five of seven targets significant, up to +48.2% cheaper |
+| it beats the baseline that beat RoR | six of seven clear of zero against the compiled fixed schedule, up to -72.8% |
+| it replaces a finetuned 8B encoder | ties five of seven, wins two, never loses; 19x less data, ~31,000x less training compute |
+| selection is the wrong target for it | 3%-routing / 63%-stopping headroom split; Scrouting's own null routing ablation at AUC 0.600 |
+
+### Originality, stated carefully
+
+The *combination* appears new: no read paper puts a cross-model activation probe inside a
+sequential MDP with a stop action. 2602.09924 is myopic, per-candidate and has no abstention;
+Scrouting is one-shot, N-way and has no abstention; AutoMix has a POMDP but no activations. The
+"own activations are the worst predictor of own success" result is new on its own.
+
+**Qualifier that must not be dropped:** two papers have been read properly. Priority claims wait
+on a real related-work sweep. Nothing in the framing may depend on being first.
+
+### Decision: collect everything locally
+
+Self-hosting was built for the probe baseline and turns out to solve four problems at once, so
+the collection moves off OpenRouter entirely.
+
+1. **Removes the blocker.** The key sits at its $200 ceiling; local inference needs no key.
+2. **Kills the EmptyGeneration artifact.** 0.0% on locally served vLLM against 16-43% via
+   OpenRouter. It tracked the serving path, not the model, and it was corrupting the middle
+   rung of the ladder the cascade argument depends on.
+3. **Yields measured serving costs.** Tokens/sec over GPU-hour gives a real cost basis, closing
+   the gap that killed the pricing sweep and that both prior papers hand-wave.
+4. **Reproducibility.** Pinned weights and pinned quantization, instead of OpenRouter dispatching
+   to an unnamed provider whose serving configuration we cannot see or cite.
+
+**The cost is that everything must be re-collected.** Locally served MXFP4 weights and whatever
+an OpenRouter provider served are not interchangeable, so mixing draws across the two paths for
+the same nominal model would be unsound. All 892 problems x 6 draws x 3 routes are recollected
+from scratch; the OpenRouter data is retained only as a serving-path comparison, which is
+itself the evidence for defect (2).
