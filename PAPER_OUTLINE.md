@@ -182,7 +182,34 @@ Linear vs MLP on the same activations, 535 pooled test problems over rolling-ori
 linear wins pool solvability (P(MLP better)=0.029) and all three cost targets. "Linear
 suffices" is measured, not assumed.
 
-### 6.6 TODO
+### 6.6 Price-ratio sensitivity — the method needs a real cost ladder
+Sweeping the oss120:scout price ratio (`lcb_replay_price_*`), full method vs RoR:
+
+| ratio | 60% | 70% | 80% |
+|---|---|---|---|
+| 40x (self-hosted, primary) | +43.9% | +20.5% | +18.1% |
+| 10x | +34.2% | +42.3% | +20.6% |
+| 4x | +19.2% | -0.6% | +7.6% |
+| 0.6x (API-like, inverted) | **-40.0%** | **-49.3%** | **-13.8%** |
+
+Cost conditioning in isolation degrades the same way and more sharply (+35.1% at 40x, -160% at
+0.6x). **The prediction that C1 would be basis-independent was wrong.** What matters is not
+within-route variance but the ratio of cost *signal* to cost *prediction error*: when routes
+cost nearly the same, `p*R - c` is dominated by p, and a noisy per-problem c injects variance
+into a term that should be near-constant.
+
+**State as a limitation, do not bury.** The method needs a real cost ladder: strong at >=10x, a
+wash near 4x, harmful under inversion. Two mitigations, both honest rather than exculpatory:
+the inverted regime is degenerate for every method (the optimal policy is "always call the big
+model" and absolute costs are pennies), and 4-40x brackets plausible self-hosted deployments
+while 0.6x is a hyperscale-API artifact.
+
+**Pre-registered prediction for TACO:** on LCB, oss120 solves 81.9%, so cheapening it collapses
+everything to a single-model policy. On TACO it solves 43-49%, so no single-model policy is
+good and routing should retain value as the ladder flattens. If the TACO sweep degrades
+markedly more gracefully, the limitation is about benchmark saturation rather than the method.
+
+### 6.7 TODO
 - [ ] TACO medium+hard (883 problems) — collecting
 - [ ] SWE-Smith -> SWE-bench Verified cross-dataset transfer
 - [x] Query-conditioned cost wired into the utility rule and measured — §6.3
