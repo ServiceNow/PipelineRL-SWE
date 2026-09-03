@@ -28,6 +28,9 @@ MAX_LEN=${MAX_LEN:-8192}
 SNAPSHOT=${SNAPSHOT:-1}
 SUBMIT=${SUBMIT:-0}
 ENVNAME=${ENVNAME:-vllm-env}
+# vllm-env has transformers 4.57 but not accelerate, which device_map requires. Installed
+# --no-deps into a side directory so the shared env stays exactly as the serving jobs expect.
+ACCEL_PATH=${ACCEL_PATH:-/mnt/llmd/results/exps/aristides/envs/accel}
 mkdir -p "${BASE}"
 
 # label:model:gpus
@@ -39,6 +42,7 @@ for SPEC in ${ROUTES}; do
   {
     echo '#!/usr/bin/env bash'; echo 'set -euo pipefail'
     echo 'export HF_HUB_DISABLE_IMPLICIT_TOKEN=1'
+    echo "export PYTHONPATH=${ACCEL_PATH}:\${PYTHONPATH:-}"
     echo "python pipelinerl/swe/scripts/livecodebench/pool_activation_probe.py --phase extract \\"
     echo "  --model '${MODEL}' --route-label ${LABEL} \\"
     echo "  --prompts-file '${PROMPTS}' \\"
