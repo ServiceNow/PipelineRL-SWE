@@ -1,262 +1,170 @@
 # Paper outline — living document
 
-**Edited in place, not appended to.** The append-only history lives in `RESEARCH_LOG.md`.
-Every number here is either measured and cited to a run, or marked TODO. Nothing enters by
-recollection.
+**Edited in place.** Append-only history lives in `RESEARCH_LOG.md`. Every number is cited to a
+run or marked TODO; nothing enters by recollection.
 
-**Status:** LCB complete on clean labels, C1 demonstrated end to end. TACO collecting.
-SWE-Smith not started.
+**Status:** LCB complete on clean labels; C1 demonstrated; per-candidate, capacity, price and
+seed checks done or running. TACO collecting (ETA 11pm–1am EDT). SWE-Smith not started.
 **Last updated:** 2026-09-03
 
 ---
 
 ## 1. Working title
+*Cheap Beliefs for Expensive Pools: Query-Conditioned Cost in Sequential Test-Time Model
+Selection*
 
-*Cheap Beliefs for Expensive Pools: Query-Conditioned Cost and Abstention in Sequential
-Test-Time Model Selection*
+## 2. One paragraph
+Sequential test-time model selection asks, at each step, whether to resample the committed
+model, reroute, or stop. Every system we surveyed conditions the *correctness* half of that
+decision on the query and leaves the *cost* half a per-model constant from the training set. We
+show per-problem cost is highly variable (p90/p10 16–37×), highly predictable from one cheap
+model's pre-generation activations (R² 0.65–0.83 against the constant), and that conditioning
+on it is worth 13–46% at matched accuracy — including on top of the existing state of the art's
+own beliefs. The resulting policy is cheaper than the counting-based baseline at all seven
+accuracy targets and beats a compiled fixed schedule with no losses.
 
-## 2. The claim, in one paragraph
+## 3. Contributions
 
-Sequential test-time model selection asks, at each step, whether to resample the model you
-committed to, reroute to a different one, or stop. Existing systems condition the *correctness*
-half of that decision on the query and leave the *cost* half a per-model constant estimated
-from the training set. We show that per-problem cost is both highly variable (p90/p10 of 16-37x)
-and highly predictable from a single cheap model's pre-generation activations (R2 0.65-0.83
-against the constant), that conditioning it sharpens the stop decision, and that the resulting
-policy beats the counting-based state of the art and a compiled fixed schedule on cost at
-matched accuracy.
-
-## 3. Contributions, honestly scoped
-
-Each is annotated with what prior work already owns, because three claims have already been
-retracted this project for insufficient checking.
-
-**C1. Query-conditioned cost in the decision rule.** *(strongest novel piece; DEMONSTRATED)*
-The utility rule `argmax_m (p_m(x)*R - c_m)` is conditioned only in the numerator by every
-system we found. RoR (2607.08665) uses count-based costs; NVIDIA's prefill router (2603.20895)
-explicitly uses "each model's median training output tokens as a verbosity proxy." We predict
-`c_m(x)` from the scout's pre-generation activations and put it in the rule.
-- *Prior art that must be cited, not claimed:* length IS linearly decodable from a prompt's last
-  hidden state (2607.05316) and hidden states are already used for length prediction in serving
-  (2602.11812). **Neither operationalises it in a routing or abstention decision** — 2607.05316
-  explicitly names prompt-end early termination as an idea it does not pursue.
-- *Ours:* cross-model (a 4B predicting a 120B's length), inside the rule, and **measured to
-  help**: swapping the constant for c_m(x) and changing nothing else saves 12.9-45.9% on count
-  beliefs (6/7 targets significant) and 15.4-26.0% on activation beliefs (5/7). Because it helps
-  on count beliefs too, it is an orthogonal improvement any router can adopt.
+**C1. Query-conditioned cost in the decision rule.** *(lead; demonstrated)*
+`argmax_m (p_m(x)·R − c_m)` is conditioned only in the numerator by RoR (2607.08665) and by
+NVIDIA's prefill router (2603.20895, "median training output tokens as a verbosity proxy"). We
+predict `c_m(x)` from a cheap model's activations and put it in the rule. **Measured to help:
++12.9–45.9% on count beliefs (6/7 targets significant), +15.4–26.0% on activation beliefs
+(5/7).** Because it improves count beliefs too, it is a drop-in upgrade to the existing state of
+the art, not something that only works inside our system.
+*Cite, don't claim:* length is linearly decodable from a prompt's last hidden state (2607.05316)
+and hidden states already drive length prediction for serving (2602.11812). Neither
+operationalises it in a decision; 2607.05316 explicitly names prompt-end early termination as
+unpursued.
 
 **C2. Abstention and resampling depth over a routed pool.**
-RoR has resample-vs-reroute but count beliefs and no stop action. 2603.20895 has activation
-routing but is single-commit with no abstention. "Knowing When to Quit" (2604.18419, ICML 2026)
-has abstention as an MDP action driven by an MLP probe on hidden states — but for a **single
-model**, with no pool, no resampling, and no cost in the objective.
-- *Ours:* the combination — a pool, depth, an analytic belief decay, and abstention falling out
-  of the same utility rule rather than a separate thresholded classifier.
+RoR has resample-vs-reroute, count beliefs, no stop action. 2603.20895 has activation routing,
+single-commit, no abstention. "Knowing When to Quit" (2604.18419, ICML 2026) has abstention as
+an MDP action from a hidden-state probe — single model, no pool, no resampling, no cost. Ours
+is the combination, with abstention falling out of the same utility rule rather than a separate
+thresholded classifier.
 
-**C3. A methodological correction: cross-model activation comparisons need a fixed readout.**
-2603.20895 reports that "foreign encoders consistently outperform a target model's own internal
-states," using a last-token readout, and does not discuss chat-template comparability. We show
-that on our pool this direction is **an artifact of readout position**: gpt-oss harmony ends its
-prompt on the word `assistant` mid-header while Qwen ends on a newline after a completed one,
-and switching to mean-pooling reverses the ordering (see §6.4).
-- *Scope honestly:* our pool is 3 models on one benchmark; theirs is 11-20 across three. This is
-  a caution and a proposed control, **not** a refutation of their result.
+**C3. One cheap probe matches probing every model — on the frontier.**
+Per-candidate probes are significantly *better predictors* (+0.05–0.06 AUC) and buy **nothing**
+on cost-at-accuracy (§6.5). Deployment consequence: we need weights for one cheap model; per-
+candidate probing needs all of them, which no API-served pool permits. *(2603.20895's
+encoder-target decoupling makes the same deployment argument — cite it.)*
 
-**C4. Empirical: the policy wins on clean labels.** The full method is cheaper than RoR at
-**all seven** accuracy targets, +18.1% to +56.2%, every one significant (P >= 0.996), and beats
-a compiled fixed schedule with three clear wins and no losses (§6.3).
+**C4. Methodological: cross-model activation comparisons need a fixed readout.** §6.4.
 
-**C5. Data-hygiene findings that are ours to own but are not contributions.** Appendix only.
+**C5. Empirical: cheaper than RoR at all seven targets, +18.1–56.2%.** §6.3.
 
 ## 4. Related work
-
-### 4.1 Sequential / budgeted test-time model selection (closest)
-- **RoR — "Resample or Reroute?"** (2607.08665, Chen). Formalises resample-vs-reroute as
-  competing uses of one per-query budget; greedy marginal-correctness-per-cost and a UCB
-  variant; 11-model open-weight pool, four benchmarks; verifier-gated ablation. **Our primary
-  baseline.** No abstention; count-based beliefs; cost not query-conditioned.
-- **How Much of the Routing Gap Is Real?** (2607.03436). Companion analysis: k>=30 draws, peer
-  models, shows part of the router-oracle gap is single-draw label noise.
-- **SeqRoute** (2605.25424). Binary weak/strong, single-use per query, no resampling, no
-  abstention, budget global across a multi-turn session.
-- **Cluster, Route, Escalate** (2606.27457); **UCCI** (2605.18796) calibrated uncertainty for
-  cost-optimal cascade routing; **Dynamic Model Routing and Cascading survey** (2603.04445).
-
-### 4.2 Activation-based prediction and routing
-- **LLM Router: Rethinking Routing with Prefill Activations** (2603.20895, NVIDIA). Prefill
-  activations, encoder-target decoupling so open-weight encoders predict closed-source targets,
-  Fisher separability for layer choice, SharedTrunkNet. Single-commit, no abstention, per-model
-  constant cost, last-token readout. **Closest to our signal; see C3.**
-- **LLMs Encode Their Failures** (2602.09924). Pre-generation probes for a model's OWN success;
-  pool routing needs a probe per candidate; probe forward passes not charged; no abstention.
-- **Scrouting / SuperScout** (2608.04804). 7B searcher's hidden states feed an N-way fixer
-  router on SWE-bench Pro. Hidden-state AUC 0.600; the no-router ablation ties the routed system
-  ("the handoff carries the result and routing collapses to cost allocation"); single-shot.
-- **Knowing When to Quit** (2604.18419, ICML 2026). Abstention as an MDP action, MLP probe on
-  hidden states, value thresholding. Single model, no pool, no resampling, no cost.
-
-### 4.3 Output-length prediction (the C1 foundation — cite, do not claim)
-- **How Much is Left?** (2607.05316). Total response length linearly decodable from the prompt's
-  last hidden state before any output. Same-model only; cross-*dataset* transfer tested,
-  cross-*model* not; never operationalised in a decision.
-- **Predicting LLM Output Length via Entropy-Guided Representations** (2602.11812, ICLR 2026).
-  Entropy-guided token pooling + progressive per-step prediction, for serving throughput and RL
-  sampling efficiency.
-- Latency-aware routing with output-length predictors (2607.18253); learned per-query cost
-  predictors over query embeddings (2604.03527).
-
-### 4.4 Routing benchmarks and gap analyses
-LLMRouterBench (2601.07206); The Routing Plateau (2606.07587); CodeRouterBench / ACRouter
-(2606.22902); the 67-model Rasch analysis (2606.27288); zero-shot routing via a universal latent
-space (2601.06220); routing collapse (2602.03478).
-
-### 4.5 Agentic stopping and escalation
-EET (2601.05777, ACL Findings 2026); AgentStop (2604.15075, ACM CAIS 2026); FailFast-RestartSmart
-(2608.03222); Atropos (2604.15075); SWE-Router (2607.00053); AutoMix; COPE (2506.11578, TMLR).
+**Sequential/budgeted selection.** RoR (2607.08665) — primary baseline. Routing-gap companion
+(2607.03436). SeqRoute (2605.25424). Cluster-Route-Escalate (2606.27457). UCCI (2605.18796).
+Survey (2603.04445).
+**Activation-based prediction/routing.** NVIDIA prefill router (2603.20895) — closest.
+LLMs Encode Their Failures (2602.09924). Scrouting (2608.04804) — hidden-state AUC 0.600, null
+routing ablation. Knowing When to Quit (2604.18419).
+**Output-length prediction (C1's foundation).** How Much is Left? (2607.05316). Entropy-Guided
+Representations (2602.11812). Latency-aware routing (2607.18253). Learned per-query cost
+predictors (2604.03527).
+**Benchmarks/gap analyses.** LLMRouterBench (2601.07206); Routing Plateau (2606.07587);
+CodeRouterBench/ACRouter (2606.22902); 67-model Rasch (2606.27288); universal latent space
+(2601.06220); routing collapse (2602.03478).
+**Agentic stopping.** EET (2601.05777); AgentStop (2604.15075); FailFast-RestartSmart
+(2608.03222); SWE-Router (2607.00053); AutoMix; COPE (2506.11578).
 
 ## 5. Method
+**5.1 Setting.** M routes × K draws. Actions: resample m, reroute, stop. Myopic
+`argmax_m (p_m(s)·R − c_m(s))`, abstention as the zero-value action. Decay
+`p_m(n) = θ_m(x)·s/(s+n)`.
+**5.2 The probe.** One prefill of a 4B scout; ridge/logistic heads on frozen mean-pooled
+activations give θ_m(x) and c_m(x) for every route, including routes whose weights we never
+touch. 551 problem-level labels, 0.16 CPU-seconds, ~40KB. Cost head uses Duan's smearing
+estimator (exp of a log-space fit is a conditional median and would under-price every route).
+**5.3 Deployability.** Weights needed for one cheap model; the rest can be black-box APIs —
+outcomes at training time, price at decision time, never activations.
 
-### 5.1 Setting
-Pool of M routes, K draws each. At each step: resample route m, reroute, or stop. Myopic
-utility `argmax_m (p_m(s)*R - c_m(s))`, abstention as the zero-value action (no separate
-threshold). Belief decay `p_m(n) = theta_m(x) * s/(s+n)`.
+## 6. Experiments
 
-### 5.2 The cheap probe
-One prefill of a 4B scout. Ridge/logistic heads on frozen mean-pooled activations give
-`theta_m(x)` and `c_m(x)` for every route, including routes whose weights we never touch.
-Training: 551 problem-level labels, 0.16 CPU-seconds, ~40KB of weights.
+**6.1 Setup.** LiveCodeBench, 892 problems, temporal 551/170/171, 6 draws × 3 routes
+{Qwen3-4B-Instruct-2507, gpt-oss-20b, gpt-oss-120b}, all served locally under vLLM at 32768.
+Self-hosted AWS-node token prices. `lcb_local_pool_1788407418`. Problem-clustered paired
+bootstrap, 5000 resamples, throughout.
 
-### 5.3 Why this is deployable where per-candidate probing is not
-Probing a model requires its weights; no API exposes hidden states. Per-candidate probing needs
-every pool member resident. We need weights for one cheap model. *(Note: 2603.20895's
-encoder-target decoupling makes the same argument — cite it rather than claim it.)*
+**6.2 Cost is variable and predictable (C1).** Between-problem variance share 84.8/62.3/90.1%;
+per-problem p90/p10 37×/16×/17×; failed draws cost 5.3×/2.6×/3.0× more than solved. Probe vs
+constant: R² 0.65/0.80/0.83, MAE cut 45–65%. Beats rescaling the scout's *observed* length
+(0.796 vs 0.588; 0.834 vs 0.629) and subsumes it (+0.002/+0.008 combined) while needing only a
+prefill. Not collinear with predicted success (partial ρ 0.46–0.75).
 
-## 6. Experiments and results
+**6.3 Frontier (C1, C5).** `lcb_replay_qcost_1788470886`.
+Cost conditioning in isolation — RoR beliefs: +45.9/+18.8/+35.1/+5.8/+13.3/+26.7/+12.9%
+(6/7 significant). Activation beliefs: +19.7/+15.4/+26.0/+15.9/+16.7/−5.8/+0.0% (5/7).
+**Full method vs RoR: +56.2/+29.6/+43.9/+21.9/+20.5/+32.5/+18.1%, all seven significant,
+P ≥ 0.996.**
+vs compiled fixed schedule: five clear wins, one marginal, one tie, no losses (up from three
+clear wins pre-qcost — cost conditioning is what separated us from our closest competitor).
+Abstention 10.5% at the 70% point, low because clean labels lifted the pool.
 
-### 6.1 Setup
-LiveCodeBench, 892 problems, temporal split 551/170/171, six draws per route, routes
-{Qwen3-4B-Instruct-2507, gpt-oss-20b, gpt-oss-120b}, all served locally under vLLM at a 32768
-cap. Costs from AWS-node token prices. `lcb_local_pool_1788407418`.
+**6.4 Readout control (C4).** Four readouts from one forward pass. Last-token vs mean-pooled
+*reverses* the cross-model ordering; gpt-oss-120b's own probe improves 0.7743 → 0.8313 from
+pooling alone, because harmony ends its prompt on `assistant` mid-header while Qwen ends on a
+newline after a completed one. Mean-pooled, the scout probe is significantly worse per route
+(−0.061, −0.049) and tied on pool solvability (−0.028 [−0.075, +0.015]). 2603.20895 uses
+last-token and does not discuss template comparability; scope this as a proposed control, not a
+refutation — our pool is 3 models on one benchmark against their 11–20 across three.
 
-### 6.2 Cost is variable and predictable  *(C1)*
-Between-problem share of length variance 84.8/62.3/90.1%; per-problem cost p90/p10 = 37x/16x/17x;
-failed draws cost 5.3x/2.6x/3.0x more than solved. Probe vs the per-route constant: R2
-0.65/0.80/0.83, MAE cut 45-65%. Beats rescaling the scout's *observed* length (R2 0.796 vs 0.588,
-0.834 vs 0.629) and subsumes it (+0.002/+0.008 when combined) — while needing only a prefill.
-Not collinear with predicted success: partial rho 0.46-0.75.
+**6.5 Per-candidate probing buys no frontier advantage (C3).** +6.4/−1.0/+6.4/+18.0/−8.8/−2.8%
+across six targets; signs alternate, mean ≈ +3%, all inside typical intervals at this n. The
+better predictor converts into nothing — the convex-gate argument playing out. TODO: CI on the
++18% at 70%.
 
-### 6.3 Frontier  *(C1, C4)*  — `lcb_replay_qcost_1788470886`
-Problem-clustered paired bootstrap, 171 test problems, 5000 resamples.
+**6.6 Capacity ablation.** Linear vs MLP on the same activations, 535 pooled test problems over
+rolling-origin folds: linear wins pool solvability (P(MLP better)=0.029) and all three cost
+targets. "Linear suffices" is measured, not assumed.
 
-**Cost conditioning in isolation** (same beliefs, same decay, only c_m changes):
+**6.7 Price-ratio sensitivity — the method needs a real cost ladder.**
+Full method vs RoR as the oss120:scout ratio varies: 40× → +43.9/+20.5/+18.1%; 10× →
++34.2/+42.3/+20.6%; 4× → +19.2/−0.6/+7.6%; **0.6× (inverted) → −40.0/−49.3/−13.8%.**
+Cost conditioning alone degrades harder (+35.1% at 40× to −160% at 0.6×). **The prediction that
+C1 would be basis-independent was wrong**: what matters is cost *signal* vs cost *prediction
+error*, and when routes cost alike a noisy c injects variance into a near-constant term.
+State as a limitation. Two honest mitigations: the inverted regime is degenerate for every
+method (optimal policy is "always call the big model"; absolute costs are pennies), and 4–40×
+brackets plausible self-hosted deployments while 0.6× is a hyperscale-API artifact.
+*Pre-registered:* TACO should degrade far more gracefully, since oss120 solves 43–49% there
+against 81.9% on LCB, so no single-model policy is good.
 
-| target | RoR beliefs: const -> qcost | activation beliefs: const -> qcost |
-|---|---|---|
-| 50% | +45.9% [+30.6, +62.1] | +19.7% [+1.5, +40.0] |
-| 55% | +18.8% [+4.3, +33.8] | +15.4% [-0.5, +34.1] |
-| 60% | +35.1% [+21.5, +48.8] | +26.0% [+1.4, +52.7] |
-| 65% | +5.8% [-8.4, +20.9] | +15.9% [+2.0, +31.3] |
-| 70% | +13.3% [+1.4, +26.8] | +16.7% [+1.8, +32.7] |
-| 75% | +26.7% [+14.5, +40.3] | -5.8% [-19.2, +6.9] |
-| 80% | +12.9% [+1.0, +25.4] | +0.0% [-11.3, +11.3] |
+**6.8 Seed sensitivity.** Seed controls draw orderings — a variance source the problem bootstrap
+holds fixed. Seed 0 vs 1: savings move −1.7/−10.2/−0.6/+0.8/−3.6/+0.5pt across targets. Sign
+never flips; magnitudes stay large. Seeds 2–3 running; report mean ± sd. The 60% point (10.2pt
+swing) needs all four before quoting.
 
-**Full method vs RoR**: +56.2 / +29.6 / +43.9 / +21.9 / +20.5 / +32.5 / +18.1%, all seven
-significant, every P >= 0.996.
-
-**vs the compiled fixed schedule**, full method, same bootstrap: five clear wins, one marginal,
-one tie, no losses (50%: -80.2% [-111.5,-48.9]; 60%: -43.5% [-67.4,-22.2]; 65%: -20.6%
-[-37.1,-5.3]; 70%: -64.9% [-89.5,-42.2]; 75%: -17.4% [-31.2,-3.6]; 80%: -10.8% [-23.4,+1.2];
-55% tie). Up from three clear wins for the pre-qcost arm -- the schedule was our closest
-competitor, and cost conditioning is what separated us from it.
-Abstention 10.5% at the 70% operating point -- low because clean labels lifted the pool
-(oss120 81.9% per draw), which is why the harder pools matter for the stopping story.
-
-### 6.4 Readout control  *(C3)*
-Four readouts from one forward pass. Last-token vs mean-pooled reverses the cross-model
-ordering; gpt-oss-120b's own probe improves 0.7743 -> 0.8313 from pooling alone. Mean-pooled,
-the scout probe is significantly worse per route (-0.061, -0.049) and tied on pool solvability
-(-0.028 [-0.075, +0.015]).
-
-### 6.5 Per-candidate probing buys no frontier advantage
-`lcb_replay_scout_mean_*` vs `lcb_replay_percandidate_mean_*`, mean-pooled readout,
-content_decay family, no qcost:
-
-| target | scout probe | per-candidate | per-candidate advantage |
-|---|---|---|---|
-| 50% | 0.00803 | 0.00752 | +6.4% |
-| 60% | 0.01777 | 0.01795 | -1.0% |
-| 65% | 0.02578 | 0.02413 | +6.4% |
-| 70% | 0.03751 | 0.03074 | +18.0% |
-| 75% | 0.04147 | 0.04513 | -8.8% |
-| 80% | 0.06863 | 0.07056 | -2.8% |
-
-Signs alternate, mean ~ +3%, all magnitudes inside the +/-15-30% intervals typical of
-comparisons at this n. **This is the result that matters more than the AUC table in 6.4.**
-Per-candidate probes are significantly better predictors (+0.05-0.06 AUC) and it converts into
-nothing downstream, which is the convex-gate argument playing out: in the 0.73-0.85 range better
-beliefs do not move the frontier.
-
-Claim to make: one probe on one cheap model **matches** probing every model on cost-at-accuracy,
-while needing weights for one model rather than all of them. Report the AUC deficit openly as
-the mechanism-level caveat rather than hiding it. TODO: CI on the +18% at 70%.
-
-### 6.6 Capacity ablation
-Linear vs MLP on the same activations, 535 pooled test problems over rolling-origin folds:
-linear wins pool solvability (P(MLP better)=0.029) and all three cost targets. "Linear
-suffices" is measured, not assumed.
-
-### 6.7 Price-ratio sensitivity — the method needs a real cost ladder
-Sweeping the oss120:scout price ratio (`lcb_replay_price_*`), full method vs RoR:
-
-| ratio | 60% | 70% | 80% |
-|---|---|---|---|
-| 40x (self-hosted, primary) | +43.9% | +20.5% | +18.1% |
-| 10x | +34.2% | +42.3% | +20.6% |
-| 4x | +19.2% | -0.6% | +7.6% |
-| 0.6x (API-like, inverted) | **-40.0%** | **-49.3%** | **-13.8%** |
-
-Cost conditioning in isolation degrades the same way and more sharply (+35.1% at 40x, -160% at
-0.6x). **The prediction that C1 would be basis-independent was wrong.** What matters is not
-within-route variance but the ratio of cost *signal* to cost *prediction error*: when routes
-cost nearly the same, `p*R - c` is dominated by p, and a noisy per-problem c injects variance
-into a term that should be near-constant.
-
-**State as a limitation, do not bury.** The method needs a real cost ladder: strong at >=10x, a
-wash near 4x, harmful under inversion. Two mitigations, both honest rather than exculpatory:
-the inverted regime is degenerate for every method (the optimal policy is "always call the big
-model" and absolute costs are pennies), and 4-40x brackets plausible self-hosted deployments
-while 0.6x is a hyperscale-API artifact.
-
-**Pre-registered prediction for TACO:** on LCB, oss120 solves 81.9%, so cheapening it collapses
-everything to a single-model policy. On TACO it solves 43-49%, so no single-model policy is
-good and routing should retain value as the ladder flattens. If the TACO sweep degrades
-markedly more gracefully, the limitation is about benchmark saturation rather than the method.
-
-### 6.8 TODO
-- [ ] TACO medium+hard (883 problems) — collecting
-- [ ] SWE-Smith -> SWE-bench Verified cross-dataset transfer
-- [x] Query-conditioned cost wired into the utility rule and measured — §6.3
-- [x] Per-candidate frontier — §6.5, no advantage
-- [ ] Truncation sensitivity (at-cap draws excluded) — running
-- [ ] Seed variance, 4 seeds — running
-- [x] Fixed-schedule comparison against the full qcost method — §6.3
-- [ ] Writing — nothing drafted yet
-- [ ] Both cost bases (self-hosted node vs API list) — cheap, not run
-- [ ] 8B LoRA retrained on clean labels — optional
-- [ ] Seeds/CV on the frontier
+**6.9 TACO medium+hard (in progress).** 883 problems (677/206). Draw-0 solve rates: scout
+18.4/14.8%, oss20 44.0/31.0%, oss120 48.7/43.4% (medium/hard) — against LCB's 42/65/82%.
+Pool-solved at one draw 52.2/50.0%, so ~half the problems are unsolved by the whole pool. Three
+distinguishable rungs, and on medium oss20 is within 5pt of oss120 at ~8.6× less cost, so the
+routing decision is non-vacuous — unlike LCB where oss120 dominates.
 
 ## 7. Limitations
 1. One benchmark until TACO and SWE land.
-2. n=171 test problems; the capacity question needed folds to resolve at all.
-3. Outcomes collected under our own serving configuration; another provider's defaults could
+2. n=171 test problems; the capacity question needed pooled folds to resolve at all.
+3. Method requires a real cost ladder (§6.7); harmful under price inversion.
+4. Outcomes collected under our own serving configuration; another provider's defaults could
    shift absolute solve rates. All comparisons are within-collection.
-4. Cost basis is self-hosted node pricing while the deployment story is API-served experts —
-   report both.
-5. The readout correction (C3) is measured on a 3-model pool on one benchmark.
+5. The readout correction (§6.4) is measured on 3 models on one benchmark.
+6. At-cap draws are route-asymmetric (oss20 10.3% on TACO hard, oss120 ~0%) — genuine budget
+   exhaustion, `finish_reason=length`, with a sensitivity run in flight.
 
-## 8. Retracted during this project — do not resurrect
+## 8. Retracted — do not resurrect
 - Cross-model superiority ("own activations are the worst predictor of own success") — readout
-  artifact, §6.4.
+  artifact (§6.4).
 - "Nobody predicts generation length from activations" — false (2607.05316, 2602.11812).
 - "First to route from a small model's hidden states" — false (2608.04804, 2603.20895).
-- Our own collection bugs framed as contributions — they are appendix material at most.
+- "C1 is basis-independent" — false (§6.7).
+- Our own collection bugs framed as contributions — appendix at most.
+
+## 9. TODO
+- [ ] TACO: rebuild, frontier, price sweep against the §6.7 pre-registration
+- [ ] SWE-Smith → Verified (needs Daytona harness fixed; 6/10 historical runs all-error)
+- [ ] Seeds 2–3; mean ± sd on every quoted saving
+- [ ] Truncation-sensitivity frontier (running)
+- [ ] CI on the +18% per-candidate point at 70%
+- [ ] Writing — nothing drafted
