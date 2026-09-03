@@ -6144,3 +6144,72 @@ mandatory-scout protocol is already bought.
 
 n = 171 is small. The oss20 result survives its bootstrap; the two ties are underpowered and
 should be reported as ties, not as parity.
+
+### The complete matrix, and a correction to the gate claim (2026-09-03)
+
+gpt-oss-120b's row landed. Layer picked on calibration (170), AUC on test (171):
+
+| activations from | -> scout | -> oss20 | -> oss120 | -> pool |
+|---|---|---|---|---|
+| **scout** (Qwen3-4B) | 0.8403* | **0.8892** | **0.7929** | **0.8045** |
+| oss20 (own weights) | 0.8083 | 0.7997* | 0.7905 | 0.7976 |
+| oss120 (own weights) | 0.7324 | 0.8080 | 0.7862* | 0.7979 |
+
+\* = own activations predicting own success = 2602.09924's method.
+
+**Read the columns, not just the rows. In both columns where the check is possible, a model's
+own activations are the WORST predictor of its own success:**
+
+- oss20's success: scout 0.8892 > oss120 0.8080 > **oss20 itself 0.7997**
+- oss120's success: scout 0.7929 > oss20 0.7905 > **oss120 itself 0.7862**
+
+Paired bootstrap, 171 problems: scout beats oss20's own probe by +0.0895, CI [+0.030, +0.153],
+P = 0.998. Against oss120's own probe, +0.0067, CI [-0.057, +0.075], P = 0.588 -- a tie.
+
+So the strong branch of the pre-registration holds: **per-candidate probing buys nothing on
+this pool**, while costing $0.007229 per problem against the scout's $0.000149, 48.5x, and the
+scout's prefill is already bought under the mandatory-scout protocol. That is the method claim,
+and it is now measured rather than asserted.
+
+### Correction: the abstention gate did NOT improve
+
+On pool solvability **conditional on the scout having failed** -- the only set where a stop
+decision exists, n = 116:
+
+| probe source | conditional AUC |
+|---|---|
+| scout | 0.7353 |
+| oss20 | 0.7539 |
+| oss120 | 0.7473 |
+
+All three land in the 0.735-0.754 band that every affordable channel in this project has
+occupied: `nothing` head 0.7335, post-scout abstention 0.7629, cheap observables 0.7491.
+**The activation probe is not better than what already exists on the gate.**
+
+This retracts the earlier reading of the scout probe run, which reported 0.7947 conditional
+and was recorded as "beats every prior channel". That number came from a different and more
+permissive protocol -- the 341-problem eval split with the layer chosen by looking at that same
+split. Choosing the layer on calibration and reporting on the held-out 171 gives 0.7353. The
+gap between 0.7947 and 0.7353 is the selection, not the signal.
+
+The prior channel numbers were themselves computed on the 341-problem eval split and may carry
+their own selection, so the ranking within the 0.73-0.76 band should not be asserted in either
+direction. The defensible statement is that all measured channels, activations included, sit in
+that band, and the convex gate response means none of them is worth much.
+
+**What this does to the paper.** The contribution is *not* "activations unlock abstention". It
+is:
+
+1. Cross-model transfer is free and per-candidate probing is waste -- measured, significant on
+   the one cell with power, and 48.5x cheaper.
+2. The signal is a shared difficulty axis, which explains both Scrouting's null routing ablation
+   and this project's 3%-routing / 63%-stopping headroom split.
+3. The gate stays stubbornly at ~0.75 from every direction we have tried, which is now a
+   well-supported negative rather than an untested gap.
+
+(3) is a weaker headline than hoped but it is honest, and it is the third independent line of
+evidence for the same claim. The method result rests on (1) and (2).
+
+**Still required before any of this is quotable**: the mean-pooled control for the chat-template
+position confound, gpt-oss-120b's dense/MoE confound, and re-running everything on the 32k
+re-collection.
