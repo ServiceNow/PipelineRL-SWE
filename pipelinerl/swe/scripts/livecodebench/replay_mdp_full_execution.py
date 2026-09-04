@@ -373,6 +373,7 @@ def replay_adaptive(
     capture_trace: bool = False,
     apply_failure_decay: bool = False,
     cross_pseudo_count: float = 0.0,
+    scorer_cost_usd: float = 0.0,
     mandatory_scout: bool = True,
     oracle_stopping: bool = False,
 ) -> dict[str, Any]:
@@ -459,6 +460,13 @@ def replay_adaptive(
             if scorer is not None or capture_trace else None
         )
         if scorer is not None:
+            # A re-queried encoder is not free. Qwen3-Embedding-8B is called once per decision
+            # on the rendered state (problem + latest attempt code + execution state, ~1178
+            # tokens mean), i.e. 5.94-9.47 times per episode. Priced by the same parameter
+            # proxy the baseline uses, that is ~$0.00065 a call -- 26-42x the probe's single
+            # prefill, and 50-75% of the cheapest operating point. Leaving it uncharged, as we
+            # did until now, silently subsidises the arm the probe is meant to replace.
+            realized_spend += float(scorer_cost_usd)
             if getattr(scorer, "uses_raw_counts", False):
                 raw_probs = scorer.factorized_beliefs(
                     problem_statement,
@@ -991,6 +999,11 @@ def main() -> None:
         "4B at $0.278/M -- so the spread the method exploits is basis-dependent and must be "
         "swept rather than asserted."))
     parser.add_argument("--execution-cost-usd", type=float, default=0.0)
+    parser.add_argument("--scorer-cost-usd", type=float, default=0.0, help=(
+        "Cost of ONE encoder query, charged per decision to the sequential (LoRA) arms. The "
+        "probe is charged once per episode via --probe-cost-usd; the encoder is re-queried at "
+        "every decision, so the two are not comparable per-episode constants and must be "
+        "charged where they are incurred."))
     parser.add_argument("--probe-cost-usd", type=float, default=0.0, help=(
         "Fixed per-episode cost of the probe's prefill, charged ONLY to arms that use it "
         "(content/cost predictions). The probe reads pre-generation activations, so it needs a "
@@ -1178,6 +1191,8 @@ def main() -> None:
                     apply_failure_decay=base in ("sequential_decay", "content_decay"),
                     cross_pseudo_count=(args.cross_pseudo_count
                                         if base == "counts_coupled" else 0.0),
+                    scorer_cost_usd=(args.scorer_cost_usd
+                                     if base in ("sequential", "sequential_decay") else 0.0),
                     decay_pseudo_count=args.decay_pseudo_count,
                     exploration_bonus=exploration_bonus,
                     mandatory_scout=args.start_protocol == "scout_first",

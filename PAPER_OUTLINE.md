@@ -268,6 +268,28 @@ Two heads per route, both linear, fit on the training split only:
 $$\hat\theta_m(x)=\sigma\!\bigl(w_m^\top h(x)+b_m\bigr),\qquad \hat T_m(x)\ \text{as in §5.3},$$
 with $\ell$ and the regularisation chosen on the calibration split and never on test.
 
+**Where each cost is incurred — the two are not comparable per-episode constants.**
+
+| | when computed | per episode | cost |
+|---|---|---|---|
+| our probe | once, from the prompt alone | 1 prefill | **$0.000149** |
+| scout as a *route* | when the policy buys a draw | 0-K decodes | $0.000920 each |
+| LoRA encoder | **once per decision**, on the rendered state | 5.94-9.47 prefills of ~1178 tok | **$0.0039-0.0062** |
+
+`theta_m(x)` and `c_m(x)` depend on the problem only, so the vector is computed once and reused
+at every decision; all state-dependence comes from the analytic decay. The encoder is the
+opposite: it re-reads problem + latest attempt code + execution feedback at every node, so it
+genuinely refines as evidence arrives. That is the capability the 26-42x buys.
+
+**And we measured what the refinement is worth.** Conditioning on `theta-hat`, the observed
+scout-failure count improves log-loss by 0.00011 (0.36886 -> 0.36875), coefficient -0.0315. The
+*unconditional* coupling is large -- oss120 pass@1 falls 97.7% -> 69.9% after one scout failure --
+but that is problem difficulty, which the probe reads off the prompt rather than inferring from
+failures. So: the probe does not refine; refining buys ~nothing once a per-problem prior exists;
+the encoder pays 26-42x to do it and ties on the frontier.
+*Caveat:* measured on the scout-failure channel only. The encoder also sees the failing code and
+execution feedback, a richer signal not yet isolated. Test before leaning on this.
+
 **Cost of the method itself.** Training: 551 problem-level labels, 0.16 CPU-seconds for all
 heads, $\approx$40 KB of parameters. Inference: one 4B prefill ($\$0.000149$), already paid for
 under the mandatory-scout protocol; the decision rule itself is arithmetic, so no network runs
