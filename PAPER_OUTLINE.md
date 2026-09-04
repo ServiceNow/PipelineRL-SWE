@@ -133,11 +133,40 @@ brackets plausible self-hosted deployments while 0.6× is a hyperscale-API artif
 against 81.9% on LCB, so no single-model policy is good.
 
 **6.8 Seed sensitivity.** Seed controls draw orderings — a variance source the problem bootstrap
-holds fixed. Seed 0 vs 1: savings move −1.7/−10.2/−0.6/+0.8/−3.6/+0.5pt across targets. Sign
-never flips; magnitudes stay large. Seeds 2–3 running; report mean ± sd. The 60% point (10.2pt
-swing) needs all four before quoting.
+holds fixed. Four seeds, full method vs RoR:
 
-**6.9 TACO medium+hard (in progress).** 883 problems (677/206). Draw-0 solve rates: scout
+| target | mean | sd | worst seed |
+|---|---|---|---|
+| 50% | +55.3% | 0.7 | +54.5% |
+| 60% | +39.2% | 6.5 | +33.5% |
+| 65% | +20.5% | 2.1 | +17.4% |
+| 70% | +20.8% | 0.3 | +20.5% |
+| 75% | +30.6% | 1.8 | +28.8% |
+| 80% | +20.7% | 4.8 | +18.1% |
+
+**Quote mean ± sd, not seed 0.** The worst seed at every target is still >= +17.4%, so the
+headline is not seed-dependent. 60% is the noisy point (sd 6.5) and should be reported as such.
+
+**6.9 Truncation sensitivity.** Excluding the 416 at-cap draws (2.59% of cells,
+`tensors_v3_notrunc`, no problem left with zero valid draws):
+
+| target | all draws | at-cap excluded | delta |
+|---|---|---|---|
+| 50% | +56.2% | +54.2% | -1.9pt |
+| 60% | +43.9% | +45.9% | +2.0pt |
+| 65% | +21.9% | +20.8% | -1.1pt |
+| 70% | +20.5% | **+11.4%** | **-9.1pt** |
+| 75% | +32.5% | +32.7% | +0.3pt |
+| 80% | +18.1% | **+10.1%** | **-8.0pt** |
+
+The advantage survives everywhere but roughly **halves at 70% and 80%**. This is mechanism, not
+noise: at-cap draws are expensive failures, the cost model predicts they will be long and steers
+away, and a per-route constant cannot. A meaningful part of the edge at high accuracy targets is
+therefore *anticipating budget-exhausting draws* -- legitimate, since every deployed system has a
+cap and failed draws cost 2.6-5.3x more than solved ones, but it must be stated rather than left
+for a reviewer to find. Report both columns.
+
+**6.10 TACO medium+hard (in progress).** 883 problems (677/206). Draw-0 solve rates: scout
 18.4/14.8%, oss20 44.0/31.0%, oss120 48.7/43.4% (medium/hard) — against LCB's 42/65/82%.
 Pool-solved at one draw 52.2/50.0%, so ~half the problems are unsolved by the whole pool. Three
 distinguishable rungs, and on medium oss20 is within 5pt of oss120 at ~8.6× less cost, so the
@@ -151,7 +180,8 @@ routing decision is non-vacuous — unlike LCB where oss120 dominates.
    shift absolute solve rates. All comparisons are within-collection.
 5. The readout correction (§6.4) is measured on 3 models on one benchmark.
 6. At-cap draws are route-asymmetric (oss20 10.3% on TACO hard, oss120 ~0%) — genuine budget
-   exhaustion, `finish_reason=length`, with a sensitivity run in flight.
+   exhaustion (`finish_reason=length`). Excluding them halves the advantage at the 70% and 80%
+   targets (§6.9), so part of the gain is anticipating budget-exhausting draws.
 
 ## 8. Retracted — do not resurrect
 - Cross-model superiority ("own activations are the worst predictor of own success") — readout
@@ -164,7 +194,7 @@ routing decision is non-vacuous — unlike LCB where oss120 dominates.
 ## 9. TODO
 - [ ] TACO: rebuild, frontier, price sweep against the §6.7 pre-registration
 - [ ] SWE-Smith → Verified (needs Daytona harness fixed; 6/10 historical runs all-error)
-- [ ] Seeds 2–3; mean ± sd on every quoted saving
-- [ ] Truncation-sensitivity frontier (running)
+- [x] Seeds 0–3; report mean ± sd (§6.8)
+- [x] Truncation-sensitivity frontier (§6.9)
 - [ ] CI on the +18% per-candidate point at 70%
 - [ ] Writing — nothing drafted
