@@ -124,3 +124,49 @@ def test_cross_route_coupling_depresses_untried_routes():
 
     assert off["decision_trace"][0]["belief_source"] == "counts"
     assert on["decision_trace"][0]["belief_source"] == "counts_coupled"
+
+
+def test_density_selection_prefers_the_cheap_route_but_still_stops():
+    """Surplus stops; density chooses. Each rule answers the question it is right about.
+
+    The surplus p*R - c maximises absolute value, so at depth 0 a high-theta expensive route
+    can win outright and the policy skips the cheap attempt that would often have sufficed --
+    which is the behaviour the forced-scout protocol was papering over. The density p/c is
+    scale-invariant in cost and prefers the cheapest adequate route, but never crosses zero so
+    it cannot abstain.
+    """
+    import numpy as np
+    from pipelinerl.swe.scripts.livecodebench.replay_mdp_full_execution import replay_adaptive
+
+    M, KK = len(SLOTS), 3
+    recs = {("p", s, k): {"model_slot": s, "code": "x", "full_execution_feedback": "f"}
+            for s in SLOTS for k in range(KK)}
+
+    def run(density, solvable_by, costs, value=1.0):
+        outcomes = np.zeros((M, KK), bool)
+        if solvable_by is not None:
+            outcomes[solvable_by, :] = True
+        return replay_adaptive(
+            outcomes, np.ones((M, KK), bool), np.tile(np.asarray(costs, float)[:, None], (1, KK)),
+            np.asarray(costs, float), np.tile(np.arange(KK), (M, 1)),
+            budget=10.0, prior=np.array([0.5, 0.6, 0.9]), pseudo_count=2.0, slots=SLOTS,
+            records=recs, problem_id="p", problem_statement="s",
+            content_prior=np.array([0.40, 0.50, 0.80]),
+            value_of_correct=value, apply_failure_decay=True, capture_trace=True,
+            mandatory_scout=False, select_by_density=density,
+        )
+
+    costs = [0.001, 0.005, 0.050]          # a steep ladder, as in the real pool
+    # every route can solve it, so the only difference is which one gets bought first
+    surplus = run(False, 2, costs)
+    density = run(True, 2, costs)
+    first_s = surplus["route_attempt_counts"]
+    first_d = density["route_attempt_counts"]
+    # density must not open with the most expensive route when a cheap one is adequate
+    assert first_d["scout"] >= first_s["scout"], (
+        f"density should try the cheap route at least as often: {first_d} vs {first_s}"
+    )
+
+    # stopping is unchanged: a hopeless problem with costs above the value must still abstain
+    stop = run(True, None, [1.0, 1.0, 1.0], value=0.05)
+    assert stop["abstained"], "density selection must not disable the stop action"

@@ -374,6 +374,7 @@ def replay_adaptive(
     apply_failure_decay: bool = False,
     cross_pseudo_count: float = 0.0,
     scorer_cost_usd: float = 0.0,
+    select_by_density: bool = False,
     mandatory_scout: bool = True,
     oracle_stopping: bool = False,
 ) -> dict[str, Any]:
@@ -644,7 +645,23 @@ def replay_adaptive(
             action_values = {
                 mi: root_action_values[mi] for mi in available if mi in root_action_values
             }
-        selection = ratios if action_values is None else action_values
+        # Stopping and selection are different questions and the two rules are right about
+        # different ones. The surplus p*R - c has a natural zero crossing, so it answers "is any
+        # action worth taking at all" -- that is where abstention comes from. But it maximises
+        # ABSOLUTE value, so at depth 0 a high-theta expensive route can win outright and the
+        # policy skips the cheap attempt that would often have sufficed. The density p/c is
+        # scale-invariant in cost and therefore structurally prefers the cheapest adequate
+        # route, which is the cascade behaviour we were otherwise hard-coding by forcing a
+        # scout draw -- but it never crosses zero, so it cannot stop, which is why the
+        # budget-swept baseline has no abstention.
+        # `--select-by-density` uses each for what it is right about: surplus decides whether to
+        # continue, density decides what to buy.
+        if action_values is None:
+            selection = ratios
+        elif select_by_density:
+            selection = {mi: ratios[mi] for mi in action_values}
+        else:
+            selection = action_values
 
         decision: dict[str, Any] | None = None
         if capture_trace:
@@ -999,6 +1016,12 @@ def main() -> None:
         "4B at $0.278/M -- so the spread the method exploits is basis-dependent and must be "
         "swept rather than asserted."))
     parser.add_argument("--execution-cost-usd", type=float, default=0.0)
+    parser.add_argument("--select-by-density", action=argparse.BooleanOptionalAction,
+                        default=False, help=(
+        "Choose the route by highest p/c (RoR's knapsack density) while still stopping on "
+        "p*R - c <= 0. Surplus alone can buy an expensive route at depth 0 and skip the cheap "
+        "attempt that would often have sufficed; density prefers the cheapest adequate route "
+        "but cannot stop. This uses each rule for the question it answers."))
     parser.add_argument("--scorer-cost-usd", type=float, default=0.0, help=(
         "Cost of ONE encoder query, charged per decision to the sequential (LoRA) arms. The "
         "probe is charged once per episode via --probe-cost-usd; the encoder is re-queried at "
@@ -1193,6 +1216,7 @@ def main() -> None:
                                         if base == "counts_coupled" else 0.0),
                     scorer_cost_usd=(args.scorer_cost_usd
                                      if base in ("sequential", "sequential_decay") else 0.0),
+                    select_by_density=args.select_by_density,
                     decay_pseudo_count=args.decay_pseudo_count,
                     exploration_bonus=exploration_bonus,
                     mandatory_scout=args.start_protocol == "scout_first",
