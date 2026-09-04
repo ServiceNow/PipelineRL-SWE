@@ -33,6 +33,19 @@ ap.add_argument("--tensors-dir", required=True)
 ap.add_argument("--readout", default="mean")
 ap.add_argument("--layer-frac", type=float, default=0.5)
 ap.add_argument("--alpha", type=float, default=100.0)
+ap.add_argument("--cap", type=float, default=0.0, help=(
+    "Exclude draws at or above this completion length from the cost target. DEFAULT OFF, and it "
+    "should stay off: truncation censors the LATENT length but not the PAID cost -- a draw that "
+    "hits the cap costs exactly the cap's worth of tokens, which we observe exactly. Excluding "
+    "them raises R2 (TACO oss20 0.093 -> 0.189) by switching to an easier target that is not the "
+    "quantity the policy spends, and under-prices every route by 30-48%. Kept only for ablation."))
+ap.add_argument("--no-shrink", action="store_true", help=(
+    "Disable calibration-fitted shrinkage. By default the prediction is linearly recalibrated "
+    "on the CALIBRATION split: regressing true log-cost on the prediction gives a slope near 1 "
+    "when the prediction is informative and near 0 when it is noise, in which case the estimate "
+    "collapses to the per-route constant. This makes query-conditioned cost provably no worse "
+    "than the constant it replaces -- the failure mode measured on TACO, where cost R2 falls to "
+    "0.09 and conditioning actively hurt."))
 ap.add_argument("--out", required=True)
 a = ap.parse_args()
 
@@ -46,7 +59,8 @@ t = np.load(T / "tensors.npz", allow_pickle=True)
 tp = [str(p) for p in t["problem_ids"]]; ti = {p: i for i, p in enumerate(tp)}
 slots = [str(s) for s in t["model_slots"]]
 valid = t["valid"]
-total = t["prompt_tokens"].astype(float) + t["completion_tokens"].astype(float)
+completion = t["completion_tokens"].astype(float)
+total = t["prompt_tokens"].astype(float) + completion
 probs = {str(json.loads(l)["problem_id"]): json.loads(l)
          for l in open(T / "problems.jsonl") if l.strip()}
 
@@ -60,23 +74,51 @@ _train_ids = {str(x) for x in _man["train_problem_ids"]}
 tr = np.array([p in _train_ids for p in pk])
 print(f"{len(pk)} problems, fitting on {tr.sum()} train, readout={a.readout} layer={layers[L]}")
 
+_cal_ids = {str(x) for x in _man["calibration_problem_ids"]}
+cal = np.array([p in _cal_ids for p in pk])
+
 C = np.zeros((len(pk), len(slots)))
 for j, s in enumerate(slots):
-    y = np.array([np.log(max(total[ti[p], j, :][valid[ti[p], j, :]].mean(), 1.0)) for p in pk])
+    def _mean_log(p):
+        sel = valid[ti[p], j, :].copy()
+        if a.cap:
+            sel &= completion[ti[p], j, :] < a.cap
+        x = total[ti[p], j, :][sel]
+        if len(x) == 0:                      # every draw censored: fall back to all of them
+            x = total[ti[p], j, :][valid[ti[p], j, :]]
+        return np.log(max(x.mean(), 1.0)) if len(x) else np.log(1.0)
+    y = np.array([_mean_log(p) for p in pk])
     sc = StandardScaler().fit(X[tr])
     m = Ridge(alpha=a.alpha).fit(sc.transform(X[tr]), y[tr])
     pred = m.predict(sc.transform(X))
+    if not a.no_shrink and cal.sum() > 10:
+        # Linear recalibration fitted on held-out calibration data. b ~ 1 when the prediction
+        # carries signal, b -> 0 when it does not, which recovers the constant automatically.
+        A_cal = np.c_[np.ones(cal.sum()), pred[cal]]
+        coef, *_ = np.linalg.lstsq(A_cal, y[cal], rcond=None)
+        pred = coef[0] + coef[1] * pred
+        print(f"  {s:8s} shrinkage slope b={coef[1]:.3f}"
+              + ("  (prediction ~ignored, collapses to constant)" if coef[1] < 0.25 else ""))
     # Duan's smearing estimator: E[tokens] = exp(pred) * mean(exp(residual)) on TRAIN only.
     # Without it, exp() of a log-space fit returns a conditional median and systematically
     # under-prices every route, which would bias the policy toward buying too much.
     smear = float(np.mean(np.exp(y[tr] - pred[tr])))
     tokens = np.exp(pred) * smear
+    # Match the first moment on TRAIN. Shrinkage compresses pred toward its mean, and by
+    # Jensen exp() of a compressed predictor has a lower mean than the quantity it estimates;
+    # the smearing factor corrects the conditional mean but not this. Without the rescale the
+    # routes came out 20-25% under-priced, which would make the policy systematically over-buy.
+    true_mean_tr = float(np.mean([
+        total[ti[p], j, :][valid[ti[p], j, :]].mean() for p, k in zip(pk, tr) if k
+    ]))
+    level = true_mean_tr / max(float(tokens[tr].mean()), 1e-9)
+    tokens = tokens * level
     C[:, j] = tokens * USD_PER_M_TOKENS[s] / 1e6
     const = float(np.mean([total[ti[p], j, :][valid[ti[p], j, :]].mean()
                            for p, k in zip(pk, tr) if k])) * USD_PER_M_TOKENS[s] / 1e6
     print(f"  {s:8s} constant ${const:.6f}  predicted mean ${C[:, j].mean():.6f}  "
           f"p10 ${np.percentile(C[:, j],10):.6f}  p90 ${np.percentile(C[:, j],90):.6f}  "
-          f"smearing {smear:.3f}")
+          f"smearing {smear:.3f}  level {level:.3f}")
 
 with open(a.out, "w") as f:
     for i, p in enumerate(pk):
