@@ -223,26 +223,34 @@ only where depth is worthless: on oss120, the sole route where depth pays, mean 
 against 0.06, both flooring to zero. **Per-problem decay is real, learnable, and does not change
 any decision** -- which is what licenses the constant, and is a sharper claim than "we simplified".
 
-**But sigma itself matters, and the default is not optimal.** An earlier reading of the sweep as
-a null was an analysis error: it compared `content_decay` *versus* `counts` at each sigma, and
-both families improve with faster decay, so the ratio cancelled while absolute costs moved ~2x.
-Absolute cost at the 50% target:
+**Sigma has real leverage on absolute cost, but helps both arms about equally.** Absolute cost
+at the 50% target moves ~2x across sigma (counts 0.01132 at 0.3 vs 0.02344 at 5.0; content
+0.00661 vs 0.01270). The *relative* advantage is therefore roughly sigma-invariant, since faster
+decay helps the baseline as much as it helps us -- which is why a sweep of the ratio alone reads
+as a null.
 
-| family | 0.3 | 1.0 | 2.0 (default) | 5.0 | 10.0 | mean CV |
-|---|---|---|---|---|---|---|
-| counts (no prior) | **0.01132** | 0.01439 | 0.01471 | 0.02344 | 0.02344 | 9.4% |
-| content (has prior) | **0.00661** | 0.00718 | 0.00995 | 0.01039 | 0.01270 | 6.9% |
+**Protocol: tune sigma per family on calibration, and report the tuned comparison.** Leaving both
+at RoR's inherited 2.0 flatters us at some targets and penalises us at others. Tuned (best sigma
+per family):
 
-**Use sigma ~ 0.3, or tune it on calibration; do not inherit RoR's 2.0.** Counts are more
-sigma-sensitive than content (CV 9.4% vs 6.9%), consistent with decay partly substituting for a
-per-problem prior -- failures are difficulty evidence, and they matter more when there is no
-other source of it. The effect is weaker than that story alone predicts, because sigma also
-models *sampling depletion* (how fast repeated draws at fixed temperature stop finding new
-solutions), which is real whether or not difficulty is already known.
+| target | RoR best (sigma) | ours best (sigma) | saving, both tuned | saving, both at 2.0 |
+|---|---|---|---|---|
+| 50% | 0.01132 (0.3) | 0.00661 (0.3) | **+41.6%** | +32.4% |
+| 60% | 0.02156 (1.0) | 0.01874 (0.3) | +13.1% | +15.4% |
+| 65% | 0.02763 (1.0) | 0.02486 (0.3) | +10.0% | +2.5% |
+| 70% | 0.03930 (2.0) | 0.03210 (2.0) | +18.3% | +18.3% |
+| 75% | 0.04831 (0.3) | 0.03736 (1.0) | +22.7% | +39.5% |
+| 80% | 0.08251 (10.0) | 0.06826 (10.0) | +17.3% | +18.4% |
 
-Where sigma has leverage, measured on our theta and cost estimates: the fraction of
+**+10% to +42% tuned, against +2.5% to +39.5% untuned** -- a similar mean but far less erratic.
+The untuned +39.5% at 75% was partly the baseline stuck at a bad sigma, and the untuned +2.5% at
+65% was partly us stuck at one. Report the tuned version: it is both fairer and more stable.
+*Caveat:* the table above selects sigma on test; the final numbers must select on calibration,
+as the layer choice does.
+
+**Where sigma has leverage**, measured on our theta and cost estimates: the fraction of
 (problem, route) pairs with 0 < n* < K is 10-20% for the cheap routes and **27-50% for oss120**,
-the route where depth actually pays. It is not a corner case.
+the route where depth actually pays. Not a corner case.
 
 Three belief sources differ only in where $\theta$ comes from:
 
