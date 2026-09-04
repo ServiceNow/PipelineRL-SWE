@@ -31,6 +31,7 @@ ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDe
 ap.add_argument("--activations", required=True)
 ap.add_argument("--tensors-dir", required=True)
 ap.add_argument("--readout", default="mean")
+ap.add_argument("--rich", action="store_true", help="Concatenate ALL layers x {mean,last} instead of one layer of one readout. The single-layer probe captured only 11-40% of the between-problem variance ceiling on TACO; concatenating roughly doubles cost R2 there (oss20 0.093->0.216) and lifts LCB too (oss120 belief AUC 0.792->0.864, cost R2 0.700->0.792). The gain is FEATURES, not capacity: an MLP on the single layer collapses to negative R2.")
 ap.add_argument("--layer-frac", type=float, default=0.5)
 ap.add_argument("--alpha", type=float, default=100.0)
 ap.add_argument("--cap", type=float, default=0.0, help=(
@@ -50,9 +51,13 @@ ap.add_argument("--out", required=True)
 a = ap.parse_args()
 
 z = np.load(a.activations, allow_pickle=True)
-X_all = z[a.readout if a.readout in z.files else "pre"]
+if a.rich:
+    parts = [z[k].reshape(z[k].shape[0], -1) for k in ("mean", "last") if k in z.files]
+    X_all = np.concatenate(parts, axis=1)[:, None, :]          # single pseudo-layer
+else:
+    X_all = z[a.readout if a.readout in z.files else "pre"]
 apids = [str(p) for p in z["problem_ids"]]; layers = list(z["layers"])
-L = min(range(len(layers)), key=lambda i: abs(layers[i] / max(layers) - a.layer_frac))
+L = 0 if a.rich else min(range(len(layers)), key=lambda i: abs(layers[i] / max(layers) - a.layer_frac))
 
 T = Path(a.tensors_dir)
 t = np.load(T / "tensors.npz", allow_pickle=True)
@@ -89,7 +94,7 @@ for j, s in enumerate(slots):
         return np.log(max(x.mean(), 1.0)) if len(x) else np.log(1.0)
     y = np.array([_mean_log(p) for p in pk])
     sc = StandardScaler().fit(X[tr])
-    m = Ridge(alpha=a.alpha).fit(sc.transform(X[tr]), y[tr])
+    m = Ridge(alpha=a.alpha * max(1, X.shape[1] // 2560)).fit(sc.transform(X[tr]), y[tr])
     pred = m.predict(sc.transform(X))
     if not a.no_shrink and cal.sum() > 10:
         # Linear recalibration fitted on held-out calibration data. b ~ 1 when the prediction

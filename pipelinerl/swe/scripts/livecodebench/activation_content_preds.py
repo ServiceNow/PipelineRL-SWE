@@ -25,6 +25,7 @@ ap.add_argument("--activations-file", action="append", default=[], metavar="ROUT
                 help=("Per-candidate mode: each route's head is fit on its OWN activations, "
                       "i.e. arXiv 2602.09924's method. Requires weights for every pool member, "
                       "so it is not deployable on an API-served pool -- run for completeness."))
+ap.add_argument("--rich", action="store_true", help="Concatenate ALL layers x {mean,last} instead of one layer of one readout. The single-layer probe captured only 11-40% of the between-problem variance ceiling on TACO; concatenating roughly doubles cost R2 there (oss20 0.093->0.216) and lifts LCB too (oss120 belief AUC 0.792->0.864, cost R2 0.700->0.792). The gain is FEATURES, not capacity: an MLP on the single layer collapses to negative R2.")
 ap.add_argument("--readout", default="pre",
                 help="which stored readout to use; 'mean' is the template-neutral one")
 ap.add_argument("--tensors-dir", required=True)
@@ -40,6 +41,9 @@ a = ap.parse_args()
 
 def _load(path):
     z = np.load(path, allow_pickle=True)
+    if a.rich:
+        parts = [z[k].reshape(z[k].shape[0], -1) for k in ("mean", "last") if k in z.files]
+        return [str(p) for p in z["problem_ids"]], np.concatenate(parts, axis=1)[:, None, :], [1]
     key = a.readout if a.readout in z.files else "pre"
     return [str(p) for p in z["problem_ids"]], z[key], list(z["layers"])
 
@@ -59,6 +63,8 @@ ok = t["final_outcome"] & t["valid"]; slots = [str(s) for s in t["model_slots"]]
 keep = [i for i, p in enumerate(pids) if p in ti]
 pk = [pids[i] for i in keep]
 def _pick(ls):
+    if a.rich:
+        return 0
     if a.layer_frac:
         return min(range(len(ls)), key=lambda i: abs(ls[i] / max(ls) - a.layer_frac))
     return ls.index(a.layer)
@@ -83,7 +89,8 @@ for j, s in enumerate(slots):
     else:
         Xr = X
     sc = StandardScaler().fit(Xr[tr])
-    clf = LogisticRegression(max_iter=2000, C=a.C).fit(sc.transform(Xr[tr]), y[tr])
+    clf = LogisticRegression(max_iter=2000,
+                             C=a.C / max(1, Xr.shape[1] // 2560)).fit(sc.transform(Xr[tr]), y[tr])
     P[:, j] = clf.predict_proba(sc.transform(Xr))[:, 1]
     print(f"  {s:8s} train base rate {y[tr].mean():.3f}  mean predicted {P[:, j].mean():.3f}")
 
