@@ -565,6 +565,32 @@ across six targets; signs alternate, mean ≈ +3%, all inside typical intervals 
 better predictor converts into nothing — the convex-gate argument playing out. TODO: CI on the
 +18% at 70%.
 
+**6.6a Probe scaling: how small can the probe be?** Same rich features, four smaller models,
+2x2 over scale x code-specialisation:
+
+| probe | params | LCB pool AUC | LCB cost R2 | TACO pool AUC | TACO cost R2 |
+|---|---|---|---|---|---|
+| **scout 4B** | 4.41B | **0.8652** | **0.633** | **0.8453** | **0.341** |
+| Qwen3-1.7B | 2.15B | 0.7861 | 0.570 | 0.8111 | 0.163 |
+| Qwen3-0.6B | 0.69B | 0.8184 | 0.509 | 0.8042 | 0.180 |
+| Coder-1.5B | 1.89B | 0.8167 | 0.361 | 0.8057 | 0.128 |
+| Coder-0.5B | 0.66B | 0.8261 | 0.355 | 0.7816 | **-0.205** |
+
+**The two heads scale differently, and that is the interesting part.** Belief signal survives
+shrinking -- a 0.69B model retains ~95% of pool AUC (0.818 vs 0.865) despite being 6.4x smaller
+and able to solve almost nothing on TACO. **That is the strongest evidence for the
+shared-difficulty account**: a model far too weak to solve these problems still separates
+solvable from hopeless, so the probe reads a property of the *problem*, not of the solver.
+Cost prediction does not survive: R2 falls from 0.633 to 0.355-0.570 on LCB and collapses on
+TACO, going negative for Coder-0.5B.
+
+**Code specialisation does not help and hurts cost.** Coder-1.5B 0.361 vs Qwen3-1.7B 0.570;
+Coder-0.5B 0.355 vs Qwen3-0.6B 0.509, with beliefs roughly a wash. The probe does not need a
+model that writes code; it needs one that represents difficulty.
+
+*Scale is non-monotone for beliefs (0.6B beats 1.7B on LCB), which at n~170 is within noise --
+do not claim an ordering among the small models without a paired bootstrap.*
+
 **6.6 Capacity ablation.** Linear vs MLP on the same activations, 535 pooled test problems over
 rolling-origin folds: linear wins pool solvability (P(MLP better)=0.029) and all three cost
 targets. "Linear suffices" is measured, not assumed.
