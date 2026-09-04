@@ -372,6 +372,7 @@ def replay_adaptive(
     q_abstain: float | None = None,
     capture_trace: bool = False,
     apply_failure_decay: bool = False,
+    cross_pseudo_count: float = 0.0,
     mandatory_scout: bool = True,
     oracle_stopping: bool = False,
 ) -> dict[str, Any]:
@@ -533,9 +534,25 @@ def replay_adaptive(
                 pseudo_count * prior[mi] / (pseudo_count + failures[mi])
                 for mi in range(len(slots))
             ])
+            belief_source = "counts"
+            if cross_pseudo_count > 0.0:
+                # Cross-route coupling for the count baseline. Count beliefs have no
+                # per-problem prior, so observed failures are their ONLY channel for learning
+                # that a problem is hard -- and that channel is worth 28 points here (oss120
+                # pass@1 falls 97.7% -> 69.9% after a single scout failure). Own-route failures
+                # already decay through `pseudo_count`; this adds a second Beta-Bernoulli decay
+                # on OTHER routes' failures, so evidence propagates across the pool.
+                # Our probe makes this redundant (it reads difficulty from the prompt), but the
+                # baseline has no such prior, so this is the strongest honest version of it.
+                total = float(failures.sum())
+                p_each = np.asarray([
+                    p_each[mi] * cross_pseudo_count
+                    / (cross_pseudo_count + (total - failures[mi]))
+                    for mi in range(len(slots))
+                ])
+                belief_source = "counts_coupled"
             bellman_pbar, bellman_decay_s = np.asarray(prior, dtype=float), pseudo_count
             p_any = 1.0 - float(np.prod(1.0 - p_each))
-            belief_source = "counts"
 
         ratios = {mi: float(p_each[mi] / expected_costs[mi]) for mi in available}
         if exploration_bonus:
@@ -882,6 +899,9 @@ def main() -> None:
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--num-orderings", type=int, default=5)
     parser.add_argument("--pseudo-count", type=float, default=2.0)
+    parser.add_argument("--cross-pseudo-count", type=float, default=0.0, help=(
+        "Enable the `counts_coupled` family: a second Beta-Bernoulli decay on OTHER routes' "
+        "failures, so the count baseline can learn problem difficulty from evidence. 0 disables."))
     parser.add_argument(
         "--pseudo-count-grid", default="",
         help=(
@@ -931,7 +951,7 @@ def main() -> None:
     parser.add_argument(
         "--q-stop-family",
         choices=["counts", "content", "content_decay", "sequential", "sequential_decay",
-                 "counts_qcost", "content_qcost", "content_decay_qcost"],
+                 "counts_qcost", "content_qcost", "content_decay_qcost", "counts_coupled"],
         help=(
             "Replace stopping for this family's frozen-R policy with a threshold on the "
             "learned q(s) = 1 - P(nothing remains), sweeping --q-stop-grid. Routing is left to "
@@ -948,7 +968,7 @@ def main() -> None:
     parser.add_argument(
         "--oracle-stopping-family",
         choices=["counts", "content", "content_decay", "sequential", "sequential_decay",
-                 "counts_qcost", "content_qcost", "content_decay_qcost"],
+                 "counts_qcost", "content_qcost", "content_decay_qcost", "counts_coupled"],
         help=(
             "Diagnostic only: for this value-policy family, replace stopping with perfect "
             "knowledge of whether any stored future draw succeeds. Routing is unchanged."
@@ -1149,6 +1169,8 @@ def main() -> None:
                     learned_transitions=learned_transitions,
                     capture_trace=capture_trace,
                     apply_failure_decay=base in ("sequential_decay", "content_decay"),
+                    cross_pseudo_count=(args.cross_pseudo_count
+                                        if base == "counts_coupled" else 0.0),
                     decay_pseudo_count=args.decay_pseudo_count,
                     exploration_bonus=exploration_bonus,
                     mandatory_scout=args.start_protocol == "scout_first",
@@ -1172,6 +1194,7 @@ def main() -> None:
     families = (
         ["counts"]
         + (["content", "content_decay"] if content else [])
+        + (["counts_coupled"] if args.cross_pseudo_count > 0 else [])
         + (["counts_qcost"] if cost_preds else [])
         + (["content_qcost", "content_decay_qcost"] if (content and cost_preds) else [])
         + (scorer_families if scorer else [])

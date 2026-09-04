@@ -79,3 +79,48 @@ def test_qcost_suffix_does_not_leak_into_belief_dispatch():
                           ("content_decay", "content_decay")]:
         base = fam[:-6] if fam.endswith("_qcost") else fam
         assert base == exp_base
+
+
+def test_cross_route_coupling_depresses_untried_routes():
+    """Failures on one route must lower beliefs about the others when coupling is on.
+
+    Count beliefs have no per-problem prior, so observed failures are their only channel for
+    learning that a problem is hard. Unconditionally that channel is worth 28 points here, so
+    the strongest honest version of the count baseline propagates evidence across routes.
+    """
+    import numpy as np
+    from pipelinerl.swe.scripts.livecodebench.replay_mdp_full_execution import replay_adaptive
+
+    def run(cross):
+        M, KK = len(SLOTS), 4
+        return replay_adaptive(
+            np.zeros((M, KK), bool), np.ones((M, KK), bool), np.full((M, KK), 0.001),
+            np.array([1e-5, 1e-5, 1e-5]), np.tile(np.arange(KK), (M, 1)),
+            budget=1.0, prior=np.array([0.5, 0.5, 0.5]), pseudo_count=2.0, slots=SLOTS,
+            records={("p", s, k): {"model_slot": s, "code": "x",
+                                   "full_execution_feedback": "f"}
+                     for s in SLOTS for k in range(KK)},
+            problem_id="p", problem_statement="s", value_of_correct=1.0,
+            cross_pseudo_count=cross, capture_trace=True, mandatory_scout=False,
+        )
+
+    off, on = run(0.0), run(2.0)
+
+    def belief_after_failures(trace, slot, depth):
+        for step in trace:
+            if sum(step["failure_counts"].values()) == depth:
+                return step["p_success_next"][slot]
+        return None
+
+    # a route that has never been tried, once other routes have failed
+    for depth in (1, 2):
+        b_off = belief_after_failures(off["decision_trace"], "oss120", depth)
+        b_on = belief_after_failures(on["decision_trace"], "oss120", depth)
+        if b_off is not None and b_on is not None:
+            assert b_on < b_off, (
+                f"depth {depth}: coupling must depress an untried route "
+                f"({b_on} !< {b_off})"
+            )
+
+    assert off["decision_trace"][0]["belief_source"] == "counts"
+    assert on["decision_trace"][0]["belief_source"] == "counts_coupled"
