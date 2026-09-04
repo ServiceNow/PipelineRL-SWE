@@ -341,19 +341,26 @@ GPU-hour), and all-API gives roughly 4-8x (gpt-oss-120b ~$0.17/M output against 
 across it and locate the break-even, rather than pass/fail at a ratio no coherent deployment
 produces.
 
-Sweep in progress across ratios {2, 3, 4, 6, 8, 10, 15, 25, 33/40} on both datasets, with oss20
-interpolated geometrically since a 20B sits between a 4B and a 120B on both memory and
-throughput. Points measured so far:
+Full method vs RoR across the ratio (oss20 interpolated geometrically):
 
-| ratio | LCB (60/70/80%) | TACO (30/40/50%) |
+| ratio | LCB 60/70/80% | TACO 30/40/50% |
 |---|---|---|
-| 33-40x | +34.6 / +33.7 / +27.4 | +63.0 / +31.4 / +25.1 |
-| 10x | +34.2 / +42.3 / +20.6 | +54.6 / +16.7 / +20.7 |
+| 2x | -45.6 / -95.5 / -20.8 | +20.3 / -15.9 / -107.0 |
+| 3x | -4.8 / -34.1 / +11.3 | +33.0 / -4.1 / -79.5 |
 | 4x | +19.2 / -0.6 / +7.6 | +32.5 / -2.8 / -7.1 |
+| **6x** | **+46.6 / +30.2 / +7.0** | **+56.1 / +26.0 / +11.0** |
+| 8x | +49.8 / +26.9 / +18.1 | +56.5 / +20.5 / +16.5 |
+| 10x | +34.2 / +42.3 / +20.6 | +54.6 / +16.7 / +20.7 |
+| 33-40x (native) | +34.6 / +33.7 / +27.4 | +63.0 / +31.4 / +25.1 |
 
-The advantage falls monotonically with the ratio on both datasets, remaining clearly positive at
-10x and becoming mixed near 4x. Reporting the curve and its break-even is the honest form of
-this result.
+**Break-even is ~4-6x; the method is reliably positive from 6x up**, on both datasets.
+
+**State this precisely, because it bites.** Self-hosted accounting puts the pool at ~40x, well
+inside the working range. But all-API pricing is roughly 4-8x, which *straddles* the break-even.
+So the honest claim is not "needs a real ladder" but "needs >= ~6x, and one of the two plausible
+pricing bases may not clear it." A deployment serving its small model at high utilisation while
+buying the large one at hyperscale rates is the case where this method has least to offer -- and
+that is a realistic deployment, not a contrived one.
 
 **6.8 Seed sensitivity.** Seed controls draw orderings — a variance source the problem bootstrap
 holds fixed. Four seeds, full method vs RoR:
@@ -445,7 +452,13 @@ shrinkage (§5.3) dials it in automatically -- slopes are 0.72-0.98 on LCB and 0
 TACO -- so a practitioner need not know the regime in advance. **This is a stronger claim than
 an unconditional one: it is predictive from calibration data alone.**
 
-**6.13 Coupled-RoR baseline (LCB).** Count beliefs given a second Beta–Bernoulli decay on other
+**6.13 Decay-rate sweep.** The pseudo-count sigma = 2.0 is inherited from RoR, and the research
+log records an empirical optimum near 0.3. Sweeping {0.3, 1, 2, 5, 10} on LCB shows **no
+consistent ordering** -- sigma=5 wins two targets, sigma=2 wins two, sigma=1 one, and the spread
+sits inside the measured seed noise. The claimed optimum at 0.3 is not supported. One fewer
+hyperparameter; keep the inherited default and say so.
+
+**6.14 Coupled-RoR baseline.** Count beliefs given a second Beta–Bernoulli decay on other
 routes' failures, $\kappa\in\{2,5,10,20\}$, taking the most favourable $\kappa$ per target.
 Coupling barely helps and hurts at three targets; our margin moves from
 +56.2/+43.9/+21.9/+20.5/+32.5/+18.1 to **+55.2/+37.5/+21.4/+20.4/+32.5/+18.1**. We built the
