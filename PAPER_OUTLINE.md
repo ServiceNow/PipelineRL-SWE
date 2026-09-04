@@ -399,9 +399,32 @@ oss20: 0.215 log vs **-0.109** dollar). Test split, rich features, shrinkage app
 1. **It works, and best where it matters most.** On the expensive route -- the one whose cost
    dominates every decision -- it cuts absolute error 46.1% on LCB and 24.3% on TACO. MAE falls
    on *all six* route/dataset cells, by 16-46%.
-2. **R2 and MAE disagree on TACO oss20** (MAE -15.8% but R2 -0.109): the probe beats the constant
-   on typical problems and loses badly on a few extreme ones, which squared error punishes. That
-   is the cell where query-conditioned cost hurt the frontier.
+2. **The one negative cell, TACO oss20, is fully diagnosed.** MAE improves (-15.8%) while R2 is
+   -0.109, because the probe beats the constant typically and loses badly on a few extremes.
+   Decomposing the squared error on the 168 test problems:
+
+   | | capped | uncapped |
+   |---|---|---|
+   | share of problems | 20.8% | 79.2% |
+   | **share of squared error** | **68.8%** | 31.2% |
+   | R2 | **-0.250** | **+0.113** |
+   | mean true cost | $0.02584 | $0.00671 |
+
+   **A fifth of the problems produce two-thirds of the error.** On uncapped problems the probe
+   works; the negative R2 is entirely the capped tail.
+
+   It is *not* that oss20 tops out most often -- the scout hits the cap on 8.6% of draws too, and
+   on more problems (27.5% vs 22.9%). It is that oss20's outputs are the **longest** (mean 7994
+   tokens, p90 28,973), so topping out is 3.9x more expensive there. Combined with its
+   4.7-10.3% EmptyGeneration rate on TACO -- reasoning to the cap and emitting nothing -- this
+   route has a failure mode that is simultaneously maximally expensive, unpredictable from the
+   prompt (whether a model runs away reasoning is largely stochastic), and concentrated enough
+   to dominate squared error.
+
+   **Implication for the paper:** the cost head's weakness is specific and characterisable, not
+   diffuse. It fails on runaway-generation events, which is also the thing a larger token cap
+   would change -- so the deferred 64k re-collection is the direct test of whether this is a
+   property of the method or of our collection budget.
 3. **Truncation is roughly half the TACO deficit.** Restricting to problems that never hit the
    token cap moves TACO oss20 from -0.109 to +0.128 and TACO scout from 0.127 to 0.264, while
    oss120 (0% capped) is unchanged -- a clean control. But cap-free TACO is still 0.13-0.34
