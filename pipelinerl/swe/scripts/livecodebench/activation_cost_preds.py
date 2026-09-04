@@ -31,7 +31,7 @@ ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDe
 ap.add_argument("--activations", required=True)
 ap.add_argument("--tensors-dir", required=True)
 ap.add_argument("--readout", default="mean")
-ap.add_argument("--rich", action="store_true", help="Concatenate ALL layers x {mean,last} instead of one layer of one readout. The single-layer probe captured only 11-40% of the between-problem variance ceiling on TACO; concatenating roughly doubles cost R2 there (oss20 0.093->0.216) and lifts LCB too (oss120 belief AUC 0.792->0.864, cost R2 0.700->0.792). The gain is FEATURES, not capacity: an MLP on the single layer collapses to negative R2.")
+ap.add_argument("--rich", action="store_true", help="Concatenate ALL layers x {mean,last} instead of one layer of one readout. The single-layer probe captured only 11-40%% of the between-problem variance ceiling on TACO; concatenating roughly doubles cost R2 there (oss20 0.093->0.216) and lifts LCB too (oss120 belief AUC 0.792->0.864, cost R2 0.700->0.792). The gain is FEATURES, not capacity: an MLP on the single layer collapses to negative R2.")
 ap.add_argument("--layer-frac", type=float, default=0.5)
 ap.add_argument("--alpha", type=float, default=100.0)
 ap.add_argument("--cap", type=float, default=0.0, help=(
@@ -39,7 +39,7 @@ ap.add_argument("--cap", type=float, default=0.0, help=(
     "should stay off: truncation censors the LATENT length but not the PAID cost -- a draw that "
     "hits the cap costs exactly the cap's worth of tokens, which we observe exactly. Excluding "
     "them raises R2 (TACO oss20 0.093 -> 0.189) by switching to an easier target that is not the "
-    "quantity the policy spends, and under-prices every route by 30-48%. Kept only for ablation."))
+    "quantity the policy spends, and under-prices every route by 30-48%%. Kept only for ablation."))
 ap.add_argument("--no-shrink", action="store_true", help=(
     "Disable calibration-fitted shrinkage. By default the prediction is linearly recalibrated "
     "on the CALIBRATION split: regressing true log-cost on the prediction gives a slope near 1 "
@@ -113,14 +113,19 @@ for j, s in enumerate(slots):
     # Jensen exp() of a compressed predictor has a lower mean than the quantity it estimates;
     # the smearing factor corrects the conditional mean but not this. Without the rescale the
     # routes came out 20-25% under-priced, which would make the policy systematically over-buy.
-    true_mean_tr = float(np.mean([
-        total[ti[p], j, :][valid[ti[p], j, :]].mean() for p, k in zip(pk, tr) if k
-    ]))
+    # A problem can have no valid draw on a route once truncated draws are excluded (the
+    # no-truncation ablation deletes the whole oss20 arm on 4 LCB problems, where all six
+    # draws ran away). Those problems carry no cost evidence, so drop them from the moment
+    # match rather than let one NaN poison the level and the constant.
+    per_problem = np.array([
+        total[ti[p], j, :][valid[ti[p], j, :]].mean() if valid[ti[p], j, :].any() else np.nan
+        for p, k in zip(pk, tr) if k
+    ])
+    true_mean_tr = float(np.nanmean(per_problem))
     level = true_mean_tr / max(float(tokens[tr].mean()), 1e-9)
     tokens = tokens * level
     C[:, j] = tokens * USD_PER_M_TOKENS[s] / 1e6
-    const = float(np.mean([total[ti[p], j, :][valid[ti[p], j, :]].mean()
-                           for p, k in zip(pk, tr) if k])) * USD_PER_M_TOKENS[s] / 1e6
+    const = true_mean_tr * USD_PER_M_TOKENS[s] / 1e6
     print(f"  {s:8s} constant ${const:.6f}  predicted mean ${C[:, j].mean():.6f}  "
           f"p10 ${np.percentile(C[:, j],10):.6f}  p90 ${np.percentile(C[:, j],90):.6f}  "
           f"smearing {smear:.3f}  level {level:.3f}")
