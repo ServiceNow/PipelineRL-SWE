@@ -64,7 +64,12 @@ def _pick(ls):
     return ls.index(a.layer)
 
 X = Xall[keep][:, _pick(layers)]
-tr = np.array([probs[p].get("source_temporal_split") == "train" for p in pk])
+# Use the canonical split manifest, NOT source_temporal_split. They coincide on LCB but
+# not on TACO, whose dates are 79.8% Unix-epoch sentinels and whose manifest is therefore a
+# random split -- fitting on the temporal "train" there would train on manifest test.
+_man = json.loads((Path(a.tensors_dir) / "split_manifest.json").read_text())
+_train_ids = {str(x) for x in _man["train_problem_ids"]}
+tr = np.array([p in _train_ids for p in pk])
 print(f"{len(pk)} problems, fitting on {tr.sum()} train, layer {a.layer}")
 
 P = np.zeros((len(pk), len(slots)))
