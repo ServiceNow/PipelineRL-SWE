@@ -337,28 +337,33 @@ async def openrouter_call(
     semaphore: asyncio.Semaphore | None = None,
     gen_timeout: int = 120,
     empty_retries: int = 2,
+    avoid_empty_provider: bool = True,
 ) -> dict:
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
         "X-Title": title,
     }
-    payload = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ],
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-    }
+    def _payload(ignore: list[str]) -> dict:
+        p = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }
+        if ignore:
+            p["provider"] = {"ignore": ignore}
+        return p
 
-    async def _call():
+    async def _call(ignore: list[str] | None = None):
         t0 = time.monotonic()
         async with session.post(
             f"{base_url}/v1/chat/completions",
             headers=headers,
-            json=payload,
+            json=_payload(ignore or []),
             timeout=aiohttp.ClientTimeout(total=gen_timeout),
         ) as resp:
             resp.raise_for_status()
@@ -394,12 +399,23 @@ async def openrouter_call(
         finish_reason == "length" is the opposite case and must be preserved: the model
         really did spend its whole budget thinking. That is a true outcome and retrying it
         would just buy the same truncation again.
+
+        Retrying alone is not enough, because the artifact is per-provider rather than
+        random. On the 64k re-collection, 84% of the surviving empties came back with
+        finish_reason == "tool_calls" -- gpt-oss opened a harmony tool call and the provider
+        returned no assistant content -- and they concentrate almost entirely on one
+        provider: 10.9% empty on Parasail against 1.1% on CoreWeave. A plain retry often
+        lands on the same provider and reproduces it, so each empty attempt also excludes
+        the provider that produced it from the next one.
         """
         out = None
+        ignore: list[str] = []
         for attempt in range(1 + max(0, empty_retries)):
-            out = await _call()
+            out = await _call(ignore)
             if (out["full_output"] or "").strip() or out.get("finish_reason") == "length":
                 return out
+            if avoid_empty_provider and out.get("provider"):
+                ignore = ignore + [out["provider"]]
             if attempt < empty_retries:
                 await asyncio.sleep(1.0 * (attempt + 1))
         return out
