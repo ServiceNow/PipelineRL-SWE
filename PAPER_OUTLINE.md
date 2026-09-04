@@ -223,8 +223,26 @@ only where depth is worthless: on oss120, the sole route where depth pays, mean 
 against 0.06, both flooring to zero. **Per-problem decay is real, learnable, and does not change
 any decision** -- which is what licenses the constant, and is a sharper claim than "we simplified".
 
-A sweep over $\sigma \in \{0.3, 1, 2, 5, 10\}$ confirms it empirically: no consistent ordering,
-spread inside seed noise (§6.13).
+**But sigma itself matters, and the default is not optimal.** An earlier reading of the sweep as
+a null was an analysis error: it compared `content_decay` *versus* `counts` at each sigma, and
+both families improve with faster decay, so the ratio cancelled while absolute costs moved ~2x.
+Absolute cost at the 50% target:
+
+| family | 0.3 | 1.0 | 2.0 (default) | 5.0 | 10.0 | mean CV |
+|---|---|---|---|---|---|---|
+| counts (no prior) | **0.01132** | 0.01439 | 0.01471 | 0.02344 | 0.02344 | 9.4% |
+| content (has prior) | **0.00661** | 0.00718 | 0.00995 | 0.01039 | 0.01270 | 6.9% |
+
+**Use sigma ~ 0.3, or tune it on calibration; do not inherit RoR's 2.0.** Counts are more
+sigma-sensitive than content (CV 9.4% vs 6.9%), consistent with decay partly substituting for a
+per-problem prior -- failures are difficulty evidence, and they matter more when there is no
+other source of it. The effect is weaker than that story alone predicts, because sigma also
+models *sampling depletion* (how fast repeated draws at fixed temperature stop finding new
+solutions), which is real whether or not difficulty is already known.
+
+Where sigma has leverage, measured on our theta and cost estimates: the fraction of
+(problem, route) pairs with 0 < n* < K is 10-20% for the cheap routes and **27-50% for oss120**,
+the route where depth actually pays. It is not a corner case.
 
 Three belief sources differ only in where $\theta$ comes from:
 
