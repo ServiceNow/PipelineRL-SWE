@@ -86,9 +86,12 @@ remaining. The episode ends on the first success, so any live state has all draw
 
 **Actions.**
 $$\mathcal{A}(s)=\{m : r_m>0\}\;\cup\;\{\bot\},$$
-i.e. spend one more draw on any route with capacity — *resampling* if $n_m>0$, *rerouting* if
-$n_m=0$ — or **abstain** ($\bot$), ending the episode with no answer. Abstention is an action of
-the MDP, not a post-hoc filter.
+i.e. spend one more draw on **any** route that still has capacity, or **abstain** ($\bot$),
+ending the episode with no answer. Every route is available at every step: there is no
+requirement to exhaust a route before switching, and no commitment to a route once chosen.
+"Resample" and "reroute" are just names for the two cases of the same action — picking a route
+with $n_m>0$ versus one with $n_m=0$ — not separate action types or a staged protocol.
+Abstention is an action of the MDP, not a post-hoc filter.
 
 **Objective.** With $R$ the value of a correct answer in dollars (the Lagrangian dual of a
 budget constraint), maximise
@@ -101,7 +104,22 @@ Let $\theta_m(x)\in(0,1)$ be the probability that a *fresh* draw from route $m$ 
 $n_m$ failures, a Beta–Bernoulli posterior with pseudo-count $\sigma$ gives the decayed belief
 $$p_m(s)\;=\;\theta_m(x)\cdot\frac{\sigma}{\sigma+n_m},\qquad \sigma=2.0 .$$
 Failures on route $m$ depress only route $m$; the routes are treated as conditionally
-independent given $x$, so $P(\text{no route succeeds next})=\prod_m\bigl(1-p_m(s)\bigr)$.
+independent **given $x$**, so $P(\text{no route succeeds next})=\prod_m\bigl(1-p_m(s)\bigr)$.
+
+*This assumption is measured, not assumed.* Unconditionally the routes are strongly coupled: on
+clean LCB, gpt-oss-120b's pass@1 is 97.7% when the scout succeeded on draw 0 and 69.9% once the
+scout has failed once — a 28-point drop — decaying only to 66.0% after six scout failures. But
+that coupling is *problem difficulty*, which $\hat\theta_m(x)$ already reads off the prompt.
+Conditioning on $\hat\theta$, the scout-failure count adds essentially nothing: log-loss
+0.36886 → 0.36875 ($\Delta=-0.00011$), coefficient $-0.0315$. **The probe performs the belief
+propagation that a coupled posterior would otherwise have to do**, which is why the factorised
+form loses nothing here.
+
+The corollary matters for the baseline. Count-based beliefs have no per-problem prior, so
+observed failures are the *only* channel through which RoR can learn that a problem is hard —
+and that channel is worth 28 points. A cross-route-coupled RoR should therefore be stronger
+than the uncoupled form, and we should implement and report it rather than let a reviewer
+point it out (§9).
 
 Three belief sources differ only in where $\theta$ comes from:
 
@@ -301,4 +319,7 @@ routing decision is non-vacuous — unlike LCB where oss120 dominates.
 - [x] Seeds 0–3; report mean ± sd (§6.8)
 - [x] Truncation-sensitivity frontier (§6.9)
 - [ ] CI on the +18% per-candidate point at 70%
+- [ ] **Coupled-RoR baseline**: give count beliefs a shared-difficulty term so failures on one
+      route depress all routes. Our probe makes coupling redundant (§5.2) but the baseline has
+      no prior, so this is the strongest honest version of RoR and it is our job to build it.
 - [ ] Writing — nothing drafted
