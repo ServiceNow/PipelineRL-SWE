@@ -1526,8 +1526,8 @@ def main() -> None:
                     outcomes[int(pi)], valid[int(pi)], realized_costs[int(pi)],
                     orderings[int(pi), oi], plan,
                 )
-                if args.probe_cost_usd and base in ("content", "content_decay",
-                                                    "content_qcost", "content_decay_qcost"):
+                _pb = family[:-6] if family.endswith("_qcost") else family
+                if args.probe_cost_usd and _pb in ("content", "content_decay"):
                     result["realized_spend"] += float(args.probe_cost_usd)
                 result["problem_id"] = pid
                 result["ordering_index"] = oi
