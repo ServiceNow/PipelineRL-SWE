@@ -451,34 +451,6 @@ oss20: 0.215 log vs **-0.109** dollar). Test split, rich features, shrinkage app
 on LCB and 82.3/85.9/91.0% on TACO, and per-problem cost spans p90/p10 of 16-37x, so the quantity
 is worth predicting even where we predict it poorly.
 
-**6.3a Reporting: cost-at-matched-accuracy hides the regime where we lose.**
-
-The policy optimises $J(\pi)=R\cdot\text{acc}-\text{cost}$, but the frontier reports *cost at a
-matched accuracy target*. That is the right view for comparability -- it is what RoR publishes --
-but it has two defects. It is **grid-sensitive**: "cheapest arm reaching T" silently switches
-policy family when no operating point lands near T (this produced a spurious 58% protocol effect,
-§6.14). And it **never probes high R**, where cost is irrelevant and only the ceiling matters.
-
-**Utility at matched R** has neither defect: both arms take the same R, every swept point is a
-comparable pair, and no target must be hit. Under it we win at **18/24** swept R on LCB and
-**17/24** on TACO, with a systematic shape:
-
-| regime | LCB | TACO |
-|---|---|---|
-| low R (cost-dominated) | tied | tied |
-| mid R | **+$0.0299** | **+$0.0533** |
-| **high R (accuracy-dominated)** | **-$0.0163** | **-$0.0660** |
-
-**We lose at high R because our accuracy ceiling is lower**: 86.1% vs RoR's 86.5% on LCB, 61.3%
-vs 61.9% on TACO. When cost stops mattering, RoR simply buys everything; abstention and
-cost-aware routing leave a few tenths of a point unclaimed. The frontier tables never show this,
-because they stop at 80% (LCB) and 50% (TACO).
-
-**Report both.** Frontier for comparability with the baseline; utility-at-matched-R as primary,
-since it is the objective and is artifact-free; ceiling gap disclosed rather than concealed by
-the target range. Do **not** report relative utility: $J$ crosses zero, so $\Delta J/|J|$ produces
-+2213% and -221% next to each other. Use dollars, or $\Delta J/R$ (accuracy-equivalent units).
-
 **6.3 Frontier (C1, C5).** All numbers: 96-point value grid, 3 draw-ordering seeds, rich
 features, `scout_first` for every arm including the baseline, problem-clustered paired bootstrap.
 
@@ -545,14 +517,11 @@ since it is the objective and is artifact-free; ceiling gap disclosed rather tha
 the target range. Do **not** report relative utility: $J$ crosses zero, so $\Delta J/|J|$ produces
 +2213% and -221% next to each other. Use dollars, or $\Delta J/R$ (accuracy-equivalent units).
 
-**6.3 Frontier (C1, C5).** `lcb_replay_qcost_1788470886`.
-Cost conditioning in isolation — RoR beliefs: +45.9/+18.8/+35.1/+5.8/+13.3/+26.7/+12.9%
-(6/7 significant). Activation beliefs: +19.7/+15.4/+26.0/+15.9/+16.7/−5.8/+0.0% (5/7).
-**Full method vs RoR (rich features): +47.8/+34.6/+23.8/+33.7/+42.4/+27.4%, all six
-significant.** On TACO: +63.0/+63.0/+31.4/+54.3/+25.1%, five significant, -21.5% at 55%.
-vs compiled fixed schedule: five clear wins, one marginal, one tie, no losses (up from three
-clear wins pre-qcost — cost conditioning is what separated us from our closest competitor).
-Abstention 10.5% at the 70% point, low because clean labels lifted the pool.
+**6.3b Against the compiled fixed schedule, not just RoR.** Compiling the best fixed
+route-and-depth schedule for each budget: five clear wins, one marginal, one tie, no losses --
+up from three clear wins before query-conditioned cost, so the cost head is what separates us
+from our closest non-adaptive competitor. Abstention runs 10.5% at the 70% point, low because
+clean labels lifted the pool's solvability.
 
 **6.4 Readout control (C4).** Four readouts from one forward pass. Last-token vs mean-pooled
 *reverses* the cross-model ordering; gpt-oss-120b's own probe improves 0.7743 → 0.8313 from
