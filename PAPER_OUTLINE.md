@@ -386,6 +386,34 @@ constant: R² 0.65/0.80/0.83, MAE cut 45–65%. Beats rescaling the scout's *obs
 (0.796 vs 0.588; 0.834 vs 0.629) and subsumes it (+0.002/+0.008 combined) while needing only a
 prefill. Not collinear with predicted success (partial ρ 0.46–0.75).
 
+**6.3a Reporting: cost-at-matched-accuracy hides the regime where we lose.**
+
+The policy optimises $J(\pi)=R\cdot\text{acc}-\text{cost}$, but the frontier reports *cost at a
+matched accuracy target*. That is the right view for comparability -- it is what RoR publishes --
+but it has two defects. It is **grid-sensitive**: "cheapest arm reaching T" silently switches
+policy family when no operating point lands near T (this produced a spurious 58% protocol effect,
+§6.14). And it **never probes high R**, where cost is irrelevant and only the ceiling matters.
+
+**Utility at matched R** has neither defect: both arms take the same R, every swept point is a
+comparable pair, and no target must be hit. Under it we win at **18/24** swept R on LCB and
+**17/24** on TACO, with a systematic shape:
+
+| regime | LCB | TACO |
+|---|---|---|
+| low R (cost-dominated) | tied | tied |
+| mid R | **+$0.0299** | **+$0.0533** |
+| **high R (accuracy-dominated)** | **-$0.0163** | **-$0.0660** |
+
+**We lose at high R because our accuracy ceiling is lower**: 86.1% vs RoR's 86.5% on LCB, 61.3%
+vs 61.9% on TACO. When cost stops mattering, RoR simply buys everything; abstention and
+cost-aware routing leave a few tenths of a point unclaimed. The frontier tables never show this,
+because they stop at 80% (LCB) and 50% (TACO).
+
+**Report both.** Frontier for comparability with the baseline; utility-at-matched-R as primary,
+since it is the objective and is artifact-free; ceiling gap disclosed rather than concealed by
+the target range. Do **not** report relative utility: $J$ crosses zero, so $\Delta J/|J|$ produces
++2213% and -221% next to each other. Use dollars, or $\Delta J/R$ (accuracy-equivalent units).
+
 **6.3 Frontier (C1, C5).** `lcb_replay_qcost_1788470886`.
 Cost conditioning in isolation — RoR beliefs: +45.9/+18.8/+35.1/+5.8/+13.3/+26.7/+12.9%
 (6/7 significant). Activation beliefs: +19.7/+15.4/+26.0/+15.9/+16.7/−5.8/+0.0% (5/7).
@@ -594,7 +622,10 @@ routing decision is non-vacuous — unlike LCB where oss120 dominates.
 4. Outcomes collected under our own serving configuration; another provider's defaults could
    shift absolute solve rates. All comparisons are within-collection.
 5. The readout correction (§6.4) is measured on 3 models on one benchmark.
-6. At-cap draws are route-asymmetric (oss20 10.3% on TACO hard, oss120 ~0%) — genuine budget
+6. **Lower accuracy ceiling than the baseline.** 86.1% vs 86.5% (LCB), 61.3% vs 61.9% (TACO).
+   At high R, where cost is irrelevant, RoR buys everything and wins on utility; our abstention
+   and cost-aware routing forgo the last few tenths (§6.3a).
+7. At-cap draws are route-asymmetric (oss20 10.3% on TACO hard, oss120 ~0%) — genuine budget
    exhaustion (`finish_reason=length`). Excluding them halves the advantage at the 70% and 80%
    targets (§6.9), so part of the gain is anticipating budget-exhausting draws.
 
