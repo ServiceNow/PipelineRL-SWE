@@ -421,10 +421,19 @@ oss20: 0.215 log vs **-0.109** dollar). Test split, rich features, shrinkage app
    prompt (whether a model runs away reasoning is largely stochastic), and concentrated enough
    to dominate squared error.
 
-   **Implication for the paper:** the cost head's weakness is specific and characterisable, not
-   diffuse. It fails on runaway-generation events, which is also the thing a larger token cap
-   would change -- so the deferred 64k re-collection is the direct test of whether this is a
-   property of the method or of our collection budget.
+   **A larger cap would make this WORSE, not better.** LCB exists at two caps, and raising it
+   from 4096 to 32768 *lowered* dollar-space R2 on every route: scout 0.466 -> 0.241, oss20
+   0.523 -> 0.473, oss120 0.683 -> 0.633. A low cap compresses the target -- with 26.9% of draws
+   pinned at 4096 the heavy tail is invisible and there is less variance to get wrong. Raising
+   the cap reveals a tail that is largely stochastic rather than prompt-determined, so the
+   regression has more to miss. (Confounded: the 4096 collection was OpenRouter-served with 22.6%
+   EmptyGeneration and the 32768 one is local with ~0%. But the direction is large and holds for
+   oss120, which had no EmptyGeneration problem at either cap.)
+
+   **Implication for the paper:** the cost head's weakness is specific and characterisable -- it
+   fails on runaway generation -- and it is a genuine limit of prompt-based cost prediction, not
+   an artifact of our token budget. The deferred 64k re-collection is therefore worth doing for
+   *label quality*, not as a fix for cost estimation.
 3. **Truncation is roughly half the TACO deficit.** Restricting to problems that never hit the
    token cap moves TACO oss20 from -0.109 to +0.128 and TACO scout from 0.127 to 0.264, while
    oss120 (0% capped) is unchanged -- a clean control. But cap-free TACO is still 0.13-0.34
