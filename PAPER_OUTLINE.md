@@ -327,21 +327,12 @@ better predictor converts into nothing — the convex-gate argument playing out.
 rolling-origin folds: linear wins pool solvability (P(MLP better)=0.029) and all three cost
 targets. "Linear suffices" is measured, not assumed.
 
-**6.7 Cost-ratio sensitivity — the method's operating range.**
-The advantage depends on there being a real cost spread, so we sweep the oss120:scout price
-ratio rather than commit to one basis.
+**6.7 Cost accounting — the method needs a cost ratio above ~6x, and MoE makes that hard to pin down.**
 
-**Inversion is not an operating point and is not reported as a failure mode.** A ratio below 1
-means a 120B MoE costs less per token than a self-hosted 4B, which arises only from a *mixed*
-basis — a small model priced at low single-tenant utilisation against a large one at hyperscale
-API rates. Under either consistent basis the ratio is well above 1: all-self-hosted gives ~40x
-on our AWS-node accounting (the 120B needs ~61GB resident and gets far lower throughput per
-GPU-hour), and all-API gives roughly 4-8x (gpt-oss-120b ~$0.17/M output against small models at
-~$0.02-0.05/M). **The plausible range is therefore ~4x to ~40x**, and we characterise the method
-across it and locate the break-even, rather than pass/fail at a ratio no coherent deployment
-produces.
+*This is the sharpest limitation in the paper. It belongs near the front, not buried.*
 
-Full method vs RoR across the ratio (oss20 interpolated geometrically):
+**The result.** Full method vs RoR across the oss120:scout price ratio (oss20 interpolated
+geometrically):
 
 | ratio | LCB 60/70/80% | TACO 30/40/50% |
 |---|---|---|
@@ -351,16 +342,53 @@ Full method vs RoR across the ratio (oss20 interpolated geometrically):
 | **6x** | **+46.6 / +30.2 / +7.0** | **+56.1 / +26.0 / +11.0** |
 | 8x | +49.8 / +26.9 / +18.1 | +56.5 / +20.5 / +16.5 |
 | 10x | +34.2 / +42.3 / +20.6 | +54.6 / +16.7 / +20.7 |
-| 33-40x (native) | +34.6 / +33.7 / +27.4 | +63.0 / +31.4 / +25.1 |
+| 30-40x | +34.6 / +33.7 / +27.4 | +63.0 / +31.4 / +25.1 |
 
-**Break-even is ~4-6x; the method is reliably positive from 6x up**, on both datasets.
+**Break-even is ~4-6x; the method is reliably positive from 6x up, and negative below ~3x.**
 
-**State this precisely, because it bites.** Self-hosted accounting puts the pool at ~40x, well
-inside the working range. But all-API pricing is roughly 4-8x, which *straddles* the break-even.
-So the honest claim is not "needs a real ladder" but "needs >= ~6x, and one of the two plausible
-pricing bases may not clear it." A deployment serving its small model at high utilisation while
-buying the large one at hyperscale rates is the case where this method has least to offer -- and
-that is a realistic deployment, not a contrived one.
+**Why the ratio is genuinely hard to pin down: our pool is two MoEs.** Cost per token is
+GPU-$/hour divided by tokens/hour, and for a mixture-of-experts model those two terms pull in
+opposite directions. gpt-oss-120b holds 116.8B parameters but activates 5.1B; gpt-oss-20b holds
+20.9B and activates 3.6B. So it needs a large card to *hold* but behaves like a small model when
+*running*. Every accounting choice lands somewhere different:
+
+| basis | oss120:scout | note |
+|---|---|---|
+| **total parameter count** (RoR's proxy) | **30x** | 116.8/4; ignores that only 5.1B is active |
+| **active parameter count** | **1.3x** | 5.1/4; ignores that you must hold 61GB |
+| our AWS-node estimate (what the tensors use) | 40x | derived from total params -> node size |
+| measured throughput, flat GPU price | 1.3x | our own serving data, concurrency 16 |
+| measured throughput, cheapest card that fits | **3.2-23x** | swings on the KV-cache budget alone |
+| OpenRouter list price for the 120B vs an assumed 4B price | <1x to ~8x | mixed basis; not a coherent comparison |
+
+**Measured from our own collection** (concurrency 16, tokens/s per GPU): scout 1220, oss20 2126,
+oss120 911. **gpt-oss-20b is faster per GPU than the 4B scout.** Charging each model the cheapest
+card its weights fit gives oss120:scout of 7.3x at a 4GB KV budget and 3.2x at 14GB -- a 2x swing
+from the KV assumption alone, because heavy concurrency forces the small model onto a bigger card
+while the large one is already on the biggest.
+
+**Inversion is not an operating point.** A ratio below 1 requires a *mixed* basis -- a small model
+at low single-tenant utilisation against a large one at hyperscale API rates. It is a pricing
+error, not a deployment, and is excluded rather than reported as a failure mode.
+
+**What prior work does, and what we will do.**
+- **RoR (2607.08665)**: "Per-draw cost is proxied by the model's parameter count in billions -- a
+  monotone stand-in for $-per-token serving cost", resolved from the repository name. Adds a
+  provider-price snapshot as a robustness table.
+- **NVIDIA prefill router (2603.20895)**: OpenRouter list prices (March 19 2026), min-max
+  normalised into the routing score; input tokens per query, output tokens approximated by "median
+  training output tokens as a verbosity proxy". **No MoE discussion and no cost-basis sensitivity
+  analysis** -- the authors list both as limitations.
+
+**Decision: report the parameter-count proxy as primary** for direct comparability with RoR, with
+the full ratio sweep as the robustness analysis, and our measured throughput basis as a secondary
+result. Under RoR's own accounting our pool is 30x, comfortably inside the working range.
+
+**The methodological point worth making, even though it cuts against us**: parameter count is a
+poor proxy on MoE pools. It reports 30x where measured throughput reports 1.3-7x, so the standard
+accounting in this literature *overstates* the headroom available to cost-aware routing whenever
+the pool contains sparse models. That is a caution for the field and a limitation on our own
+headline in the same breath.
 
 **6.8 Seed sensitivity.** Seed controls draw orderings — a variance source the problem bootstrap
 holds fixed. Four seeds, full method vs RoR:
@@ -475,7 +503,9 @@ routing decision is non-vacuous — unlike LCB where oss120 dominates.
 1b. **Cost conditioning does not replicate on strong beliefs** (§6.10). It is a contribution
    with a regime, not a universal improvement.
 2. n=171 test problems; the capacity question needed pooled folds to resolve at all.
-3. Method requires a real cost ladder (§6.7); harmful under price inversion.
+3. **The method requires a cost ratio above ~6x** (§6.7). On MoE pools that ratio is
+   accounting-dependent: parameter count says 30x, measured throughput says 1.3-7x depending on
+   the KV budget. We report under RoR's proxy for comparability and sweep the rest.
 4. Outcomes collected under our own serving configuration; another provider's defaults could
    shift absolute solve rates. All comparisons are within-collection.
 5. The readout correction (§6.4) is measured on 3 models on one benchmark.
