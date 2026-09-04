@@ -3,9 +3,10 @@
 **Edited in place.** Append-only history lives in `RESEARCH_LOG.md`. Every number is cited to a
 run or marked TODO; nothing enters by recollection.
 
-**Status:** LCB and TACO both complete. TACO forced a restructure: the *belief* contribution
-replicates strongly on both datasets; *cost conditioning* replicates only on weak beliefs and
-hurts strong ones. Contributions reordered accordingly. SWE-Smith not started.
+**Status:** LCB and TACO complete, both re-run with rich features (all layers x {mean,last}),
+which lifted every head on both datasets. Headline: full method beats RoR at 6/6 targets on LCB
+and 5/6 on TACO. Cost conditioning is regime-dependent, and the regime is now quantified.
+SWE-Smith not started.
 **Last updated:** 2026-09-04
 
 ---
@@ -229,8 +230,8 @@ prefill. Not collinear with predicted success (partial ρ 0.46–0.75).
 **6.3 Frontier (C1, C5).** `lcb_replay_qcost_1788470886`.
 Cost conditioning in isolation — RoR beliefs: +45.9/+18.8/+35.1/+5.8/+13.3/+26.7/+12.9%
 (6/7 significant). Activation beliefs: +19.7/+15.4/+26.0/+15.9/+16.7/−5.8/+0.0% (5/7).
-**Full method vs RoR: +56.2/+29.6/+43.9/+21.9/+20.5/+32.5/+18.1%, all seven significant,
-P ≥ 0.996.**
+**Full method vs RoR (rich features): +47.8/+34.6/+23.8/+33.7/+42.4/+27.4%, all six
+significant.** On TACO: +63.0/+63.0/+31.4/+54.3/+25.1%, five significant, -21.5% at 55%.
 vs compiled fixed schedule: five clear wins, one marginal, one tie, no losses (up from three
 clear wins pre-qcost — cost conditioning is what separated us from our closest competitor).
 Abstention 10.5% at the 70% point, low because clean labels lifted the pool.
@@ -321,7 +322,40 @@ beliefs — refuted, and it is what demoted C3.
 
 The best TACO configuration is `content_decay` **without** qcost. Report it that way.
 
-**6.11 Coupled-RoR baseline (LCB).** Count beliefs given a second Beta–Bernoulli decay on other
+**6.11 Rich features — read the whole representation, not one layer.**
+The single-layer/single-readout probe captured only 11-40% of the between-problem variance
+ceiling on TACO (ceiling 82-91%). Concatenating all layers x {mean, last}:
+
+| | cost R2 | | belief AUC | |
+|---|---|---|---|---|
+| | single | rich | single | rich |
+| LCB scout | 0.476 | 0.555 | 0.769 | 0.782 |
+| LCB oss20 | 0.576 | 0.701 | 0.767 | 0.813 |
+| LCB oss120 | 0.700 | **0.792** | 0.792 | **0.864** |
+| TACO scout | 0.195 | 0.397 | 0.731 | 0.756 |
+| TACO oss20 | 0.093 | 0.215 | 0.788 | 0.827 |
+| TACO oss120 | 0.359 | 0.416 | 0.821 | 0.843 |
+
+**Free at inference**: the forward pass already computes every hidden state, so this is one
+prefill plus a dot product, probe still linear. The risk was overfitting 40,960 features on
+~550 problems; held-out test improved on both datasets while an MLP on the single layer
+collapsed to negative R2, so the gain is features, not capacity. Selection verified on
+CALIBRATION (rich wins 11 of 12 cells) after initially being chosen on test.
+
+**6.12 When does cost conditioning help? The regime, quantified.**
+With rich features, qcost on activation beliefs:
+- **LCB**: +22.8/+22.7/+21.8/+18.8/+4.8/+11.0%, four of six significant.
+- **TACO**: significant wins at 35% (+16.8) and 45% (+13.5), significant losses at 30% (-29.5)
+  and 55% (-18.4), ties elsewhere. Inconsistent.
+
+The discriminating quantity is cost signal *relative to* belief signal. TACO's belief AUC
+matches LCB's (0.76-0.84 vs 0.78-0.86) while its cost R2 is roughly half (0.22-0.42 vs
+0.56-0.79). Cost conditioning helps in proportion to that ratio, and the calibration-fitted
+shrinkage (§5.3) dials it in automatically -- slopes are 0.72-0.98 on LCB and 0.83-0.96 on
+TACO -- so a practitioner need not know the regime in advance. **This is a stronger claim than
+an unconditional one: it is predictive from calibration data alone.**
+
+**6.13 Coupled-RoR baseline (LCB).** Count beliefs given a second Beta–Bernoulli decay on other
 routes' failures, $\kappa\in\{2,5,10,20\}$, taking the most favourable $\kappa$ per target.
 Coupling barely helps and hurts at three targets; our margin moves from
 +56.2/+43.9/+21.9/+20.5/+32.5/+18.1 to **+55.2/+37.5/+21.4/+20.4/+32.5/+18.1**. We built the
