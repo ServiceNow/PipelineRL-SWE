@@ -991,6 +991,13 @@ def main() -> None:
         "4B at $0.278/M -- so the spread the method exploits is basis-dependent and must be "
         "swept rather than asserted."))
     parser.add_argument("--execution-cost-usd", type=float, default=0.0)
+    parser.add_argument("--probe-cost-usd", type=float, default=0.0, help=(
+        "Fixed per-episode cost of the probe's prefill, charged ONLY to arms that use it "
+        "(content/cost predictions). The probe reads pre-generation activations, so it needs a "
+        "prefill and not a decode: on LCB that is $0.000149 against $0.000920 for the full scout "
+        "generation the scout_first protocol forces. Under --start-protocol free_start the "
+        "policy chooses whether to call the scout at all, and this charge keeps the comparison "
+        "honest -- without it the probe arms would get their signal for free."))
     parser.add_argument("--content-preds")
     parser.add_argument("--cost-preds", help=(
         "JSONL of per-problem expected costs: {problem_id, expected_costs:[c_m ...]} in USD, "
@@ -1178,6 +1185,9 @@ def main() -> None:
                     oracle_routing=oracle_routing,
                     q_abstain=q_abstain,
                 )
+                if args.probe_cost_usd and base in ("content", "content_decay",
+                                                    "content_qcost", "content_decay_qcost"):
+                    result["realized_spend"] += float(args.probe_cost_usd)
                 result["problem_id"] = pid
                 result["ordering_index"] = oi
                 outputs.append(result)
@@ -1501,6 +1511,9 @@ def main() -> None:
                     outcomes[int(pi)], valid[int(pi)], realized_costs[int(pi)],
                     orderings[int(pi), oi], plan,
                 )
+                if args.probe_cost_usd and base in ("content", "content_decay",
+                                                    "content_qcost", "content_decay_qcost"):
+                    result["realized_spend"] += float(args.probe_cost_usd)
                 result["problem_id"] = pid
                 result["ordering_index"] = oi
                 outputs.append(result)
