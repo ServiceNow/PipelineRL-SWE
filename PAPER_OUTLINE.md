@@ -477,6 +477,72 @@ since it is the objective and is artifact-free; ceiling gap disclosed rather tha
 the target range. Do **not** report relative utility: $J$ crosses zero, so $\Delta J/|J|$ produces
 +2213% and -221% next to each other. Use dollars, or $\Delta J/R$ (accuracy-equivalent units).
 
+**6.3 Frontier (C1, C5).** All numbers: 96-point value grid, 3 draw-ordering seeds, rich
+features, `scout_first` for every arm including the baseline, problem-clustered paired bootstrap.
+
+**LCB** — advantage over RoR, mean +/- sd over 3 draw-ordering seeds, 96-point grid
+
+| target | beliefs only | +query-conditioned cost | worst seed (full) |
+|---|---|---|---|
+| 50% | +45.7% ± 1.5 | **+49.1% ± 5.2** **(unstable)** | +43.2% |
+| 60% | +16.5% ± 0.6 | **+27.8% ± 1.0** | +27.2% |
+| 65% | +2.1% ± 0.7 | **+25.4% ± 2.1** | +23.7% |
+| 70% | +9.8% ± 9.0 | **+28.0% ± 8.2** **(unstable)** | +18.6% |
+| 75% | +36.5% ± 2.3 | **+39.7% ± 2.1** | +38.5% |
+| 80% | +19.2% ± 1.7 | **+21.5% ± 5.0** **(unstable)** | +18.5% |
+
+**TACO** — advantage over RoR, mean +/- sd over 3 draw-ordering seeds, 96-point grid
+
+| target | beliefs only | +query-conditioned cost | worst seed (full) |
+|---|---|---|---|
+| 30% | +74.6% ± 1.1 | **+69.8% ± 2.8** | +67.1% |
+| 35% | +58.1% ± 3.8 | **+60.2% ± 2.7** | +57.9% |
+| 40% | +36.5% ± 1.6 | **+43.4% ± 2.4** | +42.0% |
+| 45% | +19.3% ± 19.9 | **+30.1% ± 19.3** **(unstable)** | +11.3% |
+| 50% | +9.4% ± 5.3 | **+13.9% ± 4.1** | +10.2% |
+| 55% | -4.7% ± 2.1 | **-16.6% ± 11.3** **(unstable)** | -24.2% |
+
+**Two cells are seed-unstable and must be reported as such**: LCB 70% (sd 9.0 on the beliefs arm)
+and TACO 45% (sd 19.9). Seed 0 was favourable at both, so any table built on a single seed
+overstates us there. Everywhere else sd is 0.6-3.8.
+
+**Grid density mattered and was understating us.** At 24 points LCB 50% read +32.4% and TACO 30%
++71.5%; at 96 they are +52.8% and +69.6%. "Cheapest arm reaching T" silently switches policy
+family when no operating point lands near T, so sparse grids are not conservative -- they are
+noisy in both directions.
+
+**Coupled RoR, the strongest honest baseline, does not close the gap.** Giving count beliefs a
+cross-route difficulty channel (a second Beta-Bernoulli decay on other routes' failures, swept
+over kappa) moves our advantage by at most 1.1pt on LCB and 0.2pt on TACO.
+
+**6.3a Reporting: cost-at-matched-accuracy hides the regime where we lose.**
+
+The policy optimises $J(\pi)=R\cdot\text{acc}-\text{cost}$, but the frontier reports *cost at a
+matched accuracy target*. That is the right view for comparability -- it is what RoR publishes --
+but it has two defects. It is **grid-sensitive**: "cheapest arm reaching T" silently switches
+policy family when no operating point lands near T (this produced a spurious 58% protocol effect,
+§6.14). And it **never probes high R**, where cost is irrelevant and only the ceiling matters.
+
+**Utility at matched R** has neither defect: both arms take the same R, every swept point is a
+comparable pair, and no target must be hit. Under it we win at **18/24** swept R on LCB and
+**17/24** on TACO, with a systematic shape:
+
+| regime | LCB | TACO |
+|---|---|---|
+| low R (cost-dominated) | tied | tied |
+| mid R | **+$0.0299** | **+$0.0533** |
+| **high R (accuracy-dominated)** | **-$0.0163** | **-$0.0660** |
+
+**We lose at high R because our accuracy ceiling is lower**: 86.1% vs RoR's 86.5% on LCB, 61.3%
+vs 61.9% on TACO. When cost stops mattering, RoR simply buys everything; abstention and
+cost-aware routing leave a few tenths of a point unclaimed. The frontier tables never show this,
+because they stop at 80% (LCB) and 50% (TACO).
+
+**Report both.** Frontier for comparability with the baseline; utility-at-matched-R as primary,
+since it is the objective and is artifact-free; ceiling gap disclosed rather than concealed by
+the target range. Do **not** report relative utility: $J$ crosses zero, so $\Delta J/|J|$ produces
++2213% and -221% next to each other. Use dollars, or $\Delta J/R$ (accuracy-equivalent units).
+
 **6.3 Frontier (C1, C5).** `lcb_replay_qcost_1788470886`.
 Cost conditioning in isolation — RoR beliefs: +45.9/+18.8/+35.1/+5.8/+13.3/+26.7/+12.9%
 (6/7 significant). Activation beliefs: +19.7/+15.4/+26.0/+15.9/+16.7/−5.8/+0.0% (5/7).
