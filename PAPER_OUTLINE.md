@@ -381,26 +381,41 @@ Self-hosted AWS-node token prices. `lcb_local_pool_1788407418`. Problem-clustere
 bootstrap, 5000 resamples, throughout.
 
 **6.2 Cost is variable and only partly predictable (C1).**
-**Report R2 in TOKEN space, not log space.** The policy spends dollars; log-space R2 compresses
-exactly the large values that dominate cost and flatters the fit badly:
 
-| route | log-space R2 | **token-space R2** |
-|---|---|---|
-| LCB scout / oss20 / oss120 | 0.555 / 0.701 / 0.792 | **0.241 / 0.473 / 0.633** |
-| TACO scout / oss20 / oss120 | 0.397 / 0.215 / 0.416 | **0.127 / -0.109 / 0.341** |
+**All cost numbers are reported in dollars.** R2 in log space compresses exactly the large values
+that dominate spend and flatters the fit badly (LCB oss120: 0.792 log vs 0.633 dollar; TACO
+oss20: 0.215 log vs **-0.109** dollar). Test split, rich features, shrinkage applied:
 
-**TACO's oss20 cost prediction is worse than a constant (R2 = -0.109)** -- on the middle rung of
-the ladder. That is the mechanism behind query-conditioned cost hurting on TACO: not a weak
-signal but an actively harmful one, which the calibration-fitted shrinkage (SS5.3) is what keeps
-from doing more damage. A two-part hurdle model (P(cap) x cap + (1-P(cap)) x E[tokens | uncapped])
-was tested and is *worse* everywhere, so the bimodality induced by the 22.9% of TACO problems
-touching the token cap is not the cause; the features simply do not predict TACO's token counts.
+| | true mean $ | constant MAE $ | probe MAE $ | MAE cut | R2 |
+|---|---|---|---|---|---|
+| LCB scout | 0.001490 | 0.001313 | 0.000998 | +24.0% | 0.241 |
+| LCB oss20 | 0.009492 | 0.007533 | 0.005042 | +33.1% | 0.473 |
+| LCB oss120 | 0.046233 | 0.031148 | **0.016795** | **+46.1%** | **0.633** |
+| TACO scout | 0.001580 | 0.001431 | 0.001090 | +23.9% | 0.127 |
+| TACO oss20 | 0.010694 | 0.008161 | 0.006873 | +15.8% | **-0.109** |
+| TACO oss120 | 0.050096 | 0.029080 | 0.022007 | +24.3% | 0.341 |
 
- Between-problem variance share 84.8/62.3/90.1%;
-per-problem p90/p10 37×/16×/17×; failed draws cost 5.3×/2.6×/3.0× more than solved. Probe vs
-constant: R² 0.65/0.80/0.83, MAE cut 45–65%. Beats rescaling the scout's *observed* length
-(0.796 vs 0.588; 0.834 vs 0.629) and subsumes it (+0.002/+0.008 combined) while needing only a
-prefill. Not collinear with predicted success (partial ρ 0.46–0.75).
+**Where the cost estimate stands.**
+1. **It works, and best where it matters most.** On the expensive route -- the one whose cost
+   dominates every decision -- it cuts absolute error 46.1% on LCB and 24.3% on TACO. MAE falls
+   on *all six* route/dataset cells, by 16-46%.
+2. **R2 and MAE disagree on TACO oss20** (MAE -15.8% but R2 -0.109): the probe beats the constant
+   on typical problems and loses badly on a few extreme ones, which squared error punishes. That
+   is the cell where query-conditioned cost hurt the frontier.
+3. **Truncation is roughly half the TACO deficit.** Restricting to problems that never hit the
+   token cap moves TACO oss20 from -0.109 to +0.128 and TACO scout from 0.127 to 0.264, while
+   oss120 (0% capped) is unchanged -- a clean control. But cap-free TACO is still 0.13-0.34
+   against LCB's 0.33-0.63, so truncation is a contributor, not the cause.
+4. **The structure is not the problem.** A hurdle model (P(cap) x cap + (1-P(cap)) x
+   E[tokens | uncapped]) is worse everywhere, so the bimodality induced by the cap is not what a
+   better functional form would fix.
+5. **The shrinkage is load-bearing, not cosmetic.** With a route whose R2 is negative in the
+   space that matters, calibration-fitted shrinkage (SS5.3) is what stops query-conditioned cost
+   from degrading the policy; slopes are 0.72-0.98 on LCB and 0.83-0.96 on TACO.
+
+**Between-problem variance** (the ceiling any prompt-only predictor can reach) is 84.8/62.3/90.1%
+on LCB and 82.3/85.9/91.0% on TACO, and per-problem cost spans p90/p10 of 16-37x, so the quantity
+is worth predicting even where we predict it poorly.
 
 **6.3a Reporting: cost-at-matched-accuracy hides the regime where we lose.**
 
