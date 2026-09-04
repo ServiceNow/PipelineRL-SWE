@@ -495,7 +495,7 @@ The policy optimises $J(\pi)=R\cdot\text{acc}-\text{cost}$, but the frontier rep
 matched accuracy target*. That is the right view for comparability -- it is what RoR publishes --
 but it has two defects. It is **grid-sensitive**: "cheapest arm reaching T" silently switches
 policy family when no operating point lands near T (this produced a spurious 58% protocol effect,
-§6.14). And it **never probes high R**, where cost is irrelevant and only the ceiling matters.
+§6.15). And it **never probes high R**, where cost is irrelevant and only the ceiling matters.
 
 **Utility at matched R** has neither defect: both arms take the same R, every swept point is a
 comparable pair, and no target must be hit. Under it we win at **18/24** swept R on LCB and
@@ -755,6 +755,26 @@ routes' failures, $\kappa\in\{2,5,10,20\}$, taking the most favourable $\kappa$ 
 Coupling barely helps and hurts at three targets; our margin moves from
 +56.2/+43.9/+21.9/+20.5/+32.5/+18.1 to **+55.2/+37.5/+21.4/+20.4/+32.5/+18.1**. We built the
 strongest honest version of the baseline and it did not close the gap. TODO: repeat on TACO.
+
+**6.15 Start protocol: the mandatory scout is not what carries the result.** `scout_first`
+forces one scout draw before any decision (the protocol under which the probe's prefill is
+already bought); `free_start` lets the policy choose from the empty state. Advantage over RoR
+at 96 points, seed 0, full method:
+
+| | LCB 50/60/65/70/75/80% | TACO 30/35/40/45/50/55% |
+|---|---|---|
+| `scout_first` | +52.8/+28.9/+27.7/+33.3/+42.1/+27.3% | +69.6/+59.5/+42.0/+50.0/+18.4/-22.1% |
+| `free_start` | +48.1/+22.0/+20.8/+32.7/+41.5/+27.1% | +67.6/+52.7/+41.6/+33.2/+10.4/-22.5% |
+| gap | +0.2 to +6.9pt | +0.4 to +16.8pt |
+
+Both protocols win at every target we win at, and lose at the one we lose at (TACO 55%), so the
+result does not depend on the forced scout. It is worth 0.2-6.9pt on LCB and more on TACO,
+concentrated at 45-50% where the free policy skips the cheap evidence and commits early.
+
+**We previously read this as a 58% protocol effect and that was a grid artifact.** At 24 points
+"cheapest arm reaching T" jumped between policy families on one side of the comparison and not
+the other; at 96 the LCB gap collapses to a few points. Only the TACO 45% cell keeps a large
+gap, and it is one of the two seed-unstable cells (§6.3), so do not lean on it.
 
 **6.12 (retired) TACO in progress.** 883 problems (677/206). Draw-0 solve rates: scout
 18.4/14.8%, oss20 44.0/31.0%, oss120 48.7/43.4% (medium/hard) — against LCB's 42/65/82%.
