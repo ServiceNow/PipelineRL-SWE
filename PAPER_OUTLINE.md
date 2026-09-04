@@ -59,9 +59,11 @@ price-ratio limitation (§6.7). **Report as: a drop-in upgrade for count-based r
 universal improvement.** Still novel — RoR and 2603.20895 both use per-model constants, and
 length-from-activations (2607.05316, 2602.11812) is never operationalised in a decision.
 
-**C4. One cheap probe matches probing every model — on the frontier.** Per-candidate probes are
-significantly better predictors (+0.05–0.06 AUC) and buy **nothing** on cost-at-accuracy (§6.5).
-Deployment consequence: weights for one cheap model, not all of them.
+**C4. One cheap probe beats probing every model, once the probe is priced.** Per-candidate
+probes are better predictors (+0.05-0.06 AUC) and buy a real but small frontier gain
+(+0.6 to +8.6pt) -- for 48.5x the probe cost, which takes 10-38pt back. Charged honestly they
+lose to the single scout probe at **every** target (§6.5). Deployment consequence: weights for
+one cheap model, not all of them, and the argument is now economic rather than a null result.
 
 **C5. Methodological: cross-model activation comparisons need a fixed readout.** §6.4.
 
@@ -560,10 +562,35 @@ newline after a completed one. Mean-pooled, the scout probe is significantly wor
 last-token and does not discuss template comparability; scope this as a proposed control, not a
 refutation — our pool is 3 models on one benchmark against their 11–20 across three.
 
-**6.5 Per-candidate probing buys no frontier advantage (C3).** +6.4/−1.0/+6.4/+18.0/−8.8/−2.8%
-across six targets; signs alternate, mean ≈ +3%, all inside typical intervals at this n. The
-better predictor converts into nothing — the convex-gate argument playing out. TODO: CI on the
-+18% at 70%.
+**6.5 Per-candidate probing loses once its probe is priced (C4).** Probing each candidate
+means a prefill on *each* model in the pool, including the 120B: $0.000741 + $0.006338 on top of
+the scout's $0.000149, so $0.007229 against $0.000149 -- **48.5x**. Rich features, 96-point grid,
+3 draw-ordering seeds, both arms otherwise identical (same cost head, same protocol):
+
+| target | pooled probe (ours) | per-candidate, **probe free** | per-candidate, **charged** |
+|---|---|---|---|
+| 50% | +49.1% ± 5.2 | +57.7% ± 3.8 | **+10.6% ± 3.3** |
+| 60% | +27.8% ± 1.0 | +33.2% ± 0.9 | **+0.6% ± 1.2** |
+| 65% | +25.4% ± 2.1 | +26.2% ± 8.0 | **+1.0% ± 8.3** |
+| 70% | +28.0% ± 8.2 | +29.1% ± 2.5 | **+10.3% ± 3.6** |
+| 75% | +39.7% ± 2.1 | +39.5% ± 4.0 | **+28.8% ± 4.0** |
+| 80% | +21.5% ± 5.0 | +25.0% ± 0.9 | **+16.8% ± 0.8** |
+
+**The signal is real and the economics kill it.** Given away free, per-candidate probing wins at
+5/6 targets, by +0.6 to +8.6pt -- so the better AUC does convert, contrary to what we reported at
+24 points with single-layer features. Charged what it costs, it is worse than the single scout
+probe at **all six**, by 10.9 to 38.5pt, and its beliefs-only arm falls *below* the RoR baseline
+at 60% and 65% (-9.5%, -23.5%). The extra signal is worth less than one prefill on the 120B.
+
+*The comparison is exact on the differential.* Under `scout_first` the scout's prefill is already
+bought, so both arms are over-charged by the same $0.000149 -- pooled should be $0 marginal and
+per-candidate $0.007079. Correcting both moves each column up and changes no sign.
+
+**This retires the earlier null.** At 24 points with single-layer preds we read +6.4/-1.0/+6.4/
++18.0/-8.8/-2.8% and called it "buys nothing". That was grid noise on both sides. The honest
+claim is stronger and simpler: per-candidate probing is a *better predictor that costs too much*,
+and the deployment argument (one model's weights, not the pool's) now rests on price rather than
+on a failure to convert.
 
 **6.6a Probe scaling: how small can the probe be?** Same rich features, four smaller models,
 2x2 over scale x code-specialisation:
@@ -801,5 +828,4 @@ routing decision is non-vacuous — unlike LCB where oss120 dominates.
 - [ ] SWE-Smith → Verified (needs Daytona harness fixed; 6/10 historical runs all-error)
 - [x] Seeds 0–3; report mean ± sd (§6.8)
 - [x] Truncation-sensitivity frontier (§6.9)
-- [ ] CI on the +18% per-candidate point at 70%
 - [ ] Writing — nothing drafted
