@@ -71,15 +71,119 @@ CodeRouterBench/ACRouter (2606.22902); 67-model Rasch (2606.27288); universal la
 (2608.03222); SWE-Router (2607.00053); AutoMix; COPE (2506.11578).
 
 ## 5. Method
-**5.1 Setting.** M routes × K draws. Actions: resample m, reroute, stop. Myopic
-`argmax_m (p_m(s)·R − c_m(s))`, abstention as the zero-value action. Decay
-`p_m(n) = θ_m(x)·s/(s+n)`.
-**5.2 The probe.** One prefill of a 4B scout; ridge/logistic heads on frozen mean-pooled
-activations give θ_m(x) and c_m(x) for every route, including routes whose weights we never
-touch. 551 problem-level labels, 0.16 CPU-seconds, ~40KB. Cost head uses Duan's smearing
-estimator (exp of a log-space fit is a conditional median and would under-price every route).
-**5.3 Deployability.** Weights needed for one cheap model; the rest can be black-box APIs —
-outcomes at training time, price at decision time, never activations.
+
+### 5.1 Setting
+
+A pool of $M$ routes (models) $\{1,\dots,M\}$, each able to produce up to $K$ i.i.d. draws for a
+query $x$. Draw $k$ of route $m$ yields an outcome $y_{m,k}\in\{0,1\}$ (verified correct or not)
+and costs $c_{m,k}>0$ dollars. Outcomes are fixed offline in a correctness tensor, so all
+policies are compared by replay on identical draws.
+
+**State.** After some draws have been spent,
+$$s = \bigl(x,\; \mathbf{n},\; \mathbf{r}\bigr),\qquad \mathbf{n}=(n_1,\dots,n_M),\quad \mathbf{r}=(r_1,\dots,r_M),$$
+where $n_m$ is the number of *failed* draws already taken from route $m$ and $r_m$ the number
+remaining. The episode ends on the first success, so any live state has all draws so far failed.
+
+**Actions.**
+$$\mathcal{A}(s)=\{m : r_m>0\}\;\cup\;\{\bot\},$$
+i.e. spend one more draw on any route with capacity — *resampling* if $n_m>0$, *rerouting* if
+$n_m=0$ — or **abstain** ($\bot$), ending the episode with no answer. Abstention is an action of
+the MDP, not a post-hoc filter.
+
+**Objective.** With $R$ the value of a correct answer in dollars (the Lagrangian dual of a
+budget constraint), maximise
+$$J(\pi)=\mathbb{E}\Bigl[\,R\cdot\mathbb{1}[\text{episode ends in a success}] \;-\; \textstyle\sum_{\text{draws taken}} c_{m,k}\Bigr].$$
+Sweeping $R$ traces the cost–accuracy frontier. $R\to\infty$ never abstains; $R\to 0$ always does.
+
+### 5.2 Beliefs
+
+Let $\theta_m(x)\in(0,1)$ be the probability that a *fresh* draw from route $m$ solves $x$. After
+$n_m$ failures, a Beta–Bernoulli posterior with pseudo-count $\sigma$ gives the decayed belief
+$$p_m(s)\;=\;\theta_m(x)\cdot\frac{\sigma}{\sigma+n_m},\qquad \sigma=2.0 .$$
+Failures on route $m$ depress only route $m$; the routes are treated as conditionally
+independent given $x$, so $P(\text{no route succeeds next})=\prod_m\bigl(1-p_m(s)\bigr)$.
+
+Three belief sources differ only in where $\theta$ comes from:
+
+| family | $\theta_m$ | conditioned on the query? |
+|---|---|---|
+| `counts` (RoR) | $\bar\theta_m$, the train-set marginal solve rate of route $m$ | no |
+| `content` | $\hat\theta_m(x)$ from the probe, **no decay** ($p_m=\theta_m$) | yes |
+| `content_decay` | $\hat\theta_m(x)$ from the probe, decayed as above | yes |
+
+The undecayed `content` arm is retained only as an ablation: with $p_m$ frozen at depth 0 the
+stop condition below can never fire, and it was measured abstaining 0.0% at every operating
+point above 55%.
+
+### 5.3 Costs — the conditioned half
+
+Every system we surveyed uses a per-route constant estimated from training data,
+$$\bar c_m=\frac{1}{|\mathcal{D}_{\text{tr}}|}\sum_{x\in\mathcal{D}_{\text{tr}}}\overline{c_m(x)} ,$$
+(RoR: count-based; NVIDIA's prefill router: "median training output tokens as a verbosity
+proxy"). We instead predict cost per query. Writing $T_m(x)$ for the expected total tokens
+(prompt + completion) of a draw from $m$ on $x$, and $\rho_m$ for its price per token,
+$$\hat c_m(x)=\rho_m\cdot\hat T_m(x).$$
+
+$\hat T_m$ is fit in log space, because token counts are right-skewed:
+$$\hat\beta_m=\arg\min_\beta\;\sum_{x\in\mathcal{D}_{\text{tr}}}\bigl(\log T_m(x)-\beta^\top h(x)\bigr)^2+\alpha\lVert\beta\rVert^2 .$$
+Exponentiating a log-space fit returns a conditional **median**, which would systematically
+under-price every route. We correct with Duan's smearing estimator,
+$$\hat T_m(x)=\exp\!\bigl(\hat\beta_m^\top h(x)\bigr)\cdot\underbrace{\frac{1}{|\mathcal{D}_{\text{tr}}|}\sum_{x'\in\mathcal{D}_{\text{tr}}}\exp\!\bigl(\log T_m(x')-\hat\beta_m^\top h(x')\bigr)}_{\text{smearing factor }\hat\varsigma_m},$$
+which restores the conditional mean under log-normal residuals. Measured $\hat\varsigma_m\in[1.004,1.013]$,
+and predicted route means land within 1–7% of the constants they replace.
+
+### 5.4 Decision rule and abstention
+
+At a live state, the value of spending one draw on route $m$ is
+$$Q(s,m)\;=\;p_m(s)\cdot R\;-\;c_m(x),$$
+and abstaining is worth exactly zero. The policy is therefore
+$$\pi(s)=\begin{cases}\bot & \text{if } \displaystyle\max_{m\in\mathcal{A}(s)\setminus\{\bot\}} Q(s,m)\;\le\;0,\\[6pt] \displaystyle\arg\max_{m} Q(s,m) & \text{otherwise.}\end{cases}$$
+
+**Abstention needs no threshold and no extra head.** It is the zero-value action: the policy
+stops precisely when no remaining draw has positive expected value. This is the substantive
+difference from threshold-based stopping ($p_{\text{any}}\le\tau$), which requires calibrating
+$\tau$ separately and which we retain only as a baseline arm.
+
+Note $Q$ is *not* scale-invariant, and that matters. The budget-constrained form used by RoR
+ranks routes by the density $p_m/c_m$ under a spend cap; that ratio is invariant to a common
+rescaling of cost, so it ranks routes identically at every valuation and always prefers the
+cheapest. The dollar difference $p_mR-c_m$ does not, which is what lets an expensive route win
+when the problem looks solvable and lets *every* route lose when it does not.
+
+### 5.5 The probe
+
+All beliefs and costs come from one forward pass of the cheapest route. Let $h(x)\in\mathbb{R}^d$
+be the mean-pooled last-layer-fraction hidden state of the scout over the prompt tokens,
+computed **before any generation** — one prefill, no decode:
+$$h(x)=\frac{1}{|T(x)|}\sum_{t\in T(x)} h^{(\ell)}_t(x).$$
+Mean pooling rather than the last prompt token is a deliberate control: chat templates end
+differently across model families (Qwen on a newline after `<|im_start|>assistant`, gpt-oss
+harmony on the word `assistant` mid-header), and reading position $N\!-\!1$ compares different
+objects across models (§6.4).
+
+Two heads per route, both linear, fit on the training split only:
+$$\hat\theta_m(x)=\sigma\!\bigl(w_m^\top h(x)+b_m\bigr),\qquad \hat T_m(x)\ \text{as in §5.3},$$
+with $\ell$ and the regularisation chosen on the calibration split and never on test.
+
+**Cost of the method itself.** Training: 551 problem-level labels, 0.16 CPU-seconds for all
+heads, $\approx$40 KB of parameters. Inference: one 4B prefill ($\$0.000149$), already paid for
+under the mandatory-scout protocol; the decision rule itself is arithmetic, so no network runs
+at decision time. Crucially, $h(x)$ comes from **one** model, so the pool's other members need
+never expose weights — outcomes at training time and a price at decision time suffice.
+
+### 5.6 Baselines as special cases
+
+The rule specialises cleanly, which is how the ablations are constructed:
+
+| set | recovers |
+|---|---|
+| $\theta_m=\bar\theta_m$, $c_m=\bar c_m$ | RoR / count-based routing |
+| $K=1$, no $\bot$ | single-commit routing (e.g. prefill-activation routers) |
+| $\hat\theta_m(x)$, $c_m=\bar c_m$ | activation beliefs, constant cost |
+| $\hat\theta_m(x)$, $\hat c_m(x)$ | **full method** |
+
+Every `_qcost` arm differs from its twin in exactly one term, so any gap is attributable to
+cost conditioning alone.
 
 ## 6. Experiments
 
