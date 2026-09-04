@@ -3,15 +3,16 @@
 **Edited in place.** Append-only history lives in `RESEARCH_LOG.md`. Every number is cited to a
 run or marked TODO; nothing enters by recollection.
 
-**Status:** LCB complete on clean labels; C1 demonstrated; per-candidate, capacity, price and
-seed checks done or running. TACO collecting (ETA 11pm–1am EDT). SWE-Smith not started.
-**Last updated:** 2026-09-03
+**Status:** LCB and TACO both complete. TACO forced a restructure: the *belief* contribution
+replicates strongly on both datasets; *cost conditioning* replicates only on weak beliefs and
+hurts strong ones. Contributions reordered accordingly. SWE-Smith not started.
+**Last updated:** 2026-09-04
 
 ---
 
 ## 1. Working title
-*Cheap Beliefs for Expensive Pools: Query-Conditioned Cost in Sequential Test-Time Model
-Selection*
+*Cheap Beliefs for Expensive Pools: Activation Priors and Query-Conditioned Cost in Sequential
+Test-Time Model Selection*
 
 ## 2. One paragraph
 Sequential test-time model selection asks, at each step, whether to resample the committed
@@ -25,34 +26,43 @@ accuracy targets and beats a compiled fixed schedule with no losses.
 
 ## 3. Contributions
 
-**C1. Query-conditioned cost in the decision rule.** *(lead; demonstrated)*
-`argmax_m (p_m(x)·R − c_m)` is conditioned only in the numerator by RoR (2607.08665) and by
-NVIDIA's prefill router (2603.20895, "median training output tokens as a verbosity proxy"). We
-predict `c_m(x)` from a cheap model's activations and put it in the rule. **Measured to help:
-+12.9–45.9% on count beliefs (6/7 targets significant), +15.4–26.0% on activation beliefs
-(5/7).** Because it improves count beliefs too, it is a drop-in upgrade to the existing state of
-the art, not something that only works inside our system.
-*Cite, don't claim:* length is linearly decodable from a prompt's last hidden state (2607.05316)
-and hidden states already drive length prediction for serving (2602.11812). Neither
-operationalises it in a decision; 2607.05316 explicitly names prompt-end early termination as
-unpursued.
+Ordered by how well they replicate. Three claims were retracted earlier in this project for
+insufficient checking (§8), so each is annotated with prior art and with its measured regime.
 
-**C2. Abstention and resampling depth over a routed pool.**
-RoR has resample-vs-reroute, count beliefs, no stop action. 2603.20895 has activation routing,
-single-commit, no abstention. "Knowing When to Quit" (2604.18419, ICML 2026) has abstention as
-an MDP action from a hidden-state probe — single model, no pool, no resampling, no cost. Ours
-is the combination, with abstention falling out of the same utility rule rather than a separate
-thresholded classifier.
+**C1. Activation-derived per-problem priors inside a sequential resample/reroute/abstain MDP.**
+*(leads; replicates on both datasets with large effects)*
+Replacing the count-based beliefs the state of the art uses with $\hat\theta_m(x)$ from one
+cheap model's prefill is worth **+13.9% to +69.7% on TACO** (five of six targets significant)
+and comparable margins on LCB. The comparison isolates the belief source *within* the same
+sequential MDP, which single-commit routers cannot do.
+*Prior art:* NVIDIA's prefill router (2603.20895) has activation routing but is single-commit,
+no abstention, no depth. RoR (2607.08665) has the resample/reroute MDP but count beliefs and no
+stop action. Ours is the first to put query-conditioned priors inside the sequential problem.
 
-**C3. One cheap probe matches probing every model — on the frontier.**
-Per-candidate probes are significantly *better predictors* (+0.05–0.06 AUC) and buy **nothing**
-on cost-at-accuracy (§6.5). Deployment consequence: we need weights for one cheap model; per-
-candidate probing needs all of them, which no API-served pool permits. *(2603.20895's
-encoder-target decoupling makes the same deployment argument — cite it.)*
+**C2. Abstention as the zero-value action.** Stopping is exactly $\max_m Q(s,m)\le 0$ — no
+threshold, no extra head. On the harder pool this is load-bearing: TACO abstains 25–49% against
+LCB's 10.5%, because ~half of TACO is unsolved by the whole pool at one draw.
 
-**C4. Methodological: cross-model activation comparisons need a fixed readout.** §6.4.
+**C3. Query-conditioned cost — with a measured regime.** *(demoted from lead after TACO)*
+Conditioning $c_m$ on the query helps when beliefs are weak and is redundant or harmful when
+they are strong:
 
-**C5. Empirical: cheaper than RoR at all seven targets, +18.1–56.2%.** §6.3.
+| | LCB | TACO |
+|---|---|---|
+| on count beliefs | +12.9–45.9%, 6/7 significant | +6.3–36.8%, 3/6 significant |
+| on activation beliefs | +15.4–26.0%, 5/7 significant | **−29.1% to +3.6%, two significant losses** |
+
+The mechanism is signal-to-noise in the cost term: when beliefs already rank routes well, the
+error in $\hat c_m(x)$ outweighs the spread it resolves. The same mechanism explains the
+price-ratio limitation (§6.7). **Report as: a drop-in upgrade for count-based routers, not a
+universal improvement.** Still novel — RoR and 2603.20895 both use per-model constants, and
+length-from-activations (2607.05316, 2602.11812) is never operationalised in a decision.
+
+**C4. One cheap probe matches probing every model — on the frontier.** Per-candidate probes are
+significantly better predictors (+0.05–0.06 AUC) and buy **nothing** on cost-at-accuracy (§6.5).
+Deployment consequence: weights for one cheap model, not all of them.
+
+**C5. Methodological: cross-model activation comparisons need a fixed readout.** §6.4.
 
 ## 4. Related work
 **Sequential/budgeted selection.** RoR (2607.08665) — primary baseline. Routing-gap companion
@@ -288,14 +298,45 @@ therefore *anticipating budget-exhausting draws* -- legitimate, since every depl
 cap and failed draws cost 2.6-5.3x more than solved ones, but it must be stated rather than left
 for a reviewer to find. Report both columns.
 
-**6.10 TACO medium+hard (in progress).** 883 problems (677/206). Draw-0 solve rates: scout
+**6.10 TACO medium+hard — the replication.** 883 problems, random split 547/168/168 (TACO's
+dates are 79.8% Unix-epoch sentinels, so its "temporal" split was a platform confound: train a
+five-platform mixture, eval 99.5% Codeforces, 42 test problems. See RESEARCH_LOG).
+Solve rates over 6 draws: scout 16.9%, oss20 38.0%, oss120 45.3% — against LCB's 42/65/82.
+Best-of-6 oss120 reaches only 55.95%, so no single-model policy is good.
+
+Paired bootstrap, 168 test problems:
+
+| comparison | 30% | 35% | 40% | 45% | 50% | 55% |
+|---|---|---|---|---|---|---|
+| activation beliefs vs RoR | **+69.7** | **+51.4** | **+30.6** | **+39.7** | **+13.9** | −2.2 |
+| qcost on RoR beliefs | **+36.8** | **+21.1** | +10.2 | **+26.1** | +6.3 | **−9.2** |
+| qcost on activation beliefs | −15.2 | −2.7 | **−25.8** | +3.6 | −0.6 | **−29.1** |
+| full method vs RoR | **+65.1** | **+50.1** | +12.7 | **+41.9** | +13.3 | **−31.9** |
+
+(bold = interval clear of zero)
+
+**Two pre-registered predictions, both resolved.** Abstention has room: 25–49% against LCB's
+10.5% — confirmed. Cost conditioning does *not* degrade gracefully here; it fails on strong
+beliefs — refuted, and it is what demoted C3.
+
+The best TACO configuration is `content_decay` **without** qcost. Report it that way.
+
+**6.11 Coupled-RoR baseline (LCB).** Count beliefs given a second Beta–Bernoulli decay on other
+routes' failures, $\kappa\in\{2,5,10,20\}$, taking the most favourable $\kappa$ per target.
+Coupling barely helps and hurts at three targets; our margin moves from
++56.2/+43.9/+21.9/+20.5/+32.5/+18.1 to **+55.2/+37.5/+21.4/+20.4/+32.5/+18.1**. We built the
+strongest honest version of the baseline and it did not close the gap. TODO: repeat on TACO.
+
+**6.12 (retired) TACO in progress.** 883 problems (677/206). Draw-0 solve rates: scout
 18.4/14.8%, oss20 44.0/31.0%, oss120 48.7/43.4% (medium/hard) — against LCB's 42/65/82%.
 Pool-solved at one draw 52.2/50.0%, so ~half the problems are unsolved by the whole pool. Three
 distinguishable rungs, and on medium oss20 is within 5pt of oss120 at ~8.6× less cost, so the
 routing decision is non-vacuous — unlike LCB where oss120 dominates.
 
 ## 7. Limitations
-1. One benchmark until TACO and SWE land.
+1. Two benchmarks, both competitive programming; SWE-Smith would add a modality.
+1b. **Cost conditioning does not replicate on strong beliefs** (§6.10). It is a contribution
+   with a regime, not a universal improvement.
 2. n=171 test problems; the capacity question needed pooled folds to resolve at all.
 3. Method requires a real cost ladder (§6.7); harmful under price inversion.
 4. Outcomes collected under our own serving configuration; another provider's defaults could
@@ -314,12 +355,13 @@ routing decision is non-vacuous — unlike LCB where oss120 dominates.
 - Our own collection bugs framed as contributions — appendix at most.
 
 ## 9. TODO
-- [ ] TACO: rebuild, frontier, price sweep against the §6.7 pre-registration
+- [x] TACO frontier — §6.10; C3 demoted, C1 promoted
+- [x] Coupled-RoR baseline on LCB — §6.11, margin holds
+- [ ] TACO price sweep (LCB's degraded badly; TACO's ladder is less saturated)
+- [ ] Coupled-RoR on TACO
+- [ ] Seeds on TACO
 - [ ] SWE-Smith → Verified (needs Daytona harness fixed; 6/10 historical runs all-error)
 - [x] Seeds 0–3; report mean ± sd (§6.8)
 - [x] Truncation-sensitivity frontier (§6.9)
 - [ ] CI on the +18% per-candidate point at 70%
-- [ ] **Coupled-RoR baseline**: give count beliefs a shared-difficulty term so failures on one
-      route depress all routes. Our probe makes coupling redundant (§5.2) but the baseline has
-      no prior, so this is the strongest honest version of RoR and it is our job to build it.
 - [ ] Writing — nothing drafted
