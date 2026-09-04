@@ -66,20 +66,94 @@ Deployment consequence: weights for one cheap model, not all of them.
 **C5. Methodological: cross-model activation comparisons need a fixed readout.** §6.4.
 
 ## 4. Related work
-**Sequential/budgeted selection.** RoR (2607.08665) — primary baseline. Routing-gap companion
-(2607.03436). SeqRoute (2605.25424). Cluster-Route-Escalate (2606.27457). UCCI (2605.18796).
-Survey (2603.04445).
-**Activation-based prediction/routing.** NVIDIA prefill router (2603.20895) — closest.
-LLMs Encode Their Failures (2602.09924). Scrouting (2608.04804) — hidden-state AUC 0.600, null
-routing ablation. Knowing When to Quit (2604.18419).
-**Output-length prediction (C1's foundation).** How Much is Left? (2607.05316). Entropy-Guided
-Representations (2602.11812). Latency-aware routing (2607.18253). Learned per-query cost
-predictors (2604.03527).
-**Benchmarks/gap analyses.** LLMRouterBench (2601.07206); Routing Plateau (2606.07587);
-CodeRouterBench/ACRouter (2606.22902); 67-model Rasch (2606.27288); universal latent space
-(2601.06220); routing collapse (2602.03478).
-**Agentic stopping.** EET (2601.05777); AgentStop (2604.15075); FailFast-RestartSmart
-(2608.03222); SWE-Router (2607.00053); AutoMix; COPE (2506.11578).
+
+### 4.1 Sequential and budgeted test-time model selection *(closest)*
+
+- **RoR — "Resample or Reroute?"** (2607.08665, Chen). Formalises resampling the committed model
+  and rerouting to another as competing uses of one per-query budget, allocating each unit to
+  whichever action has the highest estimated marginal correctness per dollar. Evaluated by replay
+  on an eleven-model open-weight pool over four benchmarks. **Our primary baseline**; it has the
+  same action space but count-based beliefs, no stop action, and per-model constant costs.
+- **How Much of the Routing Gap Is Real?** (2607.03436). Companion analysis showing that part of
+  the celebrated router-to-oracle gap is single-draw label noise no router can capture, since the
+  per-instance oracle is built from one sample under stochastic decoding. Motivates evaluating at
+  k>=30 draws, which is why our tensors are multi-draw.
+- **SeqRoute** (2605.25424). Routes between a weak 8B and a strong 70B with a budget shared across
+  a multi-turn session, so the interesting decision is *when* to spend rather than on what. Single
+  use per query: no resampling, no abstention, no verifier.
+- **Cluster, Route, Escalate** (2606.27457). Clusters queries, routes within cluster, escalates on
+  failure — a cascade with learned entry points rather than a per-query sequential policy.
+- **UCCI** (2605.18796). Turns token-margin signals into calibrated error probabilities via
+  isotonic regression, so a cascade can threshold on a quantity that means what it says. Relevant
+  as the calibration-first alternative to our probe.
+- **Dynamic Model Routing and Cascading: A Survey** (2603.04445). The current map of the area;
+  useful for its distinction between routing (one commit) and cascading (sequential escalation),
+  which is exactly the axis our abstention action extends.
+
+### 4.2 Activation-based prediction and routing
+
+- **LLM Router: Rethinking Routing with Prefill Activations** (2603.20895, NVIDIA). Routes from
+  prefill hidden states rather than surface text, and decouples the *encoder* producing the signal
+  from the *target* whose success is predicted, so open-weight encoders can score closed-source
+  models. **The closest work to our signal**, and the source of the deployment argument that only
+  one model's weights are needed. Single-commit, no abstention, per-model constant cost,
+  last-token readout, no discussion of chat-template comparability (see §6.4).
+- **LLMs Encode Their Failures** (2602.09924). Linear probes on pre-generation activations predict
+  a model's *own* success well enough to route a pool below the best single model's cost. Requires
+  a probe per pool member and does not charge for those forward passes; no abstention.
+- **Scrouting / SuperScout** (2608.04804). A 7B searcher explores a repository and its hidden
+  states feed an N-way router over frontier fixers. Notable for honesty about its own null: the
+  hidden state separates solved from failed at AUC 0.600, and a no-router ablation ties the routed
+  system, so the authors conclude the verified handoff rather than the routing carries the result.
+- **Knowing When to Quit** (2604.18419, ICML 2026). Formalises mid-generation abstention as an
+  action in a KL-regularised MDP, with an MLP probe on hidden states estimating the value and
+  abstention triggered when it falls below the fallback's worth. Single model, no pool, no
+  resampling, and cost is absent from the objective — the closest work on *abstention*, and
+  orthogonal to the routing half.
+
+### 4.3 Output-length prediction *(the foundation for query-conditioned cost — cite, never claim)*
+
+- **How Much is Left?** (2607.05316). Shows total response length is linearly decodable from the
+  prompt's last hidden state before a single token is emitted, across three model families. Tests
+  cross-*dataset* transfer extensively but never cross-*model*, and explicitly declines to
+  operationalise the prediction, naming prompt-end early termination as future work.
+- **Predicting LLM Output Length via Entropy-Guided Representations** (2602.11812, ICLR 2026).
+  Reuses the serving model's own hidden states with entropy-guided token pooling for static
+  prediction, plus a progressive variant that re-estimates the remaining length each step. Aimed
+  at batching and RL-sampling throughput, not decision-making.
+- **Latency-aware routing** (2607.18253) and **learned per-query cost predictors** (2604.03527).
+  Both predict per-query cost for routing, but from query *embeddings* rather than activations, and
+  both target latency/SLA objectives rather than a correctness-versus-cost utility.
+
+### 4.4 Routing benchmarks and gap analyses
+
+- **LLMRouterBench** (2601.07206). 33 models over 21 datasets with real API pricing; single-commit,
+  single-draw, so it measures routing rather than sequential allocation.
+- **The Routing Plateau** (2606.07587). Documents that learned routers cluster tightly well below
+  the oracle across many pools, which is the observation the whole area is trying to explain.
+- **CodeRouterBench / ACRouter** (2606.22902). ~10K coding instances by 8 frontier models with a
+  complete task-by-model outcome matrix — the closest public artifact to our correctness tensor.
+- **The 67-model Rasch analysis** (2606.27288). Fits item-response models to a large pool and finds
+  most of the apparent routing headroom is explained by a single latent difficulty dimension —
+  independent support for the shared-difficulty account our transfer matrix measures directly.
+- **Zero-shot routing via a universal latent space** (2601.06220) and **routing collapse**
+  (2602.03478). The first adds unseen models without retraining; the second characterises how
+  routers degenerate to a single model under distribution shift.
+
+### 4.5 Agentic stopping and escalation *(adjacent modality)*
+
+- **EET** (2601.05777, ACL Findings 2026). Checks LLM confidence at milestones during agentic
+  generation, conditioned on retrieved historical experience, to decide early termination.
+- **AgentStop** (2604.15075, ACM CAIS 2026). Gradient-boosted trees over token logprobs, step
+  counts and repetition features to kill unpromising agent runs for energy savings.
+- **FailFast–RestartSmart** (2608.03222). A 0.6B monitor reading only observable trajectory text —
+  no logits or hidden states — aborts at a chosen false-positive budget and restarts fresh.
+- **SWE-Router** (2607.00053). A cheap model runs K turns and a value head reads the partial
+  trajectory to continue or escalate; notably did not beat baselines on its SWE-Smith split.
+- **AutoMix** (NeurIPS 2024). Few-shot self-verification feeding a POMDP accept-or-escalate router
+  — the earliest formulation close to ours, without activations or per-query cost.
+- **COPE** (2506.11578, TMLR). A plan/execute cascade where a small model plans and a large one
+  executes, escalating on test failure; single-draw and excludes local compute from its cost model.
 
 ## 5. Method
 
