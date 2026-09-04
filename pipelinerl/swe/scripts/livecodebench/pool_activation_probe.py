@@ -63,8 +63,19 @@ def build_prompts(args) -> None:
     from pipelinerl.swe.scripts.livecodebench.collect_lcb_trajectories import (
         load_lcb, make_prompt, problem_id,
     )
-    rows = {problem_id(r): r for r in load_lcb(min_date=args.min_date,
-                                               release_version=args.release_version)}
+    if args.problems_file:
+        # TACO problems are built into this script's record shape, so make_prompt applies
+        # unchanged and the probe sees exactly the text the model was given.
+        src = [json.loads(l) for l in open(args.problems_file) if l.strip()]
+        rows = {}
+        for r in src:
+            rows[problem_id(r)] = r
+            pid_raw = str(r.get("question_id") or r.get("problem_id") or "")
+            if pid_raw:
+                rows.setdefault(pid_raw, r)
+    else:
+        rows = {problem_id(r): r for r in load_lcb(min_date=args.min_date,
+                                                   release_version=args.release_version)}
     keep = None
     if args.problem_ids_file:
         keep = {l.strip() for l in open(args.problem_ids_file) if l.strip()}
@@ -280,6 +291,8 @@ def main() -> None:
     ap.add_argument("--activations")
     ap.add_argument("--activations-file", action="append", metavar="LABEL=PATH")
     ap.add_argument("--problem-ids-file")
+    ap.add_argument("--problems-file", default="",
+                    help="Pre-built problems JSONL (TACO), bypassing the LiveCodeBench download.")
     ap.add_argument("--prompts-file")
     ap.add_argument("--tensors-dir")
     ap.add_argument("--audit-dir", default="")
