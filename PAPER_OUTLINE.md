@@ -380,7 +380,23 @@ cost conditioning alone.
 Self-hosted AWS-node token prices. `lcb_local_pool_1788407418`. Problem-clustered paired
 bootstrap, 5000 resamples, throughout.
 
-**6.2 Cost is variable and predictable (C1).** Between-problem variance share 84.8/62.3/90.1%;
+**6.2 Cost is variable and only partly predictable (C1).**
+**Report R2 in TOKEN space, not log space.** The policy spends dollars; log-space R2 compresses
+exactly the large values that dominate cost and flatters the fit badly:
+
+| route | log-space R2 | **token-space R2** |
+|---|---|---|
+| LCB scout / oss20 / oss120 | 0.555 / 0.701 / 0.792 | **0.241 / 0.473 / 0.633** |
+| TACO scout / oss20 / oss120 | 0.397 / 0.215 / 0.416 | **0.127 / -0.109 / 0.341** |
+
+**TACO's oss20 cost prediction is worse than a constant (R2 = -0.109)** -- on the middle rung of
+the ladder. That is the mechanism behind query-conditioned cost hurting on TACO: not a weak
+signal but an actively harmful one, which the calibration-fitted shrinkage (SS5.3) is what keeps
+from doing more damage. A two-part hurdle model (P(cap) x cap + (1-P(cap)) x E[tokens | uncapped])
+was tested and is *worse* everywhere, so the bimodality induced by the 22.9% of TACO problems
+touching the token cap is not the cause; the features simply do not predict TACO's token counts.
+
+ Between-problem variance share 84.8/62.3/90.1%;
 per-problem p90/p10 37×/16×/17×; failed draws cost 5.3×/2.6×/3.0× more than solved. Probe vs
 constant: R² 0.65/0.80/0.83, MAE cut 45–65%. Beats rescaling the scout's *observed* length
 (0.796 vs 0.588; 0.834 vs 0.629) and subsumes it (+0.002/+0.008 combined) while needing only a
