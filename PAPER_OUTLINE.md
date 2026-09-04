@@ -206,6 +206,26 @@ and that channel is worth 28 points. A cross-route-coupled RoR should therefore 
 than the uncoupled form, and we should implement and report it rather than let a reviewer
 point it out (§9).
 
+**Why the decay is a global constant, and why that is not a simplification.** $\sigma$ = 2.0 is
+shared by every problem and route. Per-problem decay was tested: a factorized encoder that emits
+its own $s_m(x)$ learns something *true* -- splitting test problems at the median learned $s$
+gives ground-truth hazard ratios $p(1)/p(0)$ of 0.000 vs 1.549 (scout) and 0.220 vs 0.795
+(oss20), and the model is strictly better per-route on both ranking (AUC .831/.845/.785 vs
+.817/.827/.753) and calibration (ECE .087/.135/.122 vs .172/.213/.231).
+
+**It is nonetheless decision-irrelevant.** Under the myopic rule a route is worth another draw
+while $\theta\sigma/(\sigma+n) \ge c_m/R$, so the stopping depth is
+$$n^* = \sigma\left(\frac{\theta R}{c_m} - 1\right).$$
+Whether a route is bought *at all* depends on $\theta$ and never on $\sigma$ -- the sign of
+$(\theta R/c_m - 1)$ contains no $\sigma$. At $R=\$0.05$, 49% of problems never buy oss120 at
+any depth and no value of $\sigma$ flips one of them. Where $\sigma$ does move $n^*$, it moves it
+only where depth is worthless: on oss120, the sole route where depth pays, mean $n^*$ is 0.07
+against 0.06, both flooring to zero. **Per-problem decay is real, learnable, and does not change
+any decision** -- which is what licenses the constant, and is a sharper claim than "we simplified".
+
+A sweep over $\sigma \in \{0.3, 1, 2, 5, 10\}$ confirms it empirically: no consistent ordering,
+spread inside seed noise (§6.13).
+
 Three belief sources differ only in where $\theta$ comes from:
 
 | family | $\theta_m$ | conditioned on the query? |
@@ -280,6 +300,23 @@ with $\ell$ and the regularisation chosen on the calibration split and never on 
 at every decision; all state-dependence comes from the analytic decay. The encoder is the
 opposite: it re-reads problem + latest attempt code + execution feedback at every node, so it
 genuinely refines as evidence arrives. That is the capability the 26-42x buys.
+
+**State-conditioning the probe was tested and the factorized form wins.** Re-prefilling at every
+decision with the accumulated state (counts, failing tests) would make the probe state-conditioned
+like the encoder. Bounding that offline -- fitting a joint model on [activation + state features]
+over 23,525 reachable states -- the analytic product is *better*, not merely cheaper:
+
+| target | OURS $\hat\theta(x)\cdot\sigma/(\sigma+n)$ | learned [act + state] | decay only | $\theta$ only |
+|---|---|---|---|---|
+| scout | 0.7112 | 0.6607 | **0.7939** | 0.6866 |
+| oss20 | **0.7707** | 0.7631 | 0.7312 | 0.7207 |
+| oss120 | **0.7903** | 0.7126 | 0.7675 | 0.6916 |
+
+With ~10k training states the learned joint model overfits where imposed structure generalises.
+*Honest exception:* on the scout, decay alone beats the product, because the scout's own $\theta$
+is poorly predicted (0.6866) so multiplying by it injects noise. *Caveat:* feature concatenation
+cannot simulate a decoder reasoning over the state in context, so this bounds rather than settles
+the question.
 
 **And we measured what the refinement is worth.** Conditioning on `theta-hat`, the observed
 scout-failure count improves log-loss by 0.00011 (0.36886 -> 0.36875), coefficient -0.0315. The
