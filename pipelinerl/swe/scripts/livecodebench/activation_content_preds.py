@@ -36,6 +36,12 @@ ap.add_argument("--layer-frac", type=float, default=0.0,
                       "per-candidate mode: gpt-oss-20b has 24 layers and no layer 18, so "
                       "absolute indices do not transfer across model families."))
 ap.add_argument("--C", type=float, default=0.05)
+ap.add_argument("--no-shrink", action="store_true", help=(
+    "Disable Platt calibration of the belief head on the held-out calibration split. Default "
+    "OFF, i.e. calibration is applied. The raw logistic head is over-confident in its left "
+    "tail and that is not cosmetic: it assigned ~1% next-draw probability to routes that "
+    "solve the problem, which made the policy abstain on winnable problems and cost the "
+    "entire matched-R accuracy deficit against the count-based baseline on TACO."))
 ap.add_argument("--out", required=True)
 a = ap.parse_args()
 
@@ -75,7 +81,9 @@ X = Xall[keep][:, _pick(layers)]
 # random split -- fitting on the temporal "train" there would train on manifest test.
 _man = json.loads((Path(a.tensors_dir) / "split_manifest.json").read_text())
 _train_ids = {str(x) for x in _man["train_problem_ids"]}
+_cal_ids = {str(x) for x in _man.get("calibration_problem_ids", [])}
 tr = np.array([p in _train_ids for p in pk])
+ca = np.array([p in _cal_ids for p in pk])
 print(f"{len(pk)} problems, fitting on {tr.sum()} train, layer {a.layer}")
 
 P = np.zeros((len(pk), len(slots)))
@@ -91,8 +99,31 @@ for j, s in enumerate(slots):
     sc = StandardScaler().fit(Xr[tr])
     clf = LogisticRegression(max_iter=2000,
                              C=a.C / max(1, Xr.shape[1] // 2560)).fit(sc.transform(Xr[tr]), y[tr])
-    P[:, j] = clf.predict_proba(sc.transform(Xr))[:, 1]
-    print(f"  {s:8s} train base rate {y[tr].mean():.3f}  mean predicted {P[:, j].mean():.3f}")
+    raw = clf.predict_proba(sc.transform(Xr))[:, 1]
+    # Platt scaling on the CALIBRATION split. The raw logistic head is badly over-confident in
+    # its left tail: on TACO it assigned a median 1.05% next-draw probability to gpt-oss-20b on
+    # problems gpt-oss-20b actually solves, which drives `p*R - c` negative and makes the policy
+    # abstain on problems the count-based baseline attempts and wins. That single failure mode
+    # accounted for the ENTIRE accuracy deficit at matched R (excess give-ups on solvable
+    # problems equalled the accuracy gap to the decimal at every R we checked).
+    #
+    # Refitting a + b*logit(p) on held-out data is the belief-side analogue of the cost head's
+    # calibration-fitted shrinkage, and carries the same guarantee: b -> 0 collapses the
+    # prediction to a constant, which is exactly the per-route prior RoR uses, so conditioning
+    # can be no worse than not conditioning. It is fitted on calibration and never on test.
+    if not a.no_shrink and ca.sum() >= 20 and 0 < y[ca].mean() < 1:
+        lo = np.log(np.clip(raw, 1e-6, 1 - 1e-6) / (1 - np.clip(raw, 1e-6, 1 - 1e-6)))
+        pl = LogisticRegression(max_iter=2000, C=1e6).fit(lo[ca].reshape(-1, 1), y[ca])
+        cal = pl.predict_proba(lo.reshape(-1, 1))[:, 1]
+        b = float(pl.coef_[0][0])
+        print(f"  {s:8s} train base rate {y[tr].mean():.3f}  raw {raw.mean():.3f} -> "
+              f"calibrated {cal.mean():.3f}  (slope b={b:.3f}"
+              + ("; prediction ~ignored, collapses to constant" if b < 0.25 else "") + ")")
+        P[:, j] = cal
+    else:
+        P[:, j] = raw
+        print(f"  {s:8s} train base rate {y[tr].mean():.3f}  mean predicted {raw.mean():.3f} "
+              f"(uncalibrated)")
 
 with open(a.out, "w") as f:
     for i, p in enumerate(pk):
