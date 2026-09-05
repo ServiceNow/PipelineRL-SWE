@@ -860,6 +860,51 @@ beliefs — refuted, and it is what demoted C3.
 
 The best TACO configuration is `content_decay` **without** qcost. Report it that way.
 
+**6.10a TACO is not a strict improvement, and the reason sharpens the claim.**
+*(All TACO numbers are still the 32k pool; a 64k re-collection is running, and on LCB that
+re-collection removed the entire negative tail — treat this section as provisional.)*
+
+Hull frontier, 3 seeds, against RoR:
+
+| target | % of pool ceiling | advantage |
+|---|---|---|
+| 30% | 50% | **+46.9% ± 2.6** |
+| 40% | 67% | **+37.5% ± 2.5** |
+| 45% | 75% | **+30.1% ± 3.1** |
+| 50% | 83% | **+14.5% ± 4.0** |
+| 55% | 92% | **-8.4% ± 2.0** |
+| 60% | 100% | **-49.1% ± 19.5** |
+
+Over 401 levels from 28% to 61.5%, the mean advantage is negative at **95** of them — unlike LCB,
+where it is negative at zero. **The crossover is at ~87% of the pool ceiling.**
+
+**The mechanism inverts the intuition that a larger unsolvable set should favour abstention.**
+TACO's pool solves only **60.0%** of problems against LiveCodeBench's **91.7%**, so the 55-60%
+targets sit at 92-100% of everything the pool can do. At the 60% target:
+
+| | cost | accuracy | abstention | attempts |
+|---|---|---|---|---|
+| RoR | $0.0621 | 60.48% | **39.52%** | 6.86 |
+| ours | $0.0865 | 60.00% | **0.00%** | 7.71 |
+
+RoR's accuracy is $1-0.3952$ to five decimals: **it succeeds on every episode it does not
+abandon.** That is what a fast count-decay does natively — quit the instant failures accumulate.
+Our per-problem prior says *this one looks promising*, which **delays the quit and buys attempts
+that do not pay**. Near the ceiling our own signal works against us. (The identity is a property
+of these arms, not of the metric: `acc + abstain == 1` holds exactly in 218 of 606 abstaining
+TACO arms, so it is informative where it holds.)
+
+**Both halves contribute and they compound.** At the 60% target, against RoR: beliefs alone
+**-11.7%**, query-conditioned cost alone **-4.6%**, together **-49.1%**.
+
+**So state the scope as headroom, not as dataset.** Abstention pays when the unsolvable set is
+*identifiable from the prompt* **and** the target leaves room below the pool ceiling — not simply
+when it is large. LCB: 8.3% unsolvable, cleanly separable, targets at 55-87% of ceiling, and the
+win *returns* at the top (§6.3c). TACO: 40% unsolvable, targets pressed to 92-100% of ceiling, and
+we lose. This is the same signal-to-noise boundary as C3, now measured on the belief head too, and
+it gives the paper a falsifiable rule: **the method needs roughly 15% headroom to the pool
+ceiling.**
+
 **6.11 Rich features — read the whole representation, not one layer.**
 The single-layer/single-readout probe captured only 11-40% of the between-problem variance
 ceiling on TACO (ceiling 82-91%). Concatenating all layers x {mean, last}:
