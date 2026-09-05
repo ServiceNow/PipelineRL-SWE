@@ -996,6 +996,55 @@ datasets — it never rescues a give-up, because $V\ge 0$ can only make the poli
 and it never does. It is, however, a free cost saving: $-\$0.0070$ per episode on TACO and
 $-\$0.0006$ on LCB at identical accuracy. Take the lookahead for the cost, not for the decisions.
 
+**6.9d The decay's functional form is right; its constant was never fitted by anyone.**
+
+A natural objection: failing a problem the probe called *easy* should update harder than failing
+one it already called *hard*, and $\hat\theta\,\kappa/(\kappa+n)$ applies the same *proportional*
+decay to both. Tested three ways.
+
+**Analytically the objection dissolves.** The absolute drop after one failure is
+$\hat\theta-\hat\theta\kappa/(\kappa+1)=\hat\theta/(\kappa+1)$ — **proportional to
+$\hat\theta$**. At $\kappa{=}1$, a problem predicted 0.8 drops 0.40; one predicted 0.1 drops 0.05,
+eight times less. The decision rule compares $p$ with $c/R$ in absolute units, so the Beta
+posterior already encodes surprisal in the units the policy consumes. Proportional invariance is
+the feature, not the bug.
+
+**Empirically the extra parameter is not supported.** Fitting $\kappa$ separately above and below
+the median $\hat\theta$ splits 3–3 on which half decays slower, and held-out it wins 2 of 6 route
+cells by margins in the fourth decimal. Held-out log-loss of the sequential prediction the policy
+acts on:
+
+| | $\sigma{=}2$ | $\kappa$ fitted | $\kappa(\hat\theta)$ |
+|---|---|---|---|
+| TACO scout / oss20 / oss120 | 0.1696 / 0.3214 / 0.3169 | **0.1608** / 0.3177 / **0.2730** | 0.1609 / 0.3176 / 0.2759 |
+| LCB scout / oss20 / oss120 | 0.2175 / 0.4328 / 0.4639 | 0.1855 / **0.4101** / **0.4450** | **0.1825** / 0.4103 / 0.4516 |
+
+**But $\sigma{=}2$ loses all six cells**, and that is the finding. The constant is inherited from
+RoR and has never been fitted — by them or, until now, by us. Fitted on calibration by maximum
+likelihood it is **0.5–1.35** for our beliefs and **0.25–1.09** for RoR's, and ours is larger at
+**6 of 6** route × dataset cells, exactly as the posterior account predicts: a better prior leaves
+less for a failure to teach. *Both* methods must be re-run with their own fitted constant, or
+fitting only ours would rig the comparison.
+
+**6.9e The frontier rewards miscalibration, demonstrated by intervention.** Raising $\sigma$ for
+our arms alone makes our beliefs deliberately worse — more optimistic after failures — and the two
+metrics move in opposite directions, monotonically (TACO, calibrated beliefs, seed 0):
+
+| $\sigma$ | frontier @ 60% | utility (swept $R$ won) |
+|---|---|---|
+| 2 | -31.6% | **57/96** |
+| 5 | -21.9% | 41/96 |
+| 10 | -21.8% | 25/96 |
+| 20 | -21.1% | 17/96 |
+| 50 | -21.3% | **14/96** |
+
+Same probe, same costs, one constant. Degrading the beliefs **improves the near-ceiling frontier
+by 10 points and destroys utility**, 57/96 to 14/96. This is an intervention, not a correlation,
+and it is the paper's strongest evidence that **cost-at-matched-accuracy near the pool ceiling
+prefers the policy with worse beliefs** — because reaching a near-ceiling target requires grinding,
+and only a policy that wrongly believes the next draw might work will grind. Report utility at
+matched $R$ as primary (§6.3d) and disclose this; do not tune to the frontier.
+
 **6.10 TACO medium+hard — the replication.** 883 problems, random split 547/168/168 (TACO's
 dates are 79.8% Unix-epoch sentinels, so its "temporal" split was a platform confound: train a
 five-platform mixture, eval 99.5% Codeforces, 42 test problems. See RESEARCH_LOG).
