@@ -718,6 +718,57 @@ genuinely larger cap. The 64k re-collection (§6.16) is the direct test.
 system has a cap, and failed draws cost 2.6–5.3× more than solved ones — but the high-target LCB
 numbers should not be quoted without it.
 
+**6.9a The 64k pool changes the headline, and the two metrics disagree — informatively.**
+Rebuilding the whole chain on the re-collected pool (oss20 and oss120 at 64k; the scout is still
+the local 32k collection, and fully local 64k runs for all three routes are in flight), 96 points,
+**8 draw-ordering seeds**:
+
+| target | 32k pool (3 seeds) | 64k pool (8 seeds) | beliefs only, 64k |
+|---|---|---|---|
+| 50% | +49.1 ± 5.2 | **+56.0 ± 1.8** | +51.8 ± 2.6 |
+| 60% | +27.8 ± 1.0 | **+32.0 ± 4.2** | +26.4 ± 5.0 |
+| 65% | +25.4 ± 2.1 | +8.8 ± 12.0 *(ns)* | +9.2 ± 10.3 |
+| 70% | +28.0 ± 8.2 | **+21.3 ± 4.4** | +3.0 ± 4.3 |
+| 75% | +39.7 ± 2.1 | +6.3 ± 10.1 *(ns)* | +0.9 ± 7.4 |
+| 80% | +21.5 ± 5.0 | +6.8 ± 7.5 *(ns)* | **-6.2 ± 10.4** |
+
+**The truncation ablation predicted this.** §6.9's counterfactual forecast LCB 80% at +6.8%; the
+real re-collection gives +6.8%. Deleting runaway draws synthetically and raising the cap for real
+agree to a tenth of a point, which is the strongest evidence the ablation was measuring the right
+thing.
+
+**On the frontier the win narrows to the cost-sensitive regime**, and 65/75/80% become
+indistinguishable from the baseline across seeds. But 70% stays solid (+21.3 ± 4.4) while both its
+*neighbours* collapse — a target-local instability, which is the signature of the grid artifact in
+§6.3a rather than of a real accuracy-dependent effect.
+
+**On the primary metric the result gets better, not worse.**
+
+| | 32k pool | 64k pool |
+|---|---|---|
+| swept R where we win | 73/96 | **84/96** |
+| unanimous across seeds | — | **84/84** |
+| high R (R > $1) | **loses** (-$0.030 at R=6.16) | **wins 19/19** |
+| accuracy ceiling vs RoR | 86.1% vs 86.5% | **84.80% vs 84.80%** |
+
+Every one of the 84 wins is unanimous over all 8 seeds. **The 12 losses are the probe fee and
+nothing else**: they are the 12 lowest-R points ($0.0006–$0.0018), where R is too small for the
+policy to buy anything, and $\Delta J$ is $-0.00015$ to $-0.00030$ against a charged probe of
+$0.000149. That is the honest floor of the method — below a certain value of a correct answer,
+paying for a prediction is strictly wasted — and it is worth stating as such.
+
+**So report utility at matched R as primary and say why.** The two metrics move in *opposite*
+directions on cleaner data: utility improves and stabilises (73→84/96, unanimous), while the
+frontier destabilises at three targets. They cannot both be tracking the underlying quality of
+the policy. The frontier's "cheapest arm reaching T" switches policy families discontinuously
+(§6.3a), and the 64k pool, by moving many operating points slightly, moves which family wins each
+target — noise the matched-R comparison is immune to by construction.
+
+*Caveat, being resolved.* The 32k→64k comparison confounds the token cap with the serving path:
+the 32k pool was served locally and the 64k re-collection ran through OpenRouter. oss120 never
+truncates and still moved 81.9% → 80.9%, so ≈1pt of route quality is serving-path, not cap. Local
+64k collections for all three routes are running (§6.16) and will isolate the cap exactly.
+
 **6.10 TACO medium+hard — the replication.** 883 problems, random split 547/168/168 (TACO's
 dates are 79.8% Unix-epoch sentinels, so its "temporal" split was a platform confound: train a
 five-platform mixture, eval 99.5% Codeforces, 42 test problems. See RESEARCH_LOG).
