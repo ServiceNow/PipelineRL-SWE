@@ -1026,6 +1026,30 @@ likelihood it is **0.5–1.35** for our beliefs and **0.25–1.09** for RoR's, a
 less for a failure to teach. *Both* methods must be re-run with their own fitted constant, or
 fitting only ours would rig the comparison.
 
+**6.9d-bis Fitting the decay for BOTH methods costs us more than it gains. Report this.**
+
+$\sigma{=}2$ is unfitted for *everyone*, so fitting only our $\kappa$ would rig the comparison.
+Giving each method its own maximum-likelihood constant from the calibration split (RoR 0.40 / ours
+0.66 on TACO; 0.71 / 0.95 on LCB), 96 points, 3 seeds:
+
+| setting | LCB utility | TACO utility |
+|---|---|---|
+| both at the inherited $\sigma{=}2$ | 84/96 | 57/96 |
+| **only ours fitted** (rigged) | 84/96 | **67/96** |
+| **both fitted** (fair) | **79/96** | **46/96** |
+
+**The baseline gains more from fitting than we do.** On TACO our advantage goes from 57/96 to
+46/96 — from a modest win to roughly a tie — and on LCB from 84 to 79. So a real part of what
+looked like our contribution was **our machinery tuned against the baseline's inherited constant**.
+Under the fair setting the LiveCodeBench *frontier* actually strengthens
+(+46.9/+18.6/+19.2/+10.9/+8.0 at 50/60/70/80/84%), so the effect is not uniform, but the
+utility-level claim on TACO does not survive.
+
+*This is the single most important methodological point in the paper's evaluation.* An unfitted
+hyperparameter in the baseline is a silent advantage for whoever tunes theirs, and $\sigma{=}2$
+propagated from RoR into every comparison in this literature. **Any router paper reusing RoR's
+pseudo-count should fit it for both arms before claiming a win.**
+
 **6.9e The frontier rewards miscalibration, demonstrated by intervention.** Raising $\sigma$ for
 our arms alone makes our beliefs deliberately worse — more optimistic after failures — and the two
 metrics move in opposite directions, monotonically (TACO, calibrated beliefs, seed 0):
