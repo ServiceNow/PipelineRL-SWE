@@ -534,6 +534,43 @@ up from three clear wins before query-conditioned cost, so the cost head is what
 from our closest non-adaptive competitor. Abstention runs 10.5% at the 70% point, low because
 clean labels lifted the pool's solvability.
 
+**6.3b-bis Attribution: the family-level frontier gives the baseline our own contributions.**
+
+The frontier picks the cheapest arm *of a family* reaching T, and a family contains four arm
+types: budget-swept (`counts`), our give-up extension (`_abstain`), and our utility rule
+(`_value`, `_value_frozen`). So "RoR" was free to answer with `counts_value` — **RoR's beliefs
+inside our decision rule, abstention included** — while our family answered at the same target
+with a non-abstaining arm. That is not a comparison of belief sources, and on TACO it inverted
+the sign and led us to a wrong mechanism (§6.10a).
+
+**Always report the three-way decomposition, matched arm type on both sides**, against the
+RoR-faithful `counts` (the code's own label: `"" is the RoR-faithful cell (no give-up arm)`):
+
+| LCB target | rule only | + activation beliefs | full method |
+|---|---|---|---|
+| 50% | +8.1 ± 1 | **+46.4 ± 2** | **+46.7 ± 2** |
+| 60% | +6.6 ± 1 | +13.9 ± 3 | +10.8 ± 4 |
+| 65% | +5.8 ± 0 | +11.3 ± 3 | +7.4 ± 5 |
+| 70% | +4.3 ± 1 | +1.5 ± 3 | +12.0 ± 4 |
+| 75% | -0.2 ± 2 | -2.7 ± 2 | +4.7 ± 2 |
+| 80% | +1.6 ± 1 | -7.4 ± 5 | -6.4 ± 5 |
+| 84% | -0.7 ± 1 | +4.4 ± 2 | **+9.2 ± 1** |
+
+**The utility rule is a small, reliable win; the activation prior is the large and volatile
+term.** The rule alone gives +4.3 to +8.1% over the first four LCB targets and +4.2 to +12.1% at
+*every* TACO target (§6.10a) — modest but never harmful. The prior swings from +46% to -7% on LCB
+and +39% to -105% on TACO, tracking headroom to the pool ceiling.
+
+**This changes the emphasis between contributions.** C2 (abstention as the zero-value action) is
+cheaper to justify and more robust than C1 (activation priors) — it needs no probe, no per-problem
+prediction, and it never lost on either dataset. C1 buys far more where there is headroom. The
+paper should say that plainly rather than fold them into one number.
+
+*Consequence for the tables above:* §6.3/§6.3a family-level numbers hand the baseline our rule,
+which makes them **conservative** at targets where our arm also abstains, and **misleading** where
+it does not. Keep them as the end-to-end "best configuration of each method" view, and lead the
+attribution claims with this table.
+
 **6.3c Why the advantage compresses near the ceiling — two value regimes, not a defect.**
 
 Routing information is worth something only in proportion to what the policy is allowed *not* to
@@ -887,23 +924,38 @@ targets sit at 92-100% of everything the pool can do. At the 60% target:
 | RoR | $0.0621 | 60.48% | **39.52%** | 6.86 |
 | ours | $0.0865 | 60.00% | **0.00%** | 7.71 |
 
-RoR's accuracy is $1-0.3952$ to five decimals: **it succeeds on every episode it does not
-abandon.** That is what a fast count-decay does natively — quit the instant failures accumulate.
-Our per-problem prior says *this one looks promising*, which **delays the quit and buys attempts
-that do not pay**. Near the ceiling our own signal works against us. (The identity is a property
-of these arms, not of the metric: `acc + abstain == 1` holds exactly in 218 of 606 abstaining
-TACO arms, so it is informative where it holds.)
+**Correction — the arm labelled "RoR" here is not RoR.** It is `counts_value`: RoR's count
+beliefs inside *our* utility rule, which gets abstention free as the zero-value action. The
+RoR-faithful arm (`counts`, budget-swept, no give-up) does not abstain at all. Meanwhile our
+family had fallen back to `content_decay_qcost`, which also does not abstain. So the row above
+compares *our rule with their beliefs* against *our beliefs without our rule*, and the earlier
+reading of it — that count-decay "quits natively" — was wrong. Attribution needs matched arms.
 
-**Both halves contribute and they compound.** At the 60% target, against RoR: beliefs alone
-**-11.7%**, query-conditioned cost alone **-4.6%**, together **-49.1%**.
+**Matched-arm decomposition against the RoR-faithful `counts` arm** (hull, same arm type on
+both sides, so only the belief/cost source differs):
 
-**So state the scope as headroom, not as dataset.** Abstention pays when the unsolvable set is
-*identifiable from the prompt* **and** the target leaves room below the pool ceiling — not simply
-when it is large. LCB: 8.3% unsolvable, cleanly separable, targets at 55-87% of ceiling, and the
-win *returns* at the top (§6.3c). TACO: 40% unsolvable, targets pressed to 92-100% of ceiling, and
-we lose. This is the same signal-to-noise boundary as C3, now measured on the belief head too, and
-it gives the paper a falsifiable rule: **the method needs roughly 15% headroom to the pool
-ceiling.**
+| target | % of pool ceiling | rule only | + activation beliefs | full method |
+|---|---|---|---|---|
+| 40% | 67% | +8.7 ± 1 | **+39.4 ± 3** | **+42.5 ± 2** |
+| 45% | 75% | +8.9 ± 1 | +26.2 ± 3 | +21.5 ± 3 |
+| 50% | 83% | +12.1 ± 1 | +4.2 ± 2 | -24.6 ± 7 |
+| 55% | 92% | +6.6 ± 0 | -61.3 ± 5 | -81.8 ± 1 |
+| 60% | 100% | +4.2 ± 0 | **-104.5 ± 11** | -96.5 ± 7 |
+
+**The rule is steadily positive and the beliefs are what swing.** `counts_value` — RoR beliefs in
+our utility rule — beats RoR-faithful by +4 to +12% at *every* TACO target, and by +1.6 to +8.1%
+at every LCB target. Everything volatile lives in the activation prior: +39% where there is
+headroom, -105% at the ceiling.
+
+**So state the scope as headroom, and attribute it to the prior rather than to abstention.**
+Near the pool ceiling the policy must attempt nearly everything, so a *prompt-only* prior is
+actively harmful in both directions: called hopeless, a solvable problem is skipped and cannot be
+recovered; called promising, an unsolvable one absorbs attempts. Count-decay conditions only on
+**observed** failures, so it carries no prior error into that regime. LCB's targets sit at 55-87%
+of its 91.7% pool ceiling and we win throughout; TACO's 55-60% targets sit at 92-100% of its 60.0%
+ceiling and we lose badly. The falsifiable rule for the paper: **the activation prior needs
+roughly 15% headroom to the pool ceiling; below that, use counts.** This is the same
+signal-to-noise boundary as C3, now measured on the belief head too.
 
 **6.11 Rich features — read the whole representation, not one layer.**
 The single-layer/single-readout probe captured only 11-40% of the between-problem variance
