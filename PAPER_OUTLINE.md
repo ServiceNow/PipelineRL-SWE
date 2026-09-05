@@ -1101,6 +1101,29 @@ routing decision is non-vacuous — unlike LCB where oss120 dominates.
    targets (§6.9), so part of the gain is anticipating budget-exhausting draws.
 
 ## 8. Retracted — do not resurrect
+
+**TACO's high-target loss: two mechanisms proposed, both disconfirmed.** Do not re-tell either
+without new evidence.
+
+1. *"Count-decay quits natively; our prior delays the quit."* Wrong on the premise — the
+   RoR-faithful arm abstains 0.00% at all 17 operating points. The quitting arm was `counts_value`,
+   which is our own rule (§6.3b-bis).
+2. *"We abstain on problems we could have solved."* Measured and false. At the TACO 55% target,
+   matched utility arms discard almost identical fractions of pool-solvable problems: **ours 6.8%
+   of all episodes, RoR 6.9%**. Abstention quality is not the difference.
+3. *"Our prior escalates to the 120B, and escalation is bad value on TACO"* (2.5 accuracy points
+   per extra dollar against LiveCodeBench's 7.1). The route mix is real — at the 55% target we buy
+   22% oss120 where RoR buys 0% — but the causal claim fails its own test: making oss120 *cheaper*
+   should have flipped the loss and instead **made it worse** (-81.8% at the 50% target under
+   `--prices oss120=0.834`, against -10.7% at list price), non-monotonically across the whole
+   sweep. Escalation share is a symptom, not the cause.
+
+**Status: the mechanism for TACO's high-target loss is unknown.** TACO is still the 32k pool,
+whose 8.6% truncation rate is twice LiveCodeBench's, and on LiveCodeBench the 64k re-collection
+removed that dataset's entire negative tail. Wait for the TACO re-collection before proposing a
+fourth explanation.
+
+
 - Cross-model superiority ("own activations are the worst predictor of own success") — readout
   artifact (§6.4).
 - "Nobody predicts generation length from activations" — false (2607.05316, 2602.11812).
