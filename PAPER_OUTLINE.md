@@ -932,6 +932,36 @@ ablation (§6.9), which changes *no* serving path at all, forecast +6.8% at that
 explains the change; the serving path does not. The one remaining hole is the scout, still 32k
 here and truncating 4.13% of draws; a local 64k scout collection is running to close it.
 
+**6.9b Calibrating the belief head: the fix, and what it costs.** Platt scaling on the held-out
+calibration split (§C3b), 96 points, 3 matched seeds, against pure RoR (`counts`):
+
+| target | LCB raw | **LCB calibrated** | TACO raw | **TACO calibrated** |
+|---|---|---|---|---|
+| 50% / 35% | +41.7 ± 1.8 | +41.7 ± 1.9 | +44.6 ± 2.8 | +38.1 ± 3.3 |
+| 60% / 40% | +13.7 ± 4.8 | +11.8 ± 2.7 | +37.5 ± 2.5 | +32.6 ± 2.8 |
+| 65% / 45% | +12.3 ± 2.2 | +10.7 ± 1.1 | +30.1 ± 3.1 | +27.6 ± 3.9 |
+| 70% / 50% | +18.2 ± 1.9 | +16.3 ± 1.6 | +14.5 ± 4.0 | **+17.7 ± 1.0** |
+| 75% / 55% | +20.2 ± 2.0 | +14.1 ± 0.9 | -8.4 ± 2.0 | -7.2 ± 2.8 |
+| 80% / 60% | +1.5 ± 6.9 | **+10.5 ± 3.3** | -49.1 ± 19.5 | **-27.2 ± 9.9** |
+| 84% | +9.6 ± 2.2 | **+11.5 ± 4.0** | — | — |
+
+**On LiveCodeBench this makes the method a strict improvement with margin.** Scanning 401
+accuracy levels from 45% to 84.5%: raw beliefs are negative at 4 of them (worst -0.44%);
+**calibrated beliefs are negative at none, with a worst point of +7.59%.** The floor moves from
+"occasionally a hair below the baseline" to "never less than 7.6% cheaper".
+
+**It buys the floor by giving up the peak, exactly as compression should.** The 75% target falls
+20.2 -> 14.1, and seed sd falls almost everywhere (80%: 6.9 -> 3.3; 75%: 2.0 -> 0.9). That is the
+trade to state explicitly: **calibration converts peak advantage into worst-case guarantee**, and
+for a router that is the right direction, because the failure mode of an uncalibrated router is
+unbounded while its upside is not.
+
+**It helps TACO most where TACO was worst but does not rescue it.** The 60% target improves
+-49.1 -> -27.2 with sd halved, and 50% actually flips to *better* than raw (+14.5 -> +17.7). But
+the scan is still negative at 96 of 401 levels (worst -62.9 -> -52.3). So over-confidence was a
+*contributor* to the TACO failure, not its sole cause, and §6.10a's headroom account still stands
+for the residue. **TACO is also still the 32k pool**; its re-collection is running.
+
 **6.10 TACO medium+hard — the replication.** 883 problems, random split 547/168/168 (TACO's
 dates are 79.8% Unix-epoch sentinels, so its "temporal" split was a platform confound: train a
 five-platform mixture, eval 99.5% Codeforces, 42 test problems. See RESEARCH_LOG).
