@@ -962,6 +962,40 @@ the scan is still negative at 96 of 401 levels (worst -62.9 -> -52.3). So over-c
 *contributor* to the TACO failure, not its sole cause, and §6.10a's headroom account still stands
 for the residue. **TACO is also still the 32k pool**; its re-collection is running.
 
+**6.9c Failures are evidence, and the decay is the posterior — but the frontier rewards being
+wrong about it.**
+
+$\hat\theta_m(x)$ is an *estimate*, so a failure is genuine new evidence that the problem is
+harder than the probe thought. Modelling the residual uncertainty as $\theta\mid\hat\theta \sim
+\mathrm{Beta}$ with mean $\hat\theta$ and concentration $\kappa$ gives the posterior after $n$
+failures as exactly $\hat\theta_m(x)\,\kappa/(\kappa+n)$ — the decay's own functional form, with
+$\sigma=\kappa=$ **how much uncertainty the probe leaves**, a quantity to fit rather than a knob.
+A perfect probe gives $\kappa=\infty$ and no decay; a useless one gives small $\kappa$, which is RoR.
+
+Maximum-likelihood $\kappa$ on the calibration split: **0.54/0.79/0.64** (TACO) and
+**0.50/1.00/1.35** (LCB) for scout/oss20/oss120 — all *below* the inherited $\sigma=2$, i.e.
+failures are **more** informative than the default assumes. Held-out on test, $\sigma=2$
+over-predicts after failures on nearly every route (TACO oss120 at $n{=}1$: observed 0.086,
+$\sigma{=}2$ says 0.251); fitted $\kappa$ is closer but still optimistic.
+
+**Our beliefs are better calibrated than RoR's at 18 of 18 route × failure-count cells, on both
+datasets** (total absolute error: TACO 0.620 vs 1.024, LCB 1.093 vs 2.434). RoR believes oss20
+has a 15.2% chance after three failures where the observed rate is **0.0%**.
+
+**And that is exactly why RoR wins the near-ceiling frontier.** Being over-optimistic after
+failures makes it keep grinding, and grinding is what an accuracy target near the pool ceiling
+demands. Our correctly pessimistic beliefs say stop — right for utility, wrong for
+cost-at-matched-accuracy in that regime. **The metric rewards a miscalibrated policy**, which is
+the sharpest argument yet for reporting utility at matched $R$ alongside it (§6.3d). Testable and
+being tested: raising $\sigma$ for our arms only should *improve* the near-ceiling frontier while
+degrading utility.
+
+*Myopia is not the cause, and this is now settled at full depth.* Bellman lookahead at $h=4$ and
+$h=6$ changes accuracy and abstention by **exactly 0.000** at every operating point on both
+datasets — it never rescues a give-up, because $V\ge 0$ can only make the policy abstain *less*
+and it never does. It is, however, a free cost saving: $-\$0.0070$ per episode on TACO and
+$-\$0.0006$ on LCB at identical accuracy. Take the lookahead for the cost, not for the decisions.
+
 **6.10 TACO medium+hard — the replication.** 883 problems, random split 547/168/168 (TACO's
 dates are 79.8% Unix-epoch sentinels, so its "temporal" split was a platform confound: train a
 five-platform mixture, eval 99.5% Codeforces, 42 test problems. See RESEARCH_LOG).
