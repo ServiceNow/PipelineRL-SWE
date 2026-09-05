@@ -59,6 +59,34 @@ price-ratio limitation (§6.7). **Report as: a drop-in upgrade for count-based r
 universal improvement.** Still novel — RoR and 2603.20895 both use per-model constants, and
 length-from-activations (2607.05316, 2602.11812) is never operationalised in a decision.
 
+**C3b. The discipline that makes conditioning safe: shrink every conditioned quantity toward
+the unconditional baseline it replaces, fitted on held-out data.** This is the difference between
+a method that is *sometimes* better and one that is *consistently* better, and we can measure it
+because we shipped one head with the property and one without.
+
+Each head added **alone** to RoR's count beliefs, hull frontier, worst and best case over targets:
+
+| head | LCB worst | LCB best | TACO worst | TACO best |
+|---|---|---|---|---|
+| cost $\hat c_m(x)$ — **has** calibration shrinkage | **+9.5%** | +30.4% | -31.6% | +5.6% |
+| belief $\hat\theta_m(x)$ — raw logistic, **no** shrinkage | -9.1% | +41.7% | **-118.3%** | +43.7% |
+
+The head carrying the guarantee never hurts at all on LiveCodeBench and has 3.7x less downside on
+TACO. **Every catastrophic number in this paper came from the head that lacked it.** The
+mechanism is precise: a 40,960-feature logistic head fit on ~550 problems emits next-draw
+probabilities of $10^{-5}$–$10^{-6}$ for routes that solve the problem, the utility rule reads
+$p\cdot R - c < 0$, and the policy abstains on winnable problems (§6.10a).
+
+Platt scaling on the held-out calibration split fixes it with the same guarantee the cost head
+has: **slope $\to 0$ collapses the prediction to the per-route constant, which is exactly what
+RoR uses, so the floor of the conditioned method is the baseline's performance.** Fitted slopes
+are 0.32–0.49 on *both* datasets, so the raw head was over-confident everywhere and LiveCodeBench
+merely had enough headroom to absorb it.
+
+*Generalisable claim, and the one a reader should take away even if they never use activations:*
+any router that replaces a per-model constant with a per-query prediction must fit the shrinkage
+on held-out data, or it inherits an unbounded downside for a bounded upside.
+
 **C4. One cheap probe beats probing every model, once the probe is priced.** Per-candidate
 probes are better predictors (+0.05-0.06 AUC) and buy a real but small frontier gain
 (+0.6 to +8.6pt) -- for 48.5x the probe cost, which takes 10-38pt back. Charged honestly they
