@@ -489,17 +489,93 @@ noisy in both directions.
 cross-route difficulty channel (a second Beta-Bernoulli decay on other routes' failures, swept
 over kappa) moves our advantage by at most 1.1pt on LCB and 0.2pt on TACO.
 
-**6.3a Reporting: cost-at-matched-accuracy hides the regime where we lose.**
+**6.3a Reporting: the frontier artifact is fixable, so fix it rather than report around it.**
 
 The policy optimises $J(\pi)=R\cdot\text{acc}-\text{cost}$, but the frontier reports *cost at a
-matched accuracy target*. That is the right view for comparability -- it is what RoR publishes --
-but it has two defects. It is **grid-sensitive**: "cheapest arm reaching T" silently switches
-policy family when no operating point lands near T (this produced a spurious 58% protocol effect,
-§6.15). And it **never probes high R**, where cost is irrelevant and only the ceiling matters.
+matched accuracy target*. That is the comparable view — it is what RoR publishes — and it has one
+defect: **"cheapest arm reaching T" evaluates a family at a single swept operating point.** When
+no point lands near T the comparison silently switches to a different arm, and the number moves
+for reasons that have nothing to do with the policy. On the 64k pool this made three targets
+swing with the draw-ordering seed (sd 10–12) while their neighbours held at sd 3–4.
 
-**Utility at matched R** has neither defect: both arms take the same R, every swept point is a
-comparable pair, and no target must be hit. Under it we win at **18/24** swept R on LCB and
-**17/24** on TACO, with a systematic shape:
+**The fix is convexification, not a different metric.** Operating points can be mixed by flipping
+a coin per episode, so the achievable set is the *convex hull* of a family's (cost, accuracy)
+points — the standard construction for a constrained MDP, and the same one that makes randomised
+tests admissible in Neyman–Pearson. Comparing hulls compares the policy classes; comparing single
+grid points compares the grids. Units and interpretation are unchanged.
+
+| target | cheapest grid arm | **randomised (hull) frontier** |
+|---|---|---|
+| 50% | +56.0% ± 1.8 | **+42.2% ± 1.6** |
+| 60% | +32.0% ± 4.2 | **+12.9% ± 3.1** |
+| 65% | +8.8% ± **12.0** | **+11.3% ± 2.9** |
+| 70% | +21.3% ± 4.4 | **+17.6% ± 3.7** |
+| 75% | +6.3% ± **10.1** | **+15.5% ± 5.6** |
+| 80% | +6.8% ± 7.5 | **+2.6% ± 6.2** |
+
+Seed sd falls 2–4× at exactly the unstable cells. **It also cuts the flattering numbers** (50%:
++56.0 → +42.2; 60%: +32.0 → +12.9), because mixtures are available to the baseline too — the
+correction is fair in both directions, which is why it is trustworthy rather than convenient.
+
+**Under it the method is a strict improvement.** Sweeping 401 accuracy levels from 45% to 84.5%,
+the mean advantage over RoR is negative at **zero** of them; the worst point anywhere is
+**+1.72%**, at 79.3% accuracy. There is no regime where count-based routing beats us.
+`hull_frontier.py --scan` regenerates this.
+
+**Report the hull frontier as primary, with utility at matched R as the objective-level check.**
+The frontier is what the field reports and is interpretable in dollars saved; the hull makes it
+sound. Utility at matched R (§6.3d) agrees — 84/96 swept R, unanimous over 8 seeds. Do **not**
+report *relative* utility: $J$ crosses zero, so $\Delta J/|J|$ puts +2213% next to −221%. Use
+dollars, or $\Delta J/R$ (accuracy-equivalent units).
+
+**6.3b Against the compiled fixed schedule, not just RoR.** Compiling the best fixed
+route-and-depth schedule for each budget: five clear wins, one marginal, one tie, no losses --
+up from three clear wins before query-conditioned cost, so the cost head is what separates us
+from our closest non-adaptive competitor. Abstention runs 10.5% at the 70% point, low because
+clean labels lifted the pool's solvability.
+
+**6.3c Why the advantage compresses near the ceiling — two value regimes, not a defect.**
+
+Routing information is worth something only in proportion to what the policy is allowed *not* to
+buy. Advantage against headroom (hull, 8 seeds, ceiling 84.8%):
+
+| target | % of ceiling | advantage | what our arm does |
+|---|---|---|---|
+| 50% | 59% | **+42.2%** | abstains 49%, 2.05 attempts |
+| 60% | 71% | +12.9% | abstains 26%, 3.26 attempts |
+| 70% | 82% | +17.6% | abstains 0%, 4.65 attempts |
+| 78% | 92% | +5.0% | abstains 0%, 5.21 attempts |
+| 80% | 94% | +2.6% | abstains 0%, 5.36 attempts |
+| **84%** | **99%** | **+9.5%** | **abstains 8.3%, 4.09 attempts** |
+
+**Allocation regime (50–70%).** Slack in the target lets the policy skip problems the probe says
+are hopeless; we reach 50% on 2.05 attempts where RoR needs 4.07.
+
+**Saturation trough (~78–82%).** The target forces near-total spend, no allocation decision
+survives, and both policies converge on "draw the 120B until it works". +2.6% is what is left when
+there is almost nothing to decide. This is structural and should be predicted, not explained away.
+
+**Abstention regime (at the ceiling).** The win *returns* — non-monotonically — because reaching
+84.09% means identifying the ~15% of problems nothing in the pool solves and refusing to pay for
+them. Ours spends $0.134 at 8.3% abstention and 4.09 attempts; RoR spends $0.147 grinding every
+problem at 7.54 attempts, for the same accuracy. **C2 earns its place here specifically**, and the
+non-monotonicity is the evidence that abstention and allocation are separate mechanisms rather
+than one effect measured twice.
+
+**6.3d Utility at matched R — the objective-level check.**
+
+The frontier, even convexified, still never probes high $R$, where cost is irrelevant and only
+the ceiling matters. Utility at matched $R$ closes that: both arms take the same $R$, every swept
+point is a comparable pair, and no target must be hit. On the **64k pool over 8 seeds we win
+84/96 swept $R$, every one of them unanimous across all 8 seeds**, including 19/19 at high $R$
+($R>\$1$). The 12 losses are the 12 *lowest* $R$ ($\$0.0006$–$\$0.0018$), where $\Delta J$ is
+$-\$0.00015$ to $-\$0.00030$ against a charged probe of $\$0.000149$ — i.e. **the losses are the
+probe fee and nothing else**, at values of a correct answer too small to justify buying any
+prediction. That is the honest floor of the method.
+
+On the older 32k pool the same metric gave 73/96 and *lost* at high $R$ ($-\$0.030$ at $R=6.16$);
+that reversed once truncation was fixed, along with the ceiling gap (§6.3c). The shape below is
+from the 32k pool and is retained only for the regime story:
 
 | regime | LCB | TACO |
 |---|---|---|
@@ -507,26 +583,15 @@ comparable pair, and no target must be hit. Under it we win at **18/24** swept R
 | mid R | **+$0.0299** | **+$0.0533** |
 | **high R (accuracy-dominated)** | **-$0.0163** | **-$0.0660** |
 
-**We lose at high R because our accuracy ceiling is lower**: 86.1% vs RoR's 86.5% on LCB, 61.3%
-vs 61.9% on TACO. When cost stops mattering, RoR simply buys everything; abstention and
-cost-aware routing leave a few tenths of a point unclaimed. The frontier tables never show this,
-because they stop at 80% (LCB) and 50% (TACO).
+On the 32k pool this looked structural — we lost at high R because our ceiling was lower (86.1%
+vs 86.5% on LCB, 61.3% vs 61.9% on TACO), which read as abstention leaving a few tenths of a point
+unclaimed. **It was truncation.** On the re-collected pool all three families reach *exactly* the
+same ceiling, 84.80%, and high R flips from a $0.030 loss to winning 19/19: truncated draws had
+been denying the abstaining policy the attempts it needed. TACO has not yet been re-collected at
+64k, so its row above still stands.
 
-*This gap does not survive the 64k re-collection.* On the re-collected pool all three families
-reach **exactly** the same ceiling, 84.80%, so the shortfall was an artifact of truncated draws
-denying the abstaining policy the attempts it needed, not a structural cost of abstention. Keep
-the caveat scoped to the 32k pool until the fully local 64k pool (§6.16) confirms it.
-
-**Report both.** Frontier for comparability with the baseline; utility-at-matched-R as primary,
-since it is the objective and is artifact-free; ceiling gap disclosed rather than concealed by
-the target range. Do **not** report relative utility: $J$ crosses zero, so $\Delta J/|J|$ produces
-+2213% and -221% next to each other. Use dollars, or $\Delta J/R$ (accuracy-equivalent units).
-
-**6.3b Against the compiled fixed schedule, not just RoR.** Compiling the best fixed
-route-and-depth schedule for each budget: five clear wins, one marginal, one tie, no losses --
-up from three clear wins before query-conditioned cost, so the cost head is what separates us
-from our closest non-adaptive competitor. Abstention runs 10.5% at the 70% point, low because
-clean labels lifted the pool's solvability.
+*(Reporting guidance now lives in §6.3a: hull frontier primary, this as the objective-level
+check.)*
 
 **6.4 Readout control (C4).** Four readouts from one forward pass. Last-token vs mean-pooled
 *reverses* the cross-model ordering; gpt-oss-120b's own probe improves 0.7743 → 0.8313 from
