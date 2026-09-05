@@ -534,7 +534,37 @@ up from three clear wins before query-conditioned cost, so the cost head is what
 from our closest non-adaptive competitor. Abstention runs 10.5% at the 70% point, low because
 clean labels lifted the pool's solvability.
 
-**6.3b-bis Attribution: the family-level frontier gives the baseline our own contributions.**
+**6.3b-bis Three comparisons, and which one answers which question.**
+
+A "policy family" spans four arm types: the RoR-faithful budget sweep (`counts`), our give-up
+extension (`_abstain`), and our utility rule (`_value`, `_value_frozen`). Which arms each side may
+use changes the number by tens of points, so every frontier claim must say which comparison it is.
+All rows: hull frontier, % cost saved at matched accuracy, LCB 64k/8 seeds and TACO 32k/3 seeds.
+
+| | LCB 50/60/70/80/84% | TACO 35/45/50/55/60% |
+|---|---|---|
+| **Q1** ours (any arm) vs **RoR as published** (`counts`) | **+46.8/+18.6/+21.2/+4.2/+9.6** | +49.4/+36.3/+24.8/-1.2/-42.8 |
+| **Q2** both families, all arm types | +42.2/+12.9/+17.6/+2.6/+9.5 | +44.6/+30.1/+14.5/-8.4/-49.1 |
+| **Q3** both pinned to the utility arm | +42.1/+4.5/+8.0/**-8.1**/+9.8 | +44.6/+13.8/-41.8/-94.7/-105.1 |
+
+**Q1 is the deployment claim** — what a practitioner gets by switching from the published method.
+On LiveCodeBench we win at **every** target. **Q2 is the fair scientific comparison**: it hands
+RoR our utility rule and abstention, so it isolates the belief and cost source while granting both
+sides the same formulation freedom. **Q3 is the ablation** that shows what the activations alone
+buy, and it is where the 80% dip lives.
+
+The ordering Q1 > Q2 > Q3 at every target is the expected one, and it is the decomposition: the
+gap Q1-Q2 is what our *formulation* is worth to the baseline, and Q3 is what the *probe* is worth
+once formulation is equalised. Read together: **the utility rule is a small reliable win, the
+activation prior is the large volatile one.**
+
+*Two errors this replaces, both from mismatched arm sets.* Comparing our best arm against the
+baseline's best arm while calling the latter "RoR" credited RoR with our abstention, and on TACO
+inverted the sign badly enough to produce a wrong mechanism (§6.10a). Restricting *us* to the
+single `_value` arm while leaving RoR its full sweep made the same mistake in reverse and produced
+a spurious -6.4% at LCB 80%. Neither is a defensible pairing; always state the arm sets.
+
+**6.3b-bis-2 Attribution: what each contribution is worth.**
 
 The frontier picks the cheapest arm *of a family* reaching T, and a family contains four arm
 types: budget-swept (`counts`), our give-up extension (`_abstain`), and our utility rule
