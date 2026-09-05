@@ -669,24 +669,49 @@ holds fixed. Four seeds, full method vs RoR:
 **Quote mean ± sd, not seed 0.** The worst seed at every target is still >= +17.4%, so the
 headline is not seed-dependent. 60% is the noisy point (sd 6.5) and should be reported as such.
 
-**6.9 Truncation sensitivity.** Excluding the 416 at-cap draws (2.59% of cells,
-`tensors_v3_notrunc`, no problem left with zero valid draws):
+**6.9 Truncation sensitivity — how much of the edge is anticipating runaway generations?**
 
-| target | all draws | at-cap excluded | delta |
-|---|---|---|---|
-| 50% | +56.2% | +54.2% | -1.9pt |
-| 60% | +43.9% | +45.9% | +2.0pt |
-| 65% | +21.9% | +20.8% | -1.1pt |
-| 70% | +20.5% | **+11.4%** | **-9.1pt** |
-| 75% | +32.5% | +32.7% | +0.3pt |
-| 80% | +18.1% | **+10.1%** | **-8.0pt** |
+At-cap draws are expensive failures: they cost the full cap and essentially never solve the
+problem (LCB scout 0.0%, oss20 3.6%; TACO 0.0% on both). Cheap routes do this far more than the
+120B does — LCB 4.13%/3.64%/0.00% of scout/oss20/oss120 draws, TACO 8.64%/8.63%/0.02% — so part
+of any cost advantage over a per-route constant could be "the probe learned which prompts make
+small models ramble" rather than difficulty prediction. `make_notrunc_tensors.py` builds the
+world where that channel does not exist, and the cost head is **refit on the same valid mask**
+(without this the policy is charged for spending it can no longer incur; refitting drops the
+scout constant 31% and oss20's 14% on LCB, 39% and 19% on TACO). 96 points, 3 seeds, full method.
 
-The advantage survives everywhere but roughly **halves at 70% and 80%**. This is mechanism, not
-noise: at-cap draws are expensive failures, the cost model predicts they will be long and steers
-away, and a per-route constant cannot. A meaningful part of the edge at high accuracy targets is
-therefore *anticipating budget-exhausting draws* -- legitimate, since every deployed system has a
-cap and failed draws cost 2.6-5.3x more than solved ones, but it must be stated rather than left
-for a reviewer to find. Report both columns.
+| LCB | all draws | at-cap deleted | delta | | TACO | all draws | at-cap deleted | delta |
+|---|---|---|---|---|---|---|---|---|
+| 50% | +49.1 ± 5.2 | +56.8 ± 3.3 | +7.7pt | | 30% | +69.8 ± 2.8 | +67.9 ± 3.1 | -1.9pt |
+| 60% | +27.8 ± 1.0 | +26.8 ± 0.6 | -1.0pt | | 35% | +60.2 ± 2.7 | +57.4 ± 3.4 | -2.8pt |
+| 65% | +25.4 ± 2.1 | +25.3 ± 0.9 | -0.1pt | | 40% | +43.4 ± 2.4 | +43.0 ± 4.2 | -0.4pt |
+| 70% | +28.0 ± 8.2 | **+9.8 ± 0.8** | **-18.2pt** | | 45% | +30.1 ± 19.3 | +10.1 ± 6.4 | -20.0pt* |
+| 75% | +39.7 ± 2.1 | +35.0 ± 2.7 | -4.7pt | | 50% | +13.9 ± 4.1 | +18.4 ± 4.7 | +4.5pt |
+| 80% | +21.5 ± 5.0 | **+6.8 ± 11.2** | **-14.7pt** | | 55% | -16.6 ± 11.3 | -16.9 ± 0.8 | -0.3pt |
+
+**The result is truncation-robust except at LCB's top two targets.** Four of six LCB cells and
+five of six TACO cells move by under 5pt. What moves is LCB 70% and 80%, where the advantage
+thins to +9.8% and +6.8% (worst seed −2.7%). The mechanism is visible in the arms themselves: at
+80%, deleting runaway draws makes *RoR* 25% cheaper ($0.0838 → $0.0630) while barely touching us
+($0.0610 → $0.0598). RoR's high-target arm buys many cheap draws — 4,478 against our 1,676 — and
+each carries truncation risk a per-route constant cannot see. We were already avoiding them.
+
+**The dataset that truncates twice as much is the one that barely moves**, which rules out the
+simple story. TACO caps at 8.6% against LCB's ~4% and is unchanged at 5/6 targets, because its
+operating range (30–55%) never reaches the many-draws regime where the effect lives. So the
+finding is not "truncation drives the result" but "truncation drives the *high-target tail* of
+the result on LCB". *The TACO 45% delta is starred because that cell is seed-unstable in the base
+world (sd 19.3, §6.3); notably its sd falls to 6.4 once at-cap draws are gone, so the instability
+was itself truncation-driven.*
+
+*The counterfactual is imperfect and slightly favours the baseline.* Deleting runaway draws
+deletes a route entirely on the problems where every draw ran away — 4 LCB oss20 problems, 1 LCB
+scout, 14 TACO oss20, 2 TACO scout — so the ablated world is a little easier than a world with a
+genuinely larger cap. The 64k re-collection (§6.16) is the direct test.
+
+**Report both columns.** Anticipating budget-exhausting draws is legitimate — every deployed
+system has a cap, and failed draws cost 2.6–5.3× more than solved ones — but the high-target LCB
+numbers should not be quoted without it.
 
 **6.10 TACO medium+hard — the replication.** 883 problems, random split 547/168/168 (TACO's
 dates are 79.8% Unix-epoch sentinels, so its "temporal" split was a platform confound: train a
@@ -775,6 +800,30 @@ concentrated at 45-50% where the free policy skips the cheap evidence and commit
 "cheapest arm reaching T" jumped between policy families on one side of the comparison and not
 the other; at 96 the LCB gap collapses to a few points. Only the TACO 45% cell keeps a large
 gap, and it is one of the two seed-unstable cells (§6.3), so do not lean on it.
+
+**6.16 The 64k re-collection, and what is left of the serving-path artifact.** *In flight —
+oss20 train complete, oss120 and eval pending.* Doubling the cap 32k → 64k, on the same 551
+train problems:
+
+| | local pool, 32k | OpenRouter, 64k |
+|---|---|---|
+| at the cap | 3.63% | **1.47%** |
+| empty answer | 0.00% (local) / 22.6% (OpenRouter 32k) | **7.11%** |
+| oss20 solve rate | 65.4% | **70.8%** |
+| mean completion tokens | 4,442 | 4,330 |
+
+**Doubling the cap costs nothing and buys 5.4 points.** Mean completion length is flat (4,442 →
+4,330) because the tail is thin: only 1.47% of draws still reach 64k. So the truncation channel
+in §6.9 is a collection artifact worth removing, not an intrinsic property of the routes.
+
+**The remaining empties are one provider emitting tool calls.** 84% of the 219 surviving empties
+carry `finish_reason == "tool_calls"` — gpt-oss opened a harmony tool call and the provider
+returned no assistant content — and every one produced reasoning text but no answer. They
+concentrate almost entirely on a single provider: **10.9% empty on Parasail against 1.1% on
+CoreWeave**. Plain retry cannot fix that, since it frequently draws the same provider again; the
+collector now excludes the provider that returned nothing from the next attempt. This is the
+concrete form of the serving-path claim in §6.1 and should be reported as a measurement hazard
+for anyone collecting multi-model pools through an aggregator.
 
 **6.12 (retired) TACO in progress.** 883 problems (677/206). Draw-0 solve rates: scout
 18.4/14.8%, oss20 44.0/31.0%, oss120 48.7/43.4% (medium/hard) — against LCB's 42/65/82%.
