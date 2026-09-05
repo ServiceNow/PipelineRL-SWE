@@ -764,10 +764,13 @@ the policy. The frontier's "cheapest arm reaching T" switches policy families di
 (§6.3a), and the 64k pool, by moving many operating points slightly, moves which family wins each
 target — noise the matched-R comparison is immune to by construction.
 
-*Caveat, being resolved.* The 32k→64k comparison confounds the token cap with the serving path:
-the 32k pool was served locally and the 64k re-collection ran through OpenRouter. oss120 never
-truncates and still moved 81.9% → 80.9%, so ≈1pt of route quality is serving-path, not cap. Local
-64k collections for all three routes are running (§6.16) and will isolate the cap exactly.
+*Serving path is not the explanation.* The 32k→64k comparison also changes the serving path
+(local vLLM → OpenRouter), so we measured that channel on its own: oss120 never truncates, and
+its paired per-problem solve rate moves **-1.12pt, 95% CI [-1.97, -0.27]** over 892 problems.
+Detectable, but far too small to move a frontier point from +21.5% to +6.8% -- and the truncation
+ablation (§6.9), which changes *no* serving path at all, forecast +6.8% at that target. Truncation
+explains the change; the serving path does not. The one remaining hole is the scout, still 32k
+here and truncating 4.13% of draws; a local 64k scout collection is running to close it.
 
 **6.10 TACO medium+hard — the replication.** 883 problems, random split 547/168/168 (TACO's
 dates are 79.8% Unix-epoch sentinels, so its "temporal" split was a platform confound: train a
