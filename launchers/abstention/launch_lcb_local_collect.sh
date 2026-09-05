@@ -125,8 +125,9 @@ SCRIPT
   if [[ "${SUBMIT}" == "1" ]]; then
     make -C "${REPO_ROOT}" job JOB_NAME="lcb_local_${LABEL}_${TIMESTAMP}" ENV=pipeline-rl \
       CONDA_EXE=/opt/conda/bin/conda SNAPSHOT="${SNAPSHOT}" NPROC=1 GPU="${GPUS}" GPU_MEM=80 \
-      CPU=16 CPU_MEM=96 COMMAND="bash ${RUNNER}" >/dev/null 2>&1 \
-      && echo "submitted ${LABEL} (${MODEL}, tp=${TP}, ${GPUS} GPU, ${DRAWS} draws)"
+      CPU=16 CPU_MEM=96 COMMAND="bash ${RUNNER}" \
+      && echo "submitted ${LABEL} (${MODEL}, tp=${TP}, ${GPUS} GPU, ${DRAWS} draws)" \
+      || { echo "FAILED to submit ${LABEL}"; exit 1; }
     sleep 30
   fi
 done
