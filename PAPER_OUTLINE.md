@@ -512,6 +512,11 @@ vs 61.9% on TACO. When cost stops mattering, RoR simply buys everything; abstent
 cost-aware routing leave a few tenths of a point unclaimed. The frontier tables never show this,
 because they stop at 80% (LCB) and 50% (TACO).
 
+*This gap does not survive the 64k re-collection.* On the re-collected pool all three families
+reach **exactly** the same ceiling, 84.80%, so the shortfall was an artifact of truncated draws
+denying the abstaining policy the attempts it needed, not a structural cost of abstention. Keep
+the caveat scoped to the 32k pool until the fully local 64k pool (§6.16) confirms it.
+
 **Report both.** Frontier for comparability with the baseline; utility-at-matched-R as primary,
 since it is the objective and is artifact-free; ceiling gap disclosed rather than concealed by
 the target range. Do **not** report relative utility: $J$ crosses zero, so $\Delta J/|J|$ produces
