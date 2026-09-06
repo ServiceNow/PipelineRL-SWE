@@ -124,6 +124,32 @@ for j, s in enumerate(slots):
     true_mean_tr = float(np.nanmean(per_problem))
     level = true_mean_tr / max(float(tokens[tr].mean()), 1e-9)
     tokens = tokens * level
+    # Second recalibration, in the space the POLICY actually consumes.
+    #
+    # The shrinkage above is fitted on log tokens, so its guarantee -- b -> 0 recovers the
+    # constant -- holds in LOG space. The decision rule spends dollars, and log-space signal is
+    # not dollar-space signal: on TACO the log slope reads a healthy 0.83-0.96 while dollar-space
+    # R2 for oss20 is 0.032, i.e. noise with an 8.5x p10-p90 spread. Feeding that into
+    # `p*R - c` randomises routing, which is how a cost head that is marginally BETTER than the
+    # constant on MSE still cost 26% on the frontier.
+    #
+    # So refit the same linear shrinkage on calibration in dollars. Where the query-conditioned
+    # estimate carries no dollar-space signal this collapses to the per-route constant, which is
+    # what the guarantee was supposed to deliver in the first place.
+    if not a.no_shrink and cal.sum() > 10:
+        obs_cal = np.array([
+            total[ti[p], j, :][valid[ti[p], j, :]].mean() if valid[ti[p], j, :].any() else np.nan
+            for p, k in zip(pk, cal) if k
+        ])
+        keep = ~np.isnan(obs_cal)
+        if keep.sum() > 10:
+            A_d = np.c_[np.ones(int(keep.sum())), tokens[cal][keep]]
+            cd, *_ = np.linalg.lstsq(A_d, obs_cal[keep], rcond=None)
+            if np.isfinite(cd).all() and cd[1] > 0:
+                tokens = np.clip(cd[0] + cd[1] * tokens, 1.0, None)
+                print(f"  {s:8s} dollar-space shrinkage slope b={cd[1]:.3f}"
+                      + ("  (no dollar-space signal; collapses to the constant)"
+                         if cd[1] < 0.25 else ""))
     C[:, j] = tokens * USD_PER_M_TOKENS[s] / 1e6
     const = true_mean_tr * USD_PER_M_TOKENS[s] / 1e6
     print(f"  {s:8s} constant ${const:.6f}  predicted mean ${C[:, j].mean():.6f}  "

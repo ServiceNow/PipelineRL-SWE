@@ -1026,6 +1026,35 @@ likelihood it is **0.5–1.35** for our beliefs and **0.25–1.09** for RoR's, a
 less for a failure to teach. *Both* methods must be re-run with their own fitted constant, or
 fitting only ours would rig the comparison.
 
+**6.9f What the activation prior is actually for: it decides WHETHER to play, not WHICH arm.**
+
+Decomposing against `counts_value` (RoR's beliefs inside our rule, so abstention is available to
+both sides), fair fitted decays, hull frontier, 3 seeds:
+
+| | LCB 50/65/75/80/84% | TACO 35/45/50/55/60% |
+|---|---|---|
+| **beliefs only** | **+43.7/+14.5/+0.9/+5.2/+5.9** | +32.5/+2.1/-19.1/+4.0/-19.6 |
+| cost only | +44.2/+22.0/+6.7/+6.3/+10.0 | +12.1/-10.6/-25.3/-3.3/-14.0 |
+| both | +46.9/+15.0/+9.1/+7.6/+10.8 | +27.4/-9.9/-24.5/-5.1/-23.0 |
+
+But in the **budget-swept family, where the give-up action is disabled**, the same beliefs are
+worth essentially nothing on *either* dataset:
+
+| | LCB 50/65/75/80% | TACO 35/45/50/55/60% |
+|---|---|---|
+| beliefs only, no abstention | -3.4/-2.4/-4.4/+2.4 | -1.3/-12.8/+1.0/-1.4/-4.0 |
+
+**So the activation prior's entire value flows through abstention.** With the give-up action it is
+worth up to +43.7%; without it, zero. That is not a weakness, it is the mechanism, and it is what
+we should claim: a prompt-only probe answers *"is this problem worth attempting at all"* — a
+per-problem question — and adds nothing to *"which route should I try"*, which a per-route constant
+already answers well. **C1 and C2 are therefore not separable contributions**: the prior is the
+information and abstention is the channel through which it pays.
+
+*Consequence for the paper.* Do not report "activation beliefs improve routing"; the measurement
+does not support it. Report that they improve **selective prediction under a cost budget**, and
+show both rows above so the reader sees why.
+
 **6.9d-bis Fitting the decay for BOTH methods costs us more than it gains. Report this.**
 
 $\sigma{=}2$ is unfitted for *everyone*, so fitting only our $\kappa$ would rig the comparison.
