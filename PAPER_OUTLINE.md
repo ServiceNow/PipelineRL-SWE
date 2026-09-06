@@ -1026,6 +1026,27 @@ likelihood it is **0.5–1.35** for our beliefs and **0.25–1.09** for RoR's, a
 less for a failure to teach. *Both* methods must be re-run with their own fitted constant, or
 fitting only ours would rig the comparison.
 
+**6.9j Why cost is NOT state-dependent, and why that quietly favours us.**
+
+Tempting error, tested and retracted. Expected next-draw cost *appears* to rise steeply with
+failures (LCB oss20 5,670 -> 17,398 tokens after three, 3.07x), which looks like a missing mirror
+of the belief decay. **It is not.** Draws are i.i.d. samples from one model on one problem, so
+within a problem they are exchangeable and per-draw cost is constant by construction. Measured,
+the within-problem ratio of draw 3 to draw 0 is **1.00 / 1.00 / 1.00 / 1.00 / 1.06 / 0.93** across
+the six route-dataset cells, and the marginal rise is *entirely* selection: problems still alive
+at depth 3 had draw-0 costs 1.10-2.90x the average.
+
+**So the asymmetry in the rule is correct.** Beliefs decay because a failure is evidence about an
+unknown $\theta$; costs do not, because sampling from a distribution does not change it.
+
+**But the selection is real and it biases the baseline specifically.** The states a sequential
+policy visits are not a random sample of problems -- they are the expensive, hard ones. A
+per-route constant is fitted over all problems and therefore **under-prices continuation by up to
+2.9x exactly where the policy is still deciding**, while a per-problem head already knows this
+problem is expensive. That is a reason to prefer query-conditioned cost we had not identified:
+**the baseline's cost model is biased in the sequential setting, not merely imprecise.** Needs its
+own ablation before being claimed.
+
 **6.9i The unifying result: query-conditioning pays in the stop/go decision, not in arm selection.**
 
 Two independent decompositions land in the same place.
@@ -1114,13 +1135,10 @@ noise floor; it is a modelling gap.
    where ridge fails worst — TACO oss20 **0.005 -> 0.135**, TACO oss120 **0.238 -> 0.325** — while
    losing on the scout rows. Select the model per route on calibration, the same discipline as the
    log/direct target-space choice.
-2. **Cost is outcome-conditional and the policy ignores it.** Failed draws cost **2.4x-10.6x** more
-   than solved ones. Decomposing $E[c]=\theta E[c\mid\text{ok}]+(1-\theta)E[c\mid\text{fail}]$
-   does *not* improve the static prediction (it is an identity in the true quantities, and from
-   activations it is a wash), but it makes cost **state-dependent**: as failures accumulate,
-   $p_m(s)$ falls and expected cost should rise toward the failure branch. The current head prices
-   every depth identically, so the policy systematically under-prices continuing. Untested — it
-   needs a replay change.
+2. ~~**Cost is outcome-conditional, so make it state-dependent.**~~ **Retracted — see 6.9j.**
+   Failed draws do cost 2.4x-10.6x more than solved ones, but draws within a problem are
+   exchangeable, so there is no within-problem depth effect to model (measured ratio 0.93-1.06).
+   The apparent rise is selection across problems, which a per-problem cost head already absorbs.
 
 **3. Stack the free post-decoding signal — the largest cost-side gain we have.** Under
 `scout_first` the scout's generation is already bought, so its **realized length and outcome are
