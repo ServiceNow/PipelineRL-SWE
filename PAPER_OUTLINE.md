@@ -1122,9 +1122,30 @@ noise floor; it is a modelling gap.
    every depth identically, so the policy systematically under-prices continuing. Untested — it
    needs a replay change.
 
-*Dead ends, recorded so they are not retried.* Prompt length alone: $R^2$ 0.007-0.045 on TACO,
-negative on LCB scout. The scout's own realized generation length: beaten by the prompt activation
-(§6.9g) and worth +0.01-0.03 on top of it.
+**3. Stack the free post-decoding signal — the largest cost-side gain we have.** Under
+`scout_first` the scout's generation is already bought, so its **realized length and outcome are
+free at decision time**. Fitted as a separate view and blended on the calibration split:
+
+| | activation only | free scout signal | **stacked** |
+|---|---|---|---|
+| TACO oss20 | +0.005 | +0.106 | **+0.187** |
+| TACO oss120 | +0.238 | +0.103 | **+0.306** |
+| LCB oss20 | +0.370 | +0.181 | **+0.392** |
+| LCB oss120 | +0.492 | +0.271 | **+0.522** |
+
+Blend weights are large on both views (0.35-0.85 activation, 0.34-0.74 free), so they are
+complementary rather than redundant, and the gain is biggest exactly where the activation head
+fails worst — **TACO oss20, 0.005 → 0.187, the cell responsible for that dataset's frontier
+collapse.**
+
+*Two caveats.* The features exist only after a scout draw, so they are unavailable at the root
+under `free_start`; and they make the cost estimate state-dependent, which the replay does not yet
+model. **Correction to an earlier reading in this section:** we first measured this as worth only
++0.01-0.03 and discarded it. That was an artifact of putting 2 features into a ridge beside 40,960
+under one shared penalty, where they are crushed. Fit the views separately and stack.
+
+*Dead end, recorded so it is not retried.* Prompt length alone: $R^2$ 0.007-0.045 on TACO,
+negative on LCB scout.
 
 **6.9g An oracle cost head: how much is on the table, and what no cost head can fix.**
 
