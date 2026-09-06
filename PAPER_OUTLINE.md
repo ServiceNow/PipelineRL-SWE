@@ -1049,9 +1049,28 @@ is not what we are failing to extract — we have all of it.
 
 **The gap is verbosity, which is orthogonal to difficulty.** On TACO, difficulty explains only
 7-15% of cost variance against LiveCodeBench's 15-50%, so **85-93% of TACO's cost variance is how
-much the model rambles**, a property of the model's style on that problem rather than of the
-problem's hardness. That is the quantity a better cost head must predict, and it is a genuinely
-different target from the one the belief head solves.
+much the model rambles**. That is a genuinely different target from the one the belief head solves.
+
+**Verbosity is strongly shared across models — and invisible in the prompt.** Log-length
+correlates **r = 0.929** between gpt-oss-20b and gpt-oss-120b on LiveCodeBench (0.898 on TACO), and
+a single factor explains **78-86%** of all cross-route variance, so "this problem makes models
+ramble" is a real property of the problem. The ceiling it implies is log-$R^2$ **0.88-0.93**.
+
+But no prompt probe gets near it, **including each model's own**:
+
+| target route | probe = scout | probe = oss20 | probe = oss120 |
+|---|---|---|---|
+| scout | **+0.162** | +0.076 | +0.100 |
+| oss20 | **+0.370** | +0.302 | +0.270 |
+| oss120 | **+0.492** | +0.440 | +0.419 |
+
+gpt-oss-20b's own activations predict its own cost *worse* than the 4B scout's do. So the shared
+verbosity factor is **not encoded in the prompt representation** — how long a model will ramble is
+settled during decoding, not before it. **This bounds the research direction**: prompt-only cost
+prediction has a hard ceiling far below the problem-level signal, and closing the gap requires
+partial generation (decode $k$ tokens, then extrapolate), which costs money and changes the
+method's economics. It also re-confirms C4 from an independent angle: per-candidate probing loses
+on cost as well as on beliefs.
 
 **The labels are clean, so the headroom is real.** Split-half reliability of the per-problem cost
 label gives a dollar-space ceiling of $R^2$ **0.82-0.96** against our 0.03-0.58. This is not a
