@@ -1026,6 +1026,39 @@ likelihood it is **0.5–1.35** for our beliefs and **0.25–1.09** for RoR's, a
 less for a failure to teach. *Both* methods must be re-run with their own fitted constant, or
 fitting only ours would rig the comparison.
 
+**6.9i The unifying result: query-conditioning pays in the stop/go decision, not in arm selection.**
+
+Two independent decompositions land in the same place.
+
+**Beliefs help through abstention, not routing** (SS6.9f): activation priors are worth up to
+**+43.7%** when the give-up action is available and **~0%** when it is disabled, on both datasets.
+
+**Costs help through the absolute level, not the ratio.** The utility rule uses absolute $c_m$ to
+decide *whether any action is worth taking* and relative $c_m$ to decide *which*. We predict the
+level reasonably ($R^2$ up to 0.49) and the ratio not at all:
+
+| pair | sd(log cost ratio) TACO / LCB | ratio $R^2$ TACO / LCB |
+|---|---|---|
+| oss20 -> oss120 (**within family**) | **0.564 / 0.616** | -0.287 / -0.102 |
+| scout -> oss20 (cross family) | 1.426 / 1.264 | -0.038 / -0.022 |
+| scout -> oss120 (cross family) | 1.373 / 1.142 | +0.129 / +0.050 |
+
+**The ratio is negatively predictable in 4 of 6 cells** -- our conditioned estimate is worse than a
+constant at exactly the quantity route selection compares. So both halves of the method contribute
+through the same channel, and neither improves arm selection.
+
+**This single claim explains every result in SS6.9**: why per-candidate probing bought nothing
+(C4), why the budget-swept family shows no benefit, why the cost head's errors hurt TACO
+disproportionately, and why the near-ceiling regime -- where there is no stop/go decision left to
+make -- is where we lose.
+
+**A deployment rule falls out of it.** Within-family cost ratios are **2.3x more stable** than
+cross-family ones (sd 0.56-0.62 against 1.14-1.43), because models of a family are verbose on the
+same problems (r = 0.90-0.93, SS6.9h). So **a within-family pool can route on per-route constants
+and be nearly right; a cross-family pool has far more ratio spread, which is where
+query-conditioned cost would pay -- and precisely where prompt-only estimation fails.** That is a
+testable prediction for anyone assembling a heterogeneous pool.
+
 **6.9h Why cost prediction is hard, and it is not the shared difficulty factor.**
 
 The natural worry: both heads read one activation, so if the probe finds difficulty, the cost head
