@@ -1026,6 +1026,54 @@ likelihood it is **0.5–1.35** for our beliefs and **0.25–1.09** for RoR's, a
 less for a failure to teach. *Both* methods must be re-run with their own fitted constant, or
 fitting only ours would rig the comparison.
 
+**6.9h Why cost prediction is hard, and it is not the shared difficulty factor.**
+
+The natural worry: both heads read one activation, so if the probe finds difficulty, the cost head
+should inherit it. It does — completely — and that is the problem.
+
+**How much of per-problem cost is difficulty at all?** Regressing cost on the *true* per-problem
+pass rate (the best any pure difficulty signal could do):
+
+| | difficulty -> cost, dollar $R^2$ | our cost head, dollar $R^2$ |
+|---|---|---|
+| LCB oss120 | 0.501 | **0.492** |
+| LCB oss20 | 0.388 | **0.370** |
+| LCB scout | 0.152 | 0.162 |
+| TACO oss120 | 0.154 | 0.238 |
+| TACO oss20 | 0.133 | 0.005 |
+| TACO scout | 0.070 | 0.128 |
+
+**Our cost head is a difficulty head in disguise, and it is already saturated.** On LiveCodeBench
+it lands within 0.02 of the difficulty-implied ceiling at both large routes. So the shared factor
+is not what we are failing to extract — we have all of it.
+
+**The gap is verbosity, which is orthogonal to difficulty.** On TACO, difficulty explains only
+7-15% of cost variance against LiveCodeBench's 15-50%, so **85-93% of TACO's cost variance is how
+much the model rambles**, a property of the model's style on that problem rather than of the
+problem's hardness. That is the quantity a better cost head must predict, and it is a genuinely
+different target from the one the belief head solves.
+
+**The labels are clean, so the headroom is real.** Split-half reliability of the per-problem cost
+label gives a dollar-space ceiling of $R^2$ **0.82-0.96** against our 0.03-0.58. This is not a
+noise floor; it is a modelling gap.
+
+**Two concrete leads, both measured.**
+1. **Non-linearity, per route.** Gradient boosting on a 1/16 feature subsample beats ridge exactly
+   where ridge fails worst — TACO oss20 **0.005 -> 0.135**, TACO oss120 **0.238 -> 0.325** — while
+   losing on the scout rows. Select the model per route on calibration, the same discipline as the
+   log/direct target-space choice.
+2. **Cost is outcome-conditional and the policy ignores it.** Failed draws cost **2.4x-10.6x** more
+   than solved ones. Decomposing $E[c]=\theta E[c\mid\text{ok}]+(1-\theta)E[c\mid\text{fail}]$
+   does *not* improve the static prediction (it is an identity in the true quantities, and from
+   activations it is a wash), but it makes cost **state-dependent**: as failures accumulate,
+   $p_m(s)$ falls and expected cost should rise toward the failure branch. The current head prices
+   every depth identically, so the policy systematically under-prices continuing. Untested — it
+   needs a replay change.
+
+*Dead ends, recorded so they are not retried.* Prompt length alone: $R^2$ 0.007-0.045 on TACO,
+negative on LCB scout. The scout's own realized generation length: beaten by the prompt activation
+(§6.9g) and worth +0.01-0.03 on top of it.
+
 **6.9g An oracle cost head: how much is on the table, and what no cost head can fix.**
 
 Blending the per-route constant with perfect per-problem foresight,
