@@ -9,7 +9,10 @@ set -euo pipefail
 
 STEM=$1; shift
 R=/mnt/llmd/results/exps/aristides/reason
-NAME="$(echo "${STEM}" | tr "A-Z" "a-z")_${RANDOM}${RANDOM}"
+# eai job names must be lowercase alphanumeric with underscores between alphanumerics, so
+# fold case and replace anything else (a decimal point in a swept value, most often) rather
+# than letting the submission fail after the output directory has already been created.
+NAME="$(echo "${STEM}" | tr "A-Z" "a-z" | sed "s/[^a-z0-9]\+/_/g; s/^_//; s/_$//")_${RANDOM}${RANDOM}"
 DIR="${R}/${NAME}"
 mkdir -p "${DIR}"
 

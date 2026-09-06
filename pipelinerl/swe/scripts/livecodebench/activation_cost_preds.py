@@ -40,6 +40,10 @@ ap.add_argument("--cap", type=float, default=0.0, help=(
     "hits the cap costs exactly the cap's worth of tokens, which we observe exactly. Excluding "
     "them raises R2 (TACO oss20 0.093 -> 0.189) by switching to an easier target that is not the "
     "quantity the policy spends, and under-prices every route by 30-48%%. Kept only for ablation."))
+ap.add_argument("--no-target-space-select", action="store_true", help=(
+    "Always regress in log space. Default OFF: the script fits log-space and direct-token "
+    "regressions and picks per route on the calibration split, because log-space accuracy does "
+    "not imply dollar-space accuracy and the policy spends dollars."))
 ap.add_argument("--no-shrink", action="store_true", help=(
     "Disable calibration-fitted shrinkage. By default the prediction is linearly recalibrated "
     "on the CALIBRATION split: regressing true log-cost on the prediction gives a slope near 1 "
@@ -92,10 +96,38 @@ for j, s in enumerate(slots):
         if len(x) == 0:                      # every draw censored: fall back to all of them
             x = total[ti[p], j, :][valid[ti[p], j, :]]
         return np.log(max(x.mean(), 1.0)) if len(x) else np.log(1.0)
+
+    def _mean_tokens(p):
+        return float(np.exp(_mean_log(p)))
+
     y = np.array([_mean_log(p) for p in pk])
     sc = StandardScaler().fit(X[tr])
-    m = Ridge(alpha=a.alpha * max(1, X.shape[1] // 2560)).fit(sc.transform(X[tr]), y[tr])
+    alpha = a.alpha * max(1, X.shape[1] // 2560)
+    m = Ridge(alpha=alpha).fit(sc.transform(X[tr]), y[tr])
     pred = m.predict(sc.transform(X))
+
+    # Which space to regress in is a per-route choice, decided on held-out data.
+    #
+    # Log space is the right prior for a right-skewed target and is what the smearing correction
+    # below assumes, but the POLICY spends dollars, and the two disagree: on TACO the log fit
+    # reaches R2 0.32-0.45 in log space while delivering -0.21 to +0.33 in dollars, because
+    # dollar error is dominated by a heavy tail the log fit is free to under-weight. Regressing
+    # directly on tokens optimises the loss the decision actually pays, and wins on 4 of 6
+    # route-dataset cells (TACO oss20 -0.207 -> +0.005, LCB oss20 +0.159 -> +0.370) while losing
+    # on gpt-oss-120b, whose costs are the least skewed. So fit both and pick per route on
+    # CALIBRATION, never on test.
+    direct = None
+    if not a.no_target_space_select and cal.sum() > 10:
+        y_tok = np.array([_mean_tokens(p) for p in pk])
+        md = Ridge(alpha=alpha).fit(sc.transform(X[tr]), y_tok[tr])
+        cand = np.clip(md.predict(sc.transform(X)), 1.0, None)
+        smear_c = float(np.mean(np.exp(y[tr] - pred[tr])))
+        log_dollars = np.exp(pred) * smear_c
+        def _sse(p_):
+            return float(np.sum((y_tok[cal] - p_[cal]) ** 2))
+        if _sse(cand) < _sse(log_dollars):
+            direct = cand
+            print(f"  {s:8s} target space: DIRECT (log-space fit loses on calibration)")
     if not a.no_shrink and cal.sum() > 10:
         # Linear recalibration fitted on held-out calibration data. b ~ 1 when the prediction
         # carries signal, b -> 0 when it does not, which recovers the constant automatically.
@@ -108,7 +140,7 @@ for j, s in enumerate(slots):
     # Without it, exp() of a log-space fit returns a conditional median and systematically
     # under-prices every route, which would bias the policy toward buying too much.
     smear = float(np.mean(np.exp(y[tr] - pred[tr])))
-    tokens = np.exp(pred) * smear
+    tokens = direct if direct is not None else np.exp(pred) * smear
     # Match the first moment on TRAIN. Shrinkage compresses pred toward its mean, and by
     # Jensen exp() of a compressed predictor has a lower mean than the quantity it estimates;
     # the smearing factor corrects the conditional mean but not this. Without the rescale the
