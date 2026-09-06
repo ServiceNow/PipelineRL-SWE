@@ -1026,6 +1026,47 @@ likelihood it is **0.5–1.35** for our beliefs and **0.25–1.09** for RoR's, a
 less for a failure to teach. *Both* methods must be re-run with their own fitted constant, or
 fitting only ours would rig the comparison.
 
+**6.9g An oracle cost head: how much is on the table, and what no cost head can fix.**
+
+Blending the per-route constant with perfect per-problem foresight,
+$c_\lambda(x)=(1-\lambda)\bar c+\lambda\,c_{\text{true}}(x)$, converts "is our cost head the
+problem?" into a measurable requirement. Hull frontier against pure RoR, seed 0, calibrated
+beliefs, fitted decays. *Diagnostic only — the oracle end reads test outcomes.*
+
+| cost head | TACO 35/45/50/55/60% | LCB 50/65/75/80/84% |
+|---|---|---|
+| constant (what RoR spends) | +34.1/+6.2/+8.2/+2.1/-5.5 | +41.3/+15.5/+9.2/-0.3/+3.8 |
+| 25% oracle | +45.9/+13.6/+13.9/+6.4/+0.6 | — |
+| 50% oracle | +52.4/+16.1/+15.3/+5.1/-9.4 | — |
+| **oracle** | **+53.5/+19.3/+22.3/+3.8/-7.3** | **+76.2/+53.2/+42.8/+28.4/+9.6** |
+| *our fitted head* | *+27.5/+9.8/+10.3/-5.6/-21.8* | *+46.9/+15.0/+9.1/+7.6/+10.8* |
+
+**1. The idea is strongly validated on both datasets.** Perfect cost nearly doubles the
+LiveCodeBench advantage (+41.3 to +76.2 at the 50% target, -0.3 to +28.4 at 80%) and adds 13-14
+points on TACO at 45-50%. Query-conditioned cost is not a marginal trick; we are capturing a small
+fraction of what it is worth.
+
+**2. Our TACO head is net-negative, not merely weak.** It sits *below the constant* at four of
+five targets while the oracle sits far above. We are injecting noise, and the shrinkage that
+exists to prevent exactly that was fitted in log space (§6.9-cost). With the guardrail working,
+the floor is the constant row — which is positive at four of five TACO targets.
+
+**3. The near-ceiling failure is not a cost problem.** At the 60% target the oracle scores
+**-7.3%**, slightly *worse* than the constant's -5.5%. No cost head, however perfect, rescues that
+regime; it is the headroom effect (§6.10a) and it is now cleanly separated from estimator quality.
+Stop attributing the two to one cause.
+
+**Research direction with a number attached.** The gap between our head and the oracle is
+**+26pt** on LiveCodeBench at 50% and **+12pt** on TACO at 50%. That is a concrete target for
+future cost estimators, stated in the units the policy spends rather than in log-space $R^2$.
+
+*A natural alternative was tested and lost.* Under `scout_first` the scout's realized generation
+length is free at decision time, and predicting other routes' lengths from it is the obvious
+baseline. The prompt activation beats it (r = 0.563 vs 0.455 to oss20 length on TACO; 0.796 vs
+0.626 on LCB) and adding the realized length on top of the activation buys only +0.01-0.03 $R^2$.
+Worth reporting: **activations before generation beat observed generation length**, and cost
+nothing extra.
+
 **6.9f What the activation prior is actually for: it decides WHETHER to play, not WHICH arm.**
 
 Decomposing against `counts_value` (RoR's beliefs inside our rule, so abstention is available to
