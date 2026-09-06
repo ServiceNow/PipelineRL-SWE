@@ -1051,10 +1051,13 @@ five targets while the oracle sits far above. We are injecting noise, and the sh
 exists to prevent exactly that was fitted in log space (§6.9-cost). With the guardrail working,
 the floor is the constant row — which is positive at four of five TACO targets.
 
-**3. The near-ceiling failure is not a cost problem.** At the 60% target the oracle scores
-**-7.3%**, slightly *worse* than the constant's -5.5%. No cost head, however perfect, rescues that
-regime; it is the headroom effect (§6.10a) and it is now cleanly separated from estimator quality.
-Stop attributing the two to one cause.
+**3. The near-ceiling failure is not a cost problem.** Across the sweep the 60% target reads
+-5.5 / +0.6 / -9.4 / -14.0 / -7.3%: **non-monotonic, scattering +-7% with no trend**, on absolute
+costs of $0.061-0.070 against a fixed $0.06138 baseline. Cost-head quality has *no systematic
+effect* there, against a clear monotone trend at 50% (+8.2 -> +22.3). No cost head, however
+perfect, rescues that regime; it is the headroom effect (§6.10a), now cleanly separated from
+estimator quality. *Do not read the individual near-ceiling cells — they are single-seed and the
+hull there is set by a handful of extreme operating points.*
 
 **Research direction with a number attached.** The gap between our head and the oracle is
 **+26pt** on LiveCodeBench at 50% and **+12pt** on TACO at 50%. That is a concrete target for
