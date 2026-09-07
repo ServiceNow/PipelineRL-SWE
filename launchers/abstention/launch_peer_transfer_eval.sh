@@ -20,6 +20,7 @@ IDS=${IDS:-$R/lcb_test171_ids.txt}
 BASE=${BASE:-$R/peer_transfer_$(date +%s)}
 KEY=/home/toolkit/.secrets/openrouter_api_key
 CONCURRENCY=${CONCURRENCY:-6}
+MAX_TOKENS=${MAX_TOKENS:-65536}
 SUBMIT=${SUBMIT:-0}
 PEERS=${PEERS:-"glm5:z-ai/glm-5 deepseek:deepseek/deepseek-v4-flash kimi:moonshotai/kimi-k2.5 minimax:minimax/minimax-m2.7 qmax:qwen/qwen3-max"}
 
@@ -38,7 +39,7 @@ python pipelinerl/swe/scripts/livecodebench/collect_lcb_expert.py \\
   --source-collection-dir '${SRC}' --output-dir '${BASE}' \\
   --route-label '${LABEL}' --model '${MODEL}' --api-key-file '${KEY}' \\
   --splits 'train,eval' --problem-ids-file '${IDS}' \\
-  --max-tokens 65536 --temperature 0.2 --concurrency ${CONCURRENCY} \\
+  --max-tokens ${MAX_TOKENS} --temperature 0.2 --concurrency ${CONCURRENCY} \\
   --eval-timeout 10 --gen-timeout 1800 --max-invalid-frac 0.20 \\
   --output-suffix _t171
 SCRIPT
