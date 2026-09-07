@@ -729,13 +729,17 @@ on a failure to convert.
 **6.6a Probe scaling: how small can the probe be?** Same rich features, four smaller models,
 2x2 over scale x code-specialisation:
 
-| probe | params | LCB pool AUC | LCB cost R2 | TACO pool AUC | TACO cost R2 |
+| probe | params | LCB pool AUC | LCB cost $R^2$ (oss120 / oss20) | TACO pool AUC | TACO cost $R^2$ (oss120 / oss20) |
 |---|---|---|---|---|---|
-| **scout 4B** | 4.41B | **0.8652** | **0.633** | **0.8453** | **0.341** |
-| Qwen3-1.7B | 2.15B | 0.7861 | 0.570 | 0.8111 | 0.163 |
-| Qwen3-0.6B | 0.69B | 0.8184 | 0.509 | 0.8042 | 0.180 |
-| Coder-1.5B | 1.89B | 0.8167 | 0.361 | 0.8057 | 0.128 |
-| Coder-0.5B | 0.66B | 0.8261 | 0.355 | 0.7816 | **-0.205** |
+| **scout 4B** | 4.41B | **0.8652** | **+0.492 / +0.370** | **0.8453** | **+0.262 / -0.027** |
+| Qwen3-1.7B | 2.15B | 0.7861 | +0.450 / +0.258 | 0.8111 | +0.150 / -0.119 |
+| Qwen3-0.6B | 0.69B | 0.8184 | +0.426 / +0.264 | 0.8042 | +0.170 / -0.149 |
+| Coder-1.5B | 1.89B | 0.8167 | +0.285 / +0.159 | 0.8057 | +0.077 / -0.270 |
+| Coder-0.5B | 0.66B | 0.8261 | +0.328 / +0.148 | 0.7816 | +0.001 / **-0.299** |
+
+*Cost columns regenerated in **dollar space** on the fully re-collected pools; the AUC columns are
+unchanged by calibration, since Platt scaling is monotone. The earlier log-space cost figures
+(0.633 down to 0.355) overstated every cell -- see §6.9-cost.*
 
 **The two heads scale differently, and that is the interesting part.** Belief signal survives
 shrinking -- a 0.69B model retains ~95% of pool AUC (0.818 vs 0.865) despite being 6.4x smaller
