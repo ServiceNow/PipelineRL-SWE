@@ -38,6 +38,31 @@ these land** — if it has not, these labels are unusable and the transfer table
 
 ---
 
+### Thread D — SWE-bench Verified (launched; the out-of-sample test of the scope law)
+
+**Five Daytona grading jobs**, one per route, on the existing 5-route Verified collection
+(4B scout / gpt-oss-20b / Qwen3-30B / gpt-oss-120b / Gemini, 369 eval problems). The generations
+already existed; only real labels were missing, and `route_successes` in the parquet is the proxy
+field our own notes forbid. Each run takes ~30 min based on the Opus precedent.
+
+**Correcting an earlier recommendation.** I advised cutting SWE-bench because the Daytona harness
+"returned all-`error` in 6/10 runs". That was true of older runs, but the most recent Verified run
+completed cleanly at **319/369 resolved (86.4%)** for Opus 5. The harness works; the advice was
+wrong.
+
+**Why this is the highest-value benchmark left.** §6.9k's scope law says the advantage scales with
+the fraction of problems *nothing* in the pool solves, measured *within* TACO. SWE-bench Verified
+with this weaker pool should sit at a high unsolvable fraction — Opus reaches 86.4% but the scout
+is at 13.6% — which makes it an **out-of-sample test of the law on a different domain**
+(repo-level software engineering, not competitive programming). It also tests whether the
+difficulty latent generalises past competitive programming at all.
+
+**Kill criterion:** if the advantage does *not* rise with the unsolvable fraction here, the scope
+law is a TACO artifact and §6.9k should be demoted from a law to an observation.
+
+**After grading:** extract scout activations on the 369 Verified problems (one GPU job), build
+tensors, fit heads, run the frontier.
+
 ## 2. What these jobs decide
 
 ### Thread A — cross-model transfer (the novelty claim)
