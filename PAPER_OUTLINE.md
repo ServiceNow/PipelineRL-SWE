@@ -292,6 +292,45 @@ That is a more useful contribution than a routing win would have been: it tells 
 half of the router to build, and it is falsifiable by anyone who finds a representation that does
 route.
 
+### 3b-vii The unification: shared factors are predictable, interaction terms are not
+
+Cost-based routing was tested as an alternative to success-based routing, on the peer pool. It
+fails the same way, and decomposing why unifies every negative result in the paper.
+
+**Per-peer cost is partly predictable** from the scout's activations -- dollar $R^2$ of 0.390
+(minimax), 0.246 (glm-5), 0.158 (qmax), 0.144 (kimi), 0.032 (deepseek). **The cost *ratio* between
+peers is not: 0 of 10 pairs positive.** Routing on predicted cost scores 35.3 acc/\$ against 41.4
+for ignoring cost entirely, and 27.5 for picking the predicted-cheapest.
+
+**The structure genuinely exists.** The peer log-cost matrix is **not** rank-1: the first singular
+component explains **72.1%**, leaving **27.9% real per-problem x per-model interaction**. Model
+verbosity constants span **14x** (qwen3-max 793 mean output tokens, glm-5 11,269), and pairwise
+log-ratios have sd/|mean| of 0.6-7.8, so the cheaper model genuinely changes from problem to
+problem. There is something to route on; we cannot see it.
+
+| component | what it is | predictable from a prefill? |
+|---|---|---|
+| rank-1 problem factor | "this problem is long / hard" | **yes** -- the shared latent |
+| rank-1 model factor | "glm-5 is verbose, qwen3-max is terse" | **yes** -- a constant from calibration means, no probe |
+| **the 27.9% interaction** | "*this* model rambles on *this* problem" | **no** -- ratio $R^2 \le 0$ on all 10 pairs |
+
+**Success decomposes identically:**
+- **Success** = shared difficulty (predictable, so **abstention works**) + model x problem
+  interaction (invisible, so **routing fails**).
+- **Cost** = shared length (predictable, so the **cost level works**) + model verbosity constant (a
+  constant) + model x problem interaction (invisible, so the **cost ratio fails**).
+
+**One mechanism explains six symptoms**: per-candidate probing buys nothing (§6.5); extra PCA
+dimensions make routing worse (§3b-vi); cost ratios are negatively predictable (§6.9i); the router
+collapses to one model (§3b-vi); TACO's cost head fails where the shared component is weakest
+(§6.9n); and beliefs pay only through the give-up action (§6.9f). **A prompt representation carries
+shared factors and not interaction terms**, and every routing decision -- success- or cost-based --
+needs an interaction term.
+
+*This is the sentence the paper should be built around.* It is a positive claim about what
+prompt-only prediction can do, a sharp negative about what it cannot, and it is falsifiable: find a
+representation that predicts the interaction term, and routing becomes possible.
+
 ## 4. Related work
 
 ### 4.1 Sequential and budgeted test-time model selection *(closest)*
