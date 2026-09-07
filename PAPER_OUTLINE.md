@@ -137,6 +137,47 @@ probe beats gpt-oss-20b's own probe at predicting gpt-oss-20b (SS6.9h), and per-
 loses once priced (SS6.5). Re-frame those two results as the selective-prediction baseline
 comparison rather than as ablations.
 
+### 3b-ii The latent transfers to models from other labs, at ~25 labels each
+
+Fitting the difficulty latent from **only** scout / gpt-oss-20b / gpt-oss-120b, then applying it
+to five models it has never seen, each from a different lab, with N labelled problems and a
+two-parameter response curve:
+
+| model | solve rate | latent, N=10 | latent, N=25 | its own probe, N=25 |
+|---|---|---|---|---|
+| DeepSeek | 80% | 0.788 | **0.818** | 0.645 |
+| GLM-5 | 44% | 0.824 | **0.833** | 0.815 |
+| Kimi | 80% | 0.757 | **0.771** | 0.626 |
+| MiniMax | 50% | 0.670 | **0.741** | 0.711 |
+| Qwen-Max | 66% | 0.779 | **0.818** | 0.596 |
+
+**25 labels through the shared latent beat a dedicated probe on the same 25 at four of five
+models**, by up to 0.22 AUC. The latent is not an artifact of the gpt-oss family: it transfers
+across architectures and vendors.
+
+*Limitation to fix before this is a headline:* these screens are 50 problems each with **zero
+overlap with the main test split**, so the AUCs come from an internal split at n=50 and are noisy.
+Collecting the five peers on the real 171-problem test split is cheap and would make this a
+primary table rather than suggestive evidence.
+
+### 3b-iii On the MDP framing: setting, not contribution
+
+State it as inherited. The evidence that the sequential machinery is *not* where the value lives:
+
+- Bellman lookahead at $h=4$ and $h=6$ (full depth) changes accuracy and abstention by **exactly
+  0.000** at every operating point on both datasets (§6.9c). It is worth keeping only as a cost
+  saving.
+- The decay is a two-parameter Beta posterior whose constant was inherited unfitted from RoR by
+  everyone, us included, until §6.9d.
+- The value flows through the stop/go decision, not the resample-vs-reroute structure the MDP
+  exists to express (§6.9i).
+
+What the setting *does* earn: abstention is only meaningful sequentially (you give up after
+evidence, under a budget), and RoR's protocol is required for comparability. **Present the MDP as
+the evaluation setting we inherit, and put the contribution on the cross-model latent.** Claiming
+MDP machinery as a contribution while full-depth lookahead is a no-op is the kind of claim a
+reviewer will test and we will lose.
+
 ## 4. Related work
 
 ### 4.1 Sequential and budgeted test-time model selection *(closest)*
