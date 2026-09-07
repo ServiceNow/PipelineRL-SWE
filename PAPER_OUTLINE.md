@@ -248,6 +248,50 @@ property of the pool and not of the router. **Report the oracle row** so the rea
 ceiling, and be explicit that this pool has little routing headroom — which is also the argument
 for evaluating on the five API peers, whose strengths are far less nested.
 
+### 3b-vi The sharpest result: a shared latent supports *whether*, never *which*
+
+Tested on a deliberately complementary pool -- five API models from five labs (deepseek-v4-flash,
+glm-5, kimi-k2.5, minimax-m2.7, qwen3-max), 171 test problems, response curves fitted on the
+calibration split, the latent never having seen a peer label.
+
+**The pool has abundant routing headroom.** Best single model 71.9%; union 85.4%; **52.6% of
+problems contested**. Our cascade pool by comparison: best 68.9%, union 72.5%, +3.6pt. So the peer
+pool offers **+13.5pt** against the cascade's +3.6pt.
+
+**No probe variant reaches any of it.**
+
+| router | accuracy | cost | acc/$ | distinct models used |
+|---|---|---|---|---|
+| 1-D shared latent (2 params/model) | 70.2% | $0.0169 | **41.4** | **1 of 5** |
+| latent + 8 shared PCA dims | 70.8% | $0.0226 | 31.4 | 5 of 5 |
+| per-model probe on activations | 64.9% | $0.0284 | 22.9 | 5 of 5 |
+| always kimi (best single) | 71.9% | $0.0321 | 22.4 | — |
+| **oracle cheapest-that-solves** | **85.4%** | $0.0179 | **47.7** | — |
+
+**Why the 1-D latent collapses, and it is structural rather than a fitting failure.** All five
+response curves are monotone in the *same* scalar with similar slopes (2.11-3.12), so their
+**ordering is nearly constant across problems**: one model dominates the whole latent range and
+`argmax` picks it 171/171 times. A one-dimensional latent can express *how hard is this problem*
+-- which is a threshold, i.e. abstention -- but cannot express *which model suits this problem*,
+which requires the ordering to change. **The 1-D router's apparently strong acc/$ is entirely
+"always deepseek", reproducible from calibration-set means with no probe at all.**
+
+**And adding dimensions does not fix it.** Eight shared PCA directions, or a full per-model probe,
+do start using all five models -- and perform *worse* (31.4 and 22.9 against 41.4). The extra
+dimensions add variance, not signal. **The failure is not dimensionality; the information is not in
+the prompt representation.**
+
+**This is the paper's cleanest claim, and it is half positive and half negative:**
+> A shared difficulty latent read from one cheap prefill transfers across models and labs at ~25
+> labels each, and it supports **selective prediction** -- whether a problem is worth attempting --
+> which is worth up to +43.7% on the frontier. It does **not** support **model selection**. We
+> demonstrate this on a pool with 52.6% contested problems and +13.5pt of available routing gain,
+> where every probe variant we tried captures none of it.
+
+That is a more useful contribution than a routing win would have been: it tells practitioners which
+half of the router to build, and it is falsifiable by anyone who finds a representation that does
+route.
+
 ## 4. Related work
 
 ### 4.1 Sequential and budgeted test-time model selection *(closest)*
