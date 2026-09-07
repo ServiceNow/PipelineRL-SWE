@@ -210,6 +210,37 @@ hard", and the paper must report that rather than let a reader assume the activa
 the work. *Still missing: a true sentence-transformer baseline (none is cached here); TF-IDF is a
 weaker proxy and IrtNet's representation may sit between these rows.*
 
+### 3b-v Single-shot routing, in the literature's own units: it works, and it is the weak half
+
+The routing literature evaluates one-shot model selection. Reported that way, on the test split:
+
+| policy | accuracy | cost | accuracy per $ |
+|---|---|---|---|
+| LCB, always gpt-oss-120b | 68.9% | $0.0393 | 17.5 |
+| **LCB, routed by the probe** | 67.7% | $0.0343 | **19.8** |
+| LCB, oracle (cheapest that solves) | 72.5% | $0.0290 | 24.9 |
+| TACO, always gpt-oss-120b | 47.6% | $0.0429 | 11.1 |
+| **TACO, routed by the probe** | 48.2% | $0.0390 | **12.4** |
+| TACO, oracle | 54.8% | $0.0320 | 17.1 |
+
+**Routing works and is worth about +12-13% cost-efficiency** over always calling the big model --
+but that is **22-31% of the oracle's available gain**, against the abstention channel's +43.7%
+(§6.9f). Routing is the weak half by a factor of three or more, now measured in the units the
+routing papers use rather than only through our decomposition.
+
+**Two diagnostics that explain why.**
+- *Density routing degenerates in one shot.* Selecting by $\hat\theta/c$ scores 33.5% on LCB: it
+  picks the scout almost always. Cost-sensitivity needs a resample-or-give-up option to recover
+  from a bad cheap draw; without one it is a trap. This is the single-shot analogue of §6.3a.
+- *The pool has a dominant model.* On solvable problems the probe routes to a winner 93.4% of the
+  time against always-120b's 95.0% (LCB). It is not misrouting; there is simply rarely a cheaper
+  route that also works, because gpt-oss-120b dominates gpt-oss-20b almost everywhere.
+
+**Consequence for the claim.** Routing gains are bounded by pool complementarity, which is a
+property of the pool and not of the router. **Report the oracle row** so the reader sees the
+ceiling, and be explicit that this pool has little routing headroom — which is also the argument
+for evaluating on the five API peers, whose strengths are far less nested.
+
 ## 4. Related work
 
 ### 4.1 Sequential and budgeted test-time model selection *(closest)*
