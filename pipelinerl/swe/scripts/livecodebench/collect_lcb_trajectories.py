@@ -373,6 +373,16 @@ async def openrouter_call(
         msg = choice["message"]
         content = msg.get("content") or ""
         reasoning = msg.get("reasoning") or ""
+        # Some providers put the whole answer on the reasoning channel and leave `content`
+        # empty. Recorded naively that is an EmptyGeneration -- i.e. a wrong answer -- and the
+        # screen measured exactly that: 42% "empty" for z-ai/glm-5, 18% for minimax, 10% for
+        # kimi, against 0% for deepseek and qwen3-max. It is the same artifact that cost gpt-oss
+        # 17 points of solve rate, in a different field. If the answer channel is blank but the
+        # reasoning channel carries a fenced code block, the model did answer; grade that.
+        answer_from_reasoning = False
+        if not content.strip() and "```" in reasoning:
+            content = reasoning
+            answer_from_reasoning = True
         usage = data.get("usage", {})
         return {
             "full_output": content,
@@ -384,6 +394,7 @@ async def openrouter_call(
             # provider that ended the turn without ever emitting the final channel.
             "finish_reason": choice.get("finish_reason") or "",
             "provider": data.get("provider") or "",
+            "answer_from_reasoning": answer_from_reasoning,
         }
 
     async def _call_with_retry():

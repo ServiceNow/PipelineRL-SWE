@@ -157,3 +157,55 @@ def test_budget_exhausted_never_excludes_a_provider():
     _, n, sent = _fake_call_sequence([("", "length")], providers=["Parasail"])
     assert n == 1
     assert "provider" not in sent[0]
+
+
+def test_answer_on_the_reasoning_channel_is_not_an_empty_generation():
+    """Some providers put the whole answer in `reasoning` and leave `content` blank.
+
+    The peer screen measured 42% "empty" for z-ai/glm-5, 18% for minimax and 10% for kimi
+    against 0% for deepseek and qwen3-max -- the same artifact that cost gpt-oss 17 points of
+    solve rate, in a different field. Recorded naively these become wrong answers.
+    """
+    from pipelinerl.swe.scripts.livecodebench import collect_lcb_trajectories as m
+
+    class FakeResp:
+        def __init__(self, p): self._p = p
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+        def raise_for_status(self): pass
+        async def json(self): return self._p
+
+    class FakeSession:
+        def __init__(self, msg): self.msg = msg
+        def post(self, *a, **kw):
+            return FakeResp({"choices": [{"message": self.msg, "finish_reason": "stop"}],
+                             "usage": {"prompt_tokens": 1, "completion_tokens": 2}})
+
+    out = asyncio.run(m.openrouter_call(
+        FakeSession({"content": "", "reasoning": "thinking...\n```python\nprint(1)\n```"}),
+        "m", "sys", "user", "key", empty_retries=0, gen_timeout=1))
+    assert "print(1)" in out["full_output"]
+    assert out["answer_from_reasoning"] is True
+
+
+def test_reasoning_without_code_is_still_an_empty_generation():
+    """Reasoning that trails off mid-thought is a real failed response, not a recoverable one."""
+    from pipelinerl.swe.scripts.livecodebench import collect_lcb_trajectories as m
+
+    class FakeResp:
+        def __init__(self, p): self._p = p
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+        def raise_for_status(self): pass
+        async def json(self): return self._p
+
+    class FakeSession:
+        def post(self, *a, **kw):
+            return FakeResp({"choices": [{"message": {"content": "", "reasoning": "Let's code."},
+                                          "finish_reason": "stop"}],
+                             "usage": {"prompt_tokens": 1, "completion_tokens": 2}})
+
+    out = asyncio.run(m.openrouter_call(
+        FakeSession(), "m", "sys", "user", "key", empty_retries=0, gen_timeout=1))
+    assert out["full_output"].strip() == ""
+    assert out["answer_from_reasoning"] is False
