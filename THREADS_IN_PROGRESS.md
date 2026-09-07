@@ -60,8 +60,27 @@ difficulty latent generalises past competitive programming at all.
 **Kill criterion:** if the advantage does *not* rise with the unsolvable fraction here, the scope
 law is a TACO artifact and §6.9k should be demoted from a law to an observation.
 
-**After grading:** extract scout activations on the 369 Verified problems (one GPU job), build
-tensors, fit heads, run the frontier.
+**RESULT (2026-09-07 22:50): blocked, for a third distinct reason.** Grading ran; three jobs
+returned **0.0%, 0.0% and 0.5% resolved**. The harness is not at fault and neither are the labels:
+**the route outputs are not unified diffs.** Route 0 and 2 are prose ("I'll analyze the bug in..."),
+routes 1 and 4 are SEARCH/REPLACE edit blocks, route 3 is markdown. The Daytona evaluator expects
+an applicable `model_patch`, so it is scoring prose. Opus graded fine because that collection
+emitted diffs.
+
+**So SWE-bench Verified needs an edit-applier or a re-collection in diff format, not grading.**
+An applier exists in `pipelinerl/swe/agents/repair_agent.py` and `scripts/repair_eval_utils.py`
+and could be reused, but applying SEARCH/REPLACE blocks against a repo is error-prone and silent
+failures here look exactly like model failures -- which is how this project got a 10% oracle rate
+on Verified once before.
+
+**Recommendation: do not sink more time into this before the paper is written.** SWE-bench has now
+failed three separate ways (harness errors, proxy labels, output format). The core result stands on
+two benchmarks with a mechanism and a scope law; Verified is a nice-to-have out-of-sample check,
+not a load-bearing claim. If it is attempted later, the clean path is a fresh collection that
+*prompts for unified diffs*, not post-hoc conversion.
+
+**If resumed, after grading:** extract scout activations on the 369 Verified problems (one GPU
+job), build tensors, fit heads, run the frontier.
 
 ## 2. What these jobs decide
 
