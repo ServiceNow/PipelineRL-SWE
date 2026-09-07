@@ -95,6 +95,48 @@ one cheap model, not all of them, and the argument is now economic rather than a
 
 **C5. Methodological: cross-model activation comparisons need a fixed readout.** §6.4.
 
+## 3b. The contribution this reframes into: cross-model selective prediction
+
+Everything the method does is downstream of one quantity -- **problem difficulty, a latent shared
+across the pool**. The belief head reads it (SS6.9h shows the cost head is the same head in
+disguise), the value flows through the give-up decision rather than route choice (SS6.9i), and the
+advantage scales with how many problems nothing solves (SS6.9k). That is **selective prediction**,
+not routing, and it should be positioned as such.
+
+**What makes it new is the cross-model direction.** Selective prediction and learning-to-defer
+estimate a confidence for *the model that will answer*, from that model's own signals -- logits,
+entropy, an auxiliary head. Every baseline in that literature is same-model. We estimate the
+**shared latent once, from one cheap model's prefill**, and transfer it to models whose weights we
+never touch.
+
+**The exploitable consequence: adding a model to the pool costs tens of labels, not hundreds.**
+If difficulty is shared, a new route needs only its own 2-parameter response curve on the latent,
+not a fresh high-dimensional probe. Holding out gpt-oss-120b entirely, fitting the latent from the
+*other* routes' labels, then fitting only `P(new model solves | latent)` on N labelled problems:
+
+| N labels for the new model | shared latent (2 params) | its own probe (40,960 features) |
+|---|---|---|
+| **10** | **0.7634** | 0.6507 |
+| **25** | **0.7898** | 0.6834 |
+| 50 | 0.7898 | 0.7263 |
+| 200 | 0.7898 | 0.7512 |
+| 550 (all) | 0.7898 | 0.7755 |
+
+*(LCB, test AUC for gpt-oss-120b, 30 resamples per N. TACO is sharper still: 0.8126 from 10 labels,
+against 0.7916 for a full probe at 200.)*
+
+**25 labels through the shared latent beat 550 labels of a dedicated probe**, and the latent
+version saturates almost immediately because there are only two parameters to fit. This is the
+practical form of the claim: pools change monthly, and re-fitting a router per new model is the
+real deployment cost. Here it is a few dozen labelled problems.
+
+**It also fixes our baseline story.** The right comparison is not only RoR but **same-model
+selective prediction**, and we already have it: the per-candidate probes of SS6.5 *are* each model
+predicting its own success from its own activations, which is the standard setup. The 4B scout's
+probe beats gpt-oss-20b's own probe at predicting gpt-oss-20b (SS6.9h), and per-candidate probing
+loses once priced (SS6.5). Re-frame those two results as the selective-prediction baseline
+comparison rather than as ablations.
+
 ## 4. Related work
 
 ### 4.1 Sequential and budgeted test-time model selection *(closest)*
