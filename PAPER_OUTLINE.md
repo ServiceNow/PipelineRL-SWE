@@ -178,6 +178,38 @@ the evaluation setting we inherit, and put the contribution on the cross-model l
 MDP machinery as a contribution while full-depth lookahead is a no-op is the kind of claim a
 reviewer will test and we will lose.
 
+### 3b-iv Literature check: the shared latent is Item Response Theory, and we must say so
+
+**The framing is not new; the instantiation is.** Decomposing correctness into a shared *item
+difficulty* plus a per-model *ability* is Item Response Theory, and there is an active LLM
+literature applying it: **IrtNet** (arXiv 2510.00844) already does IRT-based **routing**;
+contextual multidimensional IRT (2608.22295) predicts on unseen questions; adaptive testing
+(2511.04689) and Ai2's fluid benchmarking use it to cut evaluation cost. **Cite these and drop any
+claim that a shared difficulty latent is novel.** It is not.
+
+**What survives contact with IrtNet, the closest work.** It predicts difficulty from 768-d
+*sentence-transformer embeddings* of the query; it does **no** abstention, **no** cost-aware
+selection, and gives **no** sample-complexity analysis for adding a model. Our differentiators are
+therefore: (i) difficulty read from a **solver model's prefill activations**, (ii) a
+**cost-constrained sequential setting with a give-up action**, and (iii) the **pool-extension label
+efficiency** (~25 labels per new model).
+
+**The baseline this implies, which we had never run.** If a 768-d sentence embedding suffices, then
+"activations" is not the contribution and "any query representation" is. Tested against the
+cheapest possible representations:
+
+| representation | LCB pool AUC | TACO pool AUC |
+|---|---|---|
+| **scout activations (40,960-d)** | **0.8629** | **0.8814** |
+| TF-IDF + SVD (256-d, no model at all) | 0.7642 | 0.7204 |
+| **problem statement length (1 number)** | 0.7110 | 0.6248 |
+
+Activations win by **+0.10 to +0.16 AUC**, so the claim holds. **But statement length alone reaches
+0.711 on LiveCodeBench**, so a substantial share of "difficulty prediction" is "long problems are
+hard", and the paper must report that rather than let a reader assume the activation is doing all
+the work. *Still missing: a true sentence-transformer baseline (none is cached here); TF-IDF is a
+weaker proxy and IrtNet's representation may sit between these rows.*
+
 ## 4. Related work
 
 ### 4.1 Sequential and budgeted test-time model selection *(closest)*
