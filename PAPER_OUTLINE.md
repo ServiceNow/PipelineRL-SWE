@@ -878,6 +878,39 @@ genuinely larger cap. The 64k re-collection (§6.16) is the direct test.
 system has a cap, and failed draws cost 2.6–5.3× more than solved ones — but the high-target LCB
 numbers should not be quoted without it.
 
+**6.9-HEADLINE Final results on the fully re-collected pools.** All three routes at a 65,536-token
+cap, calibrated belief head, cost head fitted and shrunk in dollar space, both methods on their own
+MLE-fitted decay, hull frontier, against RoR as published (`counts`).
+
+**LiveCodeBench (5 draw-ordering seeds):**
+
+| target | 50% | 60% | 70% | 80% | 84% |
+|---|---|---|---|---|---|
+| advantage | **+45.8% ± 1.4** | **+17.7% ± 2.2** | **+18.7% ± 3.9** | **+8.0% ± 3.5** | **+8.6% ± 2.5** |
+
+Scanning 401 accuracy levels from 45% to 84.5%: **negative at none, worst point +5.07%.** Utility
+at matched $R$: **79/96** swept values. This is a strict improvement with a floor five points above
+the baseline.
+
+**TACO (3 seeds, matched split, oss20/oss120 re-collected; the scout is still 32k):**
+
+| target | 35% | 45% | 50% | 55% |
+|---|---|---|---|---|
+| advantage | **+34.4% ± 2.8** | **+7.2% ± 4.3** | **+18.0% ± 3.7** | -7.3% ± 10.2 |
+
+Utility **64/96**. The 60% target is unreachable on this pool's test split. So TACO is a win at
+three of four reachable targets and on utility, but not a strict improvement -- consistent with
+SS6.9l: it is strong on the abstention axis and weak on the cost axis, and the re-collection does
+not change that because TACO's cost tail is intrinsic rather than a cap artifact (SS6.9m).
+
+**Raising the cap further will not help.** Draw lengths follow an approximate power law -- each
+doubling of the cap roughly halves the survivors (LCB 17.7/10.4/5.1/2.0% above 8k/16k/32k/64k;
+TACO 31.8/19.1/9.9/4.0%) -- so there is no cap at which the distribution becomes well behaved.
+Worse, each increase makes spend *more* tail-dominated: p90/p50 rises (LCB 9.50 -> 10.82) and the
+top decile of draws grows from 56% to **62%** of all spend on LCB, 41% to **50%** on TACO. **Over
+half of all money goes to a tenth of the draws.** That is the strongest motivation for
+query-conditioned cost and simultaneously the reason it is hard.
+
 **6.9a The 64k pool changes the headline, and the two metrics disagree — informatively.**
 Rebuilding the whole chain on the re-collected pool (oss20 and oss120 at 64k; the scout is still
 the local 32k collection, and fully local 64k runs for all three routes are in flight), 96 points,
