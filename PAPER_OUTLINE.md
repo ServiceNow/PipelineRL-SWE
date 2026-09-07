@@ -155,10 +155,17 @@ two-parameter response curve:
 models**, by up to 0.22 AUC. The latent is not an artifact of the gpt-oss family: it transfers
 across architectures and vendors.
 
-*Limitation to fix before this is a headline:* these screens are 50 problems each with **zero
+**Two limitations, one of them serious.** (a) These screens are 50 problems each with **zero
 overlap with the main test split**, so the AUCs come from an internal split at n=50 and are noisy.
-Collecting the five peers on the real 171-problem test split is cheap and would make this a
-primary table rather than suggestive evidence.
+(b) **Three of the five peers had corrupted labels.** The pool screen recorded 42% empty outputs
+for z-ai/glm-5, 18% for minimax and 10% for kimi -- answers written to the `reasoning` channel with
+`content` left blank, the same artifact that cost gpt-oss 17 points of solve rate. Their rows above
+therefore treat provider artifacts as wrong answers. **deepseek and qwen3-max had 0% empty and are
+clean**, and both score 0.818, which is reassuring but is two models, not five.
+
+The collector now recovers an answer from the reasoning channel when it carries a fenced code
+block, and all five peers are being re-collected on the real 171-problem test split. **Do not use
+the table above for anything but motivation until that lands.**
 
 ### 3b-iii On the MDP framing: setting, not contribution
 
