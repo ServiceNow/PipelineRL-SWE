@@ -1105,6 +1105,41 @@ the policy never sees stratum means, only a global per-route constant, and again
 clearly better (+0.370 on LCB, driving the +47% cost-only advantage). The correct statement is
 that **the head is useful and all of its usefulness is difficulty-mediated.**
 
+**6.9o Prescription for cost prediction, and why it may not be worth cashing.**
+
+The hump (SS6.9n) says a monotone predictor cannot work on TACO, which yields a concrete recipe:
+
+| | linear on activations | non-monotone $f(\hat{\text{difficulty}})$ | blended on calibration |
+|---|---|---|---|
+| LCB | +0.370 | +0.283 | **+0.385** |
+| TACO | **-0.027** | -0.104 | **+0.093** |
+
+1. **Two-stage.** Predict difficulty from activations (which works: pool AUC 0.85), then map
+   predicted difficulty to cost through a *non-monotone* binned function, and blend with the linear
+   head on calibration. Takes TACO from actively harmful to useful.
+2. **Choose the functional form per route on calibration.** Gradient boosting independently reaches
+   0.135 on TACO oss20 and 0.325 on TACO oss120 while losing on both scout rows -- the signature of
+   "TACO needs a hump, LiveCodeBench needs a line".
+3. **Stack the free scout-draw features** (SS6.9h): TACO oss20 0.005 -> 0.187.
+
+**But we have already run the experiment that tests whether this pays.** Stacking improved TACO
+oss20's dollar $R^2$ **37-fold** (0.005 -> 0.187) and the policy did not move: utility 68 -> 67/96,
+frontier slightly worse. **Better cost $R^2$ did not become better decisions.** The reason is
+SS6.9i: the decision compares cost *ratios* between routes, and those are near-unpredictable
+(negative $R^2$ in 4 of 6 route pairs); every fix above targets the *level*.
+
+**So the honest status is:** the recipe improves the estimate, is well-motivated by a measured
+mechanism, and has no demonstrated effect on the policy. Combined with the oracle bound (SS6.9g:
+perfect cost is worth +13pt on TACO at mid targets and nothing near the ceiling), **cost estimation
+is the wrong place to spend further effort.** The stop/go channel (SS6.9i) and the unsolvable-
+fraction axis (SS6.9k) are where the method's value actually lives.
+
+*A grading artifact was checked and is negligible.* 53 of the cheap never-solved failures carry
+`module 'tmp_sol' has no attribute 'Sol...'`, a call-format mismatch where the harness wants a
+`Solution` class and the model writes a stdin script. It affects only **9 of 883** problems (1.0%,
+those 53 errors being 9 problems x 6 draws); removing them leaves the between-stratum spread at
+7.2x, unchanged. The hump is real, not a harness artifact.
+
 **6.9m Why cost is predictable on LiveCodeBench and not on TACO. Three explanations tested and
 rejected; what remains.**
 
