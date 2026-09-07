@@ -1059,6 +1059,52 @@ likelihood it is **0.5–1.35** for our beliefs and **0.25–1.09** for RoR's, a
 less for a failure to teach. *Both* methods must be re-run with their own fitted constant, or
 fitting only ours would rig the comparison.
 
+**6.9n RESOLVED: difficulty and cost are monotonically related on LiveCodeBench and
+hump-shaped on TACO.**
+
+| pool solve rate | LCB mean cost | TACO mean cost |
+|---|---|---|
+| never solves | 20,666 | **11,416** |
+| (0, 0.2] | 22,308 | **20,229** |
+| (0.2, 0.4] | 10,468 | 15,796 |
+| (0.4, 0.6] | 6,482 | 12,139 |
+| (0.6, 0.8] | 2,761 | 5,553 |
+| always solves | 553 | 2,818 |
+| **between-stratum spread** | **40.3x** | **7.2x** |
+| **share of cost variance between strata** | **46.4%** | **12.8%** |
+
+**On LiveCodeBench cost falls monotonically with solve rate over a 40x range**, so a difficulty
+signal converts directly into a cost estimate. **On TACO the relation is hump-shaped**: the
+never-solved problems are *cheap* (mean 11,416, median 3,526) because the model recognises they are
+beyond it and bails, while the *almost*-never-solved are the most expensive (20,229) because it
+grinds and fails. Cost rises then falls with difficulty, and a monotone difficulty signal cannot
+express that. Only **12.8%** of TACO's cost variance is between difficulty strata at all, against
+**46.4%** on LiveCodeBench.
+
+This is the full explanation of SS6.9h: our cost head is a difficulty head, difficulty maps to cost
+on one benchmark and not the other, and the head inherits exactly that.
+
+**Two competing explanations were tested and rejected**, both worth recording because both are the
+natural first guesses:
+- *"TACO is harder / our mixture is too hard."* Reweighting LiveCodeBench's test set to TACO's
+  exact difficulty histogram (40% never-solve, 5% always-solve) leaves its cost $R^2$ at
+  **+0.338 +- 0.027**, against its unweighted +0.370 and TACO's -0.027. The difficulty mixture
+  explains almost none of the gap.
+- *"Restriction of range."* Rejected earlier on a bad test (a 5-95 percentile *range* that spanned
+  0.00-0.94, i.e. no restriction). The distribution-matched test above is the correct one and also
+  rejects it.
+
+**Predicted and confirmed fix direction.** If TACO needs a hump and LiveCodeBench a line, a
+non-monotone learner should help TACO and not LiveCodeBench. Gradient boosting does exactly that:
+TACO oss20 **0.005 -> 0.135**, TACO oss120 0.238 -> 0.325, while losing on both scout rows
+(SS6.9h). Select the functional form per route on calibration.
+
+*Caveat on the within-stratum numbers.* Within a narrow difficulty band the head is worse than
+that band's own mean ($R^2$ negative on both datasets). That is not evidence the head is useless:
+the policy never sees stratum means, only a global per-route constant, and against that the head is
+clearly better (+0.370 on LCB, driving the +47% cost-only advantage). The correct statement is
+that **the head is useful and all of its usefulness is difficulty-mediated.**
+
 **6.9m Why cost is predictable on LiveCodeBench and not on TACO. Three explanations tested and
 rejected; what remains.**
 
