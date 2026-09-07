@@ -1026,6 +1026,44 @@ likelihood it is **0.5–1.35** for our beliefs and **0.25–1.09** for RoR's, a
 less for a failure to teach. *Both* methods must be re-run with their own fitted constant, or
 fitting only ours would rig the comparison.
 
+**6.9l Two independent value axes, which is why TACO is both the best and the worst case.**
+
+An apparent contradiction: SS6.9k shows the advantage *rises* with the fraction of problems nothing
+solves, and TACO has 2.5x more of them than LiveCodeBench (38.1% vs 15.2% of the test split) --
+yet TACO is where we lose. Normalising for ceiling does **not** resolve it; at matched fractions
+of each pool's own ceiling TACO is still worse everywhere (+32.8/+14.0/+11.0/+3.3/-8.5 against
++50.9/+36.2/+17.6/+17.8/+7.4). Decomposing does:
+
+| at matched % of ceiling | 55% | 65% | 75% | 85% |
+|---|---|---|---|---|
+| beliefs only, LCB | +45.7% | +35.6% | +15.1% | +8.2% |
+| beliefs only, TACO | +34.4% | +23.5% | +6.7% | +6.1% |
+| **cost only, LCB** | **+47.4%** | **+38.0%** | **+18.6%** | **+17.1%** |
+| **cost only, TACO** | **+17.2%** | **+12.0%** | **+0.5%** | **-8.7%** |
+
+**The belief half transfers; the cost half does not.** TACO retains 70-75% of LiveCodeBench's
+belief-side value and only ~35% of its cost-side value, and that 18-30pt cost gap is most of the
+cross-dataset difference.
+
+**So the method has two independent value sources, and a benchmark can be strong on one and weak
+on the other:**
+
+1. **Abstention value** scales with the fraction of problems nothing in the pool solves (SS6.9k,
+   measured by intervention). TACO is the *strong* case.
+2. **Cost-conditioning value** scales with how much cost is predictable from the prompt, which is
+   bounded by how much of cost is difficulty (SS6.9h: 15-50% on LCB, 7-15% on TACO). TACO is the
+   *weak* case.
+
+TACO is high on (1) and low on (2); LiveCodeBench is the reverse. They net out against TACO, and
+because the cost failure bites hardest at high targets -- exactly where TACO's reported range sits
+-- one component failing looked like the whole dataset failing.
+
+**Deployment consequence: the two halves are separately shippable.** On a TACO-like pool, ship the
+belief head and keep the baseline's constant costs; that configuration is positive at 4 of 5 TACO
+targets (SS6.9g, lambda=0). Ship both only where cost is predictable. **Do not present the method
+as a single indivisible contribution** -- the evidence says it is two, with different scope
+conditions and different failure modes.
+
 **6.9k The scope condition, measured by intervention: advantage scales with what you can skip.**
 
 If query-conditioning pays through the stop/go decision (SS6.9i), its value must scale with how
