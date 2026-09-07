@@ -802,6 +802,45 @@ do not claim an ordering among the small models without a paired bootstrap.*
 rolling-origin folds: linear wins pool solvability (P(MLP better)=0.029) and all three cost
 targets. "Linear suffices" is measured, not assumed.
 
+**6.7-REGEN Price ratio: the threshold is ~10x, not ~6x.** Regenerated on the fully re-collected
+pool with calibrated beliefs and the dollar-space cost head. The scout stays at $0.278/M; only the
+120B's price moves. Hull frontier, seed 0.
+
+| gpt-oss-120b price | ratio to scout | 50% | 65% | 75% | 80% |
+|---|---|---|---|---|---|
+| $0.834/M | 3x | -36.8% | **-118.9%** | -63.1% | -33.5% |
+| $1.668/M | 6x | +10.5% | -44.3% | -22.4% | -10.7% |
+| $2.780/M | 10x | +33.5% | -0.5% | -1.3% | +2.6% |
+| $6.950/M | 25x | **+46.6%** | **+14.5%** | **+11.9%** | **+7.7%** |
+| $11.13/M (list) | 40x | +45.8% | +12.9% | +12.1% | +5.5% |
+
+**This moves the threshold up and the previous claim was too generous.** The outline previously
+said "above ~6x"; on clean data with calibrated heads, **6x is clearly negative at three of four
+targets** and 10x is only break-even above the 50% target. A solid win needs **~25x**, at which
+point the result is stable through list price. Below ~10x the method is actively harmful, and at
+3x catastrophically so (-118.9%).
+
+*Why this matters for the paper's honesty.* The spread the method exploits is basis-dependent
+(SS6.7), and MoE active-vs-total parameter accounting can move a pool by more than the 6x-to-25x
+gap that separates "harmful" from "clearly useful". **State the threshold in the units the operator
+actually pays and let them check their own pool**, rather than asserting the method transfers.
+
+**6.14-REGEN Coupled RoR, the strongest honest baseline, on clean data.** Giving count beliefs a
+cross-route difficulty channel and comparing against *that* rather than plain counts:
+
+| | 50% | 65% | 75% | 80% |
+|---|---|---|---|---|
+| vs plain `counts` | +45.8% | +12.9% | +12.1% | +5.5% |
+| **vs `counts_coupled`** | **+51.7%** | **+21.2%** | **+12.6%** | **+7.1%** |
+
+Our margin is *larger* against the coupled baseline, not smaller: letting the baseline infer
+difficulty from cross-route failures makes it spend more, not less. The earlier reading (coupling
+moves our advantage by at most 1.1pt) was measured against the wrong arm.
+
+**6.15-REGEN Start protocol.** `free_start` +50.8/+13.6/+10.8/+4.9% against `scout_first`
++45.8/+12.9/+12.1/+5.5% at 50/65/75/80%. Conclusion unchanged: the mandatory scout does not carry
+the result, and the two protocols agree within a few points.
+
 **6.7 Cost accounting — the method needs a cost ratio above ~6x, and MoE makes that hard to pin down.**
 
 *This is the sharpest limitation in the paper. It belongs near the front, not buried.*
