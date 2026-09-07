@@ -40,6 +40,12 @@ ap.add_argument("--cap", type=float, default=0.0, help=(
     "hits the cap costs exactly the cap's worth of tokens, which we observe exactly. Excluding "
     "them raises R2 (TACO oss20 0.093 -> 0.189) by switching to an easier target that is not the "
     "quantity the policy spends, and under-prices every route by 30-48%%. Kept only for ablation."))
+ap.add_argument("--scout-draw-features", action="store_true", help=(
+    "Stack a second cost view from the scout's own first draw -- its realized length and whether "
+    "it solved the problem. Free under the scout_first protocol, where that draw is already paid "
+    "for, and unavailable at the root under free_start. Fitted separately and blended on "
+    "calibration, because two features appended to 40,960 activations under a shared penalty "
+    "contribute nothing."))
 ap.add_argument("--no-target-space-select", action="store_true", help=(
     "Always regress in log space. Default OFF: the script fits log-space and direct-token "
     "regressions and picks per route on the calibration split, because log-space accuracy does "
@@ -70,6 +76,7 @@ slots = [str(s) for s in t["model_slots"]]
 valid = t["valid"]
 completion = t["completion_tokens"].astype(float)
 total = t["prompt_tokens"].astype(float) + completion
+outcome = t["final_outcome"]
 probs = {str(json.loads(l)["problem_id"]): json.loads(l)
          for l in open(T / "problems.jsonl") if l.strip()}
 
@@ -116,6 +123,21 @@ for j, s in enumerate(slots):
     # route-dataset cells (TACO oss20 -0.207 -> +0.005, LCB oss20 +0.159 -> +0.370) while losing
     # on gpt-oss-120b, whose costs are the least skewed. So fit both and pick per route on
     # CALIBRATION, never on test.
+    # Stack a second view built from the scout's OWN first draw: its realized length and whether
+    # it solved the problem. Under `scout_first` that draw is already bought, so these features
+    # are free at decision time. They are only two numbers, so they must be fitted SEPARATELY and
+    # blended -- appended to 40,960 activations under one shared ridge penalty they are crushed,
+    # which is how we first measured them as worthless. Blended on calibration they add a lot
+    # exactly where the activation head is weakest (TACO oss20 dollar R2 0.005 -> 0.187).
+    free = None
+    if a.scout_draw_features and cal.sum() > 10:
+        sl = np.log(completion[[ti[p] for p in pk], 0, 0] + 1.0)
+        so = outcome[[ti[p] for p in pk], 0, 0].astype(float)
+        F = np.c_[sl, so]
+        scf = StandardScaler().fit(F[tr])
+        free = np.clip(np.exp(Ridge(alpha=1.0).fit(
+            scf.transform(F[tr]), y[tr]).predict(scf.transform(F))), 1.0, None)
+
     direct = None
     if not a.no_target_space_select and cal.sum() > 10:
         y_tok = np.array([_mean_tokens(p) for p in pk])
@@ -141,6 +163,19 @@ for j, s in enumerate(slots):
     # under-prices every route, which would bias the policy toward buying too much.
     smear = float(np.mean(np.exp(y[tr] - pred[tr])))
     tokens = direct if direct is not None else np.exp(pred) * smear
+    if free is not None:
+        M = np.c_[np.ones(int(cal.sum())), tokens[cal], free[cal]]
+        obs = np.array([
+            total[ti[p], j, :][valid[ti[p], j, :]].mean() if valid[ti[p], j, :].any() else np.nan
+            for p, k in zip(pk, cal) if k
+        ])
+        ok = ~np.isnan(obs)
+        if ok.sum() > 10:
+            w, *_ = np.linalg.lstsq(M[ok], obs[ok], rcond=None)
+            if np.isfinite(w).all():
+                tokens = np.clip(w[0] + w[1] * tokens + w[2] * free, 1.0, None)
+                print(f"  {s:8s} stacked with the scout's own draw "
+                      f"(weights activation={w[1]:+.2f} scout-draw={w[2]:+.2f})")
     # Match the first moment on TRAIN. Shrinkage compresses pred toward its mean, and by
     # Jensen exp() of a compressed predictor has a lower mean than the quantity it estimates;
     # the smearing factor corrects the conditional mean but not this. Without the rescale the

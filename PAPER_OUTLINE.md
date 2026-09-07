@@ -1026,6 +1026,32 @@ likelihood it is **0.5–1.35** for our beliefs and **0.25–1.09** for RoR's, a
 less for a failure to teach. *Both* methods must be re-run with their own fitted constant, or
 fitting only ours would rig the comparison.
 
+**6.9k The scope condition, measured by intervention: advantage scales with what you can skip.**
+
+If query-conditioning pays through the stop/go decision (SS6.9i), its value must scale with how
+many problems *nothing in the pool solves* -- with none, there is nothing to skip. LiveCodeBench
+sits at 8.3% and TACO at 40%, but they differ in a dozen other ways. So hold TACO fixed and vary
+**only the mix**, dropping problems (never duplicating) and preserving split proportions.
+Targets are expressed as a fraction of each pool's own ceiling, so the comparison is like-for-like:
+
+| unsolvable | pool ceiling | 50% of ceiling | 60% | 70% | 80% |
+|---|---|---|---|---|---|
+| 10% | 89.6% | +26.6% | +16.9% | -3.0% | -6.2% |
+| 20% | 80.0% | +23.9% | +19.5% | -6.1% | -6.4% |
+| 30% | 70.3% | +26.3% | +14.9% | -2.7% | **+4.0%** |
+| 40% | 60.0% | +38.6% | +24.0% | **+12.0%** | **+13.3%** |
+| 50% | 50.0% | **+50.2%** | **+31.0%** | **+17.2%** | **+9.1%** |
+
+**The advantage rises with the unsolvable fraction in every column**, and the high-target columns
+**flip sign** -- from -6.2% at 10% unsolvable to +9.1% at 50%. This is an intervention on one
+variable in one dataset, so it is not confounded by benchmark identity, and it is the cleanest
+evidence in the paper that the mechanism is selective prediction rather than routing.
+
+**It also predicts where the method should be deployed**: pools whose members frequently *all*
+fail -- agentic SWE, hard theorem proving, long-horizon tasks -- not pools where nearly everything
+is eventually solvable. And it reframes the TACO result: TACO is not a failure case, it is the
+*high-value* end of this axis whose targets we happened to evaluate too close to its ceiling.
+
 **6.9j Why cost is NOT state-dependent, and why that quietly favours us.**
 
 Tempting error, tested and retracted. Expected next-draw cost *appears* to rise steeply with
