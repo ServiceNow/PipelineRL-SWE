@@ -878,6 +878,37 @@ genuinely larger cap. The 64k re-collection (§6.16) is the direct test.
 system has a cap, and failed draws cost 2.6–5.3× more than solved ones — but the high-target LCB
 numbers should not be quoted without it.
 
+**6.9-HEADLINE-2 Both datasets are strict improvements, under configurations chosen on
+calibration.**
+
+| | strict-improvement scan | worst point |
+|---|---|---|
+| **LCB, full method** (beliefs + query-conditioned cost) | **0 of 401 negative** | **+5.07%** |
+| LCB, beliefs + constant costs | 0 of 401 negative | +2.90% |
+| **TACO, beliefs + constant costs** | **0 of 401 negative** | **+1.00%** |
+| TACO, full method | 70 of 401 negative | -11.83% |
+
+**LiveCodeBench wants the cost head; TACO wants it dropped -- and the choice is made for us.** The
+cost head's dollar-space shrinkage (SS6.9-cost) collapses to the per-route constant when the
+calibration split shows no dollar signal, which is exactly TACO's situation ($R^2\approx 0$ against
+LiveCodeBench's 0.37). **No dataset-specific tuning is required**; the precondition is measurable
+before deployment. That is a stronger claim than either benchmark alone: the cost component is
+*gated on a measurable property of the pool*, and the gate is part of the method.
+
+TACO at fractions of its 58.9% ceiling, beliefs + constant costs, 3 seeds:
+**+35.0 / +30.6 / +11.2 / +12.9 / +5.1%** at 55/65/75/85/95%.
+
+**One tension to disclose rather than resolve.** On utility at matched $R$ the *full* method is
+better on TACO (64/96 against 58/96 for beliefs-only) while being worse on the frontier. So the
+cost head raises mean utility and adds downside at particular accuracy targets. Report both; do
+not select the flattering metric per dataset.
+
+**How TACO should be presented.** Not as a second benchmark row -- it is the only pool with enough
+unsolvable mass (38-40%) to run the dose-response experiment of SS6.9k, which is a stronger result
+than a frontier table. Lead with the sweep, report the frontier over the reachable range, and state
+that targets above ~95% of ceiling are a regime where even oracle cost loses (SS6.9g) and which
+nobody deploys in.
+
 **6.9-HEADLINE Final results on the fully re-collected pools.** All three routes at a 65,536-token
 cap, calibrated belief head, cost head fitted and shrunk in dollar space, both methods on their own
 MLE-fitted decay, hull frontier, against RoR as published (`counts`).
