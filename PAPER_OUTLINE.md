@@ -1,63 +1,75 @@
 # Paper outline — living document
 
-**Edited in place.** Append-only history lives in `RESEARCH_LOG.md`. Every number is cited to a
-run or marked TODO; nothing enters by recollection.
+**Edited in place.** Append-only history lives in `RESEARCH_LOG.md`. In-flight work is tracked in
+`THREADS_IN_PROGRESS.md`. Every number is cited to a run or marked TODO; nothing enters by
+recollection.
 
-**Status:** LCB and TACO complete, both re-run with rich features (all layers x {mean,last}),
-which lifted every head on both datasets. Headline: full method beats RoR at 6/6 targets on LCB
-and 5/6 on TACO. Cost conditioning is regime-dependent, and the regime is now quantified.
-SWE-Smith not started.
-**Last updated:** 2026-09-04
+**Status:** LiveCodeBench and TACO complete on fully re-collected 64k pools, with calibrated
+belief heads and a dollar-space cost head. **Both are strict improvements over RoR at every
+accuracy level** under configurations selected on calibration. A five-model API peer pool is
+collected for the cross-model transfer result. Seven downstream applications were tested; six
+failed for one identifiable reason (§7b), and that reason is now the paper's second contribution.
+**Target: TMLR** — the result is a careful, heavily-ablated characterisation of what a cheap
+prompt-only probe can and cannot do, which is the kind of thoroughness TMLR rewards and which a
+venue optimising for novelty would push us to overclaim.
+**Last updated:** 2026-09-07
 
 ---
 
 ## 1. Working title
-*Cheap Beliefs for Expensive Pools: Activation Priors and Query-Conditioned Cost in Sequential
-Test-Time Model Selection*
+*Whether, Not Which: Cross-Model Selective Prediction from One Cheap Prefill*
 
 ## 2. One paragraph
-Sequential test-time model selection asks, at each step, whether to resample the committed
-model, reroute, or stop. Every system we surveyed conditions the *correctness* half of that
-decision on the query and leaves the *cost* half a per-model constant from the training set. We
-show per-problem cost is highly variable (p90/p10 16–37×), highly predictable from one cheap
-model's pre-generation activations (R² 0.65–0.83 against the constant), and that conditioning
-on it is worth 13–46% at matched accuracy — including on top of the existing state of the art's
-own beliefs. The resulting policy is cheaper than the counting-based baseline at all seven
-accuracy targets and beats a compiled fixed schedule with no losses.
+Given a pool of language models and a cost budget, a policy must decide at each step whether to
+spend another draw, on which model, or to give up. We show that a single forward pass of the
+**cheapest** model in the pool — before any generation — yields a per-problem difficulty estimate
+that transfers to every other model in the pool, including models whose weights are never
+available, at about **25 labelled problems each**. Plugged into a sequential resample/reroute/quit
+rule, it strictly beats the count-based state of the art at **every** accuracy level on two
+benchmarks, with worst-case margins of +6.3% and +4.4%. We then show, across seven applications,
+that this signal supports the *whether* decision and never the *which* decision: a prompt
+representation carries the **shared difficulty factor** and not the **model × problem interaction**
+that model selection requires. We demonstrate this on a pool with 52.6% contested problems and
++13.5pt of available routing gain, where no probe variant — one-dimensional, multi-dimensional,
+per-model, or cost-based — captures any of it.
 
 ## 3. Contributions
 
-Ordered by how well they replicate. Three claims were retracted earlier in this project for
-insufficient checking (§8), so each is annotated with prior art and with its measured regime.
+Ordered by how well they replicate. Several claims were retracted during this project for
+insufficient checking (§8), and every contribution is annotated with prior art and measured regime.
 
-**C1. Activation-derived per-problem priors inside a sequential resample/reroute/abstain MDP.**
-*(leads; replicates on both datasets with large effects)*
-Replacing the count-based beliefs the state of the art uses with $\hat\theta_m(x)$ from one
-cheap model's prefill is worth **+13.9% to +69.7% on TACO** (five of six targets significant)
-and comparable margins on LCB. The comparison isolates the belief source *within* the same
-sequential MDP, which single-commit routers cannot do.
-*Prior art:* NVIDIA's prefill router (2603.20895) has activation routing but is single-commit,
-no abstention, no depth. RoR (2607.08665) has the resample/reroute MDP but count beliefs and no
-stop action. Ours is the first to put query-conditioned priors inside the sequential problem.
+**C1. A cheap prefill prior, inside a sequential cost-constrained rule, strictly beats count-based
+beliefs.** Scanning all reachable accuracy levels against RoR as published: **negative at 0 of 401
+levels on LiveCodeBench (worst point +6.28%) and 0 of 401 on TACO (worst point +4.37%)**. The
+comparison isolates the belief source *within* the same sequential MDP, which single-commit routers
+cannot do.
+*Prior art:* the prefill-activation router (2603.20895) is single-commit with no give-up action;
+RoR (2607.08665) has the resample/reroute MDP with count beliefs and no stop action; IRT-based
+routing (IrtNet, 2510.00844) uses sentence embeddings with neither abstention nor cost-awareness.
 
-**C2. Abstention as the zero-value action.** Stopping is exactly $\max_m Q(s,m)\le 0$ — no
-threshold, no extra head. On the harder pool this is load-bearing: TACO abstains 25–49% against
-LCB's 10.5%, because ~half of TACO is unsolved by the whole pool at one draw.
+**C2. The value flows through abstention, and we prove it by removing it.** With the give-up action
+the same beliefs are worth up to **+43.7%**; with it disabled, **≈0%** on both datasets. Stopping
+is exactly $\max_m Q(s,m)\le 0$ — no threshold, no extra head. C1 and C2 are therefore not
+separable: the prior is the information, abstention is the channel.
 
-**C3. Query-conditioned cost — with a measured regime.** *(demoted from lead after TACO)*
-Conditioning $c_m$ on the query helps when beliefs are weak and is redundant or harmful when
-they are strong:
+**C3. Cross-model transfer at ~25 labels, including to models whose weights we never touch.**
+The latent is fitted from three routes; each new model needs only a 2-parameter response curve.
+On five API models from five labs, **25 labels tie a 170-label dedicated probe** (mean AUC 0.785
+vs 0.780), saturating by N=25. **On API-only models same-model confidence methods cannot run at
+all**, so this is not a better option but the only one.
 
-| | LCB | TACO |
-|---|---|---|
-| on count beliefs | +12.9–45.9%, 6/7 significant | +6.3–36.8%, 3/6 significant |
-| on activation beliefs | +15.4–26.0%, 5/7 significant | **−29.1% to +3.6%, two significant losses** |
+**C4. The negative result, stated precisely and falsifiably: a prompt representation carries shared
+factors, not interaction terms.** Seven applications tested; the six that need the interaction term
+all fail, and their failures share one cause (§7b). This is the more useful half of the paper: it
+tells practitioners which half of a router to build, and it is falsifiable by anyone who exhibits a
+representation that predicts the interaction.
 
-The mechanism is signal-to-noise in the cost term: when beliefs already rank routes well, the
-error in $\hat c_m(x)$ outweighs the spread it resolves. The same mechanism explains the
-price-ratio limitation (§6.7). **Report as: a drop-in upgrade for count-based routers, not a
-universal improvement.** Still novel — RoR and 2603.20895 both use per-model constants, and
-length-from-activations (2607.05316, 2602.11812) is never operationalised in a decision.
+**C5. Methodological corrections that apply beyond this method.** Four safety mechanisms were
+fitted in a space the policy does not use, each found by a failure it caused: the belief head had
+no held-out calibration; the cost head's shrinkage *and* objective were in log space while the
+policy spends dollars; and a two-feature view was crushed by a shared ridge penalty against 40,960
+activations. Plus the randomised (convex-hull) frontier, which removes a grid artifact that moved
+individual targets by tens of points (§6.3a).
 
 **C3b. The discipline that makes conditioning safe: shrink every conditioned quantity toward
 the unconditional baseline it replaces, fitted on held-out data.** This is the difference between
