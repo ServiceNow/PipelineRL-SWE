@@ -2003,6 +2003,33 @@ routing decision is non-vacuous — unlike LCB where oss120 dominates.
    exhaustion (`finish_reason=length`). Excluding them halves the advantage at the 70% and 80%
    targets (§6.9), so part of the gain is anticipating budget-exhausting draws.
 
+## 7b. Applications tested and rejected — do not retry without a new representation
+
+Every application that needs more than the **shared scalar** fails. Recorded with numbers so the
+search is not repeated.
+
+| application | result | why it fails |
+|---|---|---|
+| single-shot routing, success-based | +12-13% acc/$, 22-31% of oracle | needs the model x problem interaction |
+| routing on a *complementary* pool (5 labs, 52.6% contested, +13.5pt available) | router collapses to one model, 171/171 picks | 1-D latent gives a constant model ordering |
+| multidimensional latent (8 PCA dims) | **worse** (31.4 vs 41.4 acc/$) | added variance, no interaction signal |
+| per-model probe on activations | **worse still** (22.9 acc/$) | same |
+| cost-based routing | 35.3 acc/$ vs 41.4 for ignoring cost | cost *ratio* $R^2 \le 0$ on all 10 peer pairs |
+| adaptive evaluation (Fisher-information item selection) | **10% worse than random** | 2-param model with global discrimination is misspecified |
+| difficulty-stratified evaluation (reweighted mean) | ~14% lower error, ~26% fewer calls | modest, real, but not a contribution on its own |
+
+**What survives is one thing, and it is genuinely not in the literature:**
+
+> **Cross-model selective prediction.** Read difficulty from one cheap prefill *before anything
+> runs*; transfer it to models whose weights you never touch at **~25 labels each** (ties a
+> 170-label dedicated probe); use it for the **whether-to-attempt** decision under a cost budget
+> (worth up to **+43.7%**); and it works on **API-only models**, where same-model confidence
+> methods (logits, entropy, auxiliary heads) cannot run at all.
+
+IRT derives difficulty from response patterns; IrtNet from sentence embeddings, with no abstention
+and no cost-awareness; prefill-activation routers do single-commit routing with no give-up action.
+None of them do this.
+
 ## 8. Retracted — do not resurrect
 
 **TACO's high-target loss: two mechanisms proposed, both disconfirmed.** Do not re-tell either
