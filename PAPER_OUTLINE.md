@@ -1026,6 +1026,44 @@ likelihood it is **0.5–1.35** for our beliefs and **0.25–1.09** for RoR's, a
 less for a failure to teach. *Both* methods must be re-run with their own fitted constant, or
 fitting only ours would rig the comparison.
 
+**6.9m Why cost is predictable on LiveCodeBench and not on TACO. Three explanations tested and
+rejected; what remains.**
+
+Both are competitive-programming benchmarks, so the difference demands an account.
+
+**Rejected 1 -- restriction of range.** TACO is medium+hard only, so its difficulty spread could be
+truncated. It is not the cause: restricting LiveCodeBench to TACO's difficulty band moves
+difficulty->cost $R^2$ only 0.453 -> 0.393, against TACO's 0.110.
+
+**Rejected 2 -- label noise.** Split-half reliability of the per-problem cost label is **0.86-0.96
+everywhere**, including the failing cell (TACO solvable, 0.907). The signal is real and we are
+failing to extract it.
+
+**Rejected 3 -- truncation bimodality.** A solvable TACO problem mixes short successes with
+failures that hit the cap 18.9% of the time (LCB: 5.9%), which should make its mean cost
+tail-dominated. Plausible, and false: the 64k re-collection halves the at-cap rate (13.8% -> 6.4%)
+and predictability does *not* recover ($R^2$ -0.013 -> -0.092, p90/p50 4.7x -> 4.9x). **The heavy
+tail is intrinsic, not an artifact of the cap.**
+
+**Where the failure actually lives.** Not TACO as a whole -- TACO's *unsolvable* problems are the
+best-predicted cell we have ($R^2$ +0.408, better than any LiveCodeBench cell). It is TACO's
+**solvable** problems in **dollar space**: $R^2$ +0.279 in logs, -0.013 in dollars, label
+reliability 0.907, p90/p50 4.9x. The predictor ranks these problems correctly and cannot locate
+the magnitude of the tail, and the mean of a heavy-tailed variable is set by the tail.
+
+**The two benchmarks are not the same cost regime, despite the same task genre.** On LiveCodeBench
+the model usually succeeds quickly (median 1,374 tokens on solvable problems) and rambles only on
+the rare hopeless ones -- so "stuck" is a distinct, uniformly expensive mode (median 13,948,
+sd/mean 0.78) that a probe can flag. TACO medium+hard is pre-filtered to remove easy problems, so
+the model sits near its competence limit throughout: solvable problems cost 2.6x more at the median
+and fail into a runaway 18.9% of the time. **Filtering a benchmark for difficulty changes the cost
+distribution's shape, not just its level**, and that is what breaks the cost head.
+
+*This is where we stop.* The residual explanation -- the prompt does not encode which problems will
+run away (SS6.9h) -- is consistent with every measurement but is not further falsifiable without
+new features. The oracle bound (SS6.9g) says closing it is worth +13pt on TACO, so it is a real
+target for future work rather than a defect to re-fit around.
+
 **6.9l Two independent value axes, which is why TACO is both the best and the worst case.**
 
 An apparent contradiction: SS6.9k shows the advantage *rises* with the fraction of problems nothing
