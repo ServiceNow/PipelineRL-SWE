@@ -60,24 +60,20 @@ difficulty latent generalises past competitive programming at all.
 **Kill criterion:** if the advantage does *not* rise with the unsolvable fraction here, the scope
 law is a TACO artifact and §6.9k should be demoted from a law to an observation.
 
-**RESULT (2026-09-07 22:50): blocked, for a third distinct reason.** Grading ran; three jobs
-returned **0.0%, 0.0% and 0.5% resolved**. The harness is not at fault and neither are the labels:
-**the route outputs are not unified diffs.** Route 0 and 2 are prose ("I'll analyze the bug in..."),
-routes 1 and 4 are SEARCH/REPLACE edit blocks, route 3 is markdown. The Daytona evaluator expects
-an applicable `model_patch`, so it is scoring prose. Opus graded fine because that collection
-emitted diffs.
+**RESOLVED — it was an operational limit, not a format or harness problem.** The first attempt
+returned 0.0%/0.0%/0.5% resolved, and I misdiagnosed it twice: first as an output-format mismatch
+(the launcher's Step 2 already converts SEARCH/REPLACE to diffs, so my converter duplicated it),
+then as a harness fault. The log said it on line 20: **`Total CPU limit exceeded. Maximum allowed:
+10`** — Daytona's org cap is ~10 concurrent sandboxes *across all jobs*, and five parallel jobs at
+`CONCURRENCY=8` requested 40. Every sandbox failed to create, and a sandbox that never starts scores
+its instance unresolved, so a blown limit is indistinguishable from a model that solves nothing.
 
-**So SWE-bench Verified needs an edit-applier or a re-collection in diff format, not grading.**
-An applier exists in `pipelinerl/swe/agents/repair_agent.py` and `scripts/repair_eval_utils.py`
-and could be reused, but applying SEARCH/REPLACE blocks against a repo is error-prone and silent
-failures here look exactly like model failures -- which is how this project got a 10% oracle rate
-on Verified once before.
+**Now running correctly:** job `dayt5_23511`, five routes **sequentially** in one job at
+`CONCURRENCY=8` — the configuration behind Opus's 319/369 (86.4%). Sandbox-create failures: **0**.
+ETA ~30 min per route, ~2.5h total.
 
-**Recommendation: do not sink more time into this before the paper is written.** SWE-bench has now
-failed three separate ways (harness errors, proxy labels, output format). The core result stands on
-two benchmarks with a mechanism and a scope law; Verified is a nice-to-have out-of-sample check,
-not a load-bearing claim. If it is attempted later, the clean path is a fresh collection that
-*prompts for unified diffs*, not post-hoc conversion.
+**Lesson recorded to memory:** before diagnosing a suspicious 0%, grep the eval log for
+`Failed to create sandbox`.
 
 **If resumed, after grading:** extract scout activations on the 369 Verified problems (one GPU
 job), build tensors, fit heads, run the frontier.
