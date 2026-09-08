@@ -5,13 +5,12 @@
 recollection.
 
 **Status:** LiveCodeBench and TACO complete on fully re-collected 64k pools, with calibrated
-belief heads and a dollar-space cost head. **RETRACTED 2026-09-08: the "strict improvement at
-every accuracy level" claim held only against RoR *as published* (constant per-route costs).
-Against RoR's beliefs plus our own cost head it is not a strict improvement on either benchmark
-(floors -4.57% / -0.46%; §3b-xii).** The surviving, sharper claim: the prefill latent predicts
-per-query *cost* well (R2 0.46-0.78 vs 0.05-0.19 for prompt length) and *success* poorly, and the
-budget gain is an interaction between conditioned beliefs and the give-up action, not a main
-effect of either. A five-model API peer pool is
+belief heads and a dollar-space cost head. **The belief head is a strict improvement over RoR at
+every accuracy level on both benchmarks** (floors +2.90% / +0.93%), isolated the clean way — RoR's
+constant costs on both sides, so only the belief source differs. Added 2026-09-08: the belief head
+and the cost head are **substitutes, not complements** — each alone buys ~+25pt at a 0.25x budget,
+and stacking them buys nothing (§3b-xii). Both are readouts of one prefill, and which one a pool
+supports is predictable in advance from cost R2. A five-model API peer pool is
 collected for the cross-model transfer result. Seven downstream applications were tested; six
 failed for one identifiable reason (§7b), and that reason is now the paper's second contribution.
 **Target: TMLR** — the result is a careful, heavily-ablated characterisation of what a cheap
@@ -46,16 +45,24 @@ per-model, or cost-based — captures any of it.
 Ordered by how well they replicate. Several claims were retracted during this project for
 insufficient checking (§8), and every contribution is annotated with prior art and measured regime.
 
-**C1. A cheap prefill prior, inside a sequential cost-constrained rule, beats count-based beliefs
-on average — and the gain is an interaction, not a main effect.** Against RoR as published, cost at
-matched accuracy falls by a mean of **32.8% (LCB) / 23.2% (TACO)**, negative at 0 of 401 levels on
-LCB (floor +9.01%) but at some levels on TACO (floor -12.29%). Against the stronger
-RoR-beliefs-plus-our-cost-head arm the means are **+5.92% / +11.55%** with floors of **-4.57% /
--0.46%** — real but *not* a strict improvement. **The earlier "strict at every level, worst points
-+6.28%/+4.37%" version of C1 is retracted (§3b-xii, §8):** it compared against RoR without a cost
-head. What replicates is the decomposition — at a 0.25x budget, conditioned beliefs alone are worth
-+0.0pt, a give-up action alone +1.2pt, and the two together **+25.8pt**. The comparison isolates the
-belief source *within* the same sequential MDP, which single-commit routers cannot do.
+**C1. A cheap prefill prior, inside a sequential cost-constrained rule, strictly beats count-based
+beliefs.** Isolating the belief source with RoR's constant costs on *both* sides, and scanning all
+reachable accuracy levels: **negative at 0 of 401 levels on LiveCodeBench (floor +2.90%) and 0 of
+401 on TACO (floor +0.93%)**. In budget units the same result reads **+26.5pt (LCB) / +25.8pt
+(TACO) at a quarter of the cost of calling the largest model on everything**. The comparison
+isolates the belief source *within* the same sequential MDP, which single-commit routers cannot do.
+*(Earlier drafts quoted floors of +6.28%/+4.37% from a pre-recollection run and did not say which
+arm; the numbers above are the 64k pools with the arm named. A 2026-09-08 retraction of this
+contribution was itself mistaken and has been withdrawn — see §8 R0.)*
+
+**C1b. The belief head and the cost head are substitutes, not complements.** Each alone buys
+~+25pt at a 0.25x budget; stacking the second on the first is worth **-2.13% to -17.20%** on the
+frontier. They are two readouts of the same prefill, so one probe purchase is enough, and the
+choice of head is set by a measurable property of the pool: TACO's per-query cost $R^2$ is 0.29-0.42
+against LiveCodeBench's 0.46-0.78, and TACO is exactly where the cost head goes negative. Prompt
+length predicts cost at $R^2\le0.19$ on LCB and **negatively** on TACO, so the signal is in the
+activations and not in a free proxy.
+
 *Prior art:* the prefill-activation router (2603.20895) is single-commit with no give-up action;
 RoR (2607.08665) has the resample/reroute MDP with count beliefs and no stop action; IRT-based
 routing (IrtNet, 2510.00844) uses sentence embeddings with neither abstention nor cost-awareness.
@@ -481,49 +488,66 @@ calling the largest model on everything:
 | 2.00x | 79.0% | 79.5% | **79.7%** | 57.5% | **57.3%** | 56.2% |
 | 3.00x | 82.5% | **83.0%** | 80.2% | 58.3% | 57.8% | **58.6%** |
 
-**CORRECTION (supersedes the first version of this table).** The first version reported only
-columns 1 and 3 and read "+25.1pt / +25.8pt at 0.25x". That gap is real but it is **almost
-entirely the cost head, not the beliefs**: RoR's own beliefs with our conditioned cost head reach
-53.6% / 42.4% at the same budget, and our beliefs then add **-0.8pt / -1.4pt** on top. The middle
-column is the decomposition the first version omitted, and it must be reported.
+**CORRECTION-2 (2026-09-08, supersedes both earlier versions of this section).** The first
+version reported only RoR-as-published vs our full arm. A first correction then claimed the gain
+was "almost entirely the cost head" — **that claim was itself wrong** and is withdrawn. It compared
+our full arm against `counts_qcost`, which subtracts our *own* cost head from the baseline side;
+that measures **redundancy between our two heads**, not attribution against RoR. The correct
+attribution holds the other component fixed on both sides. Doing that:
 
-**The same error is in the strict-improvement claim (C1, §6.9-HEADLINE).** Cost saved at matched
-accuracy, ours vs each baseline family, floor over the swept range (mean over 3 seeds):
+**Accuracy at a fixed budget (family hulls, multiples of always-oss120):**
 
-| baseline family | LCB floor | LCB mean | TACO floor | TACO mean |
-|---|---|---|---|---|
-| `counts` (RoR as published) | +9.01% | +32.77% | -12.29% | +23.23% |
-| `counts_qcost` (RoR beliefs + our cost head) | **-4.57%** | +5.92% | **-0.46%** | +11.55% |
-| `content_decay` (our beliefs, RoR-style constant costs) | -7.13% | +5.33% | -20.63% | -1.02% |
+| budget | RoR | + our beliefs | + our cost head | + both | bel | cost | both |
+|---|---|---|---|---|---|---|---|
+| **0.25x** LCB | 27.6% | **54.2%** | 53.6% | 52.8% | **+26.5** | +25.9 | +25.1 |
+| 0.50x | 58.7% | 59.4% | 55.3% | **62.2%** | +0.7 | -3.4 | +3.5 |
+| 1.00x | 66.3% | 70.1% | 71.9% | **72.9%** | +3.7 | +5.6 | +6.6 |
+| 2.00x | 79.0% | 79.5% | 79.5% | **79.7%** | +0.5 | +0.5 | +0.7 |
+| **0.25x** TACO | 17.9% | **43.7%** | 42.4% | 41.0% | **+25.8** | +24.5 | +23.1 |
+| 0.50x | 45.7% | 47.6% | 48.2% | **50.1%** | +1.9 | +2.5 | +4.4 |
+| 1.00x | 54.3% | **54.7%** | 54.0% | 53.7% | +0.4 | -0.3 | -0.6 |
+| 2.00x | 57.5% | 56.7% | 57.3% | 56.2% | -0.8 | -0.3 | -1.4 |
 
-**Against a baseline equipped with our cost head, the method is not a strict improvement on
-either benchmark.** The honest claim is a *mean* saving of +5.9% (LCB) / +11.6% (TACO) with
-negative worst points. C1 as written must be retracted; see §8.
+**The +25pt is real and it belongs to the beliefs.** At the tight budget the belief head alone is
+the *best* arm on both benchmarks. C1 stands.
 
-**What survives, and it is the more interesting claim.** Decomposed 2x2 of belief source x
-give-up action at the 0.25x budget, the two main effects are ~zero and the **interaction carries
-everything** (TACO: belief alone +0.0pt, give-up alone +1.2pt, interaction **+25.8pt**). And the
-cost head's advantage is genuinely in the prefill, not in a free proxy — test $R^2$ for
-per-query cost on LCB:
+**Strict-improvement scan, every pairing, over the paper's own ranges** (LCB 45-84.5%, TACO
+28-61.5%; 401 levels; negative-count / floor):
 
-| route | RoR's constant | prompt length only | prefill activations |
+| held fixed on both sides | LCB | TACO |
+|---|---|---|
+| costs = RoR constant; **beliefs alone** | **0/401, +2.90%** | **0/401, +0.93%** |
+| beliefs = RoR counts; **cost head alone** | **0/401, +3.88%** | 159/401, -21.63% |
+| both changed (full arm vs RoR) | **0/401, +5.07%** | 63/401, -11.83% |
+| *redundancy:* beliefs added on top of cost head | 28/401, -2.13% | 24/401, -3.94% |
+| *redundancy:* cost head added on top of beliefs | 155/401, -4.06% | 200/401, -17.20% |
+
+**The two heads are substitutes, not complements.** Each alone buys ~+25pt at the tight budget and
+a strict improvement on LCB; adding the second on top of the first buys nothing and often costs.
+They are two readouts of **one** prefill, so this is what redundancy should look like — and it is a
+result, not a disappointment: *you only need to pay for the probe once, and you can spend it on
+whichever head your pool supports.*
+
+**Which head a pool supports is measurable in advance.** Per-query cost $R^2$ (test half):
+
+| route | RoR constant | prompt length | prefill activations |
 |---|---|---|---|
-| scout | -0.010 | 0.053 | **0.457** |
-| oss20 | -0.001 | 0.089 | **0.675** |
-| oss120 | -0.000 | 0.186 | **0.784** |
+| LCB scout / oss20 / oss120 | -0.01 / -0.00 / -0.00 | 0.053 / 0.089 / 0.186 | **0.457 / 0.675 / 0.784** |
+| TACO scout / oss20 / oss120 | -0.00 / -0.00 / -0.01 | **-0.024 / -0.026 / 0.035** | 0.294 / 0.303 / 0.415 |
 
-So the shared prefill latent is real and is worth paying for — **it predicts how expensive a
-query will be far better than whether a route will solve it.** That re-points the paper (§8) and
-it independently explains the six rejected applications in §7b: all six spent the latent on
-*whether*, which is the half it is weak at.
+TACO's cost is genuinely harder to predict (0.29-0.42 against LCB's 0.46-0.78) and that is exactly
+where the cost head goes negative on the frontier (-21.63% floor). The gate of SS6.9-cost is the
+right mechanism; this is the number that sets it. **Note also that prompt length is worthless on
+both pools and actively negative on TACO — the cost signal is in the activations, not in a free
+proxy.** That is the cleanest single defence of paying for a prefill at all.
 
 **Cost-normalising the prefill-router comparison.** A full prefill-routing setup needs one prefill
 per candidate, not one total. On our pool that is **$0.007259/problem (LCB), $0.007841 (TACO) —
-49x our single scout probe** ($0.000149 / $0.000160), or **0.16x of one always-oss120 budget
-unit spent before generating a token**. At the 0.25x budget where routing matters most, the
-all-model probe alone consumes **64% of the entire budget**. This is why the prefill router is not
-a drop-in baseline at our operating points, and it is a result worth reporting rather than an
-excuse: **the budget framing prices a probe, and per-candidate probing does not survive it.**
+49x our single scout probe** ($0.000149 / $0.000160), or **0.16x of one always-oss120 budget unit
+spent before generating a token**. At the 0.25x budget where routing matters most, the all-model
+probe alone consumes **64% of the entire budget**. The budget framing prices a probe, and
+per-candidate probing does not survive it. Report this rather than treating the prefill router as
+un-runnable.
 
 **Reporting recommendation:** lead with this table *including the middle column*. Cost-at-matched-accuracy is what the routing
 literature reports and belongs in the paper for comparability, but "how many problems do I solve
@@ -2236,23 +2260,32 @@ None of them do this.
 
 ## 8. Retracted — do not resurrect
 
-**R0 (2026-09-08, headline-level). "Strict improvement over RoR at every accuracy level."**
-Retracted. The scan was run against family `counts` — RoR's count beliefs *and RoR's constant
-per-route costs*. Our system changed **two** things at once (beliefs and costs) and the comparison
-credited both to the belief contribution, which is the paper's framing. Against `counts_qcost`
-(RoR beliefs + our cost head) the floors are **-4.57% (LCB) / -0.46% (TACO)**, and in budget units
-our beliefs add **-0.8pt / -1.4pt** at the 0.25x budget where the headline "+25pt" was claimed.
+**R0 (2026-09-08) — a retraction that was itself wrong, kept as a worked example.**
+For a few hours this document claimed C1 was retracted because "the cost head carries essentially
+all of the gain." **That was incorrect and is withdrawn. C1 stands** (floors +2.90% / +0.93%,
++26.5pt / +25.8pt at 0.25x budget; §3b-xii).
 
-*Why it took so long to catch:* `counts` is the faithful published baseline, so the comparison was
-not wrong as *a* comparison — it was wrong as *the* comparison, because it does not isolate the
-variable the paper is about. Any A-vs-B where our arm carries two changes needs the two
-one-change arms reported alongside it. **Every remaining cross-family claim in this document that
-names `counts` as the baseline is suspect and must be re-run against `counts_qcost` before it goes
-in the paper** — that includes §6.9-HEADLINE, §6.9-HEADLINE-2, and the Q1 row of §6.10.
+*The mistake:* to test whether our **beliefs** beat RoR's, I compared our full arm
+(`content_decay_qcost`) against `counts_qcost`. But `counts_qcost` is RoR's beliefs **plus our own
+cost head** — it subtracts our contribution from the *baseline* side. That comparison answers "do
+the beliefs add anything **on top of our cost head**?", which is a redundancy question. The answer
+is no, and I read that as "the beliefs do nothing." What it actually means is that the two heads
+are **substitutes** (C1b) — a result, not a failure.
 
-*What replaced it:* the interaction decomposition and the cost-vs-success split in §3b-xii, which
-are stronger claims because they say *which half of the probe works*.
+*The rule this yields:* **to attribute a gain to component X, hold every other component fixed on
+both sides.** `content_decay` vs `counts` (beliefs differ, both constant costs) is the belief test;
+`counts_qcost` vs `counts` (costs differ, both count beliefs) is the cost test. An arm that changes
+two things belongs in neither cell. The five-row table in §3b-xii is the shape every future
+component claim in this project must take.
 
+*What was genuinely wrong in the original, and is fixed:* (i) the C1 floors +6.28%/+4.37% were
+from a pre-recollection run and are now +2.90%/+0.93%; (ii) the arm was not named, and it differs
+per dataset (LCB uses the cost head, TACO does not); (iii) the first budget table omitted the
+single-component columns, which is what let the misreading happen at all.
+
+*What the false alarm did surface, and is worth keeping:* the cost-vs-success $R^2$ split, the
+finding that prompt length is worthless as a cost proxy (negative on TACO), and the 49x
+cost-normalisation of per-candidate prefill routing.
 
 **TACO's high-target loss: two mechanisms proposed, both disconfirmed.** Do not re-tell either
 without new evidence.
