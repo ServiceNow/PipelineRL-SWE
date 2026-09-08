@@ -587,6 +587,54 @@ transfer into one object, and removes the duplication of feeding the same 40,960
 two independently-penalised ridge problems. *Not yet run end-to-end through the policy;* the table
 above is a predictor-level result and the frontier version is the obvious next experiment.
 
+### 3b-xv The shuffled-prediction control, and what TACO's cost head is actually doing
+
+**The null that RoR cannot provide.** With RoR's constant per-route belief *and* constant
+per-route cost, the utility $p_mR-c_m$ is **identical for every problem**, so the rule can only
+attempt-everything or attempt-nothing: measured, the winning `counts` arm at TACO's 0.25x budget
+abstains **0.0%** and spreads 4.95 thin attempts. *Any* per-problem dispersion unlocks partial
+abstention, whether or not the dispersion is informative. So "conditioned beats constant" conflates
+two things, and the literature has no baseline that separates them.
+
+**The control.** Permute the predicted vectors across problem ids. Marginal distribution is
+preserved exactly; per-problem pairing is destroyed (residual corr -0.042 to +0.048). Re-run the
+full replay. Anything the shuffled arm still buys is the decision rule's response to dispersion;
+the rest is information. Seed 0, accuracy at the 0.25x budget:
+
+| | head | RoR | **shuffled** | real | dispersion | information | % from information |
+|---|---|---|---|---|---|---|---|
+| LCB | beliefs | 26.8% | 28.8% | 52.7% | +2.0pt | **+23.9pt** | **92%** |
+| LCB | cost | 26.8% | 40.4% | 53.3% | +13.6pt | +12.9pt | 49% |
+| TACO | beliefs | 19.6% | 27.1% | 43.7% | +7.5pt | **+16.6pt** | **69%** |
+| TACO | cost | 19.6% | 35.5% | 42.6% | +15.9pt | +7.1pt | 31% |
+
+**The belief head survives the null on both benchmarks** — 92% and 69% of its gain is destroyed by
+shuffling, so it is carrying real per-problem information. That is C1, and it is now defended
+against the strongest null available rather than against a baseline that structurally cannot
+abstain.
+
+**The cost head does not, and TACO is where it fails hardest.** Only 31% of TACO's cost-head gain
+survives shuffling. This resolves what looked like a contradiction: TACO's per-query cost $R^2$ is
+0.081-0.309 and its cost head predicts *success* at **chance** (AUC 0.477-0.597, against
+0.750-0.779 on LCB), yet the cost head still appeared to buy +23pt at a tight budget. It was
+mostly buying dispersion. The +21.63% frontier floor against it at high targets is the same fact
+seen from the other end: when you must attempt nearly everything, triage value vanishes and only
+the price errors remain.
+
+**So TACO never needed cost prediction, and the published TACO arm correctly drops it.** Beliefs
+alone and beliefs+cost both reach 43.7% at 0.25x. The gate of SS6.9-cost is doing its job; this
+section supplies the mechanism the gate was missing.
+
+**Reporting consequence — this is the baseline the paper should add.** Not the prefill router
+(priced out at 49x, SS3b-xii) and not a second selective-prediction arm, but the *shuffled-prediction
+control*, reported beside every conditioned arm. It is the only comparison that separates "we
+predicted something useful" from "we gave a degenerate decision rule something to vary on", and no
+routing paper we surveyed runs it.
+
+*Caveat:* one replay seed per cell (5 draw orderings within it). The belief effects are 16-24pt and
+safe at this resolution; the dispersion split for the cost head should be re-run at 3 seeds before
+publication.
+
 ### 3b-xiv The sequential machinery is **not** extraneous — we tried to remove it
 
 If the probe emits a static per-problem scalar, an obvious simplification is to drop the MDP: pick
