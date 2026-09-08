@@ -72,10 +72,14 @@ the same beliefs are worth up to **+43.7%**; with it disabled, **≈0%** on both
 is exactly $\max_m Q(s,m)\le 0$ — no threshold, no extra head. C1 and C2 are therefore not
 separable: the prior is the information, abstention is the channel.
 
-**C3. Cross-model transfer at ~25 labels, including to models whose weights we never touch.**
-The latent is fitted from three routes; each new model needs only a 2-parameter response curve.
-On five API models from five labs, **25 labels tie a 170-label dedicated probe** (mean AUC 0.785
-vs 0.780), saturating by N=25. **On API-only models same-model confidence methods cannot run at
+**C3. Cross-model transfer: the ordering is free, the probabilities cost ~25 labels — where the
+probe is strong.** The latent is fitted from three routes; each new model needs only a 2-parameter
+response curve. Because AUC is invariant to a positive affine transform, that link cannot change a
+**ranking**, so the ordering transfers with no labels at all (mean peer AUC 0.789). What labels buy
+is **calibration**: on five API models from five labs, Brier falls to **0.1946 at N=25 against
+0.2434 for the base rate**, saturating by N=25 (§3b-xviii). On SWE-bench Verified the same
+procedure loses to the base rate at every N (§3b-xvii), and the discriminating quantity is the
+probe's own AUC (0.79 vs 0.64). **On API-only models same-model confidence methods cannot run at
 all**, so this is not a better option but the only one.
 
 **C4. The negative result, stated precisely and falsifiably: a prompt representation carries shared
@@ -586,6 +590,46 @@ already uses for new models (§3b-ii). That unifies the belief head, the cost he
 transfer into one object, and removes the duplication of feeding the same 40,960 activations into
 two independently-penalised ridge problems. *Not yet run end-to-end through the policy;* the table
 above is a predictor-level result and the frontier version is the obvious next experiment.
+
+### 3b-xviii C3 re-scored on Brier: the claim survives on LiveCodeBench and dies on SWE-V
+
+§3b-xvii showed the AUC table could not measure label efficiency. Re-running the five-peer transfer
+with the link fitted on N **calibration** problems and scored on the 171 **test** problems (20
+resamples), against each peer's own base rate estimated from the same N labels:
+
+| peer | solve | AUC | Brier N=10 | **N=25** | N=50 | N=170 | base N=25 | base N=170 |
+|---|---|---|---|---|---|---|---|---|
+| deepseek | 0.702 | 0.746 | 0.2247 | 0.1902 | 0.1852 | 0.1812 | 0.2192 | 0.2201 |
+| glm-5 | 0.620 | 0.812 | 0.2064 | 0.1986 | 0.1899 | 0.1822 | 0.2559 | 0.2476 |
+| kimi | 0.719 | 0.790 | 0.1943 | 0.1794 | 0.1658 | 0.1629 | 0.2134 | 0.2067 |
+| minimax | 0.544 | 0.811 | 0.2572 | 0.1986 | 0.1876 | 0.1815 | 0.2668 | 0.2535 |
+| qwen3-max | 0.520 | 0.787 | 0.2441 | 0.2062 | 0.1998 | 0.1925 | 0.2616 | 0.2527 |
+| **mean** | | **0.789** | 0.2253 | **0.1946** | 0.1857 | 0.1801 | **0.2434** | 0.2361 |
+| mean, glm-5 dropped | | 0.783 | 0.2301 | 0.1936 | 0.1846 | 0.1795 | 0.2403 | 0.2333 |
+
+**The latent beats the new model's base rate for every peer at every N**, by ~24% of Brier at
+N=25, and it saturates at N≈25 (0.1946 -> 0.1857 -> 0.1801 for 25 -> 50 -> 170). **So "~25 labels"
+was right after all** — the original table simply could not see it, because AUC is blind to what
+the labels buy. The claim is now supported by the metric that matches the use: a utility rule
+consumes probabilities.
+
+**The result also survives the label-quality problem.** glm-5 still has 25.7% empty and 38.6%
+truncated outputs (down from 42% but not fixed), and dropping it moves the mean by 0.001. The
+conclusion does not rest on the corrupted row.
+
+**And it does not transfer to SWE-bench Verified** (§3b-xvii): there the base rate wins at every N
+up to all 219 available, with reliability (0.0389) exceeding resolution (0.0254) — the latent's
+miscalibration costs more than its separation buys, and more labels do not close the gap. The
+discriminating quantity is the latent's own strength: **peer AUC 0.746-0.812 on LiveCodeBench
+against 0.616-0.670 on SWE-V.** Pool extension works where the probe is strong and fails where it
+is weak, which is a boundary condition rather than a contradiction, and it is measurable before
+committing to a pool.
+
+**Restated C3.** *The latent's **ordering** transfers to unseen models for free — a 2-parameter
+link cannot change a ranking, so no labels are needed for it. Its **probabilities** transfer at
+about 25 labels on a pool where the probe reaches AUC ~0.79, and do not transfer at all on one
+where it reaches ~0.64.* Both halves are new relative to the AUC-only claim, and the second half
+is the one a deployment depends on.
 
 ### 3b-xvi Selective prediction, reported as a risk-coverage curve at last
 
