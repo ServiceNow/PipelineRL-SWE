@@ -416,6 +416,38 @@ worth something, §6.9k is wrong. Running our method on RouterBench is therefore
 central claim on the opponent's home ground, and it needs only an activation extraction over its
 prompts.
 
+### 3b-xi What the prefill-router paper leaves open, in its own numbers
+
+Having corrected the overclaim (§3b-viii), three concrete openings remain, all sourced from their
+paper rather than asserted.
+
+**1. They report the gap they cannot act on.** Their Table 1 gives "all incorrect" rates — queries
+**no model in the pool solves** — of **14.22% (frontier), 8.21% (small), 12.81% (mixed)**. Their
+router "always selects a model; there is no mention of refusing to answer or deferring". So on
+their own pools, roughly one query in ten buys a model that cannot succeed. **That is our
+motivation stated in their measurements**, and it is the channel worth +43.7% here (§6.9f).
+
+**2. We disagree with their mechanism, and have evidence.** Their §7 ("Foundations for prefill
+signals") attributes cross-model transfer to the **encoder's representational geometry** — high
+dimensionality, isotropy, Fisher separability — concluding that larger open-weight encoders have
+better geometry for separating correct from incorrect.
+
+Our probe-scaling result points elsewhere: a **0.69B** probe retains **95%** of pool-solvability AUC
+(0.818 against the 4B's 0.865 on LiveCodeBench; 0.804 against 0.845 on TACO) **while solving almost
+nothing on TACO itself**. A geometry-of-the-encoder account predicts strong scale dependence; we
+measure a 0.047 AUC drop across a 6.4x size gap, from a model that cannot do the task. That favours
+the signal being **problem-level difficulty**, which any competent encoder reads, over a property
+of the encoder's representation space.
+*State it as a competing hypothesis with an ablation, not a refutation:* their geometric measures
+and our scale sweep are compatible with a weak scale effect on top of a dominant shared factor, and
+distinguishing them properly needs their d_eff/anisotropy/Fisher measurements run on our probe
+ladder. **That is a concrete, cheap experiment and it should be in the paper.**
+
+**3. They do not measure the axis that decides which method applies.** Their pools sit at 8-14%
+all-incorrect and RouterBench at 3.9%; ours at 28.7-40% (§3b-x). Neither their paper nor
+RouterBench measures advantage *as a function of* that fraction — which is exactly the controlled
+sweep of §6.9k.
+
 ## 4. Related work
 
 ### 4.1 Sequential and budgeted test-time model selection *(closest)*
