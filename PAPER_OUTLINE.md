@@ -532,14 +532,82 @@ whichever head your pool supports.*
 
 | route | RoR constant | prompt length | prefill activations |
 |---|---|---|---|
-| LCB scout / oss20 / oss120 | -0.01 / -0.00 / -0.00 | 0.053 / 0.089 / 0.186 | **0.457 / 0.675 / 0.784** |
-| TACO scout / oss20 / oss120 | -0.00 / -0.00 / -0.01 | **-0.024 / -0.026 / 0.035** | 0.294 / 0.303 / 0.415 |
+| LCB scout / oss20 / oss120 | -0.148 / -0.146 / -0.221 | -0.103 / 0.013 / 0.021 | **0.051 / 0.356 / 0.586** |
+| TACO scout / oss20 / oss120 | -0.000 / -0.004 / -0.001 | -0.028 / -0.073 / 0.028 | **0.166 / 0.081 / 0.309** |
 
-TACO's cost is genuinely harder to predict (0.29-0.42 against LCB's 0.46-0.78) and that is exactly
+*(Corrected 2026-09-08: an earlier version of this table reported 0.457/0.675/0.784 and
+0.294/0.303/0.415 from a random half-split of all 892 problems, which put ~275 training problems
+into the "test" half. The numbers above use the manifest test split, n=171/168.)*
+
+TACO's cost is harder to predict on the routes that matter (oss20 0.081 against LCB's 0.356) and that is exactly
 where the cost head goes negative on the frontier (-21.63% floor). The gate of SS6.9-cost is the
 right mechanism; this is the number that sets it. **Note also that prompt length is worthless on
 both pools and actively negative on TACO — the cost signal is in the activations, not in a free
 proxy.** That is the cleanest single defence of paying for a prefill at all.
+
+### 3b-xiii Why the two heads are redundant, and when one scalar is enough
+
+C1b said the belief head and the cost head are substitutes. This is the mechanism. Correlation
+between the belief logit and the log cost, per route, and the PCA of the six predictions the probe
+emits (3 belief logits + 3 log costs):
+
+| | corr(logit $\theta$, log $c$) scout / oss20 / oss120 | PC1 | PC1+PC2 |
+|---|---|---|---|
+| LiveCodeBench | -0.599 / -0.521 / -0.710 | **71.4%** | 81.5% |
+| TACO | -0.132 / -0.165 / -0.059 | 43.7% | 78.6% |
+
+**On LiveCodeBench the two heads are reading one scalar** — hard problems cost more and solve less,
+and a single component carries 71.4% of everything the probe emits. That is *why* they are
+substitutes, and it is the shared-difficulty-factor claim (C4) showing up inside our own
+predictions. **On TACO they are nearly orthogonal**: difficulty and expense are separate
+properties, PC1 carries only 43.7%, and the pool needs two dimensions.
+
+**Collapsing to one scalar is not merely lossless on LCB — it is an improvement.** Rank-1
+reconstruction of the six predictions (fitted on train, scored on the manifest test split):
+
+| | belief AUC, 2 heads | belief AUC, **1 scalar** | cost $R^2$, 2 heads | cost $R^2$, 1 scalar |
+|---|---|---|---|---|
+| LCB scout | 0.830 | **0.872** | 0.051 | -0.023 |
+| LCB oss20 | 0.759 | **0.786** | 0.356 | **0.392** |
+| LCB oss120 | 0.768 | **0.803** | 0.586 | 0.554 |
+| TACO scout | 0.736 | **0.772** | 0.166 | 0.052 |
+| TACO oss20 | **0.833** | 0.758 | 0.081 | 0.042 |
+| TACO oss120 | **0.819** | 0.726 | 0.309 | 0.049 |
+
+**On LCB the single scalar beats both independent heads on belief AUC at every route** (+0.027 to
++0.042) at no real cost to the cost head — the rank-1 projection denoises two separately-fit
+heads by forcing them through the structure the data actually has. **On TACO it does the opposite**
+where the pool is genuinely 2-D (oss20 0.833 -> 0.758). PC1's variance share predicts which regime
+you are in, and it is measurable before any of this is deployed.
+
+*Design consequence:* the probe should emit **one number** on pools like LCB, with per-route
+2-parameter links to beliefs and costs — the same 2-parameter response curve the transfer result
+already uses for new models (§3b-ii). That unifies the belief head, the cost head, and cross-model
+transfer into one object, and removes the duplication of feeding the same 40,960 activations into
+two independently-penalised ridge problems. *Not yet run end-to-end through the policy;* the table
+above is a predictor-level result and the frontier version is the obvious next experiment.
+
+### 3b-xiv The sequential machinery is **not** extraneous — we tried to remove it
+
+If the probe emits a static per-problem scalar, an obvious simplification is to drop the MDP: pick
+each problem's whole plan (route $m$, depth $n$) up front from the probe alone, take
+$\arg\max_{m,n}(1-(1-\hat\theta_m)^n)R - n\hat c_m$, skip when that maximum is $\le 0$, and sweep
+$R$. Same Lagrangian, same information, no belief updating during execution. Scored on the same
+test split, 5 draw orderings, 80 values of $R$:
+
+| budget | LCB RoR | LCB MDP | LCB **one-shot** | TACO RoR | TACO MDP | TACO **one-shot** |
+|---|---|---|---|---|---|---|
+| 0.25x | 27.6% | **54.2%** | 39.2% | 17.9% | **43.7%** | 35.7% |
+| 0.50x | 58.7% | **59.4%** | 39.2% | 45.7% | **47.6%** | 47.0% |
+| 1.00x | 66.3% | **70.1%** | 69.0% | 54.3% | **54.7%** | 50.0% |
+| 2.00x | 79.0% | **79.5%** | 74.3% | 57.5% | **56.7%** | 54.2% |
+
+**The sequential rule wins everywhere** (-1.1 to -20.2pt on LCB, -0.6 to -8.0pt on TACO). One-shot
+still beats RoR at the tight budget (+11.5 / +17.8pt), so the probe carries real information
+without any sequencing — but *observing that a draw failed* is worth points the prompt cannot
+supply. This is the direct answer to "is the MDP machinery extraneous": **no**, and the claim in
+§6.x that the probe "does not refine" is about the *probe*, not about the *policy*. Both are true:
+the probe is static, and acting on realised outcomes still pays.
 
 **Cost-normalising the prefill-router comparison.** A full prefill-routing setup needs one prefill
 per candidate, not one total. On our pool that is **$0.007259/problem (LCB), $0.007841 (TACO) —
