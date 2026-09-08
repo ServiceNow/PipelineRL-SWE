@@ -370,11 +370,30 @@ reads a property of **the problem**, not a simulation of its own competence. Sup
 transfer to five labs at ~25 labels (§3b-ii), +0.10-0.16 AUC over TF-IDF and far more over statement
 length (§3b-iv).
 
-**State the strength precisely.** The scout's activations beat other models' *own* activations at
-predicting **cost** (0.370 vs 0.302 for gpt-oss-20b). For **success** the scout probe is *tied* on
-pool solvability and slightly worse per route (§6.4). So the claim is **"transfers as well as an
-own-model probe at a fraction of the cost, and works where own-model probes cannot run at all"** —
-not "beats them". We have drifted toward the stronger version more than once.
+**State it as the price of own-model access, which is the striking framing.** The scout's
+activations beat other models' *own* activations at predicting **cost** (0.370 vs 0.302 for
+gpt-oss-20b). For **success** the scout is slightly worse per route (-0.049 to -0.061 AUC) and
+statistically **tied** on pool solvability (-0.028, CI [-0.075, +0.015]).
+
+| | 4B scout | gpt-oss-120b |
+|---|---|---|
+| total parameters | 4.41B | 116.8B (**26.5x**) |
+| LiveCodeBench solve rate | 41.5% | 80.9% (**~2x**) |
+| predicting oss120's own success | -0.049 to -0.061 AUC | its own activations |
+| predicting pool solvability | **tied** | — |
+
+**So own-model access is worth about 0.05 AUC.** A 4B model that solves half as many problems
+predicts gpt-oss-120b's per-problem success within five hundredths of AUC of gpt-oss-120b's own
+internal representation — and ties it on whether anything in the pool will solve the problem. The
+26.5x larger model, inspecting its own activations about its own forthcoming output, buys almost
+nothing.
+
+**That inverts the deployment argument.** It is not "use the cheap probe because per-candidate
+probing is too expensive"; it is **"the information is in the problem, not in the model, and 0.05
+AUC is the entire premium for reading it from the model that will actually answer."** The same
+reading explains why per-candidate probing loses once priced at 48.5x (§6.5) and why a 0.69B probe
+retains 95% of the signal (§6.6a): all of them are reading one problem-level quantity, and reading
+it from a larger or better-matched model adds almost nothing.
 
 **And "now what" has two measured answers**, both of which need only the shared factor: abstention
 (§6.9f, up to +43.7%) and label-efficient pool extension (§3b-ii, ~25 labels per new model). Every
