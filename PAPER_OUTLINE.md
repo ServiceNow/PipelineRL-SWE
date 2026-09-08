@@ -631,6 +631,48 @@ about 25 labels on a pool where the probe reaches AUC ~0.79, and do not transfer
 where it reaches ~0.64.* Both halves are new relative to the AUC-only claim, and the second half
 is the one a deployment depends on.
 
+### 3b-xix The scope law (SS6.9k) is FALSIFIED, by an oracle, before we ran the probe
+
+SS6.9k claims the advantage scales with the fraction of problems **nothing** in the pool solves, and
+line 439 commits us: *"if abstention is worth something [on RouterBench], SS6.9k is wrong."*
+
+The test needs no probe. Give an **oracle** the per-problem choice over all models, once with a skip
+action and once without, sweep the multiplier, and read the gap. If oracle abstention buys nothing,
+no predictor could. Budgets are expressed as a fraction of the spend at which the no-skip oracle
+frontier saturates, because at looser budgets the oracle simply picks the cheapest model that works
+and nothing binds:
+
+| benchmark | pool-unsolvable | 0.05x | 0.10x | **0.20x** | 0.40x | 0.70x |
+|---|---|---|---|---|---|---|
+| **RouterBench** | **3.9%** | +33.1pt | +47.8pt | **+67.0pt** | +5.5pt | +0.1pt |
+| LiveCodeBench | 8.2% | +60.2pt | +69.9pt | +7.9pt | +1.3pt | -0.1pt |
+| TACO | 39.5% | +33.3pt | +41.0pt | +7.0pt | +2.7pt | +0.6pt |
+
+**Abstention is worth the MOST on the pool with the LEAST unsolvable mass.** RouterBench, at 3.9%
+unsolvable, gains +67.0pt from an oracle skip action at a 0.20x budget — more than TACO at 39.5%.
+The law is not merely unsupported, it is backwards in this range.
+
+**What the mechanism actually is.** Abstention at a binding budget is not primarily about declining
+*hopeless* problems; it is **reallocation** — skipping expensive problems to afford more cheap ones.
+Pool-unsolvable mass is the extreme case (infinite cost per unit of value) and therefore sets the
+*ceiling*, but the *driver* is cost dispersion against a binding budget. This is the same finding as
+the shuffled-prediction control (SS3b-xv): dispersion is what unlocks partial abstention, and
+information is what aims it. The user's framing is the right one — **order the problems and draw a
+line; the budget decides where the line goes.**
+
+**Consequences.** (1) SS6.9k must be rewritten: the advantage scales with *budget tightness and cost
+dispersion*, and pool-unsolvable fraction bounds the ceiling rather than predicting the gain.
+(2) Every "TACO is the interesting pool because it has unsolvable mass" claim needs re-checking.
+(3) **RouterBench is no longer a falsification target but a plausible strength**, which inverts the
+plan: run our method there expecting it to work, and the 91.4%-contested structure that made us
+predict failure is irrelevant to the abstention channel.
+(4) The claim in SS3b that the result "should be positioned as selective prediction, not routing"
+survives and is strengthened — it is selective prediction under a budget.
+
+*Caveat:* oracle beliefs upper-bound every arm; this says what is available, not what our probe
+captures. LCB here is 8.2% unsolvable over all 892 problems with complete data, against 15.2% on
+the 171-problem test split used in SS3b-xvi.
+
 ### 3b-xvi Selective prediction, reported as a risk-coverage curve at last
 
 The paper's title claims selective prediction and the outline never reported the curve. Score every
