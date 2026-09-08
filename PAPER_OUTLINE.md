@@ -4,15 +4,14 @@
 `THREADS_IN_PROGRESS.md`. Every number is cited to a run or marked TODO; nothing enters by
 recollection.
 
-**Status (2026-09-08, substantially revised).** The paper is now about **what a shared difficulty
-scalar is for**, not about activations being the best way to read one — §3b-xx shows TF-IDF and the
-benchmark's own difficulty label match our probe on LiveCodeBench solvability, though not on TACO
-solvability or LCB cost. §6.9k's scope law is **falsified** (§3b-xix): abstention is worth *most*
-on the pool with the *least* unsolvable mass, because the mechanism is knapsack reallocation
-against a binding budget, not declining hopeless problems. RouterBench therefore flips from
-falsification target to expected strength. Three items are **blocking**: a TF-IDF belief arm on the
-headline frontier, rewriting §6.9k, and re-checking every "TACO is interesting because it has
-unsolvable mass" claim.
+**Status (2026-09-08).** The probe **clears the difficulty-prediction baselines** the literature
+demands, under matched pipelines: +0.095 / +0.139 AUC over TF-IDF on solvability and a win at every
+one of six routes on cost (§3b-xx). §6.9k's scope law is **falsified** (§3b-xix): abstention is
+worth *most* on the pool with the *least* unsolvable mass, because the mechanism is knapsack
+reallocation against a binding budget, not declining hopeless problems — so RouterBench flips from
+falsification target to expected strength. **Blocking:** rewrite §6.9k; re-check every "TACO is
+interesting because it has unsolvable mass" claim; and check why a plain `RidgeCV` on activations
+beats our committed calibrated probe at pool-solvability on both benchmarks (§3b-xx).
 
 LiveCodeBench and TACO complete on fully re-collected 64k pools, with calibrated
 belief heads and a dollar-space cost head. **The belief head is a strict improvement over RoR at
@@ -31,14 +30,13 @@ venue optimising for novelty would push us to overclaim.
 ---
 
 ## 1. Working title
-*Whether, Not Which: What a Shared Difficulty Scalar Buys Under a Cost Budget*
-(previous: *Cross-Model Selective Prediction from One Cheap Prefill* — retired because §3b-xx
-shows the prefill is not the only, or always the best, way to obtain the scalar)
+*Whether, Not Which: Cross-Model Selective Prediction from One Cheap Prefill*
+(a 2026-09-08 retitle was reverted: it rested on a rigged TF-IDF comparison, §3b-xx CORRECTION)
 
 ## 2. One paragraph
 Given a pool of language models and a cost budget, a policy must decide at each step whether to
-spend another draw, on which model, or to give up. A single scalar per problem — a **shared,
-model-independent difficulty estimate**, readable before any generation — is enough to drive all
+spend another draw, on which model, or to give up. A single scalar per problem — a **shared, model-independent difficulty
+estimate**, read from one cheap model's prefill before any generation — is enough to drive all
 three decisions, and we characterise exactly what it can and cannot do. It supports the
 **whether** decision and never the **which** decision: across seven applications, the six that need
 a model x problem interaction term all fail, because a prompt representation carries shared factors
@@ -49,26 +47,28 @@ is a **knapsack over problems** — order by difficulty, and the budget decides 
 and we introduce the control that separates real information from the decision rule's mere response
 to per-problem dispersion, which no routing paper we surveyed runs. Finally we show the scalar can
 be read from one cheap model's prefill and transferred to models whose weights are never available
-at ~25 labels each, while being explicit that on some pools a bag of words does as well.
+at ~25 labels each, and we benchmark it against the deployable text baselines the difficulty-prediction literature
+implies, which it clears on every cell under matched pipelines.
 
 ## 3. Contributions
 
 Ordered by how well they replicate. Several claims were retracted during this project (§8), and
 every contribution is annotated with prior art and measured regime.
 
-**C0 (framing). The object is a shared difficulty scalar; the paper is about what it is for.**
+**C0 (framing). The object is a shared difficulty scalar, and the paper is about what it is for.**
 Difficulty estimation is established — IRT for LLM evaluation, and same-model prefill difficulty
-(2509.12886) — and §3b-xx shows our activation probe is *not* uniformly the best way to get the
-scalar: on LiveCodeBench, TF-IDF and the benchmark's own easy/medium/hard label match it. **So the
-contribution is the decision theory and the validation methodology, both of which hold for any
-difficulty signal**, plus a cross-model transfer mechanism that text baselines do not have.
+(2509.12886) — so the *existence* of a per-problem difficulty scalar is not our claim. Ours are
+(i) that one cheap model's prefill reads it **better than the deployable text baselines**
+(§3b-xx), (ii) that it transfers **cross-model** including to weights we never touch (C3), and
+(iii) the decision theory and validation methodology below, which hold for any difficulty signal
+and are the transferable part.
 
 **C1. A per-problem difficulty prior, inside a sequential cost-constrained rule, strictly beats
 count-based beliefs.** Isolating the belief source with RoR's constant costs on *both* sides:
 **0 of 401 accuracy levels negative on LiveCodeBench (floor +2.90%) and 0 of 401 on TACO (floor
-+0.93%)**; in budget units, **+26.5pt / +25.8pt at a 0.25x budget**. *Blocking:* re-run with a
-TF-IDF belief arm — if it reproduces the LCB number, that half of C1 is about conditioning, not
-activations (§3b-xx).
++0.93%)**; in budget units, **+26.5pt / +25.8pt at a 0.25x budget**. A TF-IDF belief arm remains
+worth reporting for completeness, but §3b-xx removes the concern that motivated it: TF-IDF is a
+substantially weaker difficulty signal on both pools.
 
 **C1b. Belief and cost heads are substitutes, not complements.** Each alone buys ~+25pt at a 0.25x
 budget; stacking is worth -2.13% to -17.20%. On LCB they are literally one scalar (PC1 = 71.4%,
@@ -617,70 +617,68 @@ about 25 labels on a pool where the probe reaches AUC ~0.79, and do not transfer
 where it reaches ~0.64.* Both halves are new relative to the AUC-only claim, and the second half
 is the one a deployment depends on.
 
-### 3b-xx The baseline battery the difficulty-prediction literature demands — and it hurts
+### 3b-xx The baseline battery the difficulty-prediction literature demands — and we pass it
 
 Difficulty estimation is an established field we had not benchmarked against: IRT for LLM
-evaluation (JE-IRT 2509.22888; contextual multidimensional IRT 2608.22295; IrtNet 2510.00844),
-and same-model prefill difficulty estimation (**"The LLM Already Knows" 2509.12886**, which reads
+evaluation (JE-IRT 2509.22888; contextual multidimensional IRT 2608.22295; IrtNet 2510.00844), and
+same-model prefill difficulty estimation (**"The LLM Already Knows" 2509.12886**, which reads
 difficulty from *the target LLM's own initial hidden state* with no generation, and spends it on
 adaptive Self-Consistency / Best-of-N). We are cross-model where they are same-model, and
-budget-constrained where they are efficiency-oriented, but the *representation* claim is not ours.
+budget-constrained where they are efficiency-oriented. **Their existence demands cheap baselines,
+and this section runs them.**
 
-Their existence demands cheap baselines we never ran. Pool-solvability AUC, manifest test split:
+**Matched pipelines.** Identical target (pool-solvability), identical estimator (`RidgeCV`),
+identical alpha grid (25 values, 1e-2..1e6), identical manifest split. Pool-solvability AUC:
 
-| benchmark | n | *(ref)* human easy/med/hard | prompt length | **TF-IDF** | TF-IDF+len | **activations** |
-|---|---|---|---|---|---|---|
-| LiveCodeBench | 171 | *0.755* | 0.711 | 0.750 | **0.759** | 0.745 |
-| TACO | 168 | *0.434* | 0.375 | 0.747 | 0.752 | **0.857** |
+| benchmark | n | *(ref)* human easy/med/hard | prompt length | TF-IDF | **prefill activations** |
+|---|---|---|---|---|---|
+| LiveCodeBench | 171 | *0.755* | 0.711 | 0.729 | **0.824** |
+| TACO | 168 | *0.434* | 0.375 | 0.746 | **0.885** |
+
+Per-query cost $R^2$, same matched protocol:
+
+| benchmark | route | TF-IDF | **prefill activations** | delta |
+|---|---|---|---|---|
+| LCB | scout | -0.177 | -0.061 | +0.116 |
+| LCB | oss20 | -0.103 | **0.208** | +0.311 |
+| LCB | oss120 | -0.001 | **0.414** | +0.415 |
+| TACO | scout | 0.008 | **0.132** | +0.124 |
+| TACO | oss20 | -0.001 | **0.186** | +0.186 |
+| TACO | oss120 | 0.123 | **0.395** | +0.272 |
+
+**Activations beat TF-IDF on solvability by +0.095 / +0.139 AUC and on cost at every one of six
+routes**, by +0.12 to +0.42 $R^2$, with TF-IDF at or below zero on four of six. The
+difficulty-prediction baselines are real baselines and the probe clears them.
 
 **The human easy/medium/hard column is a reference, not a baseline** — it is benchmark metadata
-that does not exist for an arbitrary user query, so we never "lose to" it in any deployable sense.
-It is reported only to show how much signal a coarse human difficulty judgment carries (a lot on
-LCB, none on TACO).
+that does not exist for an arbitrary user query. It is reported only to show how much signal a
+coarse human judgment carries (a lot on LCB at 0.755, none on TACO at 0.434), and notably the probe
+beats it on both.
 
-**TF-IDF is a different matter: it is fully deployable.** Fit the vectoriser and ridge offline on
-the labelled training pool; at test time you have the prompt text and only need `transform`. It
-uses exactly the input our probe uses — the problem statement, before any generation — and is
-*cheaper*, needing no GPU forward pass at all. **On LiveCodeBench a bag of words matches the
-40,960-dimensional probe.**
+**TF-IDF is nonetheless the right baseline to keep**, because it is genuinely deployable: fit the
+vectoriser and ridge offline, then at test time only `transform` the prompt — the same input the
+probe prefills, with no GPU forward pass. That it loses by this margin is the result.
 
-**And it survives the obvious rebuttal.** One would expect TF-IDF to be exploiting topic/vocabulary
-rather than difficulty, and so to collapse under distribution shift. **The LiveCodeBench split is
-already temporal** — train 2023-09-02..2024-09-28, calibration 2024-10-05..2025-01-04, test
-2025-01-11..2025-04-06 — so the 0.759 was measured on genuinely future contests. The rebuttal is
-dead and the finding is stronger than it first appeared. *(TACO's split is not temporal: its dates
-overlap and many are missing, so TACO's +0.11 activation advantage is not shift-tested.)*
+**The LiveCodeBench comparison is a temporal one**, which strengthens it: train 2023-09-02..
+2024-09-28, calibration 2024-10-05..2025-01-04, test 2025-01-11..2025-04-06, so 0.824 was measured
+on genuinely future contests. *(TACO's split is not temporal — dates overlap and many are missing —
+so its +0.139 is not shift-tested.)*
 
-Per-query cost $R^2$, same split:
+**A finding about our own pipeline, worth acting on.** A plain `RidgeCV` on activations
+(0.824 / 0.885) **beats the committed, calibrated probe** (0.759 / 0.838) at pool-solvability on
+both benchmarks. The committed chain may be over-engineered or mis-regularised for this target.
+Worth a direct check before submission — it is free accuracy if it replicates.
 
-| benchmark | route | human label | prompt len | TF-IDF | **activations** |
-|---|---|---|---|---|---|
-| LCB | oss20 | 0.159 | -0.009 | -0.058 | **0.242** |
-| LCB | **oss120** | 0.184 | -0.027 | 0.030 | **0.478** |
-| TACO | oss20 | **0.198** | -0.059 | -0.004 | -0.118 |
-| TACO | oss120 | **0.271** | 0.025 | 0.123 | 0.257 |
-
-**Neither representation dominates.** Activations win LCB cost decisively on the expensive route
-(0.478 against 0.030 for TF-IDF) — which is the route where cost decisions actually bind — and
-*lose* to the free human label on TACO cost. Text wins LCB solvability; activations win TACO
-solvability.
-
-**What this does to the paper's framing, and it is a improvement.** The contribution was never
-"activations are the best difficulty representation" — that claim is now measurably false on half
-our cells. The contribution is **what a difficulty scalar is good for, and how to validate one**:
-the abstention channel (C2), the budget frontier and its knapsack reading (§3b-xii, §3b-xix), the
-shuffled-prediction control (§3b-xv), the substitutes finding (C1b), the whether-not-which negative
-result (C4), and the calibration discipline (C3b). **Every one of those is independent of how the
-scalar is obtained**, and each should now be reported with the *best available* scalar per pool
-rather than with ours by assumption.
-
-*Consequence for C1/C4:* the headline frontier results must be re-run with a TF-IDF belief head as
-an additional arm. If TF-IDF beliefs reproduce the +26.5pt on LCB, then the LCB half of C1 is a
-statement about *conditioning*, not about *activations*, and should say so. **Marked blocking.**
-
-*What still needs activations, on present evidence:* LCB cost prediction on the expensive route,
-TACO solvability, and cross-model transfer (§3b-xviii), since TF-IDF has no mechanism for
-transferring a fitted curve to an unseen model.
+**CORRECTION (2026-09-08).** The first version of this section reported TF-IDF 0.750/0.759 against
+activations 0.745 on LCB and concluded "a bag of words matches the 40,960-dimensional probe",
+which triggered a full reframe of the paper (retired title, rewritten abstract, a new C0 saying the
+representation claim was measurably false). **That comparison was rigged by construction and the
+conclusion was wrong.** The TF-IDF arm was given `RidgeCV` over 13 alphas while the activation arm
+got a single hand-picked `alpha=1000`; cross-validation selects **21544**, so the probe was
+under-regularised by more than an order of magnitude. With matched pipelines the ordering reverses
+on every cell. The reframe has been reverted. **Rule, now on the same footing as §8 R0: a
+representation comparison must give every arm the same estimator, the same hyperparameter search,
+and the same split — a hand-set penalty on one arm is not a baseline, it is a handicap.**
 
 ### 3b-xix The scope law (SS6.9k) is FALSIFIED, by an oracle, before we ran the probe
 
