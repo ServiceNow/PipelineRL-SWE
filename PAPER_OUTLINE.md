@@ -4,7 +4,17 @@
 `THREADS_IN_PROGRESS.md`. Every number is cited to a run or marked TODO; nothing enters by
 recollection.
 
-**Status:** LiveCodeBench and TACO complete on fully re-collected 64k pools, with calibrated
+**Status (2026-09-08, substantially revised).** The paper is now about **what a shared difficulty
+scalar is for**, not about activations being the best way to read one — §3b-xx shows TF-IDF and the
+benchmark's own difficulty label match our probe on LiveCodeBench solvability, though not on TACO
+solvability or LCB cost. §6.9k's scope law is **falsified** (§3b-xix): abstention is worth *most*
+on the pool with the *least* unsolvable mass, because the mechanism is knapsack reallocation
+against a binding budget, not declining hopeless problems. RouterBench therefore flips from
+falsification target to expected strength. Three items are **blocking**: a TF-IDF belief arm on the
+headline frontier, rewriting §6.9k, and re-checking every "TACO is interesting because it has
+unsolvable mass" claim.
+
+LiveCodeBench and TACO complete on fully re-collected 64k pools, with calibrated
 belief heads and a dollar-space cost head. **The belief head is a strict improvement over RoR at
 every accuracy level on both benchmarks** (floors +2.90% / +0.93%), isolated the clean way — RoR's
 constant costs on both sides, so only the belief source differs. Added 2026-09-08: the belief head
@@ -21,115 +31,91 @@ venue optimising for novelty would push us to overclaim.
 ---
 
 ## 1. Working title
-*Whether, Not Which: Cross-Model Selective Prediction from One Cheap Prefill*
+*Whether, Not Which: What a Shared Difficulty Scalar Buys Under a Cost Budget*
+(previous: *Cross-Model Selective Prediction from One Cheap Prefill* — retired because §3b-xx
+shows the prefill is not the only, or always the best, way to obtain the scalar)
 
 ## 2. One paragraph
 Given a pool of language models and a cost budget, a policy must decide at each step whether to
-spend another draw, on which model, or to give up. We show that a single forward pass of the
-**cheapest** model in the pool — before any generation — yields a per-problem difficulty estimate
-that transfers to every other model in the pool, including models whose weights are never
-available, at about **25 labelled problems each**. Plugged into a sequential resample/reroute/quit
-rule, it beats the count-based state of the art by a **mean** of 5.9% and 11.6% of cost at matched
-accuracy on two benchmarks — though not at every level once that baseline is given our own cost
-head. The gain decomposes cleanly: conditioned beliefs and a give-up action are each worth ~0 alone
-and +25.8pt together, and the probe's cost prediction, not its success prediction, carries most of
-what is left. We then show, across seven applications,
-that this signal supports the *whether* decision and never the *which* decision: a prompt
-representation carries the **shared difficulty factor** and not the **model × problem interaction**
-that model selection requires. We demonstrate this on a pool with 52.6% contested problems and
-+13.5pt of available routing gain, where no probe variant — one-dimensional, multi-dimensional,
-per-model, or cost-based — captures any of it.
+spend another draw, on which model, or to give up. A single scalar per problem — a **shared,
+model-independent difficulty estimate**, readable before any generation — is enough to drive all
+three decisions, and we characterise exactly what it can and cannot do. It supports the
+**whether** decision and never the **which** decision: across seven applications, the six that need
+a model x problem interaction term all fail, because a prompt representation carries shared factors
+and not interactions. Used for *whether*, it closes **65-73%** of the oracle gap in selective
+prediction on three benchmarks including out-of-domain SWE-bench Verified, and buys **+26pt of
+accuracy at a quarter of the budget** of calling the largest model on everything. We show the gain
+is a **knapsack over problems** — order by difficulty, and the budget decides where the line goes —
+and we introduce the control that separates real information from the decision rule's mere response
+to per-problem dispersion, which no routing paper we surveyed runs. Finally we show the scalar can
+be read from one cheap model's prefill and transferred to models whose weights are never available
+at ~25 labels each, while being explicit that on some pools a bag of words does as well.
 
 ## 3. Contributions
 
-Ordered by how well they replicate. Several claims were retracted during this project for
-insufficient checking (§8), and every contribution is annotated with prior art and measured regime.
+Ordered by how well they replicate. Several claims were retracted during this project (§8), and
+every contribution is annotated with prior art and measured regime.
 
-**C1. A cheap prefill prior, inside a sequential cost-constrained rule, strictly beats count-based
-beliefs.** Isolating the belief source with RoR's constant costs on *both* sides, and scanning all
-reachable accuracy levels: **negative at 0 of 401 levels on LiveCodeBench (floor +2.90%) and 0 of
-401 on TACO (floor +0.93%)**. In budget units the same result reads **+26.5pt (LCB) / +25.8pt
-(TACO) at a quarter of the cost of calling the largest model on everything**. The comparison
-isolates the belief source *within* the same sequential MDP, which single-commit routers cannot do.
-*(Earlier drafts quoted floors of +6.28%/+4.37% from a pre-recollection run and did not say which
-arm; the numbers above are the 64k pools with the arm named. A 2026-09-08 retraction of this
-contribution was itself mistaken and has been withdrawn — see §8 R0.)*
+**C0 (framing). The object is a shared difficulty scalar; the paper is about what it is for.**
+Difficulty estimation is established — IRT for LLM evaluation, and same-model prefill difficulty
+(2509.12886) — and §3b-xx shows our activation probe is *not* uniformly the best way to get the
+scalar: on LiveCodeBench, TF-IDF and the benchmark's own easy/medium/hard label match it. **So the
+contribution is the decision theory and the validation methodology, both of which hold for any
+difficulty signal**, plus a cross-model transfer mechanism that text baselines do not have.
 
-**C1b. The belief head and the cost head are substitutes, not complements.** Each alone buys
-~+25pt at a 0.25x budget; stacking the second on the first is worth **-2.13% to -17.20%** on the
-frontier. They are two readouts of the same prefill, so one probe purchase is enough, and the
-choice of head is set by a measurable property of the pool: TACO's per-query cost $R^2$ is 0.29-0.42
-against LiveCodeBench's 0.46-0.78, and TACO is exactly where the cost head goes negative. Prompt
-length predicts cost at $R^2\le0.19$ on LCB and **negatively** on TACO, so the signal is in the
-activations and not in a free proxy.
+**C1. A per-problem difficulty prior, inside a sequential cost-constrained rule, strictly beats
+count-based beliefs.** Isolating the belief source with RoR's constant costs on *both* sides:
+**0 of 401 accuracy levels negative on LiveCodeBench (floor +2.90%) and 0 of 401 on TACO (floor
++0.93%)**; in budget units, **+26.5pt / +25.8pt at a 0.25x budget**. *Blocking:* re-run with a
+TF-IDF belief arm — if it reproduces the LCB number, that half of C1 is about conditioning, not
+activations (§3b-xx).
 
-*Prior art:* the prefill-activation router (2603.20895) is single-commit with no give-up action;
-RoR (2607.08665) has the resample/reroute MDP with count beliefs and no stop action; IRT-based
-routing (IrtNet, 2510.00844) uses sentence embeddings with neither abstention nor cost-awareness.
+**C1b. Belief and cost heads are substitutes, not complements.** Each alone buys ~+25pt at a 0.25x
+budget; stacking is worth -2.13% to -17.20%. On LCB they are literally one scalar (PC1 = 71.4%,
+corr -0.52..-0.71); on TACO they are near-orthogonal (PC1 = 43.7%). Rank-1 collapse *improves* LCB
+belief AUC at every route (§3b-xiii).
 
-**C2. The value flows through abstention, and we prove it by removing it.** With the give-up action
-the same beliefs are worth up to **+43.7%**; with it disabled, **≈0%** on both datasets. Stopping
-is exactly $\max_m Q(s,m)\le 0$ — no threshold, no extra head. C1 and C2 are therefore not
-separable: the prior is the information, abstention is the channel.
+**C2. The value flows through abstention, and the mechanism is a knapsack.** With the give-up
+action the same beliefs are worth up to **+43.7%**; without it, ~0%. Stopping is exactly
+$\max_m Q(s,m)\le 0$. And abstention at a binding budget is **reallocation** — skip expensive
+problems to afford cheap ones — not declining hopeless ones (§3b-xix).
 
-**C3. Cross-model transfer: the ordering is free, the probabilities cost ~25 labels — where the
-probe is strong.** The latent is fitted from three routes; each new model needs only a 2-parameter
-response curve. Because AUC is invariant to a positive affine transform, that link cannot change a
-**ranking**, so the ordering transfers with no labels at all (mean peer AUC 0.789). What labels buy
-is **calibration**: on five API models from five labs, Brier falls to **0.1946 at N=25 against
-0.2434 for the base rate**, saturating by N=25 (§3b-xviii). On SWE-bench Verified the same
-procedure loses to the base rate at every N (§3b-xvii), and the discriminating quantity is the
-probe's own AUC (0.79 vs 0.64). **On API-only models same-model confidence methods cannot run at
-all**, so this is not a better option but the only one.
+**C2b (methodological, and we think the most portable). The shuffled-prediction control.** A
+constant belief and constant cost make every problem's utility identical, so the baseline
+*structurally cannot* partially abstain (measured: 0.0% abstention). Any per-problem dispersion
+unlocks it, informative or not. Permuting predictions across problems while preserving marginals
+separates the two: **92% (LCB) / 69% (TACO) of the belief head's gain is information**, against
+**49% / 31% for the cost head**. No routing paper we surveyed runs this control, and without it
+"conditioned beats constant" is not a claim about prediction quality (§3b-xv).
 
-**C4. The negative result, stated precisely and falsifiably: a prompt representation carries shared
-factors, not interaction terms.** Seven applications tested; the six that need the interaction term
-all fail, and their failures share one cause (§7b). This is the more useful half of the paper: it
-tells practitioners which half of a router to build, and it is falsifiable by anyone who exhibits a
-representation that predicts the interaction.
+**C3. Cross-model transfer: the ordering is free, the probabilities cost ~25 labels.** AUC is
+invariant to a positive affine transform, so a 2-parameter link cannot change a ranking — the
+ordering transfers with **no labels** (mean peer AUC 0.789 over five API models from five labs).
+Labels buy calibration: Brier **0.1946 at N=25 against 0.2434 for the base rate**, saturating at
+N≈25. On SWE-bench Verified the base rate wins at every N and the gap plateaus, and the
+discriminator is the probe's own AUC (0.79 vs 0.64) (§3b-xviii, §3b-xvii).
 
-**C5. Methodological corrections that apply beyond this method.** Four safety mechanisms were
-fitted in a space the policy does not use, each found by a failure it caused: the belief head had
-no held-out calibration; the cost head's shrinkage *and* objective were in log space while the
-policy spends dollars; and a two-feature view was crushed by a shared ridge penalty against 40,960
-activations. Plus the randomised (convex-hull) frontier, which removes a grid artifact that moved
-individual targets by tens of points (§6.3a).
+**C4. The negative result, stated falsifiably: a prompt representation carries shared factors, not
+interaction terms.** Seven applications; the six needing the interaction all fail, sharing one
+cause (§7b). Falsifiable by anyone exhibiting a representation that predicts the interaction.
 
-**C3b. The discipline that makes conditioning safe: shrink every conditioned quantity toward
-the unconditional baseline it replaces, fitted on held-out data.** This is the difference between
-a method that is *sometimes* better and one that is *consistently* better, and we can measure it
-because we shipped one head with the property and one without.
+**C5. Selective prediction, the cleanest form of the result.** One prefill, one ordering, one line:
+gap to oracle closed **64.9% (LCB) / 72.7% (TACO) / 43.8% (SWE-bench Verified)**, cutting wasted
+spend at 50% coverage by **62% / 54% / 43%**. No MDP, no cost model, no budget parameter (§3b-xvi).
 
-Each head added **alone** to RoR's count beliefs, hull frontier, worst and best case over targets:
+**C6. Methodological corrections that apply beyond this method.** Held-out calibration for every
+conditioned quantity (shrink toward the constant it replaces); fit in the space the policy acts in
+(dollars, not logs); the randomised convex-hull frontier; and the attribution rule that an arm
+changing two things belongs in no single-component cell (§8 R0).
 
-| head | LCB worst | LCB best | TACO worst | TACO best |
-|---|---|---|---|---|
-| cost $\hat c_m(x)$ — **has** calibration shrinkage | **+9.5%** | +30.4% | -31.6% | +5.6% |
-| belief $\hat\theta_m(x)$ — raw logistic, **no** shrinkage | -9.1% | +41.7% | **-118.3%** | +43.7% |
-
-The head carrying the guarantee never hurts at all on LiveCodeBench and has 3.7x less downside on
-TACO. **Every catastrophic number in this paper came from the head that lacked it.** The
-mechanism is precise: a 40,960-feature logistic head fit on ~550 problems emits next-draw
-probabilities of $10^{-5}$–$10^{-6}$ for routes that solve the problem, the utility rule reads
-$p\cdot R - c < 0$, and the policy abstains on winnable problems (§6.10a).
-
-Platt scaling on the held-out calibration split fixes it with the same guarantee the cost head
-has: **slope $\to 0$ collapses the prediction to the per-route constant, which is exactly what
-RoR uses, so the floor of the conditioned method is the baseline's performance.** Fitted slopes
-are 0.32–0.49 on *both* datasets, so the raw head was over-confident everywhere and LiveCodeBench
-merely had enough headroom to absorb it.
-
-*Generalisable claim, and the one a reader should take away even if they never use activations:*
-any router that replaces a per-model constant with a per-query prediction must fit the shrinkage
-on held-out data, or it inherits an unbounded downside for a bounded upside.
-
-**C4. One cheap probe beats probing every model, once the probe is priced.** Per-candidate
-probes are better predictors (+0.05-0.06 AUC) and buy a real but small frontier gain
-(+0.6 to +8.6pt) -- for 48.5x the probe cost, which takes 10-38pt back. Charged honestly they
-lose to the single scout probe at **every** target (§6.5). Deployment consequence: weights for
-one cheap model, not all of them, and the argument is now economic rather than a null result.
-
-**C5. Methodological: cross-model activation comparisons need a fixed readout.** §6.4.
+*Prior art:* the prefill-activation router (2603.20895) is single-commit, uses **median training
+output tokens** for cost, and has no give-up action; RoR (2607.08665) has the resample/reroute MDP
+with count beliefs and no stop action; "The LLM Already Knows" (2509.12886) reads difficulty from
+the target's *own* prefill for adaptive decoding; IRT work (JE-IRT 2509.22888, IrtNet 2510.00844,
+contextual MIRT 2608.22295) models shared difficulty from response patterns or sentence embeddings,
+without abstention or cost-awareness. Own-model length prediction for *scheduling* is a separate
+established line (EGTP, ICLR 2026; TRAIL). **Cross-model per-query cost prediction — one cheap
+prefill pricing other models inside a budget-constrained decision — is the piece none of them do.**
 
 ## 3b. The contribution this reframes into: cross-model selective prediction
 
@@ -630,6 +616,57 @@ link cannot change a ranking, so no labels are needed for it. Its **probabilitie
 about 25 labels on a pool where the probe reaches AUC ~0.79, and do not transfer at all on one
 where it reaches ~0.64.* Both halves are new relative to the AUC-only claim, and the second half
 is the one a deployment depends on.
+
+### 3b-xx The baseline battery the difficulty-prediction literature demands — and it hurts
+
+Difficulty estimation is an established field we had not benchmarked against: IRT for LLM
+evaluation (JE-IRT 2509.22888; contextual multidimensional IRT 2608.22295; IrtNet 2510.00844),
+and same-model prefill difficulty estimation (**"The LLM Already Knows" 2509.12886**, which reads
+difficulty from *the target LLM's own initial hidden state* with no generation, and spends it on
+adaptive Self-Consistency / Best-of-N). We are cross-model where they are same-model, and
+budget-constrained where they are efficiency-oriented, but the *representation* claim is not ours.
+
+Their existence demands cheap baselines we never ran. Pool-solvability AUC, manifest test split:
+
+| benchmark | n | human easy/med/hard | prompt length | TF-IDF | TF-IDF+len | **activations** |
+|---|---|---|---|---|---|---|
+| LiveCodeBench | 171 | 0.755 | 0.711 | 0.750 | **0.759** | 0.745 |
+| TACO | 168 | 0.434 | 0.375 | 0.747 | 0.752 | **0.857** |
+
+**On LiveCodeBench a bag of words matches the 40,960-dimensional probe, and so does the
+benchmark's own free difficulty label.** The activation probe wins on TACO by +0.11 AUC and is
+*beaten* on LCB. This must be reported; it is the first thing a reviewer in this area will ask.
+
+Per-query cost $R^2$, same split:
+
+| benchmark | route | human label | prompt len | TF-IDF | **activations** |
+|---|---|---|---|---|---|
+| LCB | oss20 | 0.159 | -0.009 | -0.058 | **0.242** |
+| LCB | **oss120** | 0.184 | -0.027 | 0.030 | **0.478** |
+| TACO | oss20 | **0.198** | -0.059 | -0.004 | -0.118 |
+| TACO | oss120 | **0.271** | 0.025 | 0.123 | 0.257 |
+
+**Neither representation dominates.** Activations win LCB cost decisively on the expensive route
+(0.478 against 0.030 for TF-IDF) — which is the route where cost decisions actually bind — and
+*lose* to the free human label on TACO cost. Text wins LCB solvability; activations win TACO
+solvability.
+
+**What this does to the paper's framing, and it is a improvement.** The contribution was never
+"activations are the best difficulty representation" — that claim is now measurably false on half
+our cells. The contribution is **what a difficulty scalar is good for, and how to validate one**:
+the abstention channel (C2), the budget frontier and its knapsack reading (§3b-xii, §3b-xix), the
+shuffled-prediction control (§3b-xv), the substitutes finding (C1b), the whether-not-which negative
+result (C4), and the calibration discipline (C3b). **Every one of those is independent of how the
+scalar is obtained**, and each should now be reported with the *best available* scalar per pool
+rather than with ours by assumption.
+
+*Consequence for C1/C4:* the headline frontier results must be re-run with a TF-IDF belief head as
+an additional arm. If TF-IDF beliefs reproduce the +26.5pt on LCB, then the LCB half of C1 is a
+statement about *conditioning*, not about *activations*, and should say so. **Marked blocking.**
+
+*What still needs activations, on present evidence:* LCB cost prediction on the expensive route,
+TACO solvability, and cross-model transfer (§3b-xviii), since TF-IDF has no mechanism for
+transferring a fitted curve to an unseen model.
 
 ### 3b-xix The scope law (SS6.9k) is FALSIFIED, by an oracle, before we ran the probe
 
