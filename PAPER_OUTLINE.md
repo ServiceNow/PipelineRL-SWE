@@ -628,14 +628,28 @@ budget-constrained where they are efficiency-oriented, but the *representation* 
 
 Their existence demands cheap baselines we never ran. Pool-solvability AUC, manifest test split:
 
-| benchmark | n | human easy/med/hard | prompt length | TF-IDF | TF-IDF+len | **activations** |
+| benchmark | n | *(ref)* human easy/med/hard | prompt length | **TF-IDF** | TF-IDF+len | **activations** |
 |---|---|---|---|---|---|---|
-| LiveCodeBench | 171 | 0.755 | 0.711 | 0.750 | **0.759** | 0.745 |
-| TACO | 168 | 0.434 | 0.375 | 0.747 | 0.752 | **0.857** |
+| LiveCodeBench | 171 | *0.755* | 0.711 | 0.750 | **0.759** | 0.745 |
+| TACO | 168 | *0.434* | 0.375 | 0.747 | 0.752 | **0.857** |
 
-**On LiveCodeBench a bag of words matches the 40,960-dimensional probe, and so does the
-benchmark's own free difficulty label.** The activation probe wins on TACO by +0.11 AUC and is
-*beaten* on LCB. This must be reported; it is the first thing a reviewer in this area will ask.
+**The human easy/medium/hard column is a reference, not a baseline** — it is benchmark metadata
+that does not exist for an arbitrary user query, so we never "lose to" it in any deployable sense.
+It is reported only to show how much signal a coarse human difficulty judgment carries (a lot on
+LCB, none on TACO).
+
+**TF-IDF is a different matter: it is fully deployable.** Fit the vectoriser and ridge offline on
+the labelled training pool; at test time you have the prompt text and only need `transform`. It
+uses exactly the input our probe uses — the problem statement, before any generation — and is
+*cheaper*, needing no GPU forward pass at all. **On LiveCodeBench a bag of words matches the
+40,960-dimensional probe.**
+
+**And it survives the obvious rebuttal.** One would expect TF-IDF to be exploiting topic/vocabulary
+rather than difficulty, and so to collapse under distribution shift. **The LiveCodeBench split is
+already temporal** — train 2023-09-02..2024-09-28, calibration 2024-10-05..2025-01-04, test
+2025-01-11..2025-04-06 — so the 0.759 was measured on genuinely future contests. The rebuttal is
+dead and the finding is stronger than it first appeared. *(TACO's split is not temporal: its dates
+overlap and many are missing, so TACO's +0.11 activation advantage is not shift-tested.)*
 
 Per-query cost $R^2$, same split:
 
