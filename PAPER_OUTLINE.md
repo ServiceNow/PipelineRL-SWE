@@ -343,6 +343,44 @@ needs an interaction term.
 prompt-only prediction can do, a sharp negative about what it cannot, and it is falsifiable: find a
 representation that predicts the interaction term, and routing becomes possible.
 
+### 3b-viii The claim restated as a fact about representations, not about routing
+
+The cleanest statement of what is new here is **not** an application. It is an empirical claim
+about what a small model's forward pass contains:
+
+> **A small model's prefill encodes problem difficulty in a form that transfers to other models —
+> including models from other labs, and including models the probe itself cannot emulate.**
+
+The literature covers three of the four cells; the fourth is ours:
+
+| difficulty estimated from | per-model | **shared across models** |
+|---|---|---|
+| **response patterns** (models must have answered) | — | IRT, fluid benchmarking, adaptive testing |
+| **generic text embeddings** | — | IrtNet (2510.00844) |
+| **a solver's own activations** | prefill routing (2603.20895), length-from-activations | **this work** |
+
+Prefill routing asks *each* model, from its own internals, whether **it** will succeed. IRT asks
+how hard an item is, from outcomes. **Nobody asks one model's internals for a quantity that
+predicts other models' outcomes.**
+
+**The strongest evidence is not a routing number.** A **0.69B** probe retains ~95% of pool-
+solvability AUC (0.818 against the 4B's 0.865) while solving almost nothing on TACO itself
+(§6.6a). A model far too weak to do the task still separates solvable from hopeless, so the probe
+reads a property of **the problem**, not a simulation of its own competence. Supporting evidence:
+transfer to five labs at ~25 labels (§3b-ii), +0.10-0.16 AUC over TF-IDF and far more over statement
+length (§3b-iv).
+
+**State the strength precisely.** The scout's activations beat other models' *own* activations at
+predicting **cost** (0.370 vs 0.302 for gpt-oss-20b). For **success** the scout probe is *tied* on
+pool solvability and slightly worse per route (§6.4). So the claim is **"transfers as well as an
+own-model probe at a fraction of the cost, and works where own-model probes cannot run at all"** —
+not "beats them". We have drifted toward the stronger version more than once.
+
+**And "now what" has two measured answers**, both of which need only the shared factor: abstention
+(§6.9f, up to +43.7%) and label-efficient pool extension (§3b-ii, ~25 labels per new model). Every
+application needing the interaction term fails (§7b), which is the same claim seen from the other
+side.
+
 ## 4. Related work
 
 ### 4.1 Sequential and budgeted test-time model selection *(closest)*
