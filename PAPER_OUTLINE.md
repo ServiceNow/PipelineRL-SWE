@@ -343,93 +343,78 @@ needs an interaction term.
 prompt-only prediction can do, a sharp negative about what it cannot, and it is falsifiable: find a
 representation that predicts the interaction term, and routing becomes possible.
 
-### 3b-viii The claim restated as a fact about representations, not about routing
+### 3b-viii CORRECTION: encoder-target decoupling is theirs, not ours
 
-The cleanest statement of what is new here is **not** an application. It is an empirical claim
-about what a small model's forward pass contains:
+**Two sections of this outline overclaimed novelty and are corrected here.** The prefill-router
+paper (2603.20895) states as its own contribution:
 
-> **A small model's prefill encodes problem difficulty in a form that transfers to other models —
-> including models from other labs, and including models the probe itself cannot emulate.**
+> *"Encoder-Target Decoupling: We show that open-weight encoders can serve as strong predictors of
+> closed-source target performance"* and **"hidden states of a different model outperform the
+> target model's own hidden states."**
 
-The literature covers three of the four cells; the fourth is ours:
+So **one model's activations predicting another model's success is their claim**, and our
+measurement that own-model access is worth about zero (-0.024, -0.011 AUC; -0.027, -0.019 on the
+differential) is a **replication of their finding on a different pool**, not a discovery. An
+earlier draft of this section placed them in a "per-model, not shared" cell of a novelty table.
+That was wrong, and it was wrong twice — the reframe felt compelling and I did not check the paper
+before writing it down.
 
-| difficulty estimated from | per-model | **shared across models** |
+**Replication is still worth reporting**, and ours is stronger evidence than a table row: a 4.41B
+probe that solves 41.5% predicts gpt-oss-120b's per-problem success within 0.05 AUC of gpt-oss-120b's
+own activations and ties it on pool solvability, and a **0.69B** probe retains 95% of pool AUC while
+solving almost nothing (§6.6a). Report it as **independent confirmation of encoder-target
+decoupling on a sequential pool**, and cite them for the claim.
+
+**What is actually left to us.** They explicitly do **not** address, and we do:
+
+| | 2603.20895 | this work |
 |---|---|---|
-| **response patterns** (models must have answered) | — | IRT, fluid benchmarking, adaptive testing |
-| **generic text embeddings** | — | IrtNet (2510.00844) |
-| **a solver's own activations** | prefill routing (2603.20895), length-from-activations | **this work** |
+| abstention / give-up action | no | **yes — the entire value channel (§6.9f, +43.7%)** |
+| resampling the same model | no | **yes** |
+| sequential decisions under a cost budget | no | **yes** |
+| label-efficient addition of a new model | no | **yes — ~25 labels (§3b-ii)** |
+| routing gains | **+45.58% gap closed** | **negative on 3 pools (§7b)** |
 
-Prefill routing asks *each* model, from its own internals, whether **it** will succeed. IRT asks
-how hard an item is, from outcomes. **Nobody asks one model's internals for a quantity that
-predicts other models' outcomes.**
+**Their evaluation:** MMLU-Pro, Humanity's Last Exam, **LiveCodeBench**, LLMRouterBench; pools of
+11 (frontier), 20 (7-9B), and 9 (mixed-tier) models; 85/15 splits.
 
-**The strongest evidence is not a routing number.** A **0.69B** probe retains ~95% of pool-
-solvability AUC (0.818 against the 4B's 0.865) while solving almost nothing on TACO itself
-(§6.6a). A model far too weak to do the task still separates solvable from hopeless, so the probe
-reads a property of **the problem**, not a simulation of its own competence. Supporting evidence:
-transfer to five labs at ~25 labels (§3b-ii), +0.10-0.16 AUC over TF-IDF and far more over statement
-length (§3b-iv).
+**The live tension worth resolving before submission.** They close 45.58% of the
+strongest-to-oracle gap; we get **-33%** on our LiveCodeBench cascade. We overlap on the benchmark,
+so the difference is the **pool**: ours is a 3-model cascade where gpt-oss-120b dominates and the
+whole oracle gap is **3.6pt**, against their 9-20 model pools chosen for complementary strengths.
+That is the pool-structure account (§3b-vi) and it predicts our routing result should improve on
+their pools. **`LLMRouterBench` is cached locally** (`datasets--withmartian--routerbench`), so this
+is directly testable and should be tested rather than argued.
 
-**State it as the price of own-model access, which is the striking framing.** The scout's
-activations beat other models' *own* activations at predicting **cost** (0.370 vs 0.302 for
-gpt-oss-20b). For **success** the scout is slightly worse per route (-0.049 to -0.061 AUC) and
-statistically **tied** on pool solvability (-0.028, CI [-0.075, +0.015]).
+### 3b-x The two papers sit at opposite ends of one measurable axis
 
-| | 4B scout | gpt-oss-120b |
-|---|---|---|
-| total parameters | 4.41B | 116.8B (**26.5x**) |
-| LiveCodeBench solve rate | 41.5% | 80.9% (**~2x**) |
-| predicting oss120's own success | -0.049 to -0.061 AUC | its own activations |
-| predicting pool solvability | **tied** | — |
+Pool structure, computed identically across every pool we have access to:
 
-**So own-model access is worth about 0.05 AUC.** A 4B model that solves half as many problems
-predicts gpt-oss-120b's per-problem success within five hundredths of AUC of gpt-oss-120b's own
-internal representation — and ties it on whether anything in the pool will solve the problem. The
-26.5x larger model, inspecting its own activations about its own forthcoming output, buys almost
-nothing.
+| pool | best single | oracle | headroom | **contested** | **pool-unsolvable** |
+|---|---|---|---|---|---|
+| **RouterBench (11 models)** — their main testbed | 84.3% | 96.1% | +11.8pt | **91.4%** | **3.9%** |
+| API peers (5 labs) | 71.9% | 85.4% | +13.5pt | 52.6% | 14.6% |
+| SWE-bench Verified (5 routes) | 62.3% | 71.3% | +9.0pt | 55.0% | **28.7%** |
+| LiveCodeBench cascade (3) | 68.9% | 72.5% | +3.6pt | 46.1% | 8.3% |
+| TACO cascade (3) | — | 60.0% | — | — | **40.0%** |
 
-**That inverts the deployment argument.** It is not "use the cheap probe because per-candidate
-probing is too expensive"; it is **"the information is in the problem, not in the model, and 0.05
-AUC is the entire premium for reading it from the model that will actually answer."** The same
-reading explains why per-candidate probing loses once priced at 48.5x (§6.5) and why a 0.69B probe
-retains 95% of the signal (§6.6a): all of them are reading one problem-level quantity, and reading
-it from a larger or better-matched model adds almost nothing.
+**RouterBench is 91.4% contested with 3.9% unsolvable** — maximally favourable to routing and
+useless for abstention. Our pools are 28.7-40% unsolvable at roughly half the contest rate:
+hostile to routing, rich for abstention. **Their +45.58% gap closure and our -33% are the same
+scope law read from opposite ends**, not a contradiction, and the axis is measurable before
+deployment.
 
-**And "now what" has two measured answers**, both of which need only the shared factor: abstention
-(§6.9f, up to +43.7%) and label-efficient pool extension (§3b-ii, ~25 labels per new model). Every
-application needing the interaction term fails (§7b), which is the same claim seen from the other
-side.
+**This is the honest positioning.** They opened the question of predicting one model's success from
+another's activations and answered the routing half on routing-favourable pools. We answer the
+**selective-prediction half** on pools that frequently fail outright, add the sequential
+cost-budgeted setting with a give-up action, and supply **the measurement that says which half
+applies to a given pool** (§6.9k). Their paper existing makes ours easier to position, not harder.
 
-### 3b-ix Prefill routing evaluated with its own signal: own-model access is worth ~0
-
-The obvious objection to §3b-viii is that prefill routers do not need a *shared* factor — each
-model reads its **own** activations, so it can capture its own idiosyncratic residual, which is
-exactly the interaction term routing needs. Tested directly on LiveCodeBench (167 test problems),
-fitting each model's probe on **its own** activations versus one scout probe for all of them:
-
-| | own activations | scout activations | own-access premium |
-|---|---|---|---|
-| predict gpt-oss-20b's success | 0.8223 | **0.8464** | **-0.0241** |
-| predict gpt-oss-120b's success | 0.7754 | **0.7865** | **-0.0110** |
-| **differential** oss120 vs oss20 | 0.5933 | **0.6200** | **-0.0267** |
-| **differential** oss20 vs scout | 0.6538 | **0.6731** | **-0.0192** |
-| single-shot routing, acc/\$ | 20.3 | 19.2 | (oracle 24.9) |
-
-**There is no per-model residual to capture.** Own-model access is slightly *negative* on absolute
-prediction and slightly *negative* on the differential — the quantity routing actually needs. Both
-sources give differential AUCs of only **0.59-0.67**, which is why every router lands near
-always-call-the-largest-model.
-
-**This extends the negative result from our probe to the published method.** SS7b shows routing
-fails from *our* representation; this shows it fails from **each model's own** representation too,
-evaluated with the signal the prefill-routing line is built on. The interaction term is not weakly
-encoded in the wrong model's activations — it appears not to be linearly present in *any* model's
-prefill.
-
-*Caveat before this becomes a headline:* the differentials rest on 31-54 disagreement cases per
-pair and one pair was degenerate (the larger model wins every disagreement). Needs a paired
-bootstrap, and ideally the same test on the five-model peer pool where 52.6% of problems are
-contested.
+**The falsifiable test, on their benchmark, with data already cached.** RouterBench has 3.9%
+unsolvable, so our scope law predicts **abstention should be worth almost nothing there**. If it is
+worth something, §6.9k is wrong. Running our method on RouterBench is therefore a test of our own
+central claim on the opponent's home ground, and it needs only an activation extraction over its
+prompts.
 
 ## 4. Related work
 
