@@ -400,6 +400,37 @@ it from a larger or better-matched model adds almost nothing.
 application needing the interaction term fails (§7b), which is the same claim seen from the other
 side.
 
+### 3b-ix Prefill routing evaluated with its own signal: own-model access is worth ~0
+
+The obvious objection to §3b-viii is that prefill routers do not need a *shared* factor — each
+model reads its **own** activations, so it can capture its own idiosyncratic residual, which is
+exactly the interaction term routing needs. Tested directly on LiveCodeBench (167 test problems),
+fitting each model's probe on **its own** activations versus one scout probe for all of them:
+
+| | own activations | scout activations | own-access premium |
+|---|---|---|---|
+| predict gpt-oss-20b's success | 0.8223 | **0.8464** | **-0.0241** |
+| predict gpt-oss-120b's success | 0.7754 | **0.7865** | **-0.0110** |
+| **differential** oss120 vs oss20 | 0.5933 | **0.6200** | **-0.0267** |
+| **differential** oss20 vs scout | 0.6538 | **0.6731** | **-0.0192** |
+| single-shot routing, acc/\$ | 20.3 | 19.2 | (oracle 24.9) |
+
+**There is no per-model residual to capture.** Own-model access is slightly *negative* on absolute
+prediction and slightly *negative* on the differential — the quantity routing actually needs. Both
+sources give differential AUCs of only **0.59-0.67**, which is why every router lands near
+always-call-the-largest-model.
+
+**This extends the negative result from our probe to the published method.** SS7b shows routing
+fails from *our* representation; this shows it fails from **each model's own** representation too,
+evaluated with the signal the prefill-routing line is built on. The interaction term is not weakly
+encoded in the wrong model's activations — it appears not to be linearly present in *any* model's
+prefill.
+
+*Caveat before this becomes a headline:* the differentials rest on 31-54 disagreement cases per
+pair and one pair was degenerate (the larger model wins every disagreement). Needs a paired
+bootstrap, and ideally the same test on the five-model peer pool where 52.6% of problems are
+contested.
+
 ## 4. Related work
 
 ### 4.1 Sequential and budgeted test-time model selection *(closest)*
