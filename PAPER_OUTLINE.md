@@ -587,6 +587,67 @@ transfer into one object, and removes the duplication of feeding the same 40,960
 two independently-penalised ridge problems. *Not yet run end-to-end through the policy;* the table
 above is a predictor-level result and the frontier version is the obvious next experiment.
 
+### 3b-xvi Selective prediction, reported as a risk-coverage curve at last
+
+The paper's title claims selective prediction and the outline never reported the curve. Score every
+problem by predicted pool-solvability from the one scout prefill, attempt the top $c$ fraction, and
+measure **risk** = the share of attempted problems that *nothing in the pool solves* (pure wasted
+spend). LCB/TACO use the committed probe on the manifest test split; SWE-bench Verified uses
+out-of-fold ridge on the scout activations (5-fold, n=369).
+
+| benchmark | n | pool-unsolvable | AUC | AURC | random | oracle | **gap closed** |
+|---|---|---|---|---|---|---|---|
+| LiveCodeBench | 171 | 15.2% | 0.759 | 0.062 | 0.152 | 0.013 | **64.9%** |
+| TACO | 168 | 41.1% | 0.838 | 0.185 | 0.411 | 0.100 | **72.7%** |
+| SWE-bench Verified | 369 | 28.7% | 0.703 | 0.182 | 0.287 | 0.046 | **43.8%** |
+
+Wasted spend cut at fixed coverage:
+
+| benchmark | @50% coverage | @70% | @90% |
+|---|---|---|---|
+| LiveCodeBench | 5.8% vs 15.2% (**-62%**) | 9.2% (-40%) | 11.0% (-27%) |
+| TACO | 19.0% vs 41.1% (**-54%**) | 24.6% (-40%) | 35.1% (-15%) |
+| SWE-bench Verified | 16.3% vs 28.7% (**-43%**) | 21.3% (-26%) | 25.3% (-12%) |
+
+**This is the cleanest statement of the contribution and it holds on all three pools, including
+the out-of-domain one.** It needs no MDP, no cost model and no budget: one cheap prefill, one
+ranking, and you halve the money spent on problems nothing can solve. SWE-bench Verified is the
+weakest of the three (43.8% against 64.9/72.7%), consistent with its lower probe AUC — *and still
+subject to the `--max-len 8192` truncation confound, so it is a floor, not a domain boundary.*
+
+### 3b-xvii Pool extension on SWE-bench Verified — and a measurement error in C3
+
+**AUC cannot measure label efficiency for a 2-parameter link.** AUC is invariant to any positive
+affine transform, so $\sigma(az+b)$ induces exactly the ranking $z$ does, for every $(a,b)$. Held-out
+AUC for the latent arm on SWE-V is therefore *identical* at N=10, 25, 50 and 100 (e.g. oss20 0.653
+at all four). **Any movement with N in an AUC-based label-efficiency table is the fit recovering the
+wrong *sign* at small N, not the response curve being learned.** §3b-ii's "~25 labels" is an
+AUC table, so its N=10 -> N=25 improvement is a sign-recovery effect and the claim must be restated:
+**the ranking transfers essentially for free; labels buy calibration, which AUC cannot see.**
+
+Measuring it properly, with Brier on 150 held-out problems, 12 resamples, the latent fitted on the
+four routes that are *not* the held-out one:
+
+| | N=10 | N=25 | N=50 | N=100 |
+|---|---|---|---|---|
+| latent + 2-param link | 0.2981 | 0.2579 | 0.2455 | 0.2401 |
+| the new model's own probe | 0.2772 | 0.2703 | 0.2660 | 0.2607 |
+| **the new model's base rate alone** | **0.2543** | **0.2436** | **0.2375** | **0.2350** |
+
+**On SWE-bench Verified the base rate wins at every N.** The latent ranks better than a dedicated
+probe (AUC 0.616-0.670 against 0.517-0.629) but is *worse calibrated than simply knowing how often
+the new model succeeds*. So pool extension does not transfer to this domain: the ordering does, the
+probabilities do not, and the probabilities are what a utility rule consumes.
+
+*Two caveats.* The own-probe Brier uses clipped ridge output rather than a fitted link, which
+flatters the other two rows; the latent-vs-base-rate comparison is the fair one and it is the one
+that fails. And the 8192-token truncation applies here too.
+
+**Consequence for C3.** The five-peer LiveCodeBench result may still stand — different pool,
+different domain — but it must be re-scored on Brier before it is claimed, and the "~25 labels"
+phrasing has to go in favour of "ranking transfers with no labels; calibration needs N and may not
+be worth it." Marked as blocking in §THREADS.
+
 ### 3b-xv The shuffled-prediction control, and what TACO's cost head is actually doing
 
 **The null that RoR cannot provide.** With RoR's constant per-route belief *and* constant
