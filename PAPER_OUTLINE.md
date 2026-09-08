@@ -448,6 +448,39 @@ all-incorrect and RouterBench at 3.9%; ours at 28.7-40% (§3b-x). Neither their 
 RouterBench measures advantage *as a function of* that fraction — which is exactly the controlled
 sweep of §6.9k.
 
+### 3b-xii Report the frontier in budget units — it is a knapsack, and R is the multiplier
+
+The utility rule $\arg\max_m (p_m R - c_m)$ with a **common** $R$ across problems is the
+Lagrangian relaxation of a global budget constraint, with $R$ the multiplier. **Sweeping $R$ is
+the knapsack.** RoR's density rule is the same greedy applied *within* a problem; **abstention is
+what extends it across problems**, because giving up on one frees budget for another.
+
+Re-expressing the frontier in the units a practitioner actually has — a budget, as a multiple of
+calling the largest model on everything:
+
+| budget | LCB: RoR | LCB: ours | gain | TACO: RoR | TACO: ours | gain |
+|---|---|---|---|---|---|---|
+| **0.25x** | 27.6% | **52.8%** | **+25.1pt** | 17.9% | **43.7%** | **+25.8pt** |
+| 0.50x | 58.7% | 62.2% | +3.5pt | 45.7% | 47.6% | +1.9pt |
+| 1.00x | 66.3% | 72.9% | +6.6pt | 54.3% | 54.7% | +0.4pt |
+| 2.00x | 79.0% | 79.7% | +0.7pt | 57.5% | 56.7% | -0.8pt |
+| 3.00x | 82.5% | 80.2% | -2.3pt | 58.3% | 58.9% | +0.6pt |
+
+**At a quarter of the budget of calling gpt-oss-120b on everything, we solve 25 points more
+problems than the count-based baseline, on both benchmarks.** The advantage is largest exactly
+where the budget binds and vanishes where it does not — the same sentence explains the whole curve,
+and it is the same data as §6.9-HEADLINE, only in legible units.
+
+**Reporting recommendation:** lead with this table. Cost-at-matched-accuracy is what the routing
+literature reports and belongs in the paper for comparability, but "how many problems do I solve
+for my budget" is the question an operator has, and it is where the method looks strongest and its
+regime is clearest.
+
+*(Superseded: an earlier attempt at this as a separate "workload allocation" experiment used a
+value-per-dollar route selector that always chose the scout, so the allocation did not scale with
+the budget at all -- it read +90% at 0.25x and -45% at 1.0x purely as an artifact. The frontier
+already is the allocator; no separate experiment is needed.)*
+
 ## 4. Related work
 
 ### 4.1 Sequential and budgeted test-time model selection *(closest)*
