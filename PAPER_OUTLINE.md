@@ -680,6 +680,65 @@ on every cell. The reframe has been reverted. **Rule, now on the same footing as
 representation comparison must give every arm the same estimator, the same hyperparameter search,
 and the same split — a hand-set penalty on one arm is not a baseline, it is a handicap.**
 
+### 3b-xxi RouterBench: we win, but through the channel the paper says does not work
+
+RouterBench (36,497 prompts, 11 models, 3.8% pool-unsolvable, 91.4% contested), TF-IDF beliefs,
+RoR-style constant costs on both sides, budget as a fraction of RoR-saturation spend:
+
+| arm | 0.10x | 0.20x | 0.40x | 0.70x |
+|---|---|---|---|---|
+| RoR (constant beliefs) | 67.5% | 67.5% | 67.5% | 67.5% |
+| **ours** | **73.4%** | **74.9%** | **78.7%** | **82.5%** |
+| shuffled control | 66.1% | 66.1% | 66.1% | 76.6% |
+| ours, give-up disabled | 73.4% | 74.9% | 78.7% | 82.5% |
+
+**We beat RoR by +5.9 to +15.0pt and the shuffle control confirms it is information** (the
+shuffled arm is *below* RoR at tight budgets). **But the give-up row is identical to the full row:
+abstention contributes exactly nothing.** The entire gain is routing — the *which* decision.
+
+**This qualifies C4, which is a headline contribution.** Decomposing against a shared-scalar arm
+that keeps difficulty and destroys the interaction:
+
+| | 0.10x | 0.20x | 0.40x | 0.70x |
+|---|---|---|---|---|
+| shared scalar only | -0.2 | +2.9 | +2.9 | +2.9 |
+| **full per-model** | **+5.9** | **+7.4** | **+11.2** | **+15.0** |
+
+**Most of the gain is genuine model x problem interaction** — up to +12.1pt beyond what a shared
+difficulty scalar buys. So "a prompt representation carries shared factors, not interaction terms"
+is **pool-dependent, not universal**: it holds on our pools (28-41% unsolvable, 52-55% contested)
+and fails on RouterBench (3.8% / 91.4%). **C4 must be restated with contested mass as its scope
+condition.** §7b already suspected this — it is now measured.
+
+**The two channels are complements across pools, and that is the cleaner story.** Where unsolvable
+mass is high, abstention is the channel and routing is worthless (our pools). Where contested mass
+is high, routing is the channel and abstention is worthless (RouterBench). One cheap difficulty
+signal serves both; which channel pays is read off pool structure before deployment.
+
+### 3b-xxii The shipped belief head is under-regularised — free accuracy
+
+`activation_content_preds.py` uses a hard-coded `C = 0.05/(dim//2560) = 0.003125`. Selecting C on
+the **calibration** split (which the script already loads for Platt) and scoring on test:
+
+| route | shipped | C* on cal | gain |
+|---|---|---|---|
+| LCB scout | 0.840 | 0.00030 | -0.006 |
+| LCB oss20 | 0.769 | 0.00001 | +0.022 |
+| **LCB oss120** | 0.758 | 0.00010 | **+0.043** |
+| TACO scout | 0.743 | 0.00003 | +0.015 |
+| TACO oss20 | 0.800 | 0.00003 | +0.040 |
+| TACO oss120 | 0.818 | 0.00010 | +0.032 |
+
+**Mean +0.024 AUC, +0.043 on gpt-oss-120b** — the expensive route the policy's decisions hinge on.
+Selected C is 10-300x smaller than shipped, so the head is badly under-regularised; the effect is
+near-zero only on the scout, where classes are balanced. Separately, **noisy-OR beats max** for
+pool-solvability (0.770 vs 0.759 LCB, 0.844 vs 0.838 TACO), which improves §3b-xvi for free. Both
+are one-line changes and every downstream number should be regenerated after them.
+
+*(An earlier claim that a plain ridge beat the committed chain by 0.065 was mostly a target
+mismatch — the shipped head predicts pass@1 on draw 0, and it was scored on pool-solvability over
+six draws. The residual above is the real part.)*
+
 ### 3b-xix The scope law (SS6.9k) is FALSIFIED, by an oracle, before we ran the probe
 
 SS6.9k claims the advantage scales with the fraction of problems **nothing** in the pool solves, and
@@ -697,9 +756,18 @@ and nothing binds:
 | LiveCodeBench | 8.2% | +60.2pt | +69.9pt | +7.9pt | +1.3pt | -0.1pt |
 | TACO | 39.5% | +33.3pt | +41.0pt | +7.0pt | +2.7pt | +0.6pt |
 
-**Abstention is worth the MOST on the pool with the LEAST unsolvable mass.** RouterBench, at 3.9%
-unsolvable, gains +67.0pt from an oracle skip action at a 0.20x budget — more than TACO at 39.5%.
-The law is not merely unsupported, it is backwards in this range.
+**With an ORACLE, abstention is worth the most on the pool with the least unsolvable mass** —
+RouterBench gains +67.0pt from a skip action at a 0.20x budget, more than TACO at 39.5%.
+
+**PARTIAL RETRACTION (2026-09-09).** This section originally concluded "the law is backwards".
+That was too strong: an oracle measures what abstention makes *available*, not what a real
+predictor can *realise*. Running the method on RouterBench with actual (TF-IDF) beliefs, the
+give-up action is worth **exactly 0.0pt at every budget** — predicted $p$ is high everywhere (1st
+percentile of $\max_m p_m$ is 0.401), so the skip is a step function from 100% to 0.6% abstention
+between two adjacent values of $R$ and never has a useful partial regime. **§6.9k is right about
+realised abstention value and wrong about the ceiling.** Restated: *the fraction of the abstention
+ceiling a predictor can capture scales with unsolvable mass, even though the ceiling itself does
+not.*
 
 **What the mechanism actually is.** Abstention at a binding budget is not primarily about declining
 *hopeless* problems; it is **reallocation** — skipping expensive problems to afford more cheap ones.
