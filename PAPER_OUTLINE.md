@@ -725,6 +725,34 @@ mass is high, abstention is the channel and routing is worthless (our pools). Wh
 is high, routing is the channel and abstention is worthless (RouterBench). One cheap difficulty
 signal serves both; pool structure says which before deployment.
 
+**Against RouterBench's own baseline and metric.** Their **Zero Router** is defined as the
+non-decreasing convex hull of the individual LLMs — which is exactly the single-model hull above,
+so the corrected comparison is the one their paper asks for. Their metric is
+**AIQ** $=\frac{1}{c_{max}-c_{min}}\int_{c_{min}}^{c_{max}} \tilde{R}_\theta\,dc$:
+
+| dataset | n (test) | Zero Router AIQ | ours | delta |
+|---|---|---|---|---|
+| **ALL (pooled)** | 14,599 | 0.7472 | **0.7916** | **+5.95%** |
+| hellaswag | 3,984 | 0.7719 | 0.8049 | +4.28% |
+| grade-school-math | 3,011 | 0.8753 | 0.9273 | +5.93% |
+| mmlu-professional-law | 593 | 0.5621 | 0.5552 | -1.23% |
+| arc-challenge | 583 | 0.8962 | 0.8300 | -7.39% |
+| winogrande | 516 | 0.7249 | 0.5985 | **-17.44%** |
+
+**We beat the Zero Router by +5.95% AIQ pooled, and lose on three of five individual datasets.**
+The pooled number is carried by the two large sets. RouterBench reports the same *shape* of result
+for its own predictive routers — their KNN and MLP routers "generally do not significantly
+outperform the Zero Router", winning on MMLU and Winogrande and underperforming on ARC-Challenge
+and MBPP. **So the honest claim is that we land in the same regime as the benchmark's published
+routers, not clearly above them.** We should not claim to beat KNN/MLP without their per-dataset
+numbers in hand.
+
+*Protocol gap to close before citing this:* our router is trained once on the pooled training
+split and then evaluated per dataset, whereas RouterBench trains and evaluates per dataset. The
+three losses are all on small sets (516-593) where a pooled TF-IDF vocabulary is furthest from the
+local distribution, so the per-dataset protocol is likely to help and must be run before any
+comparison is claimed. **Marked blocking for any RouterBench claim.**
+
 **CORRECTION (2026-09-09).** The first version of this section reported gains of "+5.9 to +15.0pt"
 against an arm labelled "RoR (constant beliefs)" that sat flat at 67.5% across three budgets, and
 an interaction component of up to +12.1pt. **Both were inflated by a methodology error of our own
