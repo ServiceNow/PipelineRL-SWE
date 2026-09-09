@@ -680,40 +680,61 @@ on every cell. The reframe has been reverted. **Rule, now on the same footing as
 representation comparison must give every arm the same estimator, the same hyperparameter search,
 and the same split — a hand-set penalty on one arm is not a baseline, it is a handicap.**
 
-### 3b-xxi RouterBench: we win, but through the channel the paper says does not work
+### 3b-xxi RouterBench: we win, modestly, through the channel the paper says does not work
 
-RouterBench (36,497 prompts, 11 models, 3.8% pool-unsolvable, 91.4% contested), TF-IDF beliefs,
-RoR-style constant costs on both sides, budget as a fraction of RoR-saturation spend:
+RouterBench: 36,497 prompts, 11 models, **3.8% pool-unsolvable, 91.4% contested**, oracle 96.2%,
+best single gpt-4-1106-preview at 84.0% for $0.00329/query. TF-IDF beliefs, RoR-style constant
+costs on both sides, **randomised mixtures allowed on every arm** (§6.3a):
 
-| arm | 0.10x | 0.20x | 0.40x | 0.70x |
+| arm | $0.0005 | $0.0010 | $0.0020 | $0.0033 (= gpt-4) |
 |---|---|---|---|---|
-| RoR (constant beliefs) | 67.5% | 67.5% | 67.5% | 67.5% |
-| **ours** | **73.4%** | **74.9%** | **78.7%** | **82.5%** |
-| shuffled control | 66.1% | 66.1% | 66.1% | 76.6% |
-| ours, give-up disabled | 73.4% | 74.9% | 78.7% | 82.5% |
+| single-model hull (mixtures of fixed models) | 69.2% | 71.8% | 77.1% | 84.0% |
+| **ours** | **74.7%** | **77.3%** | **81.7%** | 84.4% |
+| shuffled control | 67.3% | 70.3% | 76.3% | 82.8% |
+| random routing | 51.1% | 54.5% | 54.5% | 54.5% |
+| **gain over single-model hull** | **+5.6** | **+5.5** | **+4.6** | **+0.4** |
+| *of which information (vs shuffled)* | *+7.4* | *+7.0* | *+5.4* | *+1.6* |
 
-**We beat RoR by +5.9 to +15.0pt and the shuffle control confirms it is information** (the
-shuffled arm is *below* RoR at tight budgets). **But the give-up row is identical to the full row:
-abstention contributes exactly nothing.** The entire gain is routing — the *which* decision.
+**A real but modest win: +4.6 to +5.6pt below the gpt-4 price point, collapsing to +0.4pt at it.**
+The shuffled arm sits *below* the single-model hull at tight budgets, so uninformative
+per-problem variation is actively harmful here — the opposite of its effect on our own pools
+(§3b-xv), where dispersion alone bought points.
 
-**This qualifies C4, which is a headline contribution.** Decomposing against a shared-scalar arm
-that keeps difficulty and destroys the interaction:
+**Abstention contributes exactly nothing.** Disabling the give-up action changes no cell: predicted
+$p$ is high everywhere (1st percentile of $\max_m p_m$ = 0.401), so the skip is a step function
+from 100% to 0.6% abstention between adjacent $R$ and never has a useful partial regime. **The
+entire gain is routing — the *which* decision.**
 
-| | 0.10x | 0.20x | 0.40x | 0.70x |
+**This qualifies C4, a headline contribution.** Decomposing against a shared-scalar arm that keeps
+difficulty and destroys the interaction:
+
+| | $0.0005 | $0.0010 | $0.0020 | $0.0033 |
 |---|---|---|---|---|
-| shared scalar only | -0.2 | +2.9 | +2.9 | +2.9 |
-| **full per-model** | **+5.9** | **+7.4** | **+11.2** | **+15.0** |
+| shared scalar only, vs single-model hull | +0.9 | +0.9 | +0.6 | +0.0 |
+| **full per-model, vs single-model hull** | **+5.6** | **+5.5** | **+4.6** | **+0.4** |
+| **interaction component** | **+4.6** | **+4.6** | **+4.0** | **+0.3** |
 
-**Most of the gain is genuine model x problem interaction** — up to +12.1pt beyond what a shared
-difficulty scalar buys. So "a prompt representation carries shared factors, not interaction terms"
-is **pool-dependent, not universal**: it holds on our pools (28-41% unsolvable, 52-55% contested)
-and fails on RouterBench (3.8% / 91.4%). **C4 must be restated with contested mass as its scope
-condition.** §7b already suspected this — it is now measured.
+**The interaction is worth ~5x what the shared scalar buys.** So "a prompt representation carries
+shared factors, not interaction terms" is **pool-dependent, not universal**: it holds on our pools
+(28-41% unsolvable, 52-55% contested) and fails on RouterBench (3.8%, 91.4%). **C4 must be
+restated with contested mass as its scope condition** — §7b suspected exactly this, and it is now
+measured.
 
-**The two channels are complements across pools, and that is the cleaner story.** Where unsolvable
+**The two channels are complements across pools, which is the cleaner story.** Where unsolvable
 mass is high, abstention is the channel and routing is worthless (our pools). Where contested mass
 is high, routing is the channel and abstention is worthless (RouterBench). One cheap difficulty
-signal serves both; which channel pays is read off pool structure before deployment.
+signal serves both; pool structure says which before deployment.
+
+**CORRECTION (2026-09-09).** The first version of this section reported gains of "+5.9 to +15.0pt"
+against an arm labelled "RoR (constant beliefs)" that sat flat at 67.5% across three budgets, and
+an interaction component of up to +12.1pt. **Both were inflated by a methodology error of our own
+making:** the budget lookup returned the best hull *vertex* under budget instead of interpolating
+along the hull, so randomised mixtures — which §6.3a introduced precisely to remove this artifact,
+and which we apply everywhere else — were unavailable. That penalises the baseline most, because a
+constant-belief arm has few, widely-spaced vertices (hence the flat row). With mixtures restored
+the gain is +4.6..+5.6pt and the interaction component +4.0..+4.6pt. The qualitative conclusion
+survives; the magnitudes do not. *Check every frontier table for interpolated lookup before
+submission.*
 
 ### 3b-xxii The shipped belief head is under-regularised — free accuracy
 
