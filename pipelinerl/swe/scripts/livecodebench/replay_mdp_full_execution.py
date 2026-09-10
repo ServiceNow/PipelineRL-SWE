@@ -542,7 +542,24 @@ def replay_adaptive(
                     decay_s = float(decay_by_problem.get(problem_id, decay_s))
                 bellman_decay_s = decay_s
                 p_each = theta * decay_s / (decay_s + failures)
-                belief_source = "content_decay"
+                if cross_pseudo_count > 0.0:
+                    # Cross-route coupling for the CONTENT family. This was previously enabled
+                    # only for the count baseline, on the assumption that "our probe makes this
+                    # redundant (it reads difficulty from the prompt)". That assumption was never
+                    # tested and is false: prefill + one observed scout outcome predicts gpt-oss-120b
+                    # success at AUC 0.792 against 0.768 for the prefill alone, so the scout's
+                    # realised result carries information the prompt does not. The scout is drawn on
+                    # 100% of episodes under `scout_first`, so this evidence is already paid for --
+                    # discarding it handed the baseline an advantage in the coupled comparison.
+                    total = float(failures.sum())
+                    p_each = np.asarray([
+                        p_each[mi] * cross_pseudo_count
+                        / (cross_pseudo_count + (total - failures[mi]))
+                        for mi in range(len(slots))
+                    ])
+                    belief_source = "content_decay_coupled"
+                else:
+                    belief_source = "content_decay"
             else:
                 bellman_decay_s = None
                 p_each = theta
@@ -1246,9 +1263,11 @@ def main() -> None:
                     bellman_horizon=bellman_horizon,
                     learned_transitions=learned_transitions,
                     capture_trace=capture_trace,
-                    apply_failure_decay=base in ("sequential_decay", "content_decay"),
+                    apply_failure_decay=base in ("sequential_decay", "content_decay",
+                                                 "content_decay_coupled"),
                     cross_pseudo_count=(args.cross_pseudo_count
-                                        if base == "counts_coupled" else 0.0),
+                                        if base in ("counts_coupled",
+                                                    "content_decay_coupled") else 0.0),
                     scorer_cost_usd=(args.scorer_cost_usd
                                      if base in ("sequential", "sequential_decay") else 0.0),
                     select_by_density=args.select_by_density,
@@ -1280,6 +1299,7 @@ def main() -> None:
         ["counts"]
         + (["content", "content_decay"] if content else [])
         + (["counts_coupled"] if args.cross_pseudo_count > 0 else [])
+        + (["content_decay_coupled"] if (content and args.cross_pseudo_count > 0) else [])
         + (["counts_qcost"] if cost_preds else [])
         + (["content_qcost", "content_decay_qcost"] if (content and cost_preds) else [])
         + (scorer_families if scorer else [])
