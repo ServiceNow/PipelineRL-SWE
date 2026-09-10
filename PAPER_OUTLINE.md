@@ -796,6 +796,61 @@ remaining seeds at the chosen value (6 + 8 jobs rather than 48). **The AUC-vs-fr
 measured above is the evidence that this matters**, and it is a better contribution than the
 +0.024 AUC it replaces.
 
+### 3b-xxvii The probe is a good ranker and a poor estimator — and that explains the budget curve
+
+**The observation.** Replacing $\hat\theta(x)$ with the true per-problem solve rate and changing
+nothing else (counts, decay, cost head, sequential rule all identical), LCB seed 0:
+
+| budget | RoR | ours | oracle $\theta$ | ours gain | oracle gain | **we capture** |
+|---|---|---|---|---|---|---|
+| 0.25x | 26.8% | 52.7% | 68.4% | +26.0 | +41.6 | **63%** |
+| 0.50x | 58.4% | 62.6% | 74.7% | +4.2 | +16.4 | 26% |
+| **1.00x** | 64.9% | 67.4% | **84.8%** | +2.5 | +19.9 | **13%** |
+| 2.00x | 78.5% | 80.0% | 84.8% | +1.5 | +6.3 | 24% |
+
+**The high-budget flatness is a prediction failure, not a structural ceiling.** A perfect belief
+gains +19.9pt at 1.0x and reaches the pool ceiling; we capture 13% of it.
+
+**The explanation, and it unifies four separate results.** Tight budgets bind on the *extensive*
+margin — which problems to attempt at all — which needs only an **ordering**; a misranking near
+the cutoff swaps two problems of similar value and costs almost nothing. High budgets bind on the
+*intensive* margin — how deep, on which route — which compares $p\cdot R$ against $c$ for a
+specific marginal draw and needs to know whether $p$ is 0.15 or 0.35. **A ranking cannot answer
+that; only a calibrated value can.**
+
+Under that reading, four findings we had treated separately are one finding:
+
+| finding | restated |
+|---|---|
+| C3: ordering transfers free, calibration costs ~25 labels | ranking is cheap, values are expensive |
+| §3b-xxvi: selecting C on AUC helped ranking, hurt the policy | AUC scores order; the policy consumes values |
+| SWE-V pool extension fails, reliability 0.0389 > resolution 0.0254 | a calibration failure, not a discrimination one |
+| we capture 63% of headroom at 0.25x, 13% at 1.0x | ordering suffices at the extensive margin only |
+
+**The decomposition that tests it** (in flight): `ISO` = our predictions isotonically recalibrated
+against truth — monotone, so our ranking is preserved *exactly* and only calibration changes;
+`RANK1` = a one-factor oracle with perfect shared difficulty and zero interaction. Then
+ours -> ISO is what perfect calibration of our own ordering buys, ISO -> RANK1 is what a better
+representation buys, and RANK1 -> ORACLE is the interaction, which C4 says no prompt-only probe
+reaches. **Prediction: ours -> ISO is large at 1.0x and small at 0.25x.** If ISO barely moves and
+RANK1 does, the thesis is wrong and our ranking, not our calibration, is the weak link.
+
+**Why our existing calibration does not already fix this.** Platt scaling fits **two parameters per
+route** on a **global** monotone curve. It can remove average over-confidence and nothing else:
+- it cannot fix miscalibration that varies **across the range**, and the range that matters is the
+  low-$p$ tail where the stop decision bites and where we have the fewest calibration examples;
+- the calibration split is **~170 problems**, so the tail is fit on tens of points;
+- post-hoc calibration is monotone by construction, so it **cannot add resolution**. Under the
+  Murphy decomposition (Brier = reliability - resolution + uncertainty) it drives reliability toward
+  zero and leaves resolution untouched. Where resolution is low — SWE-V, 0.0254 — perfect
+  calibration just makes the predictor *confidently average*;
+- **we calibrate the wrong conditional.** We calibrate $P(\text{solve next draw}\mid x, m)$ at depth
+  0, but the policy consumes it after $n$ observed failures, where the belief is
+  $\hat\theta\cdot\sigma/(\sigma+n)$ with a **single global $\sigma$**. If the true decay shape
+  varies per problem, no amount of calibrating the depth-0 prior repairs it. *This is the specific,
+  testable one, and it is the natural next experiment: fit $\sigma$ per problem (or per difficulty
+  bin) and re-run.*
+
 ### 3b-xxiii Bootstrap CIs on the strict-improvement floors — and TACO does not survive
 
 The floor is a **minimum over 401 correlated levels**, the most downward-biased statistic in the
