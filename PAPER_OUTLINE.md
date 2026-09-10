@@ -796,6 +796,53 @@ remaining seeds at the chosen value (6 + 8 jobs rather than 48). **The AUC-vs-fr
 measured above is the evidence that this matters**, and it is a better contribution than the
 +0.024 AUC it replaces.
 
+### 3b-xxx Selecting components on a predictor metric degrades the policy — four cases and one fix
+
+**The pattern.** Four interventions, each improving its own predictor metric and each making the
+frontier worse:
+
+| intervention | predictor gain | frontier effect |
+|---|---|---|
+| belief penalty $C$ selected on AUC | +0.024 AUC | **-4.34pp** TACO floor (P(floor>0) 0.514 -> 0.000) |
+| cost penalty $\alpha$ selected on $R^2$ | 4/6 cells; TACO oss20 -0.033 -> +0.187 | **-3.2pt** LCB 0.25x |
+| cross-route coupling | +0.024 AUC from observed scout outcome | **-23.8pt** LCB 0.25x |
+| isotonic recalibration (ISO) | perfect calibration by construction | -0.4 to -1.9pt |
+
+**The cause.** AUC is invariant to any monotone transform, $R^2$ and calibration error are
+invariant to affine rescaling of the residual structure the rule uses — but
+$\arg\max_m(p_mR-c_m)$ consumes prediction *values*, and abstention fires on $\max_m Q\le0$.
+Better-regularised predictors are more **compressed**; the rule needs **spread**. Optimising
+accuracy is paid for in dispersion.
+
+**The fix, and its limits.** Selecting $\alpha$ on the *calibration frontier* (`--eval-split
+calibration`, test touched once), LCB, 5 seeds:
+
+| budget | delta vs shipped | sd | seeds positive |
+|---|---|---|---|
+| 0.25x | **+3.88pt** | 0.73 | **5/5** |
+| 0.50x | **+2.34pt** | 1.06 | **5/5** |
+| 1.00x | **-2.60pt** | 1.92 | 1/5 |
+| 2.00x | +0.26pt | 0.59 | 3/5 |
+
+**Frontier-selection does not dominate — it trades regimes.** The tight-budget gain is real and
+consistent (5/5 seeds, sd 0.73) and it costs 2.6pt at 1.0x, equally consistently. Reporting a mean
+over budgets (+0.97pt) hides that, and an earlier single-seed read of "+1.3pt" did exactly that.
+
+**The selection is also noisy at these sample sizes.** TACO (n=168 calibration) picks
+$\alpha=10^6$ where LCB (n=170) picks $10^4$ — good, in that the criterion does per-pool work
+rather than finding a property of the ridge geometry. But TACO's curve is non-monotone
+(46.3 / 48.1 / 44.7 / 46.3 / 48.2 across $10^2..10^6$), with the two best values tied within 0.1pt
+at opposite ends of the grid. **Taking an argmax over a curve like that is not a reliable
+procedure**, and the honest reading is that the frontier criterion reliably rejects *extreme*
+regularisation while being unable to discriminate within an order of magnitude.
+
+**What survives as a claim.** *In a cost-constrained sequential policy, component hyperparameters
+must not be selected on standard predictor metrics, because those metrics are invariant to the
+prediction spread the decision rule consumes.* Four independent demonstrations support the
+negative; the positive prescription (select on the policy objective) avoids the failure mode but
+buys a regime trade rather than a uniform win, and needs more calibration data than we have to be
+executed cleanly.
+
 ### 3b-xxix Cost prediction is the largest measured lever, and its ceiling is not 1.0
 
 **Oracle arms bound each channel** (LCB seed 0, everything else fixed):
