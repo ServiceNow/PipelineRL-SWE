@@ -796,7 +796,50 @@ remaining seeds at the chosen value (6 + 8 jobs rather than 48). **The AUC-vs-fr
 measured above is the evidence that this matters**, and it is a better contribution than the
 +0.024 AUC it replaces.
 
-### 3b-xxvii The probe is a good ranker and a poor estimator — and that explains the budget curve
+### 3b-xxviii RETRACTION of §3b-xxvii, and the correct decomposition: it is the representation
+
+§3b-xxvii argued the probe is a good ranker and a poor estimator, predicting that perfect
+calibration of our own ordering would close the high-budget gap. **The test refutes it.** LCB seed
+0, everything identical except the belief input, where `ISO` is our predictions isotonically
+recalibrated against truth (monotone, so our ranking is preserved *exactly*) and `RANK1` is a
+one-factor oracle with perfect shared difficulty and zero interaction:
+
+| budget | RoR | ours | ISO | RANK1 | ORACLE |
+|---|---|---|---|---|---|
+| 0.25x | 26.8% | 52.7% | 55.2% | 65.7% | 68.4% |
+| 0.50x | 58.4% | 62.6% | 60.7% | 73.1% | 74.7% |
+| 1.00x | 64.9% | 67.4% | 67.0% | 74.9% | 84.8% |
+| 2.00x | 78.5% | 80.0% | 79.1% | 81.8% | 84.8% |
+
+| budget | **calibration** (ours->ISO) | **representation** (ISO->RANK1) | **interaction** (RANK1->ORACLE) |
+|---|---|---|---|
+| 0.25x | +2.5 | **+10.5** | +2.7 |
+| 0.50x | **-1.9** | **+12.4** | +1.6 |
+| 1.00x | **-0.4** | **+7.8** | +9.9 |
+| 2.00x | -0.9 | +2.7 | +3.0 |
+
+**Perfect calibration buys nothing and is negative at three of four budgets. The representation is
+the bottleneck, worth +7.8 to +12.4pt.** Our *ordering* is the weak link, not our probabilities.
+The prediction §3b-xxvii made — "ours->ISO large at 1.0x" — came back at -0.4.
+
+**So the honest diagnosis is the plain one: the probe does not carry enough per-problem
+information.** Not a ceiling on the channel (oracle reaches 84.8%), not miscalibration (ISO is
+flat), and not primarily the interaction (worth +2.7/+1.6/+9.9/+3.0, second everywhere except
+1.0x). *Caveat: RANK1 is fitted to truth including test, so +10.5 is a ceiling for a perfect
+shared-difficulty probe, not what a realistically better one would deliver. One seed.*
+
+**This also downgrades the per-tercile sigma experiment** (§6.x correction): sigma governs continue
+decisions, which sit downstream of an ordering that is already wrong. Run it for completeness, but
+the prior on it mattering should now be low.
+
+**Where the remaining effort should go — cheap evidence, not better readouts.** The measured
+alternative is not a richer probe of the same prefill but *buying a little evidence*: RoR's own
+failure channel is worth 28 points (§6.x), and one observed scout failure moves oss120 pass@1 from
+97.7% to 69.9%. That is a far larger per-problem signal than our prefill carries, and it is already
+priced in our budget framework (the scout costs 0.05x of an oss120 call). **§3b-xxix prices the
+options.**
+
+### 3b-xxvii The probe is a good ranker and a poor estimator — **RETRACTED, see §3b-xxviii**
 
 **The observation.** Replacing $\hat\theta(x)$ with the true per-problem solve rate and changing
 nothing else (counts, decay, cost head, sequential rule all identical), LCB seed 0:
