@@ -1,133 +1,73 @@
 # Threads in progress
 
-**Living document — overwrite in place, do not append.** Snapshot: 2026-09-07 18:05 UTC.
-Companion to `PAPER_OUTLINE.md` (the paper as it currently stands) and `RESEARCH_LOG.md`
-(append-only history). This file answers one question: *what is running, why, and what does it
-decide?*
+**Living document — overwrite in place, do not append.** Snapshot: 2026-09-10.
+Companion to `PAPER_OUTLINE.md` (the paper as it stands), `PRIOR_ART.md` (what we must position
+against), `RESEARCH_LOG.md` (append-only history). This file answers one question: *what is
+running, why, and what does it decide?*
 
 ---
 
 ## 1. Jobs in flight
 
-Ten collection jobs, all OpenRouter, all on the LiveCodeBench pool. Nothing else is running.
+| job | what it is | decides | ETA |
+|---|---|---|---|
+| `iso_lcb_s0_2134522074` | our theta-hat, isotonically recalibrated against truth | **is calibration the bottleneck?** | ~5 min |
+| `rank1_lcb_s0_3045219557` | one-factor oracle: perfect *shared* difficulty, zero interaction | ceiling for any prompt-only probe | ~5 min |
+| `orc_lcb_s1`, `orc_taco_s0/s1` | oracle per-(problem,route) theta | does seed 0's headroom hold up | done/near |
 
-| job | what it collects | progress | rate | ETA |
-|---|---|---|---|---|
-| `peer_qmax` (test) | qwen3-max on the 171 test problems | 85/171 | 4.9/min | **~0.3h** |
-| `peer_deepseek` (test) | deepseek-v4-flash, test | 28/171 | 1.6/min | ~1.5h |
-| `peer_kimi` (test) | kimi-k2.5, test | 16/171 | 0.9/min | ~2.8h |
-| `peer_minimax` (test) | minimax-m2.7, test | 15/171 | 0.9/min | ~3.0h |
-| `peer_glm5` (test) | glm-5, test | 7/171 | 0.4/min | **~6.8h** |
-| `peer_qmax` (cal) | qwen3-max on the 170 calibration problems | 10/170 | 3.9/min | ~0.7h |
-| `peer_deepseek` (cal) | deepseek, calibration | 10/170 | 3.9/min | ~0.7h |
-| `peer_glm5` (cal) | glm-5, calibration | 4/170 | 1.6/min | ~1.8h |
-| `peer_kimi` (cal) | kimi, calibration | 4/170 | 1.6/min | ~1.8h |
-| `peer_minimax` (cal) | minimax, calibration | 2/170 | 0.8/min | ~3.6h |
-
-**Everything is gated on glm-5 (~7h).** The other four finish within ~3.5h. Partial analysis is
-possible on qmax + deepseek alone, which are also the two models with clean labels historically.
-
-**Why both splits.** The response curve must be *fitted* on calibration and *evaluated* on test.
-The first launch collected only the test split, which would have repeated the very defect these
-runs exist to remove (fit and score on the same 171 problems).
-
-**Watch for:** empty-output rate on glm-5 / kimi / minimax. The earlier screen measured 42% / 10% /
-18% empties from answers written to the `reasoning` channel. The collector now recovers those
-(`answer_from_reasoning`), and **verifying that the rate has collapsed is the first check when
-these land** — if it has not, these labels are unusable and the transfer table stays motivation-only.
+**These four settle the central open question** (§2 below). Nothing else is running.
 
 ---
 
-### Thread D — SWE-bench Verified (launched; the out-of-sample test of the scope law)
+## 2. The open question: is our probe a ranker or an estimator?
 
-**Five Daytona grading jobs**, one per route, on the existing 5-route Verified collection
-(4B scout / gpt-oss-20b / Qwen3-30B / gpt-oss-120b / Gemini, 369 eval problems). The generations
-already existed; only real labels were missing, and `route_successes` in the parquet is the proxy
-field our own notes forbid. Each run takes ~30 min based on the Opus precedent.
+**Thesis (§3b-xxvii).** The probe orders problems well and estimates their probabilities badly.
+Tight budgets need only an *ordering* (which problems to attempt — errors near the cutoff swap
+similar-value problems and are nearly free). High budgets need *calibrated values* (whether a 4th
+draw at p=0.15 beats one at p=0.35), which a ranking cannot supply.
 
-**Correcting an earlier recommendation.** I advised cutting SWE-bench because the Daytona harness
-"returned all-`error` in 6/10 runs". That was true of older runs, but the most recent Verified run
-completed cleanly at **319/369 resolved (86.4%)** for Opus 5. The harness works; the advice was
-wrong.
+**Evidence it already explains:** C3 (ordering transfers free, calibration costs ~25 labels);
+§3b-xxvi (selecting C on AUC improved ranking and *hurt* the policy); the SWE-V pool-extension
+failure (reliability 0.0389 > resolution 0.0254); and the low-vs-high budget split itself
+(we capture 63% of oracle headroom at 0.25x, **13% at 1.0x**).
 
-**Why this is the highest-value benchmark left.** §6.9k's scope law says the advantage scales with
-the fraction of problems *nothing* in the pool solves, measured *within* TACO. SWE-bench Verified
-with this weaker pool should sit at a high unsolvable fraction — Opus reaches 86.4% but the scout
-is at 13.6% — which makes it an **out-of-sample test of the law on a different domain**
-(repo-level software engineering, not competitive programming). It also tests whether the
-difficulty latent generalises past competitive programming at all.
+**The decomposition in flight**, at each budget:
 
-**Kill criterion:** if the advantage does *not* rise with the unsolvable fraction here, the scope
-law is a TACO artifact and §6.9k should be demoted from a law to an observation.
+| gap | measures | if large |
+|---|---|---|
+| ours -> ISO | perfect calibration of *our own* ranking | fixable without a better probe |
+| ISO -> RANK1 | perfect shared difficulty | our ranking is weak; better representations pay |
+| RANK1 -> ORACLE | model x problem interaction | unreachable by any prompt-only probe (C4) |
 
-**RESOLVED — it was an operational limit, not a format or harness problem.** The first attempt
-returned 0.0%/0.0%/0.5% resolved, and I misdiagnosed it twice: first as an output-format mismatch
-(the launcher's Step 2 already converts SEARCH/REPLACE to diffs, so my converter duplicated it),
-then as a harness fault. The log said it on line 20: **`Total CPU limit exceeded. Maximum allowed:
-10`** — Daytona's org cap is ~10 concurrent sandboxes *across all jobs*, and five parallel jobs at
-`CONCURRENCY=8` requested 40. Every sandbox failed to create, and a sandbox that never starts scores
-its instance unresolved, so a blown limit is indistinguishable from a model that solves nothing.
-
-**Now running correctly:** job `dayt5_23511`, five routes **sequentially** in one job at
-`CONCURRENCY=8` — the configuration behind Opus's 319/369 (86.4%). Sandbox-create failures: **0**.
-ETA ~30 min per route, ~2.5h total.
-
-**Lesson recorded to memory:** before diagnosing a suspicious 0%, grep the eval log for
-`Failed to create sandbox`.
-
-**If resumed, after grading:** extract scout activations on the 369 Verified problems (one GPU
-job), build tensors, fit heads, run the frontier.
-
-## 2. What these jobs decide
-
-### Thread A — cross-model transfer (the novelty claim)
-Fit the difficulty latent from scout / gpt-oss-20b / gpt-oss-120b only; add each peer with a
-2-parameter response curve on N labels. Preliminary (n=50 internal split, 3 of 5 peers on corrupt
-labels): 25 labels beat a dedicated 40,960-feature probe at 4 of 5 models. These runs replace that
-with a clean fit-on-calibration / score-on-test table.
-**Decides:** whether §3b-ii can be a primary table. **Kill criterion:** if the clean AUCs collapse
-toward the own-probe baseline, the label-efficiency claim goes and the paper leans on abstention.
-
-### Thread B — pool structure (the most interesting open lead)
-The earlier screen found the peer pool has **+8.0pt union over its best member with 32% of problems
-contested**, against our cascade pool's **+0.88pt at ten draws** — roughly 9x the routing headroom.
-That reframes every routing result we have: our pool is *nested* (each route dominates the last),
-so routing headroom is ~0 and abstention is the whole story; a *complementary* pool should behave
-differently.
-**Decides:** whether "a router's value is set by pool structure, and the regime is measurable
-before deploying" is a real claim. **Prediction to falsify:** peer-pool routing should beat the
-+12-13% cost-efficiency our cascade pool gives. If it does not, the pool-structure story is wrong
-and routing is simply weak everywhere.
-
-### Thread C — predicting *contested* problems (the method proposal)
-The 32% of problems where pool members disagree is exactly where routing pays. Predicting which
-problems are contested is a per-problem task — the routing analogue of abstention — and the probe
-already does the abstention version well. **This is the strongest candidate for a method
-contribution rather than an observation**, and it is cheap once Thread A's labels exist.
+**Prediction:** ours->ISO is large at 1.0x and small at 0.25x. If instead ISO barely moves and
+RANK1 does, the thesis is wrong and ranking is the weak link.
 
 ---
 
-## 3. Not running, deliberately
+## 3. Blocking before any draft
 
-| dropped | why |
+1. **Add Greedy Knapsack as a first-class baseline** (`PRIOR_ART.md` §4). It is a *named baseline*,
+   not our method, and it **beats our MDP on LCB above 0.30x** (+3.8pt at 0.50x, +2.4pt at 1.00x).
+   Run it with the route chosen on calibration, not best-of-3 on test.
+2. **Cite Predictive Scheduling (2602.01237)** as nearest prior work for the allocator, and the
+   prefill router (2603.20895) for cross-model. Reviewers in this area will know both.
+3. **More TACO seeds.** Three is why its floor CI spans zero; the strict-improvement claim is dead
+   at 3 seeds either way (P=0.514 shipped, 0.000 selected).
+4. **Select C on the frontier, not on AUC** (§3b-xxvi). The AUC-selected head is worse on 3 of 4
+   arms.
+5. **Regenerate every downstream number** after 4.
+
+## 4. Not running, deliberately
+
+| | why |
 |---|---|
-| further cost-head work | 37x better cost $R^2$ moved the policy **zero** (§6.9o); oracle bounds the payoff at +13pt mid-targets, nothing near the ceiling |
-| 128k token cap | draw lengths are a power law — each doubling halves survivors and makes spend *more* tail-dominated (top decile 56%→62% of all spend) |
-| LoRA baseline | our own baseline, trained on stale labels; dropping it costs only the "26-42x more expensive and ties" line, which §5.5's offline bound covers |
-| SWE-bench Verified | Daytona harness returned all-`error` in 6/10 historical runs |
-| TACO cost prediction | difficulty→cost is hump-shaped there (§6.9n); a monotone difficulty signal cannot express it, and the fix improves the estimate without improving the policy |
+| cost head on RouterBench | 78% of it is multiple-choice where prompt length gives cost R2 0.97; measured +0.45% weighted (§3b-xxv) |
+| more RouterBench work | +3.91% AIQ lands in the same regime as their own KNN/MLP routers; not a differentiator |
+| SWE-V pool extension | base rate wins at every N up to all 219, and it is a calibration failure, not a fixable one |
+| glm-5 recollection | 25.7% empty / 38.6% truncated; would firm up C3, but C3 is now our weakest claim |
 
----
+## 5. Known-stale
 
-## 4. Known-stale, must be fixed before submission
-
-1. **A true sentence-transformer baseline is missing.** IrtNet predicts difficulty from 768-d
-   sentence embeddings; we only have TF-IDF (0.7642/0.7204) and statement length (0.7110/0.6248)
-   against activations (0.8629/0.8814). No sentence-transformer is cached here.
-2. **TACO's price-ratio sweep** was never regenerated; only LiveCodeBench's was, and that moved the
-   threshold from ~6x to ~10x.
-3. **Confidence intervals on the two headline floors** (+6.28% LCB, +4.37% TACO). Currently point
-   estimates over 3-5 seeds; the strict-improvement claim is the most exposed without a
-   problem-clustered bootstrap.
-4. **§6.8 and §6.9's truncation table are superseded**, not refreshed — rewrite as "the ablation
-   predicted the real re-collection to a tenth of a point," which is the stronger result.
+- Every §6.x frontier number predates the `--select-C` regeneration and the mixture/cost-constant
+  corrections. Do not quote §6.x without checking against §3b-xxi..xxvii.
+- SWE-V numbers at `--max-len 8192` are superseded by the 16k re-extraction (§3b-xxiv).
