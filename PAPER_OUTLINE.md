@@ -796,6 +796,64 @@ remaining seeds at the chosen value (6 + 8 jobs rather than 48). **The AUC-vs-fr
 measured above is the evidence that this matters**, and it is a better contribution than the
 +0.024 AUC it replaces.
 
+### 3b-xxix Cost prediction is the largest measured lever, and its ceiling is not 1.0
+
+**Oracle arms bound each channel** (LCB seed 0, everything else fixed):
+
+| budget | ours | +per-tercile sigma | +oracle sigma | +oracle cost |
+|---|---|---|---|---|
+| 0.25x | 52.7% | 53.9% | 53.7% | **60.7%** |
+| 1.00x | 67.4% | **71.3%** | **75.8%** | **77.2%** |
+| 2.00x | 80.0% | 79.3% | 80.9% | 79.8% |
+
+Per-tercile sigma is worth **+3.9pt at 1.0x and ~0 at 0.25x** — exactly the falsifiable prediction
+(sigma governs continue decisions, and at 0.25x $n^*$ floors at 0.34). Oracle sigma bounds that
+channel at **+8.4pt**, so three constants capture ~46% of it. **Oracle cost is the largest single
+lever at +9.8pt (1.0x) and +8.0pt (0.25x).**
+
+**What predicts cost, measured:**
+
+| predictor | LCB $R^2$ | TACO $R^2$ |
+|---|---|---|
+| constant (RoR) | -0.221 | -0.001 |
+| prompt length | 0.017 | 0.018 |
+| scout's *realised output length* | 0.254 | 0.141 |
+| **prefill activations** | **0.414** | **0.395** |
+| activations + scout output length | 0.417 | 0.396 |
+
+The scout's realised output length is **15x better than prompt length** — an earlier dismissal of
+"length" conflated the two — but adds **+0.003** on top of activations. **The prefill already knows
+how verbose the answer will be, better than generating it and measuring**, which is the
+prefill-beats-generation result again on the cost side.
+
+**The ceiling is the between-problem variance share, not 1.0.** Decomposing per-draw cost:
+
+| route | ICC (= max achievable per-problem $R^2$) | we reach | captured |
+|---|---|---|---|
+| LCB oss120 | **0.841** | 0.414 | **49%** |
+| TACO oss120 | **0.795** | 0.395 | **50%** |
+| LCB oss20 | 0.671 | 0.208 | 31% |
+
+16-20% of cost variance is irreducible draw noise. **We capture half of what is predictable**, on a
+plain regression target, with three known mechanical deficiencies: the cost head is a linear ridge
+on pooled mean/last (never given the rich multi-layer treatment the belief head got), fitted in log
+space with smearing (the space C3b says is wrong), under a single hard-coded alpha (the pattern that
+cost +0.024 AUC on the belief side). **Fix those before concluding anything about representation
+limits.**
+
+**Correction to §3b-xxviii.** That section concluded "the representation is the bottleneck,
++7.8-12.4pt", measured with sigma and the cost head at their broken values. Fixing sigma recovers
++3.9pt and oracle cost bounds another +9.8pt, so a meaningful share of what was attributed to the
+representation is machinery we had mis-specified.
+
+**Correction on the learned belief (2026-09-10).** A claim that "the learned sigma / factorized
+scorer was never replayed" was **wrong**. It was replayed on the 32k pool
+(`lcb_mdp_factorized_seed17_*`) with full Bellman-lookahead and q-stop arms, and beat `counts` by
+**+5.3pt at both 0.25x and 1.0x**. What is true is narrower: that run carries no `content_decay`
+arm, so the factorized belief has never been compared head-to-head against our probe, and it has
+never been re-run on the 64k pool. **The open question is whether it beats ours, not whether it
+works.**
+
 ### 3b-xxviii RETRACTION of §3b-xxvii, and the correct decomposition: it is the representation
 
 §3b-xxvii argued the probe is a good ranker and a poor estimator, predicting that perfect
