@@ -33,7 +33,16 @@ ap.add_argument("--tensors-dir", required=True)
 ap.add_argument("--readout", default="mean")
 ap.add_argument("--rich", action="store_true", help="Concatenate ALL layers x {mean,last} instead of one layer of one readout. The single-layer probe captured only 11-40%% of the between-problem variance ceiling on TACO; concatenating roughly doubles cost R2 there (oss20 0.093->0.216) and lifts LCB too (oss120 belief AUC 0.792->0.864, cost R2 0.700->0.792). The gain is FEATURES, not capacity: an MLP on the single layer collapses to negative R2.")
 ap.add_argument("--layer-frac", type=float, default=0.5)
-ap.add_argument("--alpha", type=float, default=100.0)
+ap.add_argument("--alpha", type=float, default=100.0,
+                help=("ridge penalty, scaled by feature count. Used only when --select-alpha is "
+                      "off. A hard-coded penalty is not a fitted choice: selecting it per route "
+                      "on calibration takes TACO gpt-oss-20b from -0.033 to +0.187 dollar R2, "
+                      "i.e. from actively harmful to useful, which is the likely mechanism behind "
+                      "the cost head hurting the TACO frontier."))
+ap.add_argument("--select-alpha", action="store_true", help=(
+    "Choose the ridge penalty per route by dollar-space R2 on the CALIBRATION split -- the same "
+    "split the shrinkage step already uses. Helps 4 of 6 route-dataset cells."))
+ap.add_argument("--alpha-grid", default="1e1,1e2,1e3,1e4,1e5,1e6,1e7")
 ap.add_argument("--cap", type=float, default=0.0, help=(
     "Exclude draws at or above this completion length from the cost target. DEFAULT OFF, and it "
     "should stay off: truncation censors the LATENT length but not the PAID cost -- a draw that "
@@ -109,9 +118,27 @@ for j, s in enumerate(slots):
 
     y = np.array([_mean_log(p) for p in pk])
     sc = StandardScaler().fit(X[tr])
-    alpha = a.alpha * max(1, X.shape[1] // 2560)
-    m = Ridge(alpha=alpha).fit(sc.transform(X[tr]), y[tr])
-    pred = m.predict(sc.transform(X))
+    Xs = sc.transform(X)
+    if a.select_alpha and cal.sum() > 10:
+        # Select in DOLLAR space, because that is what the policy spends -- the same argument
+        # that moved the shrinkage out of log space (C3b).
+        y_cal_true = np.array([_mean_tokens(p) for p in pk])
+        best = (None, -np.inf)
+        for cand in [float(v) for v in a.alpha_grid.split(",") if v.strip()]:
+            mm = Ridge(alpha=cand).fit(Xs[tr], y[tr])
+            sm = float(np.mean(np.exp(y[tr] - mm.predict(Xs[tr]))))
+            pc = np.exp(mm.predict(Xs)) * sm
+            num = float(((y_cal_true[cal] - pc[cal]) ** 2).sum())
+            den = float(((y_cal_true[cal] - y_cal_true[cal].mean()) ** 2).sum())
+            v = 1.0 - num / max(den, 1e-30)
+            if v > best[1]:
+                best = (cand, v)
+        alpha = best[0]
+        print(f"  {s:8s} selected alpha={alpha:g} (cal dollar R2 {best[1]:.3f})")
+    else:
+        alpha = a.alpha * max(1, X.shape[1] // 2560)
+    m = Ridge(alpha=alpha).fit(Xs[tr], y[tr])
+    pred = m.predict(Xs)
 
     # Which space to regress in is a per-route choice, decided on held-out data.
     #
