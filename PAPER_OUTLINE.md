@@ -796,6 +796,54 @@ remaining seeds at the chosen value (6 + 8 jobs rather than 48). **The AUC-vs-fr
 measured above is the evidence that this matters**, and it is a better contribution than the
 +0.024 AUC it replaces.
 
+### 3b-xxxi What the tight-budget win is actually made of, and what the knapsack framing settles
+
+**The +26pt is information, not RoR's structural limit.** LCB @ 0.25x, seed 0, decomposed with the
+shuffled-prediction control:
+
+| | accuracy | attributable to |
+|---|---|---|
+| RoR as published | 26.8% | — |
+| + per-problem **dispersion** only (predictions shuffled, marginals kept) | 28.8% | **+2.0pt** — fixing RoR's structural inability to allocate selectively |
+| + our actual per-problem **information** | 52.7% | **+24.0pt** — the signal |
+
+So the concern that we only win because count-based beliefs *cannot* vary per problem is
+measurable, and it accounts for **2 of the 26 points**. The rest is the prediction being right.
+
+**But the headline framing should change anyway.** RoR-as-published is the weakest reasonable
+policy in that regime. The honest statement is not "we beat RoR by 26 points" but: **a sequential
+budget policy with no per-problem prior leaves ~24 points on the table at tight budgets, and one
+cheap prefill recovers them.** RoR is the demonstration that the gap exists, not the measure of our
+contribution.
+
+**Both our rule and the knapsack are already global; the difference is adaptivity.** Our `_value`
+arms and the one-shot arm of §3b-xiv both solve a **global** budget in the **dual** — each problem
+takes the plan maximising $(1-(1-\theta_m)^n)R - n\hat c_m$ under a **common** $R$, swept to trace
+the frontier. `hull()` pools budget-swept and $R$-swept arms, so the reported frontier already
+contains globally-coupled policies. *(An earlier note in `THREADS_IN_PROGRESS.md` describing the
+replay as "per-problem budget" was wrong.)*
+
+**Which makes the one-shot comparison a clean adaptivity ablation.** Same global formulation, same
+predictions, same multiplier — the only difference is that the MDP re-reads
+$\theta\sigma/(\sigma+n)$ after each observed failure. It wins by **+1.1 to +20.2pt**. *Adaptivity
+is worth that much, holding the allocation formulation fixed* — and a knapsack cannot have it,
+because committing a plan up front is what a knapsack is.
+
+**So "make the knapsack resample-aware" resolves to one specific defect.** Depth is already part of
+the item, and the budget is already global. What is stale is $R$ itself: it is computed from
+**predicted** costs (cost $R^2$ = 0.545, not 1.0), realised spend drifts from plan, and nothing
+corrects the drift. **Dual descent — updating $R$ against realised spend as the batch progresses —
+is the missing piece**, requires no change to the per-problem rule, and is the next experiment
+(`THREADS_IN_PROGRESS.md` §1).
+
+**Prior art, checked (`PRIOR_ART.md` §4b, §6b).** ROI-Reasoning formalises this allocation as an
+Ordered Stochastic Multiple-Choice Knapsack **and has an abstain action**, so neither the knapsack
+nor abstention-under-budget is ours — but it is **single-model**, uses the target's **own**
+meta-cognitive predictions, and does not resample. Semantic-agreement cascades ensemble small
+models for deferral but require **full generations**. **What survives as ours in this area: one
+cheap prefill pricing an entire heterogeneous pool, which is what makes a cross-model knapsack
+affordable at all.**
+
 ### 3b-xxx Selecting components on a predictor metric degrades the policy — four cases and one fix
 
 **The pattern.** Four interventions, each improving its own predictor metric and each making the
