@@ -758,6 +758,44 @@ benchmark each prompt came from, using that benchmark's per-model base rates and
 signal — is worth **-0.07%**. So none of the gain is benchmark identification; it is per-prompt
 prediction, as claimed.
 
+### 3b-xxvi Selecting the belief head on AUC is the wrong objective — measured, not argued
+
+§3b-xxii found the shipped head under-regularised and selecting C on calibration AUC worth
++0.024 AUC. Regenerating both belief heads with `--select-C` and re-running all eight replays
+(5 LCB seeds, 3 TACO; everything else held fixed), bootstrap CIs over seeds:
+
+| | arm | shipped C | **C selected on AUC** | delta |
+|---|---|---|---|---|
+| LCB | beliefs only | +2.90% [+0.73,+3.44] | **+4.03% [+0.98,+4.41]** | **+1.13pp** |
+| LCB | full method | +5.07% [+1.04,+7.71] | +4.31% [+0.22,+5.33] | -0.76pp |
+| **TACO** | beliefs only | +0.93% [-4.75,+2.81] P=0.514 | **-3.41% [-11.22,-1.09] P=0.000** | **-4.34pp** |
+| TACO | full method | -11.83% P=0.000 | -16.57% P=0.000 | -4.74pp |
+
+**A head with strictly better ranking makes the policy worse on three of four arms.** The mechanism
+is the one §3b-xv identified: AUC is invariant to any monotone transform, so it scores only the
+*order* of the predictions, while the rule $\arg\max_m(p_mR-c_m)$ consumes their *values*.
+Selecting C on AUC picked 16-160x stronger regularisation, which compressed predictions toward the
+base rate and destroyed the dispersion the decision rule was exploiting. **Better ranking, less
+spread, worse policy.**
+
+This is C3b one level up. We had already fixed "fit the cost head in dollar space, not log space,
+because the policy spends dollars" — and then selected the belief head in *AUC space* when the
+policy acts in *probability space*. **The general rule: select every component on the objective the
+policy optimises, not on a proxy that is invariant to the thing the policy uses.**
+
+**Consequence for TACO, and it settles a question left open in §3b-xxiii.** TACO's
+strict-improvement claim is dead under *both* heads: P(floor>0) = 0.514 with the shipped head (a
+coin flip) and 0.000 with the AUC-selected one. **Report TACO as a win on the budget axis and on
+utility at matched R, and drop the strict-improvement language for it entirely.** LiveCodeBench's
+claim survives both (P = 0.998 / 0.995).
+
+**Open, and the right next experiment:** sweep C and select on the *calibration frontier* rather
+than calibration AUC, then report test once. Design: ~6 values of C spanning the shipped 0.003125
+down to the AUC-selected 0.0000188, choose on one seed's calibration frontier, then run the
+remaining seeds at the chosen value (6 + 8 jobs rather than 48). **The AUC-vs-frontier divergence
+measured above is the evidence that this matters**, and it is a better contribution than the
++0.024 AUC it replaces.
+
 ### 3b-xxiii Bootstrap CIs on the strict-improvement floors — and TACO does not survive
 
 The floor is a **minimum over 401 correlated levels**, the most downward-biased statistic in the
@@ -836,6 +874,8 @@ the **calibration** split (which the script already loads for Platt) and scoring
 | TACO oss120 | 0.818 | 0.00010 | +0.032 |
 
 **Mean +0.024 AUC, +0.043 on gpt-oss-120b** — the expensive route the policy's decisions hinge on.
+**But see §3b-xxvi: this AUC gain makes the *policy* worse on three of four arms**, because AUC
+scores order and the policy consumes values. The fix is to select C on the frontier, not on AUC.
 Selected C is 10-300x smaller than shipped, so the head is badly under-regularised; the effect is
 near-zero only on the scout, where classes are balanced. Separately, **noisy-OR beats max** for
 pool-solvability (0.770 vs 0.759 LCB, 0.844 vs 0.838 TACO), which improves §3b-xvi for free. Both
