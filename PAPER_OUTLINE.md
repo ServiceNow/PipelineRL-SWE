@@ -680,89 +680,75 @@ on every cell. The reframe has been reverted. **Rule, now on the same footing as
 representation comparison must give every arm the same estimator, the same hyperparameter search,
 and the same split — a hand-set penalty on one arm is not a baseline, it is a handicap.**
 
-### 3b-xxi RouterBench: we win, modestly, through the channel the paper says does not work
+### 3b-xxi RouterBench, with our actual probe: +3.91% AIQ, and it is all interaction
 
-RouterBench: 36,497 prompts, 11 models, **3.8% pool-unsolvable, 91.4% contested**, oracle 96.2%,
-best single gpt-4-1106-preview at 84.0% for $0.00329/query. TF-IDF beliefs, RoR-style constant
-costs on both sides, **randomised mixtures allowed on every arm** (§6.3a):
+**Protocol.** RouterBench (36,497 prompts, 11 models, 3.8% pool-unsolvable, 91.4% contested).
+Scout activations extracted for every prompt (Qwen3-4B-Instruct-2507, `--max-len 8192`, the same
+config as our LCB/TACO probes). Kernel ridge on 21,898 x 20,480, alpha selected on a held-out
+slice (lands at 1e5, interior to a 1e2-1e6 grid). **Their baseline** (Zero Router = non-decreasing
+convex hull of the individual LLMs) and **their metric** (AIQ, mean quality over the shared cost
+domain). Training pooled, evaluation per dataset, MMLU subsets aggregated as they aggregate them.
 
-| arm | $0.0005 | $0.0010 | $0.0020 | $0.0033 (= gpt-4) |
-|---|---|---|---|---|
-| single-model hull (mixtures of fixed models) | 69.2% | 71.8% | 77.1% | 84.0% |
-| **ours** | **74.7%** | **77.3%** | **81.7%** | 84.4% |
-| shuffled control | 67.3% | 70.3% | 76.3% | 82.8% |
-| random routing | 51.1% | 54.5% | 54.5% | 54.5% |
-| **gain over single-model hull** | **+5.6** | **+5.5** | **+4.6** | **+0.4** |
-| *of which information (vs shuffled)* | *+7.4* | *+7.0* | *+5.4* | *+1.6* |
+| dataset | n | Zero | TF-IDF | **ACTIV** | shuffled | shared-only | give-up off |
+|---|---|---|---|---|---|---|---|
+| mmlu | 5596 | 0.7200 | 0.7344 | **0.7472** | 0.6932 | 0.7354 | 0.7459 |
+| hellaswag | 3984 | 0.7717 | 0.8151 | **0.8244** | 0.7023 | 0.7795 | 0.8238 |
+| grade-school-math | 3011 | 0.8752 | 0.8817 | **0.8957** | 0.8192 | 0.8304 | 0.8955 |
+| arc-challenge | 583 | 0.8961 | 0.8978 | **0.9133** | 0.8720 | 0.9149 | 0.9127 |
+| winogrande | 516 | 0.7249 | 0.7035 | 0.7246 | 0.7191 | 0.7296 | 0.7247 |
+| chinese_zodiac | 164 | 0.5775 | 0.5983 | 0.5842 | 0.4458 | 0.4080 | 0.5827 |
+| mbpp | 162 | 0.6591 | 0.6561 | 0.6531 | 0.5693 | 0.5545 | 0.6522 |
+| consensus_summary | 156 | 0.9021 | 0.9087 | 0.8777 | 0.8164 | 0.7949 | 0.8777 |
 
-**A real but modest win: +4.6 to +5.6pt below the gpt-4 price point, collapsing to +0.4pt at it.**
-The shuffled arm sits *below* the single-model hull at tight budgets, so uninformative
-per-problem variation is actively harmful here — the opposite of its effect on our own pools
-(§3b-xv), where dispersion alone bought points.
+**Weighted AIQ against the Zero Router (n=14,172):**
 
-**Abstention contributes exactly nothing.** Disabling the give-up action changes no cell: predicted
-$p$ is high everywhere (1st percentile of $\max_m p_m$ = 0.401), so the skip is a step function
-from 100% to 0.6% abstention between adjacent $R$ and never has a useful partial regime. **The
-entire gain is routing — the *which* decision.**
+| arm | delta |
+|---|---|
+| TF-IDF (our text baseline) | +2.43% |
+| **prefill activations (ours)** | **+3.91%** |
+| shuffled control | **-6.03%** |
+| shared scalar only | **-0.60%** |
+| ours, give-up action disabled | +3.82% |
 
-**This qualifies C4, a headline contribution.** Decomposing against a shared-scalar arm that keeps
-difficulty and destroys the interaction:
+**Decomposition:** information (ours - shuffled) **+9.94%**; interaction (ours - shared scalar)
+**+4.52%**; abstention (ours - give-up-off) **+0.10%**.
 
-| | $0.0005 | $0.0010 | $0.0020 | $0.0033 |
-|---|---|---|---|---|
-| shared scalar only, vs single-model hull | +0.9 | +0.9 | +0.6 | +0.0 |
-| **full per-model, vs single-model hull** | **+5.6** | **+5.5** | **+4.6** | **+0.4** |
-| **interaction component** | **+4.6** | **+4.6** | **+4.0** | **+0.3** |
+**Three findings, and the first two are the paper's.**
 
-**The interaction is worth ~5x what the shared scalar buys.** So "a prompt representation carries
-shared factors, not interaction terms" is **pool-dependent, not universal**: it holds on our pools
-(28-41% unsolvable, 52-55% contested) and fails on RouterBench (3.8%, 91.4%). **C4 must be
-restated with contested mass as its scope condition** — §7b suspected exactly this, and it is now
-measured.
+1. **The probe beats the text baseline on their benchmark too** — +3.91% against +2.43%, and
+   pool-solvability AUC 0.777 against 0.744, with per-model AUC higher on all 11. Consistent with
+   §3b-xx.
+2. **A shared difficulty scalar is worse than not routing at all here (-0.60%).** All of the gain
+   is the model x problem interaction. **This is the sharpest available statement of C4's scope
+   condition:** on our pools the interaction is unlearnable and the shared scalar carries
+   everything; on a 91.4%-contested pool the shared scalar is worthless and the interaction carries
+   everything. Same probe, opposite decomposition, and pool structure predicts which.
+3. **Abstention contributes +0.10% — nothing.** Confirmed with the real probe, not just TF-IDF.
+   The give-up action is a step function here because predicted $p$ is high everywhere. So the
+   two-channel story holds: unsolvable mass -> abstention channel; contested mass -> routing
+   channel.
 
-**The two channels are complements across pools, which is the cleaner story.** Where unsolvable
-mass is high, abstention is the channel and routing is worthless (our pools). Where contested mass
-is high, routing is the channel and abstention is worthless (RouterBench). One cheap difficulty
-signal serves both; pool structure says which before deployment.
+**Positioning.** RouterBench reports that its own KNN and MLP routers "generally do not
+significantly outperform the Zero Router". +3.91% weighted is a modest, honest win in that regime;
+we should not claim to beat their routers without their per-dataset AIQ values. We lose on
+consensus_summary (-2.71%) and mbpp (-0.92%), both small.
 
-**Against RouterBench's own baseline and metric.** Their **Zero Router** is defined as the
-non-decreasing convex hull of the individual LLMs — which is exactly the single-model hull above,
-so the corrected comparison is the one their paper asks for. Their metric is
-**AIQ** $=\frac{1}{c_{max}-c_{min}}\int_{c_{min}}^{c_{max}} \tilde{R}_\theta\,dc$:
+**Everything in this section before 2026-09-10 was TF-IDF, not our method, and three separate
+errors were corrected on the way here** — all in the flattering direction, all caught by controls
+rather than by inspection:
+- *mixtures disabled*: the budget lookup returned the best hull vertex rather than interpolating,
+  which penalises the baseline most. Inflated the frontier gain to "+5.9..+15.0pt".
+- *global cost constants in a per-dataset evaluation*: RouterBench's per-dataset costs range from
+  0.21x (winogrande) to 2.20x (gsm8k) of the global mean, so gpt-4 was mispriced ~6x and never
+  selected. Produced a spurious -17.44% on winogrande.
+- *train/test overlap*: a per-dataset split drawn from a fresh RNG while the router had been
+  trained on the global 60% split, so ~60% of each evaluation set was in training. Produced a
+  spurious +14.96% on winogrande.
 
-| dataset | n (test) | Zero Router AIQ | ours | delta |
-|---|---|---|---|---|
-| **ALL (pooled)** | 14,599 | 0.7472 | **0.7916** | **+5.95%** |
-| hellaswag | 3,984 | 0.7719 | 0.8049 | +4.28% |
-| grade-school-math | 3,011 | 0.8753 | 0.9273 | +5.93% |
-| mmlu-professional-law | 593 | 0.5621 | 0.5552 | -1.23% |
-| arc-challenge | 583 | 0.8962 | 0.8300 | -7.39% |
-| winogrande | 516 | 0.7249 | 0.5985 | **-17.44%** |
-
-**We beat the Zero Router by +5.95% AIQ pooled, and lose on three of five individual datasets.**
-The pooled number is carried by the two large sets. RouterBench reports the same *shape* of result
-for its own predictive routers — their KNN and MLP routers "generally do not significantly
-outperform the Zero Router", winning on MMLU and Winogrande and underperforming on ARC-Challenge
-and MBPP. **So the honest claim is that we land in the same regime as the benchmark's published
-routers, not clearly above them.** We should not claim to beat KNN/MLP without their per-dataset
-numbers in hand.
-
-*Protocol gap to close before citing this:* our router is trained once on the pooled training
-split and then evaluated per dataset, whereas RouterBench trains and evaluates per dataset. The
-three losses are all on small sets (516-593) where a pooled TF-IDF vocabulary is furthest from the
-local distribution, so the per-dataset protocol is likely to help and must be run before any
-comparison is claimed. **Marked blocking for any RouterBench claim.**
-
-**CORRECTION (2026-09-09).** The first version of this section reported gains of "+5.9 to +15.0pt"
-against an arm labelled "RoR (constant beliefs)" that sat flat at 67.5% across three budgets, and
-an interaction component of up to +12.1pt. **Both were inflated by a methodology error of our own
-making:** the budget lookup returned the best hull *vertex* under budget instead of interpolating
-along the hull, so randomised mixtures — which §6.3a introduced precisely to remove this artifact,
-and which we apply everywhere else — were unavailable. That penalises the baseline most, because a
-constant-belief arm has few, widely-spaced vertices (hence the flat row). With mixtures restored
-the gain is +4.6..+5.6pt and the interaction component +4.0..+4.6pt. The qualitative conclusion
-survives; the magnitudes do not. *Check every frontier table for interpolated lookup before
-submission.*
+**One control that came out clean and is worth reporting:** an oracle-dataset router — *told* which
+benchmark each prompt came from, using that benchmark's per-model base rates and no per-prompt
+signal — is worth **-0.07%**. So none of the gain is benchmark identification; it is per-prompt
+prediction, as claimed.
 
 ### 3b-xxii The shipped belief head is under-regularised — free accuracy
 
