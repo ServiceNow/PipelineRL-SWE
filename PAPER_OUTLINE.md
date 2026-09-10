@@ -758,6 +758,69 @@ benchmark each prompt came from, using that benchmark's per-model base rates and
 signal — is worth **-0.07%**. So none of the gain is benchmark identification; it is per-prompt
 prediction, as claimed.
 
+### 3b-xxiii Bootstrap CIs on the strict-improvement floors — and TACO does not survive
+
+The floor is a **minimum over 401 correlated levels**, the most downward-biased statistic in the
+paper, and it had never carried an interval. Cluster bootstrap over seeds, 4000 resamples, on the
+statistic `hull_frontier.py` actually reports (min over levels of the seed-**averaged** advantage):
+
+| arm | floor | 95% CI | **P(floor > 0)** | seeds with a negative floor |
+|---|---|---|---|---|
+| LCB, full method | +5.07% | [+1.04, +7.71] | **0.999** | 2 of 5 |
+| LCB, beliefs only | +2.90% | [+0.73, +3.44] | **0.997** | 2 of 5 |
+| **TACO, beliefs only** | **+0.93%** | **[-4.75, +2.81]** | **0.511** | 1 of 3 |
+
+**LiveCodeBench's strict-improvement claim survives; TACO's does not.** P(floor>0) on TACO is
+**0.511** — a coin flip. "Negative at 0 of 401 levels on TACO" must be dropped, or restated as
+"the seed-averaged curve was non-negative on the three seeds we ran, with an interval spanning
+zero." With three seeds this is a statement about sample size as much as effect size, and the
+honest fix is more seeds, not a softer verb.
+
+**A second finding that must be reported whichever way TACO resolves.** The floor is computed on
+the seed-*averaged* curve, and averaging smooths away each seed's worst level. Computed per seed
+instead, **2 of 5 LCB seeds and 1 of 3 TACO seeds have a negative floor**, and the mean per-seed
+floor drops to +1.69% / +0.27% / -0.65%. **So "strict improvement" is a property of the averaged
+curve, not of a single run** — a reviewer running one seed would not reproduce it. Say so.
+
+### 3b-xxiv SWE-bench Verified at 16k: truncation was real but is not the whole deficit
+
+39.6% of SWE-V prompts exceed 8192 tokens (11.7% exceed 16384), so the confound flagged in
+§3b-xvi was severe. Re-extracted at `--max-len 16384`, out-of-fold on the same 369 problems:
+
+| max-len | pool-solvability AUC | AURC | gap to oracle closed |
+|---|---|---|---|
+| 8192 | 0.691 | 0.181 | 44.0% |
+| **16384** | **0.730** | **0.173** | **47.3%** |
+
+**Truncation cost ~0.04 AUC and ~3pt of gap closure — real, and not enough.** SWE-V at 16k
+(0.730) is still far below LiveCodeBench (0.824) and TACO (0.885). **The domain boundary is
+genuine**, not an artifact: repo-level software engineering is harder for a prompt-only probe than
+competitive programming, and the earlier caveat can now be withdrawn rather than carried.
+
+### 3b-xxv The cost head on RouterBench: it pays only where cost is already nearly deterministic
+
+Fitting the conditioned cost head on RouterBench activations and swapping it for the constant:
+
+| dataset | n | cost $R^2$: const / length / **activations** | AIQ const-c | AIQ qcost | delta |
+|---|---|---|---|---|---|
+| mmlu | 5596 | -0.000 / 0.975 / **0.987** | +3.64% | **+4.63%** | **+0.99%** |
+| hellaswag | 3984 | -0.000 / 0.972 / **0.977** | +6.74% | **+7.06%** | +0.31% |
+| grade-school-math | 3011 | -0.000 / 0.231 / **0.381** | +2.01% | +1.67% | **-0.34%** |
+| mbpp | 162 | -0.005 / 0.045 / **0.251** | -0.94% | -1.38% | **-0.44%** |
+
+**This came out backwards from the prediction, which is the interesting part.** We expected the
+cost head to pay on the generative sets (gsm8k, mbpp) where output length is genuinely
+unpredictable, and to be pointless on multiple-choice where prompt length already determines cost.
+The opposite happened: **it helps only where cost prediction is near-perfect ($R^2\approx0.98$) and
+hurts where prediction is merely good ($R^2$ 0.25-0.38).**
+
+That is C3b's discipline restated as a threshold rather than a principle: **a conditioned quantity
+must be nearly exact to beat the constant it replaces, because the policy consumes it as a price
+and mis-pricing mis-routes.** Weighted over these four sets the cost head is worth **+0.45%** —
+marginal, and consistent with C1b (the heads are substitutes, and the belief head is the stronger
+one). *Recommendation: report RouterBench with beliefs only, and use this table as the evidence for
+the gate rather than as a result.*
+
 ### 3b-xxii The shipped belief head is under-regularised — free accuracy
 
 `activation_content_preds.py` uses a hard-coded `C = 0.05/(dim//2560) = 0.003125`. Selecting C on
