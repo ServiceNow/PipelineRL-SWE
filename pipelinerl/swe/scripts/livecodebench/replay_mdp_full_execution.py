@@ -964,6 +964,14 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--eval-split", choices=["test", "calibration"], default="test", help=(
+            "Which split to REPORT on. Use `calibration` when sweeping a hyperparameter so the "
+            "choice is made on the policy objective without touching test; then re-run once on "
+            "`test` at the chosen value. Three separate interventions (belief C on AUC, cost "
+            "alpha on R2, cross-route coupling) each improved their own predictor metric and made "
+            "the frontier WORSE, because those metrics are invariant to prediction spread and the "
+            "utility rule is not."))
+    parser.add_argument(
         "--decay-sigma-map", default="", help=(
             "jsonl of {problem_id, sigma}: per-problem decay concentration, overriding "
             "--decay-pseudo-count where present. sigma is the exchange rate between the probe's "
