@@ -38,9 +38,11 @@ Given a pool of language models and a cost budget, a policy must decide at each 
 spend another draw, on which model, or to give up. A single scalar per problem — a **shared, model-independent difficulty
 estimate**, read from one cheap model's prefill before any generation — is enough to drive all
 three decisions, and we characterise exactly what it can and cannot do. It supports the
-**whether** decision and never the **which** decision: across seven applications, the six that need
-a model x problem interaction term all fail, because a prompt representation carries shared factors
-and not interactions. Used for *whether*, it closes **65-73%** of the oracle gap in selective
+**whether** decision or the **which** decision, and *which of the two* is set by a measurable
+property of the pool. On pools with heavy unsolvable mass the model x problem interaction is
+unlearnable and the shared scalar carries everything: six of seven applications needing the
+interaction fail. On a 91.4%-contested pool the decomposition **inverts** -- the shared scalar is
+worse than not routing at all (-0.60% AIQ) while the interaction is worth +4.52%. Used for *whether*, it closes **65-73%** of the oracle gap in selective
 prediction on three benchmarks including out-of-domain SWE-bench Verified, and buys **+26pt of
 accuracy at a quarter of the budget** of calling the largest model on everything. We show the gain
 is a **knapsack over problems** — order by difficulty, and the budget decides where the line goes —
@@ -95,9 +97,15 @@ Labels buy calibration: Brier **0.1946 at N=25 against 0.2434 for the base rate*
 N≈25. On SWE-bench Verified the base rate wins at every N and the gap plateaus, and the
 discriminator is the probe's own AUC (0.79 vs 0.64) (§3b-xviii, §3b-xvii).
 
-**C4. The negative result, stated falsifiably: a prompt representation carries shared factors, not
-interaction terms.** Seven applications; the six needing the interaction all fail, sharing one
-cause (§7b). Falsifiable by anyone exhibiting a representation that predicts the interaction.
+**C4. What a prompt representation carries is set by pool structure, and both regimes are
+measured.** On our pools (28-41% pool-unsolvable, 52-55% contested) it carries the **shared
+difficulty factor** and not the model x problem **interaction**: seven applications tested, the six
+needing the interaction all fail for one cause (§7b). On RouterBench (3.8% unsolvable, 91.4%
+contested) the decomposition inverts: the shared scalar is **worse than not routing** (-0.60% AIQ)
+and the interaction carries the entire gain (+4.52%) (§3b-xxi). **Same probe, opposite
+decomposition, and contested mass predicts which** -- so this is a scope law with two measured
+regimes, not a flat negative result. *(Supersedes the earlier universal claim; that version was
+written before RouterBench and was true only of the pools it was measured on.)*
 
 **C5. Selective prediction, the cleanest form of the result.** One prefill, one ordering, one line:
 gap to oracle closed **64.9% (LCB) / 72.7% (TACO) / 43.8% (SWE-bench Verified)**, cutting wasted

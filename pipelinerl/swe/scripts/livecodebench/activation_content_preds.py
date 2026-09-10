@@ -35,7 +35,18 @@ ap.add_argument("--layer-frac", type=float, default=0.0,
                 help=("pick each model's layer by RELATIVE depth instead. Required in "
                       "per-candidate mode: gpt-oss-20b has 24 layers and no layer 18, so "
                       "absolute indices do not transfer across model families."))
-ap.add_argument("--C", type=float, default=0.05)
+ap.add_argument("--C", type=float, default=0.05,
+                help=("inverse ridge penalty, scaled by feature count. Used only when "
+                      "--select-C is off. A HARD-CODED penalty is not a fitted choice: the "
+                      "shipped 0.05/16=0.003125 is 10-300x weaker than what the calibration "
+                      "split selects, worth +0.024 AUC on average and +0.043 on gpt-oss-120b, "
+                      "the route whose cost makes the policy's decisions bind."))
+ap.add_argument("--select-C", action="store_true", help=(
+    "Choose C per route by AUC on the CALIBRATION split -- the same held-out split the Platt "
+    "step already uses, so this costs no extra data. Off by default only so existing runs "
+    "reproduce; every new run should pass it."))
+ap.add_argument("--C-grid", default="1e-5,3e-5,1e-4,3e-4,1e-3,3e-3,1e-2,3e-2,1e-1",
+                help="candidate C values (before the feature-count scaling) for --select-C")
 ap.add_argument("--no-shrink", action="store_true", help=(
     "Disable Platt calibration of the belief head on the held-out calibration split. Default "
     "OFF, i.e. calibration is applied. The raw logistic head is over-confident in its left "
@@ -97,9 +108,27 @@ for j, s in enumerate(slots):
     else:
         Xr = X
     sc = StandardScaler().fit(Xr[tr])
-    clf = LogisticRegression(max_iter=2000,
-                             C=a.C / max(1, Xr.shape[1] // 2560)).fit(sc.transform(Xr[tr]), y[tr])
-    raw = clf.predict_proba(sc.transform(Xr))[:, 1]
+    Xs = sc.transform(Xr)
+    scale = max(1, Xr.shape[1] // 2560)
+    if a.select_C and ca.sum() >= 20 and 0 < y[ca].mean() < 1:
+        # Pick the penalty on held-out data rather than asserting it. Ranking is what the
+        # utility rule consumes from this head, so select on AUC.
+        def _auc(yy, ss):
+            r = np.argsort(np.argsort(ss)) + 1
+            npos = yy.sum()
+            return (r[yy == 1].sum() - npos * (npos + 1) / 2) / (npos * (len(yy) - npos))
+        best = (None, -1.0)
+        for cand in [float(x) for x in a.C_grid.split(",") if x.strip()]:
+            m = LogisticRegression(max_iter=2000, C=cand / scale).fit(Xs[tr], y[tr])
+            v = _auc(y[ca], m.predict_proba(Xs[ca])[:, 1])
+            if v > best[1]:
+                best = (cand, v)
+        C_used = best[0]
+        print(f"  {s:8s} selected C={C_used:g} (cal AUC {best[1]:.3f}) vs shipped default {a.C:g}")
+    else:
+        C_used = a.C
+    clf = LogisticRegression(max_iter=2000, C=C_used / scale).fit(Xs[tr], y[tr])
+    raw = clf.predict_proba(Xs)[:, 1]
     # Platt scaling on the CALIBRATION split. The raw logistic head is badly over-confident in
     # its left tail: on TACO it assigned a median 1.05% next-draw probability to gpt-oss-20b on
     # problems gpt-oss-20b actually solves, which drives `p*R - c` negative and makes the policy
