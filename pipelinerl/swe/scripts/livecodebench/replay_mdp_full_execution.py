@@ -364,6 +364,7 @@ def replay_adaptive(
     exploration_bonus: bool = False,
     decay_pseudo_count: float | None = None,
     decay_by_problem: dict[str, float] | None = None,
+    cost_update_weight: float = 0.0,
     tau_abstain: float | None = None,
     min_success_per_cost: float | None = None,
     value_of_correct: float | None = None,
@@ -393,6 +394,16 @@ def replay_adaptive(
         )
     ptr = np.zeros(len(slots), dtype=int)
     failures = np.zeros(len(slots), dtype=int)
+    # Cost estimates are a PRIOR, not a constant. Within-problem cost CV is 0.197 (LCB oss120) /
+    # 0.222 (TACO), so draws of the same problem cost nearly the same -- and one observed draw
+    # predicts a held-out draw's cost BETTER than the prefill does (R2 0.660 vs 0.497 on LCB
+    # oss120, 0.448 vs 0.269 on TACO). The policy has already paid for those draws, so re-using a
+    # static estimate discards evidence. This shrinks the prefill estimate toward the running mean
+    # of observed costs on the same route, exactly as the belief decays toward observed failures.
+    # Same-route only: cross-route cost transfer is catastrophic (R2 -3.7 scout->oss120).
+    cost_est = np.asarray(expected_costs, dtype=float).copy()
+    _cost_obs_sum = np.zeros(len(slots), dtype=float)
+    _cost_obs_n = np.zeros(len(slots), dtype=float)
     spent_budget = 0.0
     realized_spend = 0.0
     attempts: list[dict[str, Any]] = []
@@ -419,11 +430,16 @@ def replay_adaptive(
         nonlocal spent_budget, realized_spend
         draw, new_ptr = _next_valid_draw(orderings[mi], int(ptr[mi]), valid[mi])
         ptr[mi] = new_ptr
-        if draw is None or spent_budget + expected_costs[mi] > budget:
+        if draw is None or spent_budget + cost_est[mi] > budget:
             return None, draw
         ptr[mi] += 1
-        spent_budget += float(expected_costs[mi])
+        spent_budget += float(cost_est[mi])
         realized_spend += float(realized_costs[mi, draw])
+        if cost_update_weight > 0.0:
+            _cost_obs_sum[mi] += float(realized_costs[mi, draw])
+            _cost_obs_n[mi] += 1.0
+            cost_est[mi] = ((cost_update_weight * float(expected_costs[mi]) + _cost_obs_sum[mi])
+                            / (cost_update_weight + _cost_obs_n[mi]))
         route_attempt_counts[slots[mi]] += 1
         if outcomes[mi, draw]:
             return True, draw
@@ -445,7 +461,7 @@ def replay_adaptive(
         for mi in range(len(slots)):
             draw, new_ptr = _next_valid_draw(orderings[mi], int(ptr[mi]), valid[mi])
             ptr[mi] = new_ptr
-            if draw is not None and spent_budget + expected_costs[mi] <= budget:
+            if draw is not None and spent_budget + cost_est[mi] <= budget:
                 available.append(mi)
         if not available:
             break
@@ -590,12 +606,12 @@ def replay_adaptive(
             bellman_pbar, bellman_decay_s = np.asarray(prior, dtype=float), pseudo_count
             p_any = 1.0 - float(np.prod(1.0 - p_each))
 
-        ratios = {mi: float(p_each[mi] / expected_costs[mi]) for mi in available}
+        ratios = {mi: float(p_each[mi] / cost_est[mi]) for mi in available}
         if exploration_bonus:
             t = int(failures.sum())
             ratios = {
                 mi: ratios[mi] + float(
-                    np.sqrt(2.0 * np.log(t + 1) / (failures[mi] + 1)) / expected_costs[mi]
+                    np.sqrt(2.0 * np.log(t + 1) / (failures[mi] + 1)) / cost_est[mi]
                 )
                 for mi in available
             }
@@ -606,7 +622,7 @@ def replay_adaptive(
             action_values = None
         elif bellman_horizon is None:
             action_values = {
-                mi: float(p_each[mi] * value_of_correct - expected_costs[mi])
+                mi: float(p_each[mi] * value_of_correct - cost_est[mi])
                 for mi in available
             }
         else:
@@ -964,6 +980,13 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--cost-update-weight", type=float, default=0.0, help=(
+            "Pseudo-count for shrinking the prefill cost estimate toward observed costs on the "
+            "SAME route: c = (w*prefill + sum_observed)/(w + n_observed). 0 keeps the shipped "
+            "static estimate. Within-problem cost CV is ~0.20 on the expensive route and one "
+            "observed draw beats the prefill (R2 0.660 vs 0.497), so this is evidence the policy "
+            "has already paid for. Try 1.0."))
+    parser.add_argument(
         "--adaptive-r-eta", type=float, default=0.0, help=(
             "Enable the `_adaptiveR` arms: instead of fixing the Lagrange multiplier R for the "
             "whole batch, sweep a TARGET mean spend and let R adapt by dual descent against "
@@ -1298,6 +1321,7 @@ def main() -> None:
                     select_by_density=args.select_by_density,
                     decay_pseudo_count=args.decay_pseudo_count,
                     decay_by_problem=_sigma_map,
+                    cost_update_weight=args.cost_update_weight,
                     exploration_bonus=exploration_bonus,
                     mandatory_scout=args.start_protocol == "scout_first",
                     oracle_stopping=oracle_stopping,
