@@ -1296,7 +1296,42 @@ $(\theta R/c_m - 1)$ contains no $\sigma$. At $R=\$0.05$, 49% of problems never 
 any depth and no value of $\sigma$ flips one of them. Where $\sigma$ does move $n^*$, it moves it
 only where depth is worthless: on oss120, the sole route where depth pays, mean $n^*$ is 0.07
 against 0.06, both flooring to zero. **Per-problem decay is real, learnable, and does not change
-any decision** -- which is what licenses the constant, and is a sharper claim than "we simplified".
+the ENTRY decision** -- which is what licenses the constant *in the low-budget regime*, and is a
+sharper claim than "we simplified".
+
+**CORRECTION (2026-09-10). The original sentence read "does not change any decision" and that is
+false.** At $n=0$ the decay factor is $\sigma/(\sigma+0)=1$ exactly, so $\sigma$ cancels from the
+entry condition $\theta R \ge c$ -- that part is right. But $\sigma$ is precisely the factor
+multiplying *observed failures*, so it governs every **continue** decision, and continue decisions
+are the whole sequential half of the method. The measurement that licensed the constant was taken
+at $R=\$0.05$, where $n^*$ floors at zero and nothing about depth matters at all. Generalising from
+a regime where a quantity is inert to "the quantity is inert" is the §8 R0 error again.
+
+**Depth is not inert at the budgets where we underperform.** Mean $n^*$ on gpt-oss-120b, the only
+route where depth pays:
+
+| budget | 0.25x | 1.00x | 2.00x | 3.00x |
+|---|---|---|---|---|
+| $n^*$ (oss120) | 0.34 | **2.88** | **4.40** | **5.52** |
+
+**And $\sigma$ is strongly heterogeneous.** Realised $P(\text{success on next draw}\mid n$ prior
+failures$)$ on oss120, pooled over random orderings, split by predicted-difficulty tercile:
+
+| tercile | $n{=}0$ | $n{=}1$ | $n{=}2$ | $n{=}3$ | **implied $\sigma$** |
+|---|---|---|---|---|---|
+| hard | 0.532 | 0.248 | 0.136 | 0.091 | **0.69** |
+| middle | 0.912 | 0.538 | 0.261 | 0.127 | **0.80** |
+| easy | 0.982 | 0.840 | 0.750 | 0.692 | **6.45** |
+
+A ~9x spread against our single global $\sigma=0.95$. The constant is about right for hard and
+middle problems and **~7x too small for easy ones**: after two failures on an easy problem we have
+cut the belief by more than half when the data says a failure there is mostly draw noise. $\sigma$
+encodes *how much of the residual uncertainty is problem difficulty rather than draw noise*, and
+that ratio is exactly what varies with difficulty.
+
+**This is now a candidate explanation for the 13% capture rate at 1.0x budget** (§3b-xxvii), and it
+is directly testable: swap the global $\sigma$ for a per-tercile $\sigma$ and re-run. If $\sigma$
+is the culprit the gap should close at 1.0x-2.0x and not at 0.25x, where $n^*$ floors.
 
 **Sigma has real leverage on absolute cost, but helps both arms about equally.** Absolute cost
 at the 50% target moves ~2x across sigma (counts 0.01132 at 0.3 vs 0.02344 at 5.0; content
