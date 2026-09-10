@@ -1253,7 +1253,8 @@ def main() -> None:
                     args.pseudo_count if pseudo_count is None else pseudo_count, slots,
                     records, pid, str(problems[pid]["problem_statement"]),
                     content_prior=(content.get(pid)
-                                   if base in ("content", "content_decay") else None),
+                                   if base in ("content", "content_decay",
+                                               "content_decay_coupled") else None),
                     scorer=scorer if base in ("sequential", "sequential_decay") else None,
                     calibrator=calibrator,
                     state_layout=args.state_layout,
@@ -1280,6 +1281,7 @@ def main() -> None:
                     q_abstain=q_abstain,
                 )
                 if args.probe_cost_usd and base in ("content", "content_decay",
+                                                    "content_decay_coupled",
                                                     "content_qcost", "content_decay_qcost"):
                     result["realized_spend"] += float(args.probe_cost_usd)
                 result["problem_id"] = pid
