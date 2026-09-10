@@ -1139,6 +1139,15 @@ def main() -> None:
 
     manifest = load_split_manifest(tensor_dir / "split_manifest.json", pids)
     train_idx, cal_idx, test_idx = split_indices(manifest, pids)
+    if args.eval_split == "calibration":
+        # Hyperparameters must be chosen on the policy's own objective, not on a predictor metric
+        # that is invariant to prediction SPREAD -- three separate interventions (belief C on AUC,
+        # cost alpha on R2, cross-route coupling) each improved their predictor and made the
+        # frontier worse. Selecting on the frontier requires evaluating one, and doing that on the
+        # test split would be selection on test. This routes evaluation to the calibration split so
+        # a sweep can pick there and touch test exactly once.
+        print(f"EVAL SPLIT = calibration ({len(cal_idx)} problems); test split untouched")
+        test_idx = cal_idx
     problems = {row["problem_id"]: row for row in _read_jsonl(tensor_dir / "problems.jsonl")}
     records = {
         (row["problem_id"], row["model_slot"], int(row["draw_index"])): row
