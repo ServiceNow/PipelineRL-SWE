@@ -6903,3 +6903,129 @@ and compare cost-at-accuracy against the scout-probe frontier. If per-candidate 
 buy a better frontier, the cheap probe is vindicated where it actually matters -- and a frontier
 result is a stronger claim than an AUC table. If it does buy a better frontier, the paper is a
 cost/quality tradeoff and should say so plainly.
+
+---
+
+## 2026-09-08 to 2026-09-10 — Diagnosis session: what actually limits the policy
+
+Three days of ablations, seven retractions, and a reframing. Numbers here are cited to runs; the
+current state of each claim lives in `PAPER_OUTLINE.md` §3b-xxi..§3b-xxxi, the next experiment in
+`THREADS_IN_PROGRESS.md`, and positioning in the new `PRIOR_ART.md`.
+
+### What we set out to do, and what happened instead
+
+The plan was to finish the a-d application program, add baselines, and draft. Instead every
+"improvement" attempted made the policy worse, and diagnosing *why* became the result.
+
+### The oracle decomposition — the most useful thing built
+
+Replace one component with its ground-truth value, hold everything else fixed, re-run the replay.
+Bounds what any amount of work on that component could buy. LCB seed 0, gain over `ours`:
+
+| component replaced by oracle | 0.25x | 1.00x |
+|---|---|---|
+| belief $\theta$ (per-route, includes interaction) | +15.7pt | **+17.4pt** |
+| — of which perfect **calibration** of our own ranking (ISO) | +2.5pt | **-0.4pt** |
+| — of which perfect **shared difficulty** (RANK1) | +10.5pt | +7.8pt |
+| — of which the **interaction** | +2.7pt | +9.9pt |
+| decay $\sigma$ | -- | **+8.4pt** (per-tercile alone: +3.9pt) |
+| cost $\hat c$ | +8.0pt | **+9.8pt** |
+
+**Calibration is not the bottleneck** — perfect calibration of our own ordering is worth ~0 and is
+negative at three of four budgets. **The ranking is.** This refuted the "good ranker, poor
+estimator" thesis written two hours earlier (§3b-xxvii, retracted in §3b-xxviii).
+
+### The finding that should have come first
+
+**Selecting a component on its own predictor metric degrades the policy.** Four cases: belief $C$
+on AUC (-4.34pp TACO floor), cost $\alpha$ on $R^2$ (-3.2pt LCB 0.25x), cross-route coupling on a
+sound information argument (-23.8pt), isotonic recalibration (-0.4..-1.9pt). AUC is invariant to
+monotone transforms; $\arg\max_m(p_mR-c_m)$ consumes **values**. Better-regularised predictors are
+**compressed**; the rule needs **spread**.
+
+Frontier-selection (new `--eval-split calibration`) avoids the failure mode but **trades regimes**:
++3.88pt at 0.25x (5/5 seeds) against -2.60pt at 1.00x (1/5). At n~170 it reliably rejects extreme
+regularisation and cannot discriminate within an order of magnitude.
+
+### Ceilings worth knowing
+
+- **Cost prediction cannot reach $R^2=1$.** The between-problem variance share (ICC) is **0.841**
+  (LCB oss120) / 0.795 (TACO). We reach 0.545, i.e. **65% of what is predictable**; 16-20% is
+  irreducible draw noise.
+- **One prefill beats six generations of the same model**, at 1/47 the cost (LCB 0.768 vs 0.789 at
+  6 draws; TACO never crosses). A generation is one Bernoulli($\theta$) sample; a prefill is a
+  continuous read on $\theta$. This is the argument against generation-based cascades and we had
+  never made it.
+- **$\sigma$ is heterogeneous by ~9x** across difficulty terciles (0.69 / 0.80 / 6.45 against a
+  global 0.95) and governs every *continue* decision. It cancels from *entry* ($\sigma/(\sigma+0)=1$),
+  which is why an earlier measurement at $R=\$0.05$ — where $n^*$ floors at 0.07 — found it inert.
+  At 1.0x budget $n^*$ is 2.88.
+
+### Nulls, so nobody repeats them
+
+- **Cross-family prefill ensembling gains nothing.** Best single encoder 0.859; every 2- and
+  3-encoder combination 0.851-0.858 under concatenation, mean, rank and stacked blending. Encoders
+  read the same shared factor, so there is no error diversity. (Also reproduces the prefill-router's
+  Encoder-Target Decoupling on our data: gpt-oss-20b's prefill predicts gpt-oss-120b's success at
+  0.859, better than gpt-oss-120b's own at 0.805.)
+- **Scout's realised output length** is 15x better than prompt length for cost (0.254 vs 0.017) and
+  adds **+0.003** over activations. The prefill already knows how verbose the answer will be.
+- **Cross-route coupling** costs 23.8pt at 0.25x. The original code comment — "our probe makes this
+  redundant" — was untested and turned out right.
+
+### Benchmarks added
+
+- **RouterBench**, with our actual probe: **+3.91% AIQ** against their Zero Router (their metric,
+  their baseline, per-dataset). Abstention contributes **+0.10%** — the entire gain is routing, and
+  the shared scalar alone is **worse than not routing** (-0.60%) while the interaction is worth
+  +4.52%. This **inverts C4**: on our pools the shared scalar carries everything and the interaction
+  is unlearnable; at 91.4% contested it is the reverse. Same probe, opposite decomposition.
+- **SWE-bench Verified at 16k** (39.6% of its prompts exceed 8192): pool AUC 0.691 -> 0.730, gap
+  closed 44.0% -> 47.3%. Truncation was real; the domain boundary is **also** real, since 0.730 is
+  far below LCB 0.824 and TACO 0.885.
+
+### Retractions
+
+1. **The scope law (§6.9k)** — oracle abstention is worth *most* where unsolvable mass is *least*
+   (RouterBench +67pt at 3.9%). Partially reinstated: it holds for *realised* value, not the ceiling.
+2. **"Strict improvement" on TACO** — P(floor>0) = 0.514 shipped, 0.000 under the better belief head.
+   Dead under both. LCB survives (P=0.998).
+3. **"Strict improvement" as a per-run property** — it holds on the seed-*averaged* curve; 2/5 LCB
+   seeds have negative floors individually.
+4. **The ranker-vs-estimator thesis** — refuted by its own test within two hours.
+5. **"Learned sigma was never replayed"** — it was, on the 32k pool, beating counts by +5.3pt at
+   0.25x and 1.0x. It has never been compared against *our* probe, which is the narrow truth.
+6. **"A published baseline beats us above 0.30x"** — the greedy arm picked its route best-of-3 **on
+   test**, was a single point against our hull, and drew to exhaustion. The correctly-specified
+   version is the one-shot knapsack, which we beat by +1.1 to +20.2pt.
+7. **"The replay uses a per-problem budget"** — both `_value` arms and the one-shot knapsack solve a
+   **global** budget in the dual.
+
+### Errors caught by controls, not by inspection
+
+The `counts_qcost` attribution (comparing our arm against one containing our own cost head); a
+hand-set ridge penalty on one arm of a representation comparison while the other got CV; disabled
+mixtures on RouterBench; global cost constants in a per-dataset evaluation where per-dataset costs
+range 0.21x-2.20x; train/test overlap from mismatched splits; running the TF-IDF **baseline** as if
+it were our method for every RouterBench number; and a `content_decay_coupled` dispatch bug that
+silently ran the arm as `counts`.
+
+**Every one was in the flattering direction, and the common shape is: measure in one regime,
+generalise, never test where the quantity is live.** Consequence recorded in
+`THREADS_IN_PROGRESS.md` §5 — the headline numbers need independent reproduction, specifically
+re-run at a budget/seed/pool each claim was *not* measured at.
+
+### Where the tight-budget win comes from
+
+Decomposed with the shuffled-prediction control, LCB @ 0.25x: RoR 26.8% -> 28.8% with per-problem
+**dispersion** alone (+2.0pt) -> 52.7% with our actual **information** (+24.0pt). So RoR's structural
+inability to allocate selectively accounts for **2 of the 26 points**. The honest framing is not
+"we beat RoR by 26" but **"a sequential budget policy with no per-problem prior leaves ~24 points on
+the table at tight budgets, and one cheap prefill recovers them."**
+
+### Next
+
+`THREADS_IN_PROGRESS.md` §1: **dual descent on $R$.** Both our rule and the knapsack fix the
+multiplier in advance from *predicted* costs; realised spend drifts (cost $R^2$ 0.545) and nothing
+corrects it. Updating $R$ against realised spend needs no change to the per-problem rule. Kill
+criterion: if it gains nothing, global coupling is not the missing ingredient.
