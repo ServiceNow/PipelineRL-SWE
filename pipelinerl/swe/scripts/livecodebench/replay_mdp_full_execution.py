@@ -964,6 +964,13 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--adaptive-r-eta", type=float, default=0.0, help=(
+            "Enable the `_adaptiveR` arms: instead of fixing the Lagrange multiplier R for the "
+            "whole batch, sweep a TARGET mean spend and let R adapt by dual descent against "
+            "REALISED spend. Both our rule and the one-shot knapsack currently fix R in advance "
+            "from PREDICTED costs; cost R2 is 0.545, so realised spend drifts from plan and "
+            "nothing corrects it. 0 disables. 0.5-2.0 is a sensible step size."))
+    parser.add_argument(
         "--eval-split", choices=["test", "calibration"], default="test", help=(
             "Which split to REPORT on. Use `calibration` when sweeping a hyperparameter so the "
             "choice is made on the policy objective without touching test; then re-run once on "
@@ -1563,6 +1570,60 @@ def main() -> None:
                     "candidate_outputs": oracle_outputs,
                 })
     rows.extend(frozen_rows)
+
+    # ---- Adaptive-R (dual descent) -------------------------------------------------------
+    # A fixed R is the dual solution computed from PREDICTED costs. Realised spend drifts from it
+    # (cost R2 = 0.545, not 1.0) and nothing corrects the drift, so the policy keeps buying at a
+    # stale price for the rest of the batch. Here we sweep the TARGET mean spend and let R move:
+    # after each problem, if cumulative spend exceeds cumulative target, R falls and the rule gets
+    # stingier. This is the standard online-knapsack correction and changes nothing about the
+    # per-problem rule -- only the multiplier it reads.
+    if args.adaptive_r_eta > 0.0:
+        import math as _math
+        _rng = np.random.default_rng(args.seed)
+        # run() internally loops all draw-orderings and we consume one, so keep the grid tight.
+        _fams = [f for f in families if f in ("content_decay", "counts")]
+        _targets = np.geomspace(max(expected_costs.min() * 0.5, 1e-6),
+                                float(expected_costs.max()) * 6.0, 16)
+        _n_outer = min(3, args.num_orderings)
+        for _fam in _fams:
+            for _B in _targets:
+                _accs, _spends = [], []
+                for _oi in range(_n_outer):
+                    _order = _rng.permutation(len(test_idx))
+                    _R = float(np.median(value_grid))
+                    _spent = 0.0; _solved = 0; _n = 0
+                    for _k in _order:
+                        _out = run([test_idx[int(_k)]], unconstrained_budget, _fam,
+                                   None, None, _R, capture_trace=False)
+                        if not _out:
+                            continue
+                        _r = _out[0]
+                        _spent += float(_r.get("realized_spend", 0.0))
+                        _solved += int(bool(_r.get("correct")))
+                        _n += 1
+                        _tgt = _n * float(_B)
+                        _drift = (_spent - _tgt) / max(_tgt, 1e-12)
+                        _R = float(np.clip(_R * _math.exp(-args.adaptive_r_eta * _drift),
+                                           value_grid[0] * 0.1, value_grid[-1] * 10.0))
+                    if _n:
+                        _accs.append(_solved / _n); _spends.append(_spent / _n)
+                if _accs:
+                    rows.append({
+                        "policy": f"{_fam}_adaptiveR", "budget": float(_B), "tau": None,
+                        "min_success_per_cost": None, "value_of_correct": None,
+                        "bellman_horizon": None,
+                        "correctness": float(np.mean(_accs)),
+                        "mean_realized_cost": float(np.mean(_spends)),
+                        "n_episodes": int(len(test_idx) * args.num_orderings),
+                        "mean_attempts": float("nan"),
+                        "overall_abstention_rate": float("nan"),
+                        "router_entry_rate": float("nan"),
+                        "abstention_rate_after_scout_failure": float("nan"),
+                        "conditional_correctness_after_scout_failure": float("nan"),
+                        "min_success_per_cost_value": None,
+                    })
+        print(f"adaptive-R: {len(_targets)} targets x {len(_fams)} families, eta={args.adaptive_r_eta}")
 
     # Value-controlled frontier. One scalar R drives escalation and stopping jointly,
     # so there is no budget grid and no calibration-selected abstention threshold.
