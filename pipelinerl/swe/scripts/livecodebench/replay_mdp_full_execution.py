@@ -363,6 +363,7 @@ def replay_adaptive(
     state_layout: str = "counts_last",
     exploration_bonus: bool = False,
     decay_pseudo_count: float | None = None,
+    decay_by_problem: dict[str, float] | None = None,
     tau_abstain: float | None = None,
     min_success_per_cost: float | None = None,
     value_of_correct: float | None = None,
@@ -530,6 +531,15 @@ def replay_adaptive(
             bellman_pbar = theta
             if apply_failure_decay:
                 decay_s = pseudo_count if decay_pseudo_count is None else decay_pseudo_count
+                # sigma is the exchange rate between the probe's prior and observed failures, and
+                # it is NOT constant across difficulty: measured implied sigma is 0.69 (hard) /
+                # 0.80 (middle) / 6.45 (easy) on oss120. A global constant discards easy problems
+                # after failures that are mostly draw noise. sigma cancels from the ENTRY
+                # condition (at n=0 the factor is sigma/sigma=1) but governs every CONTINUE
+                # decision, so this can only matter where depth is live -- n* is 0.34 at a 0.25x
+                # budget and 2.88 at 1.0x.
+                if decay_by_problem is not None:
+                    decay_s = float(decay_by_problem.get(problem_id, decay_s))
                 bellman_decay_s = decay_s
                 p_each = theta * decay_s / (decay_s + failures)
                 belief_source = "content_decay"
@@ -937,6 +947,13 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--decay-sigma-map", default="", help=(
+            "jsonl of {problem_id, sigma}: per-problem decay concentration, overriding "
+            "--decay-pseudo-count where present. sigma is the exchange rate between the probe's "
+            "prior and observed failures; measured implied sigma is 0.69/0.80/6.45 across "
+            "difficulty terciles against a global 0.95, so a constant discards easy problems "
+            "after failures that are mostly draw noise."))
+    parser.add_argument(
         "--decay-pseudo-count", type=float, default=None,
         help="Pseudo-count for our sequential_decay variant. Defaults to --pseudo-count; set "
              "separately so the RoR sweep and our decay do not move in lockstep.",
@@ -1094,6 +1111,15 @@ def main() -> None:
     valid = data["valid"].astype(bool)
     pids = [str(value) for value in data["problem_ids"]]
     slots = [str(value) for value in data["model_slots"]]
+    _sigma_map: dict[str, float] | None = None
+    if args.decay_sigma_map:
+        _sigma_map = {}
+        for _l in open(args.decay_sigma_map):
+            if _l.strip():
+                _r = json.loads(_l)
+                _sigma_map[str(_r["problem_id"])] = float(_r["sigma"])
+        print(f"per-problem sigma loaded for {len(_sigma_map)} problems from {args.decay_sigma_map}")
+
     manifest = load_split_manifest(tensor_dir / "split_manifest.json", pids)
     train_idx, cal_idx, test_idx = split_indices(manifest, pids)
     problems = {row["problem_id"]: row for row in _read_jsonl(tensor_dir / "problems.jsonl")}
@@ -1227,6 +1253,7 @@ def main() -> None:
                                      if base in ("sequential", "sequential_decay") else 0.0),
                     select_by_density=args.select_by_density,
                     decay_pseudo_count=args.decay_pseudo_count,
+                    decay_by_problem=_sigma_map,
                     exploration_bonus=exploration_bonus,
                     mandatory_scout=args.start_protocol == "scout_first",
                     oracle_stopping=oracle_stopping,
