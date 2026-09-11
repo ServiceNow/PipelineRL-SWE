@@ -796,6 +796,42 @@ remaining seeds at the chosen value (6 + 8 jobs rather than 48). **The AUC-vs-fr
 measured above is the evidence that this matters**, and it is a better contribution than the
 +0.024 AUC it replaces.
 
+### 3b-xxxii Bellman lookahead: helps LiveCodeBench's floor, hurts TACO, does nothing for budgets
+
+The one *structural* change tried, as opposed to the five predictor improvements of §3b-xxx. An
+exact Bellman solve over the failure-count lattice plans depth like a knapsack but **re-solves at
+every state** rather than committing — the resample-aware allocation the one-shot arm (§3b-xiv)
+cannot express. H=1 reproduces the myopic rule exactly; larger H credits the continuation value the
+myopic rule drops.
+
+| | floor vs `counts` | 95% CI | P(>0) | seeds negative |
+|---|---|---|---|---|
+| LCB myopic (5 seeds) | +2.90% | [+0.73, +3.44] | 0.998 | 2/5 |
+| **LCB bellman h2** | **+4.86%** | **[+1.82, +6.31]** | **1.000** | **1/5** |
+| TACO myopic (3 seeds) | +0.93% | [-4.75, +2.81] | 0.502 | 1/3 |
+| TACO bellman h2 | **-6.38%** | [-18.22, +2.40] | 0.247 | 2/3 |
+
+**LiveCodeBench's strict-improvement claim gets stronger** — the floor rises by two thirds, the
+interval moves up and away from zero, and the share of individually-negative seeds halves.
+**TACO's gets worse**, from a coin flip to clearly negative.
+
+**It does not move budget-units performance at all**: -0.8 / +0.0 / +0.6 / -0.1 pt at
+0.25x/0.50x/1.0x/2.0x on LCB, averaged over 5 seeds.
+
+**Horizon ordering (seed 0, the only seed run with 2/4/8):** h2 +3.46% > h4 +1.36% > h8 +0.94%.
+Deeper lookahead is worse, consistent with belief error compounding across the lattice — a 2-step
+solve recovers the continuation value, an 8-step solve trusts imperfect beliefs eight moves out.
+
+**A seed-0 result that did not replicate.** Seed 0 alone showed **+4.4pt at 1.0x budget**; across
+five seeds that is **+0.6pt**. This is the sixth intervention this session whose single-seed result
+overstated its replication. **Treat every single-seed number in this document as a hypothesis.**
+
+**Where this leaves the two positives.** Of seven interventions tried, the five that improved a
+predictor metric all failed (§3b-xxx), adaptive-R fired its kill criterion, and Bellman h2 — the
+only one that changed the *policy structure* — is the only one that improved anything that
+survived replication. That asymmetry is the most robust thing in this section: **at our prediction
+quality, policy structure is where the remaining value is, and better inputs are not.**
+
 ### 3b-xxxi What the tight-budget win is actually made of, and what the knapsack framing settles
 
 **The +26pt is information, not RoR's structural limit.** LCB @ 0.25x, seed 0, decomposed with the
