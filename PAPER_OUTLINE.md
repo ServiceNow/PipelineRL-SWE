@@ -796,6 +796,65 @@ remaining seeds at the chosen value (6 + 8 jobs rather than 48). **The AUC-vs-fr
 measured above is the evidence that this matters**, and it is a better contribution than the
 +0.024 AUC it replaces.
 
+### 3b-xxxiii The cost claim holds on all three benchmarks — and what nearly hid it on SWE-V
+
+**Cost at matched accuracy is what the routing literature reports and what a practitioner asks.**
+It is also weaker than "strictly better at every level", which is the claim that died on TACO. The
+weaker claim holds everywhere we have looked.
+
+**LiveCodeBench** (5 seeds, myopic vs `counts`): strict-improvement floor **+2.90%**, rising to
+**+4.86%** with Bellman h2, P(floor>0) = 1.000. Cost to match always-gpt-oss-120b: **69.8%** of its
+price, where RoR needs 86.1%.
+
+**TACO** (3 seeds), cost saved against RoR at fixed accuracy targets:
+
+| target | advantage | 95% CI | P(win) |
+|---|---|---|---|
+| 35% | **+33.6%** | [+32.2, +34.9] | **1.000** |
+| 40% | **+29.3%** | [+29.1, +29.7] | **1.000** |
+| 45% | +4.7% | [+2.2, +7.7] | **1.000** |
+| 50% | **+12.8%** | [+9.5, +14.9] | **1.000** |
+| 55% | +8.6% | [+1.2, +13.6] | **1.000** |
+
+*The 45% dip is hull-vertex placement, not a weakness:* RoR happens to have a vertex at exactly
+$0.01388 / 45.0% while ours sit at 43.7% and 48.6%, so at that target RoR reads a vertex and we
+interpolate along a chord. The neighbourhood is smooth (+29.3 -> +4.7 -> +12.9 across 40/45/50%).
+**Report a curve or an average over targets, never a single target.**
+
+**SWE-bench Verified** (369 problems, single-draw so single-commit + abstain, out-of-fold probe):
+
+| target | RoR cost | ours | advantage |
+|---|---|---|---|
+| 30% | $0.00260 | $0.00163 | **+37.4%** |
+| 40% | $0.00347 | $0.00253 | **+27.0%** |
+| 50% | $0.00433 | $0.00362 | **+16.4%** |
+| 55% | $0.00477 | $0.00421 | **+11.7%** |
+
+**RETRACTED within the hour: "the cost claim fails on SWE-V".** A first version of this table showed
+±4% noise and I built a "switching price too cheap to skip" story on top of it. **The cause was a
+bug of mine:** I passed *actual realised per-problem costs* into the decision rule for both arms.
+With constant beliefs, RoR's utility $p R - c_i$ then varies only through $c_i$, so it was
+attempting the genuinely cheapest problems first — per-problem cost information no deployed policy
+has. The LCB/TACO replays correctly decide on **constant per-route estimates** and charge realised
+costs; once SWE-V does the same, the advantage appears. **Any new frontier harness must decide on
+estimates and charge realisations, and the tell is a constant-belief arm producing a many-vertex
+hull — it should be nearly all-or-nothing.**
+
+**The probe is doing real work on SWE-V**, which the broken table obscured: ranking by predicted
+gemini-success, the attempted set solves **90.4% at 20% coverage** against 62.3% overall (+28.1pt
+lift), decaying monotonically to parity at full coverage.
+
+**Two caveats.** SWE-V is single-draw, so it is a *different policy class* (single-commit routing
+with abstention, not the resample MDP) and should be reported as such rather than blended into one
+table. And it is one split with out-of-fold predictions, not seed-replicated like LCB's five —
+bootstrap it before the draft.
+
+**Pool-structure context, which still stands.** The switching price of the top rung differs by
+orders of magnitude across pools: LCB $0.38 (inside the operating range), TACO $5.99 (never worth
+buying — every TACO number is effectively a two-rung pool), SWE-V $0.0085 (always worth buying).
+That shapes *which channel* pays — routing versus abstention — but it does not determine whether
+the cost claim holds, which it does in all three.
+
 ### 3b-xxxii Bellman lookahead: helps LiveCodeBench's floor, hurts TACO, does nothing for budgets
 
 The one *structural* change tried, as opposed to the five predictor improvements of §3b-xxx. An
