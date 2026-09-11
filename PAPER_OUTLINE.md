@@ -796,6 +796,49 @@ remaining seeds at the chosen value (6 + 8 jobs rather than 48). **The AUC-vs-fr
 measured above is the evidence that this matters**, and it is a better contribution than the
 +0.024 AUC it replaces.
 
+### 3b-xxxiv Which RoR are we beating? Both, and they must be reported separately
+
+**A labelling error running through this document.** `hull()` pools a *policy family*, and the
+`counts` family contains `counts_value`, `counts_abstain` and `counts_value_frozen` — arms that use
+**our** zero-value give-up rule. Seven of the nine vertices of the LCB `counts` hull come from those
+arms, abstaining at **18.7%–41.6%**. So every "vs RoR as published" number in this document was
+actually measured against **RoR augmented with our give-up action**, which is strictly stronger
+than the published method: RoR has no stop action at all (*"stop-only is a descriptive reference,
+not a member of A"*, `PRIOR_ART.md` §1).
+
+**Both baselines, separately** (cost saved at matched accuracy, seeds as stated):
+
+| | target | **vs RoR as published** | vs RoR + our give-up |
+|---|---|---|---|
+| LCB (5 seeds) | 50% | **+54.5%** | +45.8% |
+| | 60% | **+28.6%** | +17.7% |
+| | 70% | +20.3% | +18.7% |
+| | 80% | +9.2% | +8.0% |
+| | 84% | +8.8% | +8.6% |
+| TACO (3 seeds) | 35% | **+45.7%** | +33.6% |
+| | 40% | **+42.5%** | +29.3% |
+| | 45% | **+21.4%** | +4.7% |
+| | 50% | +13.1% | +12.8% |
+| | 55% | +9.1% | +8.6% |
+
+**The gap is largest exactly where abstention does its work** — tight budgets — which is the
+mechanism check passing: +28.6% against +17.7% at LCB 60%, +42.5% against +29.3% at TACO 40%.
+
+**And it dissolves the TACO 45% "dip".** Against published RoR that target is **+21.4%**, not +4.7%.
+The dip was our own give-up action being handed to the baseline at that accuracy, not hull-vertex
+placement as §3b-xxxiii claims. *Correct that section: the vertex-placement explanation is right
+about the mechanism in general and wrong about this instance.*
+
+**Reporting rule.** Lead with **RoR as published** — it is the actual prior method, and a reader
+comparing against the literature expects the literature's policy. Carry **RoR + give-up** alongside
+as a steelman, since the result survives it and reporting only the published arm invites the fair
+objection that we withheld our own mechanism from the baseline. **Never report one as if it were
+the other**, which is what this document did until now.
+
+*Scope of the correction:* every "vs RoR" figure in §3b-xii, §3b-xv, §3b-xxi..xxxiii and in the
+summary tables is the augmented arm and needs relabelling. The strict-improvement floors are
+likewise measured against the augmented hull, so they are conservative rather than wrong.
+
 ### 3b-xxxiii The cost claim holds on all three benchmarks — and what nearly hid it on SWE-V
 
 **Cost at matched accuracy is what the routing literature reports and what a practitioner asks.**
