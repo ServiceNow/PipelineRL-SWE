@@ -7,9 +7,33 @@ what does it decide?*
 
 ---
 
-## 1. Next thread: the stale-multiplier fix (adaptive R)
+## 0. Headline as it now stands (2026-09-11)
 
-**Nothing is running. This is what to do next.**
+**The claim is cost, not strict improvement.** Cost at matched accuracy against RoR:
+
+| pool | advantage | evidence |
+|---|---|---|
+| LiveCodeBench | floor **+4.86%** with Bellman h2 | 5 seeds, P(floor>0)=1.000 |
+| TACO | **+4.7% to +33.6%** | 3 seeds, P(win)=1.000 at all 5 targets |
+| SWE-bench Verified | **+11.7% to +37.4%** | 1 split, out-of-fold, single-commit |
+
+Strict improvement ("better at *every* level") holds on LCB only. **Report the cost claim.**
+
+**Blocking before a draft:** bootstrap SWE-V (one split only); more TACO seeds; report TACO as a
+curve not single targets (the 45% dip is vertex placement); independent replication (§5).
+
+**Running:** a 9-model, 50-problem TACO pool screen (~$23 worst case) testing whether a top rung
+exists whose switching price lands under ~$1. TACO's current top rung prices at $5.99 and is never
+worth buying, so every TACO number is effectively a two-rung pool.
+
+---
+
+## 1. Backlog thread: the stale-multiplier fix (adaptive R) — CLOSED, kill criterion fired
+
+**Result: -16.5 to -26.5pt against static R.** The Lagrangian optimum is a single multiplier; dual
+descent is for online settings where the price must be learned, and we tune R offline on a
+calibration sweep, so adaptation only adds noise around a value that was already right. The
+receding-horizon and index-policy escalations are therefore **not worth building**.
 
 **The setup, stated correctly.** Both our sequential MDP (`_value` arms) and the one-shot knapsack
 (§3b-xiv) solve a **global** budget in the **dual**: pick each problem's plan under a common
