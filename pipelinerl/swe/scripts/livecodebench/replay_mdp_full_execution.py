@@ -365,6 +365,7 @@ def replay_adaptive(
     decay_pseudo_count: float | None = None,
     decay_by_problem: dict[str, float] | None = None,
     cost_update_weight: float = 0.0,
+    single_commit: bool = False,
     tau_abstain: float | None = None,
     min_success_per_cost: float | None = None,
     value_of_correct: float | None = None,
@@ -456,7 +457,10 @@ def replay_adaptive(
             return finish(False, False)
         entered_router = True
 
+    router_attempts = 0
     while True:
+        if single_commit and router_attempts >= 1:
+            break
         available: list[int] = []
         for mi in range(len(slots)):
             draw, new_ptr = _next_valid_draw(orderings[mi], int(ptr[mi]), valid[mi])
@@ -769,6 +773,14 @@ def replay_adaptive(
             not oracle_stopping and q_abstain is None
             and (probability_stop or marginal_stop or value_stop)
         )
+        if single_commit:
+            # The published prefill router (2603.20895) commits to exactly one model before
+            # generation: "We instead commit to one model before generation, and ask whether
+            # richer signals can raise that decision's accuracy without multi-stage fallback."
+            # It has no give-up action -- the policy is argmax_k s_k,q -- and never resamples.
+            # Running it on OUR beliefs isolates what the sequential machinery adds over the
+            # closest prior work, holding the signal fixed.
+            regular_stop = False; probability_stop = marginal_stop = value_stop = False
         if oracle_stop or q_stop or regular_stop:
             if decision is not None:
                 decision.update({
@@ -805,6 +817,8 @@ def replay_adaptive(
             else max(selection, key=selection.__getitem__)
         )
         result, chosen_draw = attempt(chosen)
+        if result is not None:
+            router_attempts += 1
         if decision is not None:
             decision.update({
                 "chosen_route": slots[chosen],
@@ -979,6 +993,12 @@ def main() -> None:
             "and report the baseline at its BEST s rather than inheriting the claim."
         ),
     )
+    parser.add_argument(
+        "--single-commit-arm", action="store_true", help=(
+            "Add a `content_commit` arm: the published prefill-router policy (2603.20895) run on "
+            "OUR beliefs -- commit to one model before generation, no give-up action, no "
+            "resampling. Isolates what the sequential machinery adds over the closest prior work "
+            "with the signal held fixed."))
     parser.add_argument(
         "--cost-update-weight", type=float, default=0.0, help=(
             "Pseudo-count for shrinking the prefill cost estimate toward observed costs on the "
@@ -1292,6 +1312,9 @@ def main() -> None:
             # `_qcost` is orthogonal to the belief source: same beliefs, same decay, only the
             # cost term changes. Strip it before any belief-source test so the arms stay paired.
             base = family[:-6] if family.endswith("_qcost") else family
+            _single = base.endswith("_commit")
+            if _single:
+                base = base[:-len("_commit")]
             ec = cost_preds.get(pid, expected_costs) if family.endswith("_qcost") else expected_costs
             for oi in range(args.num_orderings):
                 result = replay_adaptive(
@@ -1322,6 +1345,7 @@ def main() -> None:
                     decay_pseudo_count=args.decay_pseudo_count,
                     decay_by_problem=_sigma_map,
                     cost_update_weight=args.cost_update_weight,
+                    single_commit=_single,
                     exploration_bonus=exploration_bonus,
                     mandatory_scout=args.start_protocol == "scout_first",
                     oracle_stopping=oracle_stopping,
@@ -1350,6 +1374,7 @@ def main() -> None:
         + (["content", "content_decay"] if content else [])
         + (["counts_coupled"] if args.cross_pseudo_count > 0 else [])
         + (["content_decay_coupled"] if (content and args.cross_pseudo_count > 0) else [])
+        + (["content_commit"] if (content and args.single_commit_arm) else [])
         + (["counts_qcost"] if cost_preds else [])
         + (["content_qcost", "content_decay_qcost"] if (content and cost_preds) else [])
         + (scorer_families if scorer else [])
