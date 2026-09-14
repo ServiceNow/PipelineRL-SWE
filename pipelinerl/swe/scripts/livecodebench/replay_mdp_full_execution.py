@@ -258,6 +258,7 @@ def _solve_bellman_action_values(
     decay_s: float | None,
     horizon: int,
     raw_belief_at: Callable[[tuple[int, ...]], np.ndarray] | None = None,
+    cross_route_rho: float = 0.0,
 ) -> tuple[dict[int, float], float]:
     """Exact backward induction over the reachable failure-count lattice.
 
@@ -303,7 +304,18 @@ def _solve_bellman_action_values(
         function isolates the transition model and nothing else.
         """
         if raw_belief_at is None:
-            return pbar
+            if cross_route_rho <= 0.0:
+                return pbar
+            # ANALYTIC cross-route transition. The default asserts routes are conditionally
+            # independent given the problem, which is false -- a hard problem is hard for
+            # everyone -- so "try a different route" is systematically over-valued and the
+            # lookahead keeps buying. rho is the per-failure discount another route's belief
+            # takes from failures observed ELSEWHERE: rho=0 is the independence default,
+            # rho->1 means one failure anywhere all but rules the pool out. This is the
+            # correction `raw_belief_at` was built for, without needing a learned scorer.
+            other = [sum(offsets) - offsets[m] for m in range(n_routes)]
+            return np.asarray([pbar[m] * (1.0 - cross_route_rho) ** other[m]
+                               for m in range(n_routes)], dtype=float)
         supplied = raw_belief_at(offsets)
         return pbar if supplied is None else supplied
 
@@ -360,6 +372,7 @@ def replay_adaptive(
     content_prior: np.ndarray | None = None,
     posterior_prior: np.ndarray | None = None,
     argmax_shrink: float = 0.0,
+    cross_route_rho: float = 0.0,
     scorer: Callable[..., np.ndarray] | None = None,
     calibrator: Callable[[np.ndarray, int], np.ndarray] | None = None,
     state_layout: str = "counts_last",
@@ -718,6 +731,7 @@ def replay_adaptive(
                 bellman_decay_s,
                 bellman_horizon,
                 raw_belief_at=raw_belief_at,
+                cross_route_rho=cross_route_rho,
             )
             action_values = {
                 mi: root_action_values[mi] for mi in available if mi in root_action_values
@@ -1156,6 +1170,12 @@ def main() -> None:
         "4B at $0.278/M -- so the spread the method exploits is basis-dependent and must be "
         "swept rather than asserted."))
     parser.add_argument("--execution-cost-usd", type=float, default=0.0)
+    parser.add_argument("--cross-route-rho-grid", default=None, help=(
+        "Comma-separated rho for the ANALYTIC cross-route transition in the Bellman lattice. The "
+        "default reuses the root belief at every node, asserting that failing route m says "
+        "nothing about route m\', which is false -- so \'try another route\' is over-valued. Each "
+        "rho discounts a route\'s belief by (1-rho)^(failures elsewhere). Needs a horizon >= 2 to "
+        "do anything, since at h=1 there is no successor. Emitted as `<family>_rho<r>_value`."))
     parser.add_argument("--argmax-shrink-grid", default=None, help=(
         "Comma-separated shrink factors for the winner's-curse correction on the STOP test. The "
         "selected max surplus is biased upward by selection; each value lambda tests "
@@ -1393,6 +1413,7 @@ def main() -> None:
         *,
         capture_trace: bool = False,
         argmax_shrink: float = 0.0,
+        cross_route_rho: float = 0.0,
         pseudo_count: float | None = None,
         exploration_bonus: bool = False,
         bellman_horizon: int | None = None,
@@ -1422,6 +1443,7 @@ def main() -> None:
                                                "content_decay_coupled") else None),
                     posterior_prior=(posterior.get(pid) if base == "content_post" else None),
                     argmax_shrink=argmax_shrink,
+                    cross_route_rho=cross_route_rho,
                     scorer=scorer if base in ("sequential", "sequential_decay") else None,
                     calibrator=calibrator,
                     state_layout=args.state_layout,
@@ -1449,9 +1471,7 @@ def main() -> None:
                     oracle_routing=oracle_routing,
                     q_abstain=q_abstain,
                 )
-                if args.probe_cost_usd and base in ("content", "content_decay",
-                                                    "content_decay_coupled",
-                                                    "content_qcost", "content_decay_qcost"):
+                if args.probe_cost_usd and base.startswith("content"):
                     result["realized_spend"] += float(args.probe_cost_usd)
                 result["problem_id"] = pid
                 result["ordering_index"] = oi
@@ -1793,6 +1813,27 @@ def main() -> None:
                     "bellman_horizon": None, **_aggregate(_out),
                 })
 
+    # Cross-route transition sweep. Only meaningful at horizon >= 2.
+    if args.cross_route_rho_grid:
+        _rhos = [float(x) for x in args.cross_route_rho_grid.split(",") if x.strip()]
+        _h = max(bellman_horizons) if bellman_horizons else None
+        if _h is None or _h < 2:
+            raise ValueError("--cross-route-rho-grid needs --bellman-horizons with a horizon >= 2: "
+                             "at h=1 the lattice has no successor and rho cannot act")
+        _fams = sorted({f for f, h, l in value_arms if h is None and not l})
+        print(f"cross-route rho sweep: {len(_rhos)} rhos x {len(_fams)} families at h={_h}")
+        for _fam in _fams:
+            for _rho in _rhos:
+                _pol = f"{_fam}_rho{_rho:g}_value"
+                for _r in value_grid:
+                    _out = run(test_idx, unconstrained_budget, _fam, None, None, _r,
+                               bellman_horizon=_h, cross_route_rho=_rho)
+                    rows.append({
+                        "policy": _pol, "budget": None, "tau": None,
+                        "min_success_per_cost": None, "value_of_correct": _r,
+                        "bellman_horizon": _h, **_aggregate(_out),
+                    })
+
     # Winner's-curse sweep: same value frontier, but the stop test runs on a shrunk max.
     if args.argmax_shrink_grid:
         _lams = [float(x) for x in args.argmax_shrink_grid.split(",") if x.strip()]
@@ -1871,9 +1912,9 @@ def main() -> None:
                     outcomes[int(pi)], valid[int(pi)], realized_costs[int(pi)],
                     orderings[int(pi), oi], plan,
                 )
-                _pb = family[:-6] if family.endswith("_qcost") else family
-                if args.probe_cost_usd and _pb in ("content", "content_decay"):
-                    result["realized_spend"] += float(args.probe_cost_usd)
+                # No probe cost here: these are FIXED-MODEL reference points and never query the
+                # probe. This previously keyed off a stale `family` left over from an earlier
+                # loop, so the diamonds could be inflated by $probe depending on loop order.
                 result["problem_id"] = pid
                 result["ordering_index"] = oi
                 outputs.append(result)
