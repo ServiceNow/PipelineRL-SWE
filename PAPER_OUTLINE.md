@@ -883,7 +883,19 @@ at 70%, and at 80% we win even if wrong answers are free.** So:
 That is a weak premise. In every deployment we can think of, a silently wrong patch costs *more*
 than a flagged one — review time, and false confidence — so $W > A$, i.e. $W/A > 1 \gg 0.55$.
 
-**But disclosure belongs to the policy CLASS, not to our representation — check before claiming
+**Attribution update (ROI-Reasoning re-read, 2026-09-14).** Earlier sections of this document
+attribute "the formulation column" and "abstention-under-a-global-budget" to ROI-Reasoning. A
+re-read shows that **over-conceded**: they never predict a success probability or a continuous cost
+(*"No probability output; ROI is implicit in the learned policy"*; difficulty is a 4-level ordinal
+tag proxying **cost**), they do not solve a knapsack (they name OS-MCKP and train a policy by
+Dr. GRPO — *Greedy Knapsack is one of THEIR baselines*), and their skip is a fine-tuned output token
+`\boxed{NA}`, not a computed zero-crossing. So the rule $\max(0,\max_m(p_mR-c_m))$ is **not in their
+paper**; it is the textbook Lagrangian dual of a constrained allocation. **Cite them for the goal —
+budgeted inference over many tasks with skipping available — and cite standard constrained-MDP
+material for the rule. Claim neither.** See `PRIOR_ART.md` §4b. What this does *not* change is the
+empirical finding below, which is about our own arms.
+
+**Disclosure belongs to the policy CLASS, not to our representation — check before claiming
 it.** `counts_value` (count beliefs + the give-up action on a global price) also discloses **100%**
 of its failures at 64.9% and 75.6% accuracy. So the 100%-vs-0% gap is the value of *having* a
 give-up action, which `PRIOR_ART.md` §4b records as **ROI-Reasoning's**, not ours. Stated correctly:

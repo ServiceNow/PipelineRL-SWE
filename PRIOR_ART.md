@@ -90,23 +90,48 @@ all. **The correctly-specified version is the one-shot knapsack of §3b-xiv** (e
 `(model, depth)` plan, value $1-(1-\theta)^n$, cost $n\hat c$, common multiplier), **and we beat it
 by +1.1 to +20.2pt.**
 
-## 4b. ROI-Reasoning (2601.03822) — the knapsack formalisation, checked
+## 4b. ROI-Reasoning (2601.03822) — RE-READ 2026-09-14; the earlier entry over-conceded
 
-*They do:* formalise budget allocation as an **Ordered Stochastic Multiple-Choice Knapsack**
-(OS-MCKP): *"each problem $x_i$ corresponds to a class, while different actions (e.g., solving,
-partially attempting, or abstaining) correspond to items within that class"*, with an explicit
-ordering constraint because *"the reward and computational cost of an action are not known at
-decision time"*. They **have an abstain action** — `\boxed{NA}`, trained by "Refusal Learning" for
-"low-ROI problems when the expected cost outweighs the potential benefit".
+*"ROI-Reasoning: Rational Optimization for Inference via Pre-Computation Meta-Cognition"*, Zhao, Qi,
+Sun. Re-read from the arXiv HTML because this project had been conceding "abstention-under-budget"
+to it wholesale, and that concession was load-bearing for our own attribution claims.
 
-*They do NOT:* allocate over a **pool of different models** (the knapsack is over reasoning-effort
-levels for **one** model, e.g. Qwen2.5-1.5B-Instruct); use a **separate cheap model** (predictions
-are the target's own `<predicted_level>` meta-cognitive tags); price **multiple models from one
-forward pass**; or **resample** (one generation trajectory per problem).
+*They do:*
+- Budget **multiple tasks under a strict GLOBAL token constraint**, named as an Ordered Stochastic
+  Multiple-Choice Knapsack (OS-MCKP). Confirmed global, not per-query.
+- **Solve-or-skip.** The skip is a **trained output token**: *"the model learns to output a
+  standardized `\boxed{NA}` token as its final answer"* when *"expected cost outweighs potential
+  benefit"*, taught by Refusal Learning — if no sample is correct the target label becomes
+  `<predicted_level>Level-3</predicted_level> \boxed{NA}`.
+- **Two stages of fine-tuning on the target model**: Meta-Cognitive Fine-Tuning, then
+  Rationality-Aware RL (Dr. GRPO) for *"sequential decision making under a hard token budget"*.
+- Difficulty as a **4-level ordinal tag**, and it is a proxy for **cost, not success**:
+  *"The discrete level k serves as a coarse proxy for expected computational cost... Level-0
+  denotes short solutions (e.g., within 256 tokens), Level-1 corresponds to 256-512 tokens."*
 
-*Leaves us:* **cross-model pricing — one cheap prefill valuing an entire heterogeneous pool** — and
-resampling as part of the allocation. **Does NOT leave us:** the knapsack formulation, or
-abstention-under-budget, both of which are theirs.
+*They do NOT — and three of these were wrong or missing in the previous entry:*
+- **Solve a knapsack.** They name OS-MCKP and then optimise a policy by RL; the group-relative
+  advantage acts as an implicit shadow price. **"Greedy Knapsack" (predict-then-optimize) is one of
+  THEIR baselines**, not their method — so the knapsack solve is prior art they position against.
+- **Predict a success probability, or a continuous cost.** *"No probability output; ROI is implicit
+  in the learned policy, not explicitly predicted."* There is no $p$, no $c$ in continuous units,
+  and no explicit price — so the rule $\arg\max_m(p_mR-c_m)$ with a zero-crossing give-up **does not
+  appear in this paper**.
+- Route among **multiple models** (one base model, e.g. Qwen2.5-1.5B-Instruct; effort/length only),
+  **resample** at inference (single pass, *"generation is terminated once the token limit is
+  reached"*), or work **without training the target** (two fine-tuning stages are required).
+
+*Corrected attribution — the previous entry said "the knapsack formulation, or abstention-under-
+budget, both of which are theirs", and that is too generous:*
+- **Theirs, cite it:** the *goal* — budgeted inference over many tasks under a global constraint
+  where skipping is an available action — and solve-or-skip as a trained model behaviour.
+- **Neither of ours:** the Lagrangian relaxation itself. $\max(0,\max_m(p_mR-c_m))$ is the textbook
+  dual of a constrained allocation (the same convexification `hull_frontier.py` already cites for
+  randomised tests in Neyman-Pearson). Do not concede it to them; do not claim it.
+- **Left to us, and now wider than we thought:** explicit calibrated per-problem success *and* cost
+  prediction driving the decision (they have neither); cross-model pricing over a heterogeneous
+  pool from one cheap prefill; resampling as part of the allocation; and **requiring no training of
+  any pool model** against their two mandatory fine-tuning stages.
 
 ---
 
