@@ -7,6 +7,48 @@ what does it decide?*
 
 ---
 
+## -1. RUNNING RIGHT NOW (2026-09-14 19:0x) — what each job decides
+
+All local jobs are CPU-only replays on the LCB 64k pool with the matched geometric budget grid
+(§3b-xxxv), seed 0 unless stated. Output root `/mnt/llmd/results/exps/aristides/reason/gridmatch/`.
+Launchers are `run_*.sh` in that directory; every one deletes its `episode_traces.jsonl` on exit
+(they run 0.7–5 GB each).
+
+| job | dir | state | question it decides |
+|---|---|---|---|
+| **learned sigma head-to-head** | eai `lcb_fact64k_h2h_seed17_1789410753` | **QUEUING** (dataset stage done, 138 MB) | Does a **learned per-problem $\sigma$** beat our probe? §3b-xxxi: this comparison has never existed — never on the 64k pool, never with a `content_decay` arm in the same replay. One replay, so seed / draw orderings / budget grid cannot confound the belief source. Launcher `launchers/abstention/launch_lcb_factorized_64k_headtohead.sh`. |
+| **winner's-curse shrink** | `shrink/shrink` | running ~9 min | Is the give-up firing **too late** because $\max_m(\hat p_mR-\hat c_m)$ is selection-biased upward? Sweeps $\lambda \in \{0.25,0.5,0.75,1.0\}$ in $\max - \lambda(\max-\text{mean}) \le 0$. Predicts the measured 63–86% waste. Routing untouched. |
+| **free_start refresh** | `shrink/freestart` | running ~9 min | How much does the **mandatory scout generation** cost us? `scout_first` pays a full scout draw (\$0.00084, 5.6x the probe) on 100% of episodes. Known good on the *old* pool (+50.8/+13.6/+10.8/+4.9%); never re-run here. It is the only way "we decline before spending" becomes literally true. |
+| **cross-route rho** | `rho/rho` | running ~3 min | The Bellman lattice reuses the root belief at every node — its own docstring says this "asserts that failing route m says nothing about route m'". False, so "try another route" is over-valued. Sweeps $\rho\in\{0.1,0.25,0.5,0.75\}$ discounting a route by $(1-\rho)^{\text{failures elsewhere}}$. h=2 only. |
+
+**Finished, awaiting analysis:**
+
+| job | dir | what it tests |
+|---|---|---|
+| two-constraint policy | `capped/{content_decay_qcost,counts}` | Cap **and** price swept jointly (12 caps x 96 prices). Motivated by the anomaly that the capped arm wins at 70–80% yet cannot reach 84%. Given to **both** arms so a win is not just a richer policy class for us. |
+| quantile cost head | `quantile/q{mean,0.25,0.50,0.75,0.90}` | Is $\mathbb{E}[c]$ the wrong functional? Duan's smearing rescales $\exp(\text{log-fit})$ from the conditional median to the mean; this swaps in the $q$-th quantile of the same residual law. Includes a **matched mean arm** so the comparison is not against a differently-fitted stored file. |
+| posterior-over-$k$ head | `post/s{0,1,2}` | Exact Bayes on the success count instead of Beta-Bernoulli. $k$ is strongly bimodal (49%/34% at 0/6 for scout), which $\theta\sigma/(\sigma+n)$ cannot represent. **No $\sigma$ at all.** 3 seeds. |
+| matched-grid 2x2 | `runs/lcb_s{0..4}`, `runs/taco_s{0..2}` | LCB analysed (§3b-xxxvii). **TACO not yet analysed** — free, no compute. |
+
+**Ideas considered and dropped, with the reason:**
+
+- **Monotone beliefs across routes** ($p_\text{scout}\le p_\text{oss20}\le p_\text{oss120}$). Measured
+  first: the binary complementarity is tiny (scout-solves-and-oss120-does-not 0.3%, oss20 0.7%), but
+  **per-problem pass-rate monotonicity is violated on 16.5% of problems**. Baking it in would be
+  wrong one problem in six.
+- **Joint (p, c) head.** Substantially done: §3b-xiii measures corr −0.60/−0.52/−0.71 on LCB with
+  **PC1 carrying 71.4%**, and the rank-1 collapse is already built and is an *improvement*. What is
+  left is the joint *uncertainty* (variance of the surplus), which folds into the shrink and rho
+  arms rather than being a fourth head.
+
+**Two bugs found while checking what the probe is charged (fixed, `ae9bbbe`):**
+`content_post` and `content_commit` were never charged `--probe-cost-usd` (my new arm would have run
+with a free probe); and the **fixed-model reference points** were charged the probe off a *stale*
+`family` variable from an earlier loop, so the single-model diamonds could be inflated by \$probe
+depending on loop order.
+
+---
+
 ## 0. Headline as it now stands (2026-09-14)
 
 **Two defects found and fixed in the same pass.** (1) RoR (2607.08665) budgets **per query**; our
