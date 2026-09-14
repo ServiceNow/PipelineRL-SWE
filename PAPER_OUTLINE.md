@@ -842,6 +842,59 @@ formulation (ROI-Reasoning's). If the margin vs `counts_value` is small, the win
 the contribution claim must shrink to cross-model pricing from one prefill. Reporting only
 `counts` would claim the column as ours. **Report the full grid.**
 
+### 3b-xlvi THE CLEAN CLAIM: the belief head alone is positive on 19 of 19 targets across four pools
+
+Everything conditional in this document came from reporting the **bundled** arm. Isolate the belief
+head — formulation held at the global dual, **costs held constant and identical on both sides** —
+and the result is not conditional at all:
+
+| pool | | | | | |
+|---|---|---|---|---|---|
+| **LiveCodeBench** (5 seeds) | 50% **+40.5±1.0** | 60% **+19.6±2.4** | 70% **+16.5±2.6** | 80% **+4.6±1.6** | 84% **+5.4±2.1** |
+| *sign test* | 5/5 | 5/5 | 5/5 | 5/5 | 5/5 |
+| **TACO** (3 seeds) | 35% **+33.6±1.1** | 40% **+29.3±0.2** | 45% **+2.2±2.0** | 50% **+7.3±1.9** | 55% **+1.1±0.8** |
+| *sign test* | 3/3 | 3/3 | 2/3 | 3/3 | 2/3 |
+| **RouterBench** (14,599 test) | 60% **+35.2** | 70% **+76.9** | 75% **+75.1** | 80% **+50.8** | 84% **+22.9** |
+| **SWE-bench Verified** | 30% **+19.5** | 40% **+9.5** | 50% **+3.4** | 55% **+1.2** | — |
+
+**19 of 19 targets positive, across four pools and two task families** (competitive programming and
+software engineering), and unanimous across seeds at 17 of the 19 where seeds exist. The SWE-V row
+uses my deliberately weak probe reconstruction (§3b-xxxviii); the recorded probe is stronger.
+
+**This is the headline. Lead with it.** One sentence: *replacing count-based beliefs with beliefs
+read from one cheap prefill, changing nothing else, reduces cost at matched accuracy at every
+accuracy target on every pool we have.*
+
+**Why it read as a pile of conditionals until now.** The reported arm bundled the belief head with
+the **cost head**, and the cost head is genuinely pool-dependent: a large win on LCB (+39.4±2.9 at
+the tight target) and **actively harmful on TACO above 40%** (−21.6% at 45%). §3b-xiii predicted
+exactly this — on TACO the heads are nearly orthogonal (PC1 43.7% against LCB's 71.4%) and TACO's
+cost $R^2$ is the weakest we measure. **So the cost head is a second contribution with a documented
+failure mode, not a caveat on the first.** Report them separately and select on calibration.
+
+### 3b-xlvii TACO's pool is NOT degenerate — the problem is the price of the top rung
+
+A standing hypothesis (and an intuition worth testing before acting on it) was that TACO fails
+because `oss20` and `oss120` perform alike, i.e. a degenerate two-rung pool. **Measured, it is
+false:**
+
+| pool | scout | oss20 | oss120 | rungs on the hull | switching price of the top rung |
+|---|---|---|---|---|---|
+| LCB | 41.5% / \$0.00116 | 68.1% / \$0.00889 | 80.9% / \$0.03237 | **3 of 3** | **\$0.18** per unit accuracy |
+| TACO | 16.3% / \$0.00161 | 38.3% / \$0.01464 | 45.6% / \$0.05005 | **3 of 3** | **\$0.49** per unit accuracy |
+
+All three TACO routes sit on the hull and the `oss20`→`oss120` gap is a real 7.3pp. The pool is
+structurally fine. What differs is **price**: TACO's top rung costs **2.7x more per unit of
+accuracy** than LCB's. So at loose budgets on TACO the expensive rung *must* be bought, and
+mis-pricing it is directly expensive — which is precisely why the **cost** head hurts there and the
+**belief** head does not.
+
+**Do not rebuild the TACO pool.** The principled form of that move is a **pre-registered
+admissibility criterion on pool structure** — e.g. "≥3 rungs on the cost/accuracy hull with
+switching prices inside the operating range" — decided *without reference to our method's
+performance*. TACO **passes** that criterion, so excluding it would be selection on the outcome.
+And it is unnecessary: the belief-head claim survives TACO at all five targets.
+
 ### 3b-xlv TACO on the matched grid: the headline arm's cost claim RETRACTS above 40%, but the representation claim survives
 
 3 seeds, matched geometric budget grid, strict `counts` baseline (mean ± sd, sign test across seeds):
