@@ -49,51 +49,87 @@ depending on loop order.
 
 ---
 
-## 0. Headline as it now stands (2026-09-14)
+## 0. Headline as it now stands (2026-09-14, evening)
 
-**Two defects found and fixed in the same pass.** (1) RoR (2607.08665) budgets **per query**; our
-`_value` arms run with `unconstrained_budget`, so they are a **global**-budget method — and
-abstention-under-a-global-budget is **ROI-Reasoning's** (2601.03822), recorded in `PRIOR_ART.md` §4b
-as not ours. (2) The budget arm was swept on 17 **linear** points against the value arm's 96
-**geometric** ones — 3 points below \$0.02 against 55.
+### The clean claim — lead with this
 
-**The 2x2, on the matched grid** (LCB pool64k, seed 0). Row = representation (**ours**), column =
-formulation (**theirs**):
+**Replacing count-based beliefs with beliefs read from one cheap prefill, changing nothing else,
+cuts cost at matched accuracy at every accuracy target on every pool we have.**
 
-| contrast | isolates | 50% | 60% | 70% | 80% | 84% |
+Belief head isolated: formulation held at the global dual, **costs constant and identical on both
+sides**, so only the belief source differs.
+
+| pool | | | | | |
+|---|---|---|---|---|---|
+| **LiveCodeBench** (5 seeds) | 50% **+40.5±1.0** | 60% **+19.6±2.4** | 70% **+16.5±2.6** | 80% **+4.6±1.6** | 84% **+5.4±2.1** |
+| *sign test* | 5/5 | 5/5 | 5/5 | 5/5 | 5/5 |
+| **TACO** (3 seeds) | 35% **+33.6±1.1** | 40% **+29.3±0.2** | 45% **+2.2±2.0** | 50% **+7.3±1.9** | 55% **+1.1±0.8** |
+| *sign test* | 3/3 | 3/3 | 2/3 | 3/3 | 2/3 |
+| **RouterBench** (14,599 test) | 60% **+35.2** | 70% **+76.9** | 75% **+75.1** | 80% **+50.8** | 84% **+22.9** |
+| **SWE-bench Verified** | 30% **+19.5** | 40% **+9.5** | 50% **+3.4** | 55% **+1.2** | |
+
+**19/19 targets positive**, four pools, two task families, unanimous across seeds at 17/19.
+(§3b-xlvi. SWE-V row uses a deliberately weak probe reconstruction; the recorded probe is stronger.)
+
+### The paper shape
+
+1. **Representation claim** — the table above. Unconditional. The headline.
+2. **Formulation contribution** — the **two-constraint policy** (per-episode cap *and* global price
+   swept jointly): **+4.1/+7.1/+11.4/+2.4%** over the price alone at all four reachable targets,
+   while the cap *alone* is **−61.7%** at 50%. Neither RoR's cap nor the pure Lagrangian. Open:
+   it inherits the cap's ceiling and cannot reach 84%.
+3. **Cost head** — a second representation contribution **with a documented failure mode**: a large
+   win on LCB (+39.4±2.9 tight) and **actively harmful on TACO above 40%** (−21.6% at 45%). Report
+   separately from the belief head and select on **calibration**, never post hoc on test.
+
+### Why this looked like a pile of conditionals until now
+
+Every reported arm **bundled** the belief head with the cost head. The belief head is universal; the
+cost head is pool-dependent, exactly as §3b-xiii predicted (on TACO the two heads are near-orthogonal
+— PC1 43.7% against LCB's 71.4% — and TACO's cost $R^2$ is the weakest we measure).
+
+### Two retractions from today
+
+- **TACO's bundled cost claim above 40%** (§3b-xlv). §3b-xxxiv recorded +45.7/+42.5/+21.4/+13.1/+9.1
+  vs RoR; on the matched grid it is **+35.5/+20.2/−5.7/−12.5/−31.8**, losing at three of five
+  targets with 0/3 seeds. The old numbers used the **linear** budget grid.
+- **"TACO fails because `oss20` ≈ `oss120`"** (§3b-xlvii) — **false**. All three routes sit on the
+  hull and the gap is a real 7.3pp. The difference is **price**: TACO's top rung costs **\$0.49 per
+  unit accuracy against LCB's \$0.18**, 2.7x dearer, so the expensive rung must be bought at loose
+  budgets and mis-pricing it is directly costly. **Do not rebuild the TACO pool** — it passes any
+  pre-registered structural criterion, so dropping it would be selection on the outcome, and the
+  belief claim survives it anyway.
+
+### Method variants, all six run (§3b-xliv)
+
+| variant | 50% | 60% | 70% | 80% | 84% | verdict |
 |---|---|---|---|---|---|---|
-| ours vs `counts_value` | **representation**, global dual held | **+45.8%** | **+15.7%** | **+15.2%** | **+5.5%** | **+10.5%** |
-| `content_decay_qcost` vs `counts` | **representation**, RoR's own cap held | **+16.9%** | **+6.7%** | **+18.9%** | **+5.8%** | n/a |
-| `counts_value` vs `counts` | formulation alone | +5.1% | +5.8% | +1.8% | −0.2% | −3.3% |
-| ours vs `counts` | everything | +48.6% | +20.6% | +16.7% | +5.3% | +7.5% |
+| two-constraint (cap x price) | +4.1 | +7.1 | **+11.4** | +2.4 | — | **works** |
+| posterior over $k$ (exact Bayes, no $\sigma$) | +11.0 | +5.7 | +5.9 | +0.9 | −6.5 | **works, tight/mid** |
+| `free_start` (ours) | +9.2 | +2.2 | −1.4 | −2.2 | −1.4 | marginal |
+| winner's-curse shrink | +12.1 | +1.2 | +0.8 | +2.1 | +0.3 | marginal |
+| cross-route $\rho$ (vs its h2 control) | +8.0 | +2.0 | −0.7 | −3.6 | −2.9 | mixed |
+| quantile cost head | — | — | — | — | — | void, re-running |
 
-**The matched grid cost us 6.3 and 6.9 points at the two tight targets** (54.9→48.6, 27.5→20.6) and
-nothing at 70% and above. **But it moved the attribution in our favour:** formulation alone fell
-from +16.7%/+13.9% to **+5.1%/+5.8%**, and is negative at 80% and 84%. Most of what looked like "the
-global budget is worth a lot when money is tight" was RoR's missing grid points.
+**The pattern that matters:** four of five peak at the 50% target around +8 to +12% and fade or
+reverse by 80%. That is where abstention is active (50.9% abstain at 50%, 6.8% at 84%), so they are
+all the *same* intervention — improving the give-up decision — and will stack **sub-additively**, as
+the belief and cost heads did. **Stop adding stopping tweaks.** The two-constraint policy is the
+exception: it peaks in the middle and is about the feasible set, not stopping. *An oracle-stopping
+run is in flight to bound what is left in that channel.*
 
-**Headline to lead with — anchored, and fully attributable:**
+`free_start` is a **mechanism confirmation**: +9.2/+2.2 for our arm and **exactly +0.0% at every
+target for RoR**, because count beliefs are identical at entry so RoR cannot skip the scout
+*selectively*. Third independent instance of the selective-vs-indiscriminate mechanism.
 
-> At the accuracy `gpt-oss-120b` reaches when called on every problem (68.77%), the router costs
-> **\$0.0341 against \$0.0452** — **24.5% less than calling that model on everything**, and **17.8%
-> less than RoR**. At this operating point our arm under RoR's *own* per-query formulation lands at
-> the same \$0.0341, so the entire margin is the representation and none of it is the formulation.
+### Where a clean win could still live
 
-**Mechanism (structural, from the code not a fit).** Count beliefs are $s\pi_m/(s+n_m)$: at $n_m=0$
-**every problem carries the identical belief vector**, so `counts_value` **cannot abstain
-selectively at entry** — it must buy failures to discriminate. It abstains at **41.6%** at the 50%
-target and still costs more than us. *Abstention only pays if you know what to abstain on before
-spending.* Hence the interaction: **+27.5pt** over independent components at 50%, +8.5pt at 60%.
-
-**Graphs:** https://claude.ai/code/artifact/23d6da83-6b81-46d8-bf0e-749cf68af553
-
-**Status of the three other pools:** the 2x2 has **not** been run on TACO / SWE-V / RouterBench, and
-their numbers are still the conflated row on the old linear grid. **No paper headline can be fixed
-until that decomposition is run on all four** — and on the tight targets it should be expected to
-come down, as LCB's did.
-
-**Blocking before a draft:** the 2x2 + matched grid on the other three pools; seeds (this is n=1);
-bootstrap SWE-V (one split only); more TACO seeds; independent replication (§5).
+- **Not more stopping tweaks** — four knobs, one channel, redundant.
+- **The loose end is untouched.** Our margin at 80–84% is +3.2 to +7.2% and nothing has moved it. At
+  high $R$ nothing is declined, so it is pure routing and depth; oracle cost is the largest lever
+  there (+9.8pt at 1.0x).
+- **Richer policy classes** — the two-constraint result says the class was leaving money on the
+  table independent of predictions. Fixing its 84% ceiling would be a real contribution.
 
 ---
 

@@ -7092,3 +7092,39 @@ lands at the same $0.03412, so all of it is representation.
 
 **Not yet done:** the 2x2 + matched grid on TACO / SWE-V / RouterBench — their published numbers are
 still the conflated row on the old linear grid, so no paper headline can be set yet. n=1 seed.
+
+
+---
+
+## 2026-09-14 (evening) — the clean claim was under the bundling
+
+**Six method variants run, five analysed** (two-constraint cap x price, posterior-over-$k$,
+`free_start`, winner's-curse shrink, cross-route $\rho$; the quantile arm was void and re-run).
+Two work, two are marginal, one is mixed. Four of the five peak at the 50% accuracy target around
++8 to +12% and fade or reverse by 80% — which is where abstention is active — so they are all the
+same intervention, improving the give-up decision, and will stack sub-additively. **The exception is
+the two-constraint policy**, which peaks at 70% (+11.4%) and is about the feasible set rather than
+stopping; the cap *alone* is −61.7% at 50%, so neither knob is right on its own.
+
+**`free_start` is a mechanism confirmation, not a win:** +9.2/+2.2 for our arm and exactly +0.0% at
+every target for RoR, because count beliefs are identical for every problem at entry and RoR cannot
+skip the scout selectively. Third independent instance of the same mechanism.
+
+**TACO retraction.** On the matched grid the bundled arm vs RoR is +35.5/+20.2/−5.7/−12.5/−31.8,
+against §3b-xxxiv's recorded +45.7/+42.5/+21.4/+13.1/+9.1 — losing at three of five targets, 0/3
+seeds. Cause: the old numbers used the linear budget grid.
+
+**And a hypothesis falsified before acting on it.** "TACO fails because oss20 and oss120 perform
+alike" is false: all three routes sit on the hull, the gap is a real 7.3pp, and the difference is
+*price* — TACO's top rung costs \$0.49 per unit accuracy against LCB's \$0.18. So the expensive rung
+must be bought at loose budgets and mis-pricing it is costly, which is exactly why the **cost** head
+breaks on TACO and the **belief** head does not. Rebuilding the pool was considered and rejected:
+TACO passes any pre-registered structural criterion, so excluding it would be selection on the
+outcome.
+
+**The result that reframes the whole line.** Isolating the belief head — formulation at the global
+dual, costs constant and identical on both sides — gives **19/19 targets positive across four pools
+and two task families**, unanimous across seeds at 17/19. Every conditional in this project came
+from bundling the belief head with the pool-dependent cost head. The headline is one sentence:
+*replacing count-based beliefs with beliefs read from one cheap prefill, changing nothing else,
+cuts cost at matched accuracy at every target on every pool.*
