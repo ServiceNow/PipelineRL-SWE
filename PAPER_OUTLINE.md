@@ -842,6 +842,57 @@ formulation (ROI-Reasoning's). If the margin vs `counts_value` is small, the win
 the contribution claim must shrink to cross-model pricing from one prefill. Reporting only
 `counts` would claim the column as ours. **Report the full grid.**
 
+### 3b-xliv Six method variants, run. Two work, two are marginal, one is mixed, one was void
+
+LCB 64k, seed 0, matched geometric grid, each against **its own run's** control so nothing is
+confounded across replays. Cost at matched accuracy vs `content_decay_qcost_value` unless stated.
+
+| variant | 50% | 60% | 70% | 80% | 84% | verdict |
+|---|---|---|---|---|---|---|
+| **two-constraint (cap x price)** | **+4.1%** | **+7.1%** | **+11.4%** | **+2.4%** | — | **works** |
+| **posterior over $k$** (exact Bayes, no $\sigma$) | **+11.0%** | **+5.7%** | **+5.9%** | +0.9% | −6.5% | **works, tight/mid only** |
+| `free_start` (ours) | +9.2% | +2.2% | −1.4% | −2.2% | −1.4% | marginal, tight only |
+| winner's-curse shrink ($\lambda{=}0.25$) | +12.1% | +1.2% | +0.8% | +2.1% | +0.3% | marginal, tight only |
+| cross-route $\rho{=}0.25$ *(vs its own h2 control)* | +8.0% | +2.0% | −0.7% | −3.6% | −2.9% | mixed |
+| quantile cost head | — | — | — | — | — | **VOID, see below** |
+
+**1. The two-constraint policy is the best new result.** Sweeping a per-episode cap *and* the
+global price jointly (12 caps x 96 prices) beats the price alone at **all four reachable targets**,
+and the cap *alone* is catastrophic (−61.7% at 50%). So neither knob is right on its own and the
+product grid genuinely contains both edges — as predicted from the anomaly that motivated it. It
+inherits the cap's ceiling and cannot reach 84%. **This is neither RoR's cap nor the pure
+Lagrangian, so it is a policy-class contribution rather than a representation one.**
+
+**2. The posterior-over-$k$ head works where the bimodality argument says it should.** +11.0/+5.7/
++5.9% at the tight and middle targets, and **−6.5% at 84%** — at maximum $R$ nothing is declined, so
+the sharper posterior has nothing to act on and only its extra estimation noise remains.
+
+**3. `free_start` is a mechanism confirmation more than a win.** +9.2%/+2.2% at the tight targets
+for our arm and **exactly +0.0% at every target for RoR**. Count beliefs are identical for every
+problem at entry, so RoR cannot use the freedom to skip the scout *selectively* — it can only enter
+or not, which the budget sweep already covered. **Only the arm with per-problem beliefs can spend a
+free start.** Third independent instance of the selective-vs-indiscriminate mechanism. Within
+`free_start`, ours vs RoR is +53.3/+22.3/+15.5/+3.2/+6.3%, slightly better at the tight end than
+the +48.6/+20.6/+16.7/+5.3/+7.5% under `scout_first`.
+
+**4. The winner's curse is real but small.** +12.1% at the 50% target and ~0 elsewhere, and
+$\lambda{=}1$ turns negative at 70% (−3.9%). The selection bias exists and biting it earlier helps
+exactly where the give-up is most active, but it does not explain the 63–86% waste.
+
+**5. Cross-route $\rho$ partially repairs h2 rather than improving on myopic.** Against its own
+h2 control it is **+6.9–8.0% at 50%** and negative from 70% up. h2 alone is −8.9% against myopic at
+50%; $\rho$ recovers most of that. So the independence assumption *is* costing the lookahead at
+tight budgets, which was the hypothesis — but the net effect against the myopic headline is ~zero.
+
+**6. The quantile experiment was VOID and has been re-run.** All five $q$ produced **byte-identical
+frontiers**. Cause: the pipeline applies a dollar-space linear recalibration $a + b\cdot\text{pred}$
+fitted on calibration *after* the smearing step, and a linear recalibration **absorbs any constant
+multiplicative shift exactly** — so the quantile was silently undone. Fixed by re-applying the
+quantile/mean ratio *after* the recalibration, so the shrinkage corrects the shape and the quantile
+sets the level (ratios now 0.47–0.85 at $q{=}0.25$ against 1.24–1.94 at $q{=}0.90$). *Lesson for
+this codebase: any downstream affine recalibration will annihilate an upstream level knob. Check
+that variants differ before reading their results.*
+
 ### 3b-xliii Failure disclosure: at matched accuracy we convert ~100% of failures from shipped wrong answers into announced declines
 
 **Why this is a pure substitution question.** At matched accuracy the failure *rate* is equal by

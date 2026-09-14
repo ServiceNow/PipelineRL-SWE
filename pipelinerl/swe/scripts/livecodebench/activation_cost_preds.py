@@ -258,8 +258,18 @@ for j, s in enumerate(slots):
         if keep.sum() > 10:
             A_d = np.c_[np.ones(int(keep.sum())), tokens[cal][keep]]
             cd, *_ = np.linalg.lstsq(A_d, obs_cal[keep], rcond=None)
+            # A linear recalibration a + b*pred ABSORBS any constant multiplicative shift, so
+            # running it after --cost-quantile silently undoes the quantile: all q produce
+            # byte-identical predictions. Fit the recalibration, then re-apply the quantile/mean
+            # ratio on top of it, so the shrinkage corrects the SHAPE and the quantile still sets
+            # the level.
             if np.isfinite(cd).all() and cd[1] > 0:
                 tokens = np.clip(cd[0] + cd[1] * tokens, 1.0, None)
+                if a.cost_quantile is not None:
+                    _res = np.exp(y[tr] - pred[tr])
+                    _ratio = float(np.quantile(_res, a.cost_quantile)) / float(np.mean(_res))
+                    tokens = np.clip(tokens * _ratio, 1.0, None)
+                    print(f"  {s:8s} re-applied quantile ratio {_ratio:.4f} after recalibration")
                 print(f"  {s:8s} dollar-space shrinkage slope b={cd[1]:.3f}"
                       + ("  (no dollar-space signal; collapses to the constant)"
                          if cd[1] < 0.25 else ""))
