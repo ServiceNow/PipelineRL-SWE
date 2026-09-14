@@ -359,6 +359,7 @@ def replay_adaptive(
     *,
     content_prior: np.ndarray | None = None,
     posterior_prior: np.ndarray | None = None,
+    argmax_shrink: float = 0.0,
     scorer: Callable[..., np.ndarray] | None = None,
     calibrator: Callable[[np.ndarray, int], np.ndarray] | None = None,
     state_layout: str = "counts_last",
@@ -780,9 +781,27 @@ def replay_adaptive(
         )
         # Under value control, stopping needs no separate threshold: abstaining is
         # the zero-value action, so quit when no route has positive dollar value.
-        value_stop = action_values is not None and (
-            not action_values or max(action_values.values()) <= 0.0
-        )
+        # WINNER'S CURSE. The rule selects argmax_m(p_m R - c_m) from ESTIMATED quantities, so
+        # the selected arm's surplus is biased upward: selection favours whichever route got the
+        # luckiest estimation error. The plug-in max therefore overstates the true max, the
+        # zero-test fires too late, and the policy keeps buying past the point where it should
+        # give up -- consistent with the measured 63-86% of spend landing on episodes that never
+        # produce a correct answer. The bias grows with the SPREAD of the action values (with one
+        # arm there is no selection and no bias), so penalise the max by a multiple of its excess
+        # over the mean and test THAT against zero. Routing is untouched: only the stop decision
+        # sees the penalty, so this cannot be confused with a change of route preference.
+        # argmax_shrink=0 reproduces the plug-in rule exactly.
+        value_stop = False
+        if action_values is not None:
+            if not action_values:
+                value_stop = True
+            else:
+                _vals = list(action_values.values())
+                _mx = max(_vals)
+                if argmax_shrink > 0.0 and len(_vals) > 1:
+                    _mean = sum(_vals) / len(_vals)
+                    _mx = _mx - argmax_shrink * (_mx - _mean)
+                value_stop = _mx <= 0.0
         # Diagnostic upper bound: replace only the stopping decision with perfect
         # knowledge of the stored future outcomes. Route scores, rankings, costs,
         # capacities, R, and Bellman horizon remain untouched. This deliberately
@@ -1137,6 +1156,11 @@ def main() -> None:
         "4B at $0.278/M -- so the spread the method exploits is basis-dependent and must be "
         "swept rather than asserted."))
     parser.add_argument("--execution-cost-usd", type=float, default=0.0)
+    parser.add_argument("--argmax-shrink-grid", default=None, help=(
+        "Comma-separated shrink factors for the winner's-curse correction on the STOP test. The "
+        "selected max surplus is biased upward by selection; each value lambda tests "
+        "max - lambda*(max - mean) <= 0 instead of max <= 0, so larger lambda gives up earlier. "
+        "Emitted as policies `<family>_shrink<lambda>_value`. 0 reproduces the plug-in rule."))
     parser.add_argument("--posterior-preds", default=None, help=(
         "jsonl of per-problem posteriors over the SUCCESS COUNT k (field `p_k`, one list of K+1 "
         "probabilities per route). Enables the `content_post` family, whose belief update is exact "
@@ -1368,6 +1392,7 @@ def main() -> None:
         value_of_correct: float | None = None,
         *,
         capture_trace: bool = False,
+        argmax_shrink: float = 0.0,
         pseudo_count: float | None = None,
         exploration_bonus: bool = False,
         bellman_horizon: int | None = None,
@@ -1396,6 +1421,7 @@ def main() -> None:
                                    if base in ("content", "content_decay",
                                                "content_decay_coupled") else None),
                     posterior_prior=(posterior.get(pid) if base == "content_post" else None),
+                    argmax_shrink=argmax_shrink,
                     scorer=scorer if base in ("sequential", "sequential_decay") else None,
                     calibrator=calibrator,
                     state_layout=args.state_layout,
@@ -1766,6 +1792,23 @@ def main() -> None:
                     "min_success_per_cost": None, "value_of_correct": _r,
                     "bellman_horizon": None, **_aggregate(_out),
                 })
+
+    # Winner's-curse sweep: same value frontier, but the stop test runs on a shrunk max.
+    if args.argmax_shrink_grid:
+        _lams = [float(x) for x in args.argmax_shrink_grid.split(",") if x.strip()]
+        _fams = [f for f, h, l in value_arms if h is None and not l]
+        print(f"argmax-shrink sweep: {len(_lams)} lambdas x {len(_fams)} families")
+        for _fam in _fams:
+            for _lam in _lams:
+                _pol = f"{_fam}_shrink{_lam:g}_value"
+                for _r in value_grid:
+                    _out = run(test_idx, unconstrained_budget, _fam, None, None, _r,
+                               argmax_shrink=_lam)
+                    rows.append({
+                        "policy": _pol, "budget": None, "tau": None,
+                        "min_success_per_cost": None, "value_of_correct": _r,
+                        "bellman_horizon": None, **_aggregate(_out),
+                    })
 
     # Value-controlled frontier. One scalar R drives escalation and stopping jointly,
     # so there is no budget grid and no calibration-selected abstention threshold.
