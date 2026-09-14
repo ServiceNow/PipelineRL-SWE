@@ -796,6 +796,121 @@ remaining seeds at the chosen value (6 + 8 jobs rather than 48). **The AUC-vs-fr
 measured above is the evidence that this matters**, and it is a better contribution than the
 +0.024 AUC it replaces.
 
+### 3b-xxxvi Whose budget is global? RoR's is per-query; the global-budget-with-abstention paper is ROI-Reasoning
+
+**A conflation to avoid (made once in session, caught immediately).** Two prior baselines have
+different budget formulations and they must not be merged:
+
+| baseline | budget | ranking statistic | abstains? |
+|---|---|---|---|
+| **RoR** (2607.08665) | **per-query** — *"competing uses of one per-query budget"* | density $p/c$ | **no** |
+| **ROI-Reasoning** (2601.03822) | **global batch** (OS-MCKP over problems) | ROI | **yes** — theirs |
+| **ours** (`_value` arms) | global, solved in the dual at price $R$ | surplus $pR-c$ | yes |
+
+So our `counts` arm, which caps spend per episode, is a **faithful** reimplementation of RoR on the
+budget axis. There is no formulation error there. The error would be to describe RoR as a batch
+knapsack — that is ROI-Reasoning, a different paper, and `PRIOR_ART.md` §4b already records that
+**the knapsack formulation and abstention-under-budget are both theirs, not ours**.
+
+**Where abstention comes from, stated correctly.** Under a global budget $B$, the Lagrangian
+relaxation of $\max\sum_i \mathbb{E}[\text{correct}_i]$ s.t. $\sum_i \mathbb{E}[\text{cost}_i]\le B$
+decouples per problem; with $R = 1/\lambda$ the per-problem rule is
+$\max(0,\ \max_m (p_m R - c_m))$. The zero action is in the feasible set, so **abstention is
+complementary slackness** — the marginal dollar buys more accuracy elsewhere in the batch. RoR
+cannot express this because it ranks by **density** $p/c$, a ratio of positive quantities with no
+zero to cross; we rank by **surplus**, which has a sign. Stated in our own code at
+`replay_mdp_full_execution.py:703`: *"the density p/c ... never crosses zero, so it cannot stop,
+which is why the budget-swept baseline has no abstention."*
+
+**The uncomfortable consequence, which is the point of this section.** Our `_value` arms run with
+`unconstrained_budget` (`:1312`, `:1706`), so the cap never binds and $R$ alone traces the frontier:
+**our arm is a global-budget method and our primary baseline is a per-query-budget method.** A
+global budget is strictly more powerful — it can move money from a doomed problem to a solvable one;
+a per-query cap cannot. So part of every margin reported against `counts` is *formulation*, and
+formulation-with-abstention is **ROI-Reasoning's contribution, not ours**.
+
+**Therefore `counts_value` — count beliefs under our global dual — is the baseline that isolates
+what is actually ours.** The 2x2:
+
+| | per-query cap (RoR's knob) | global dual $R$ |
+|---|---|---|
+| count beliefs | `counts` — **RoR as published** | `counts_value` — **the honest baseline** |
+| our beliefs | `content_decay_qcost` | `content_decay_qcost_value` — **ours** |
+
+Read it this way: the **row** difference is representation (ours), the **column** difference is
+formulation (ROI-Reasoning's). If the margin vs `counts_value` is small, the win is formulation and
+the contribution claim must shrink to cross-model pricing from one prefill. Reporting only
+`counts` would claim the column as ours. **Report the full grid.**
+
+### 3b-xxxvii The 2x2, run: how much is representation and how much is formulation
+
+LCB pool64k, seed 0, `content_decay_qcost` beliefs + cost head, 96-point $R$ sweep. Cost at matched
+accuracy; positive = ours cheaper.
+
+| contrast | isolates | 50% | 60% | 70% | 80% | 84% |
+|---|---|---|---|---|---|---|
+| **ours vs `counts_value`** | **representation, formulation held at global dual** | **+45.8%** | **+15.7%** | **+15.2%** | **+5.5%** | **+10.5%** |
+| **`content_decay_qcost` vs `counts`** | **representation, formulation held at RoR's per-query cap** | **+21.4%** | **+12.9%** | **+17.5%** | **+5.5%** | n/a |
+| `counts_value` vs `counts` | formulation alone (ROI-Reasoning's) | +16.7% | +13.9% | +1.8% | +1.0% | **−3.3%** |
+| ours vs `counts` | everything — *what has been reported to date* | +54.9% | +27.5% | +16.7% | +6.4% | +7.5% |
+
+**The headline survives the decomposition.** Representation is worth **+5.5% to +21.4%** inside
+RoR's *own* per-query formulation, and **+5.5% to +45.8%** inside ours. Formulation alone is worth
+a lot at tight budgets (+16.7%/+13.9%) and **nothing or less than nothing** at loose ones (+1.0%,
+−3.3%). So the thing we can claim is real, and it is not the knapsack.
+
+**The two are strongly complementary at tight budgets, and that is mechanistic:**
+
+| target | repr. alone | form. alone | if independent | actual | **interaction** |
+|---|---|---|---|---|---|
+| 50% | 21.4% | 16.7% | 34.5% | **54.9%** | **+20.4pt** |
+| 60% | 12.9% | 13.9% | 25.0% | 27.5% | +2.5pt |
+| 70% | 17.5% | 1.8% | 19.0% | 16.7% | −2.3pt |
+| 80% | 5.5% | 1.0% | 6.5% | 6.4% | −0.1pt |
+
+**Why.** Count beliefs are $\hat p_m = s\,\pi_m/(s + n_m)$, so at $n_m = 0$ **every problem has the
+identical belief vector** — the route prior. The code says it: *"Count beliefs have no per-problem
+prior, so observed failures are their ONLY channel for learning that a problem is hard"*
+(`:595`). Hence `counts_value` **cannot abstain selectively at entry**: with no failures observed
+the surplus $p_mR - c_m$ is the same number on every problem and the give-up is all-or-nothing. Its
+only route to discrimination is to **pay for failures first**. That is visible in the arm — it
+abstains at **41.6%** at the 50% target and *still* costs more than ours.
+
+So: **abstention is only worth having if you can tell which problems to abstain on before paying.**
+The global dual supplies the give-up action (ROI-Reasoning's); per-problem priors from activations
+make it *selective* (ours). Neither alone gets the tight-budget number. This is the strongest
+version of the contribution claim available and it is the one to lead with.
+
+*Grid status:* the `counts_value`-vs-ours row is **grid-invariant** — both arms are 96-point $R$
+sweeps, untouched by §3b-xxxv. The two rows involving budget-swept arms (`counts`,
+`content_decay_qcost`) are **pending** the matched geometric sweep. Single seed; seeds needed.
+
+### 3b-xxxv The two arms were not swept under the same spacing law
+
+**The defect.** The budget-swept (RoR) arm's grid was 12 linear points from the cheapest route to
+$3\times$ the dearest, plus 5 more to full exhaustion — 17 points at a ~\$0.012 pitch. The value
+arm gets **96 geometric** points. On the LCB pool that is:
+
+| | points below \$0.02 | points below \$0.05 |
+|---|---|---|
+| linear budget grid (17 pts) | **3** | 7 |
+| matched geometric grid (96 pts) | **55** | 71 |
+
+Every tight-budget claim reads off inside the region the linear grid samples three times.
+
+**Why it is not obviously fatal, and why it still has to be fixed.** Mixtures make the baseline
+frontier continuous, so a sparse grid does not credit RoR with something unreachable — the chord
+between two swept points is an achievable randomised policy. The exposure runs the **other way**:
+greedy allocation under a cap is not concave in $B$, so a denser grid can surface points *above*
+the chord and shrink our margin exactly where it is largest. Untested until now, and the first
+thing a reviewer pulls on.
+
+**Fix.** `--budget-grid geometric --budget-grid-points N` sweeps the budget arm under the value
+arm's spacing law. `linear` remains the default so previously recorded numbers stay reproducible.
+This is the matched-comparison rule that has already produced two wrong retractions in this line.
+
+<!-- RESULT PENDING: LCB linear vs geo96, 2x2, seed 0 -->
+
 ### 3b-xxxiv Which RoR are we beating? Both, and they must be reported separately
 
 **A labelling error running through this document.** `hull()` pools a *policy family*, and the
