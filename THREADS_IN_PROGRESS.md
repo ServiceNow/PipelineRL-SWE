@@ -7,24 +7,54 @@ what does it decide?*
 
 ---
 
-## 0. Headline as it now stands (2026-09-11)
+## 0. Headline as it now stands (2026-09-14)
 
-**The claim is cost, not strict improvement.** Cost at matched accuracy against RoR:
+**Every "vs RoR" number in this line mixed two things. They are now separated.** RoR
+(2607.08665) budgets **per query**; our `_value` arms run with `unconstrained_budget`, so $R$ alone
+traces the frontier and they are a **global**-budget method. A global budget is strictly stronger —
+it reallocates from doomed problems to solvable ones. And abstention-under-a-global-budget is
+**ROI-Reasoning's** (2601.03822), which `PRIOR_ART.md` §4b already records as not ours. So part of
+every margin against `counts` was formulation we cannot claim.
 
-| pool | advantage | evidence |
-|---|---|---|
-| LiveCodeBench | floor **+4.86%** with Bellman h2 | 5 seeds, P(floor>0)=1.000 |
-| TACO | **+4.7% to +33.6%** | 3 seeds, P(win)=1.000 at all 5 targets |
-| SWE-bench Verified | **+11.7% to +37.4%** | 1 split, out-of-fold, single-commit |
+**The 2x2** (LCB pool64k, seed 0, 96-point $R$ sweep). Row = representation (**ours**), column =
+formulation (**theirs**):
 
-Strict improvement ("better at *every* level") holds on LCB only. **Report the cost claim.**
+| contrast | isolates | 50% | 60% | 70% | 80% | 84% |
+|---|---|---|---|---|---|---|
+| ours vs `counts_value` | **representation**, global dual held | **+45.8%** | **+15.7%** | **+15.2%** | **+5.5%** | **+10.5%** |
+| `content_decay_qcost` vs `counts` | **representation**, RoR's own cap held | **+21.4%** | **+12.9%** | **+17.5%** | **+5.5%** | n/a |
+| `counts_value` vs `counts` | formulation alone | +16.7% | +13.9% | +1.8% | +1.0% | −3.3% |
+| ours vs `counts` | everything — *what we reported until now* | +54.9% | +27.5% | +16.7% | +6.4% | +7.5% |
 
-**Blocking before a draft:** bootstrap SWE-V (one split only); more TACO seeds; report TACO as a
-curve not single targets (the 45% dip is vertex placement); independent replication (§5).
+**The claim survives.** Representation is worth **+5.5% to +21.4%** inside RoR's own formulation.
+Formulation alone is worth a lot at tight budgets and **nothing or less** at loose ones (−3.3% at
+84%). The part we can claim is real and it is not the knapsack.
 
-**Running:** a 9-model, 50-problem TACO pool screen (~$23 worst case) testing whether a top rung
-exists whose switching price lands under ~$1. TACO's current top rung prices at $5.99 and is never
-worth buying, so every TACO number is effectively a two-rung pool.
+**Candidate headline number** — matched to a reference a reader already understands, rather than a
+grid target:
+
+> At the accuracy of the best single model in the pool (gpt-oss-120b, 68.77%), our router costs
+> **$0.0341 vs $0.0452** — **24.5% less than calling that model on everything**, and **17.8% less
+> than RoR**. Holding RoR's own per-query formulation fixed so only the beliefs change, **16.0%**.
+
+**Mechanism, and why the parts are complementary (+20.4pt over independent at 50%).** Count beliefs
+are $s\pi_m/(s+n_m)$: at $n_m=0$ **every problem has the identical belief vector**, so
+`counts_value` **cannot abstain selectively at entry** — it must pay for failures to discriminate.
+It abstains at **41.6%** at the 50% target and still costs more than us. *Abstention only pays if
+you know what to abstain on before spending.* The global dual supplies the give-up action; the
+activation prior makes it selective.
+
+**Status of the three other pools:** the 2x2 has **not** been run on TACO / SWE-V / RouterBench.
+Their published numbers are the conflated `ours vs counts` row. **A paper headline cannot be set
+until that decomposition is run on all four.**
+
+**Also open:** the budget-swept arms (`counts`, `content_decay_qcost`) were swept on a 17-point
+**linear** grid against the value arm's 96 **geometric** points — 3 points below \$0.02 against 55.
+`--budget-grid geometric` added; the matched rerun is in flight (§3b-xxxv). The `counts_value` row
+above is grid-invariant and already final; the two rows touching budget-swept arms are provisional.
+
+**Blocking before a draft:** the 2x2 on the other three pools; matched-grid rerun; bootstrap SWE-V
+(one split only); more TACO seeds; independent replication (§5).
 
 ---
 

@@ -7029,3 +7029,55 @@ the table at tight budgets, and one cheap prefill recovers them."**
 multiplier in advance from *predicted* costs; realised spend drifts (cost $R^2$ 0.545) and nothing
 corrects it. Updating $R$ against realised spend needs no change to the per-problem rule. Kill
 criterion: if it gains nothing, global coupling is not the missing ingredient.
+
+---
+
+## 2026-09-14 — the baseline was two papers, and the grids were not matched
+
+**Trigger.** Two questions in sequence: *"how exactly are we doing the sweep for RoR? we're already
+changing the formulation because it's not knapsack right"*, then *"can we do our method where we
+have the abstention naturally fall out, in ADDITION to RoR's global batch budget type thing?"*,
+then *"but i'm confused you say RoR has a per episode cap but you also say they have a global
+budget. which is it?"* — the last one caught a live error of mine.
+
+**Error and correction.** I described RoR (2607.08665) as a one-shot batch knapsack. It is not: it
+budgets **per query** (*"competing uses of one per-query budget"*, §4.1). The batch knapsack with
+an abstain action is **ROI-Reasoning** (2601.03822), a different paper, and `PRIOR_ART.md` §4b
+already records the knapsack formulation and abstention-under-budget as **theirs**. Our `counts`
+arm caps spend per episode and is therefore faithful to RoR — no defect there.
+
+**But the correction lands somewhere worse.** Our `_value` arms are invoked with
+`unconstrained_budget` (`:1312`, `:1706`), so the cap never binds and $R$ alone traces the frontier.
+Our arm is a **global**-budget method; our headline baseline is a **per-query** one. A global budget
+is strictly stronger. So an unknown share of every margin reported against `counts` was formulation
+we cannot claim.
+
+**Resolution: the 2x2.** All four cells already existed in the replay output.
+
+| | per-query cap | global dual $R$ |
+|---|---|---|
+| count beliefs | `counts` (RoR as published) | `counts_value` |
+| our beliefs | `content_decay_qcost` | `content_decay_qcost_value` |
+
+LCB pool64k seed 0, cost at matched accuracy: representation is worth **+5.5..+21.4%** inside RoR's
+own formulation and **+5.5..+45.8%** inside ours; formulation alone is **+16.7%/+13.9%** at tight
+budgets and **+1.0%/−3.3%** at loose ones. The headline survives, and it is not the knapsack.
+
+**Mechanism found (structural, from the code not a fit).** `p_m = s\pi_m/(s+n_m)`, so at $n_m=0$
+every problem carries the identical belief vector — `:595` says it outright: *"Count beliefs have no
+per-problem prior, so observed failures are their ONLY channel for learning that a problem is
+hard."* Therefore `counts_value` **cannot abstain selectively at entry**; it must buy failures to
+discriminate. It abstains at 41.6% at the 50% target and still costs more than us. That is why the
+two components interact (+20.4pt over independent at 50%): the dual supplies the give-up action, the
+activation prior makes it selective.
+
+**Second defect, independent.** The budget arm's grid was 12 linear points from the cheapest route
+to 3x the dearest plus 5 to exhaustion (17, ~$0.012 pitch); the value arm gets 96 **geometric**.
+Below $0.02 that is **3 points against 55** — and every tight-budget claim reads off inside that
+region. Mixtures make the baseline frontier continuous so the sparse grid is not unfair in the sense
+of crediting RoR with the unreachable; the exposure runs the other way, since greedy allocation
+under a cap is not concave in $B$ and a denser grid can surface points *above* the chord. Added
+`--budget-grid geometric --budget-grid-points N`; `linear` stays default for reproducibility.
+
+**Not yet done:** the 2x2 on TACO / SWE-V / RouterBench — their published numbers are still the
+conflated row, so no paper headline can be set yet.
