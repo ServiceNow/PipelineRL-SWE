@@ -842,6 +842,71 @@ formulation (ROI-Reasoning's). If the margin vs `counts_value` is small, the win
 the contribution claim must shrink to cross-model pricing from one prefill. Reporting only
 `counts` would claim the column as ours. **Report the full grid.**
 
+### 3b-xlviii CONTAMINATION: `content_preds_RANK1.jsonl` has test-split AUC 0.998 and must not be used
+
+Found while running the belief-source ladder, where the RANK1 arm returned +71.8/+67.2/+64.6/
++31.5/+20.9% — better than our own arm at every target and within a few points of the **oracle**.
+That is impossible on its face: a rank-1 projection of a set of predictions can only *lose*
+information, never gain it. Checked directly against the truth on the manifest **test** split:
+
+| preds file | AUC (oss120) | corr with true per-problem rate | MAE vs truth |
+|---|---|---|---|
+| `content_preds_rich_cal.jsonl` (ours) | 0.7685 | 0.5315 | 0.2531 |
+| **`content_preds_RANK1.jsonl`** | **0.9980** | **0.9061** | **0.1472** |
+| `content_preds_KNN.jsonl` | 0.7450 | 0.4928 | 0.2706 |
+| `content_preds_ORACLE.jsonl` (true rate) | 1.0000 | 1.0000 | 0.0006 |
+
+**A rank-1 collapse of a 0.769-AUC predictor cannot have AUC 0.998.** The file was built with test
+labels in scope. **Any number computed from it is contaminated.**
+
+**Consequences.**
+1. The RANK1 row of the belief-source ladder is **void** and excluded.
+2. **§3b-xiii's claim that "collapsing to one scalar is not merely lossless on LCB — it is an
+   improvement" must be re-verified**, since its rank-1 reconstruction table may have been computed
+   from this artefact. Until re-fitted train-only, treat that claim as unsupported.
+3. Every `*_ORACLE*` and `*RANK1*` file in the prepared directories should be assumed diagnostic
+   and never fed to a reported arm. The oracle files are *labelled* as such and are used correctly
+   as upper bounds; RANK1 is not labelled and was being read as a method arm.
+
+### 3b-xlix What the belief head is actually doing — it is the activations, not merely a per-problem prior
+
+The 19/19 claim compares against `counts_value`, which has **no per-problem prior at all**, so it
+cannot separate "per-problem beliefs help" from "these beliefs help". The ladder separates them.
+Only the belief source varies: constant costs on both sides, **no cost head anywhere**, same
+formulation, grid, seed and split. TF-IDF and length heads are fitted with the **same** protocol as
+the activation head — same manifest split, penalty selected per route on calibration by the same
+criterion — so this cannot repeat the rigged comparison of §3b-xx.
+
+| belief source | needs a forward pass? | 50% | 60% | 70% | 80% | 84% |
+|---|---|---|---|---|---|---|
+| `counts` — no per-problem prior | no | — | — | — | — | — |
+| **problem LENGTH** (chars + words) | **no** | **+2.7%** | **−2.8%** | **−2.2%** | +5.3% | +4.7% |
+| **TF-IDF** of the statement | no | +12.2% | **−0.3%** | +11.8% | +1.2% | +0.3% |
+| kNN on activations | yes | +26.8% | +8.8% | +7.6% | +0.8% | +3.3% |
+| **activations (ours)** | yes | **+40.8%** | **+19.2%** | **+12.0%** | **+2.3%** | **+6.6%** |
+| *ORACLE beliefs* | — | *+75.4%* | *+71.8%* | *+68.7%* | *+65.5%* | *+73.4%* |
+
+**Three things this settles.**
+
+1. **It is not "any per-problem prior".** Problem length — the most trivial per-problem signal that
+   exists — buys essentially nothing and is *negative* at two targets. The policy does not simply
+   benefit from having some per-problem number to condition on.
+2. **It is the activations specifically, not the text.** A properly-fitted TF-IDF head on the same
+   statements recovers at most a third of the gain and is **negative at 60%**. Our arm beats it at
+   every target. Since the probe is one prefill of a model that never generates, this is the
+   representation claim in its strongest available form.
+3. **The channel is far from exhausted, and the gap is worst where we are weakest.** Against the
+   oracle belief we capture **54% / 27% / 17% / 4% / 9%** of the available cost saving at the five
+   targets. At the loose end we recover almost none of it — which is exactly the regime no variant
+   has moved (§3b-xliv), and says the loose-budget problem is *belief quality*, not policy
+   structure.
+
+**Entry vs continue: the first run was confounded and is being redone.** Under `scout_first` the
+scout draw is *mandatory*, so `failures.sum() == 0` never occurs inside the decision loop and the
+"entry only" arm never fires — it returned −1.0/−0.7/−0.3/−0.2/−0.1%, i.e. count beliefs everywhere,
+exactly as that diagnosis predicts. **Under this protocol there is no entry decision to measure.**
+Re-running under `--start-protocol free_start`, where the policy may decline before buying anything.
+
 ### 3b-xlvi THE CLEAN CLAIM: the belief head alone is positive on 19 of 19 targets across four pools
 
 Everything conditional in this document came from reporting the **bundled** arm. Isolate the belief
