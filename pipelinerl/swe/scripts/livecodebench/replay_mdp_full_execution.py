@@ -358,6 +358,7 @@ def replay_adaptive(
     problem_statement: str,
     *,
     content_prior: np.ndarray | None = None,
+    posterior_prior: np.ndarray | None = None,
     scorer: Callable[..., np.ndarray] | None = None,
     calibrator: Callable[[np.ndarray, int], np.ndarray] | None = None,
     state_layout: str = "counts_last",
@@ -539,6 +540,34 @@ def replay_adaptive(
                     else 1.0 - float(np.prod(1.0 - p_each))
                 )
                 belief_source = "sequential"
+        elif posterior_prior is not None:
+            # Exact Bayes on the success count, which is the whole truth about an exchangeable
+            # cell. P(k=j | n failures) ~ P(k=j) * C(K-j, n)/C(K, n), and given k the next draw
+            # succeeds with probability k/(K-n) exactly. No sigma: the decay rate is implied by
+            # how bimodal the predicted posterior is, which is the quantity a single constant --
+            # or a single learned s_m -- was standing in for.
+            _K = posterior_prior.shape[1] - 1
+            _j = np.arange(_K + 1)
+            p_each = np.empty(len(slots), dtype=float)
+            for mi in range(len(slots)):
+                n_obs = int(failures[mi])
+                post = posterior_prior[mi].astype(float)
+                if n_obs > 0:
+                    # C(K-j, n)/C(K, n): probability the n observed draws all failed given j
+                    # successes. Zero once j > K-n, which is the hard information a point
+                    # estimate cannot represent -- k=6 is ruled OUT by one failure.
+                    lik = np.ones(_K + 1)
+                    for _i in range(n_obs):
+                        lik = lik * np.clip(_K - _j - _i, 0, None) / max(_K - _i, 1)
+                    post = post * lik
+                tot = float(post.sum())
+                post = post / tot if tot > 1e-300 else np.full(_K + 1, 1.0 / (_K + 1))
+                remaining = max(_K - n_obs, 1)
+                p_each[mi] = float((post * _j).sum()) / remaining
+            p_each = np.clip(p_each, 1e-9, 1.0)
+            bellman_pbar, bellman_decay_s = p_each, None
+            belief_source = "content_post"
+            p_any = 1.0 - float(np.prod(1.0 - p_each))
         elif content_prior is not None:
             # A content prior is a per-problem theta with no depth dependence: one vector
             # per problem, emitted before any draw. Left undecayed it is frozen at depth 0,
@@ -1108,6 +1137,12 @@ def main() -> None:
         "4B at $0.278/M -- so the spread the method exploits is basis-dependent and must be "
         "swept rather than asserted."))
     parser.add_argument("--execution-cost-usd", type=float, default=0.0)
+    parser.add_argument("--posterior-preds", default=None, help=(
+        "jsonl of per-problem posteriors over the SUCCESS COUNT k (field `p_k`, one list of K+1 "
+        "probabilities per route). Enables the `content_post` family, whose belief update is exact "
+        "Bayes under exchangeability rather than the Beta-Bernoulli approximation: "
+        "P(k=j | n failures) ~ P(k=j)*C(K-j,n)/C(K,n), then p(next) = E[k|n]/(K-n). It has no "
+        "sigma, so nothing is hand-set and nothing is learned to stand in for the decay."))
     parser.add_argument("--capped-value-family", default=None, help=(
         "Sweep a per-episode CAP and the global price R JOINTLY for this family, instead of "
         "pinning the cap at unconstrained. Motivated by an observed anomaly: the capped arm beats "
@@ -1261,6 +1296,10 @@ def main() -> None:
     if args.content_preds:
         for row in _read_jsonl(Path(args.content_preds)):
             content[str(row["problem_id"])] = np.asarray(row["p_successes"][: len(slots)], dtype=float)
+    posterior: dict[str, np.ndarray] = {}
+    if args.posterior_preds:
+        for row in _read_jsonl(Path(args.posterior_preds)):
+            posterior[str(row["problem_id"])] = np.asarray(row["p_k"], dtype=float)
     cost_preds: dict[str, np.ndarray] = {}
     if args.cost_preds:
         for row in _read_jsonl(Path(args.cost_preds)):
@@ -1356,6 +1395,7 @@ def main() -> None:
                     content_prior=(content.get(pid)
                                    if base in ("content", "content_decay",
                                                "content_decay_coupled") else None),
+                    posterior_prior=(posterior.get(pid) if base == "content_post" else None),
                     scorer=scorer if base in ("sequential", "sequential_decay") else None,
                     calibrator=calibrator,
                     state_layout=args.state_layout,
@@ -1405,6 +1445,7 @@ def main() -> None:
         + (["content", "content_decay"] if content else [])
         + (["counts_coupled"] if args.cross_pseudo_count > 0 else [])
         + (["content_decay_coupled"] if (content and args.cross_pseudo_count > 0) else [])
+        + (["content_post"] if posterior else [])
         + (["content_commit"] if (content and args.single_commit_arm) else [])
         + (["counts_qcost"] if cost_preds else [])
         + (["content_qcost", "content_decay_qcost"] if (content and cost_preds) else [])

@@ -842,6 +842,43 @@ formulation (ROI-Reasoning's). If the margin vs `counts_value` is small, the win
 the contribution claim must shrink to cross-model pricing from one prefill. Reporting only
 `counts` would claim the column as ours. **Report the full grid.**
 
+### 3b-xlii Wasted spend: everyone wastes two thirds of it; what differs is what the waste buys
+
+Dollars spent on episodes that produced no correct answer, from per-episode traces (LCB seed 0,
+matched grid). This is the quantity neither cost-at-matched-accuracy nor conditional accuracy
+exposes.
+
+| policy | accuracy | total | **wasted** | % of spend | on declines | on wrong answers |
+|---|---|---|---|---|---|---|
+| RoR as published | 74.2% | \$0.05860 | \$0.04162 | 71.0% | \$0 | **\$0.04162** |
+| `counts_value` | 74.2% | \$0.05596 | \$0.04162 | 74.4% | \$0.04162 | \$0 |
+| **ours** | 75.0% | \$0.05303 | **\$0.03489** | 65.8% | \$0.03489 | \$0 |
+| RoR as published | 64.9% | \$0.03179 | \$0.02416 | 76.0% | \$0 | \$0.02416 |
+| **ours** | 64.1% | \$0.02609 | **\$0.01809** | 69.3% | \$0.01809 | \$0 |
+| RoR as published | 35.7% | \$0.01212 | \$0.01163 | **95.9%** | \$0 | \$0.01163 |
+| **ours** | 34.7% | \$0.00305 | \$0.00264 | 86.5% | \$0.00264 | \$0 |
+
+**Correct the rhetoric.** This document (and a claim made aloud in session) framed the difference as
+*"RoR spends the money and then fails; we decline before spending."* Half right. We also spend
+before declining — every dollar of our waste sits on episodes we eventually abstained on, meaning we
+bought draws, they failed, and only then did we give up. What is true is narrower and should be
+stated that way:
+
+1. **Waste is the norm, not the exception, for every arm** — 63.5% to 95.9% of all spend, rising as
+   the budget tightens. No policy in this class is efficient in the sense a reader might assume.
+2. **At matched accuracy we waste 16–18% fewer dollars** (\$0.03489 vs \$0.04162 at ~74%;
+   \$0.09494 vs \$0.11634 at 84.8%). Real, and the same order as the headline cost gap rather than
+   a separate larger effect.
+3. **The kind of waste is categorically different.** RoR's waste is 100% on *wrong answers it
+   delivered*; ours is ~100% on *declines it announced*. Same money, different product — and that
+   is a deployment argument, not a cost argument.
+4. At the top operating point `counts_value` wastes **exactly** what `counts` does (\$0.11634),
+   because at maximum $R$ it never abstains and degenerates to `counts`. A useful sanity check that
+   the two arms coincide where they should.
+
+*Report this as a panel with the three-state decomposition (§3b-xxxix), not as a headline.* It does
+not enlarge the cost claim; it characterises it.
+
 ### 3b-xli The "representation" row bundles two of our components — split it
 
 `counts_value` -> `content_decay_qcost_value` changes **three** things: the belief prior
