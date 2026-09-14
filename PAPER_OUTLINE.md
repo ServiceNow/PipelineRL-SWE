@@ -842,6 +842,58 @@ formulation (ROI-Reasoning's). If the margin vs `counts_value` is small, the win
 the contribution claim must shrink to cross-model pricing from one prefill. Reporting only
 `counts` would claim the column as ours. **Report the full grid.**
 
+### 3b-l Oracle bounds: the loose end is where everything is left, and it is a BELIEF problem
+
+Two oracle arms on the current setup (LCB, matched grid), each replacing exactly one component and
+holding the rest fixed. Both are diagnostic upper bounds, never deployable.
+
+| oracle component | 50% | 60% | 70% | 80% | 84% |
+|---|---|---|---|---|---|
+| perfect **stopping** | *n/a* | *n/a* | *n/a* | **+44.0%** | **+65.0%** |
+| perfect **routing** | *n/a* | *n/a* | **+43.1%** | **+27.6%** | +8.3% |
+| perfect **both** | *n/a* | *n/a* | *n/a* | +51.0% | +69.4% |
+| perfect **beliefs** (§3b-xlix) | +75.4% | +71.8% | +68.7% | **+65.5%** | **+73.4%** |
+
+*The tight-target cells are unreadable and are marked n/a rather than reported.* The oracle arms
+attach to the **frozen-$R$** policy, which has only 4–5 operating points from the retention grid, so
+its hull cannot span the tight end; the raw numbers there (−445%, −524%) are an artefact of grid
+coverage, not a finding. **Only the 70–84% columns are interpretable.**
+
+**This overturns the working hypothesis from §3b-xliv.** That section argued the stopping channel
+was nearly closed because four variants all bought ~+10% at the 50% target and faded by 80%. The
+oracle says the opposite about the *other* end: **perfect stopping is worth +44% to +65% at the
+80–84% targets**, and every variant we ran moves that regime by ~0. So stopping is not closed — it
+is **untouched where it matters most**, and the variants were all competing over the tight end
+because that is where a *myopic* improvement can act.
+
+**And the loose end is a belief problem before it is a policy problem.** Perfect beliefs are worth
+**+65.5%/+73.4%** at 80/84% while we capture **4%/9%** of that (§3b-xlix). Perfect routing is worth
+only +8.3% at 84%. So the binding constraint at loose budgets is *knowing which problems are
+hopeless*, not *choosing among routes* — and no structural variant can manufacture that.
+
+**Direction this sets.** Stop tuning the give-up rule at the tight end, where four knobs already
+overlap. The open problem is **belief quality at high coverage**: at 84% we recover 9% of the
+available belief headroom and 0% of the stopping headroom.
+
+### 3b-li Quantile cost head: a small, consistent win for the CONSERVATIVE direction only
+
+Re-run after the void first attempt (§3b-xliv item 6). Each $q$ against a **matched mean arm** built
+by the identical pipeline, so the contrast is the functional and nothing else.
+
+| $q$ | 50% | 60% | 70% | 80% | 84% |
+|---|---|---|---|---|---|
+| 0.10 | −4.9% | −7.2% | +2.8% | +0.6% | +1.5% |
+| 0.25 | −2.5% | −6.5% | +3.5% | +2.1% | +0.4% |
+| 0.50 (median) | −0.2% | −2.4% | +1.2% | +1.8% | +1.0% |
+| 0.75 | −1.2% | −3.9% | +3.7% | +1.6% | +1.4% |
+| **0.90** | **+3.8%** | **+1.2%** | **+1.5%** | **+5.5%** | **+0.8%** |
+
+**Only $q=0.90$ is positive at every target**, and the optimistic tail ($q=0.10$, 0.25) is clearly
+negative at the two tight ones. That is the sign the asymmetry argument predicted — under a cap,
+under-pricing can exhaust the episode while over-pricing only forgoes a buy — but the magnitude is
+small (≈+2.6% mean across targets). **Worth reporting as a cheap, directional finding; not worth
+building on.** Single seed; the +5.5% at 80% should be seed-replicated before being quoted.
+
 ### 3b-xlviii CONTAMINATION: `content_preds_RANK1.jsonl` has test-split AUC 0.998 and must not be used
 
 Found while running the belief-source ladder, where the RANK1 arm returned +71.8/+67.2/+64.6/

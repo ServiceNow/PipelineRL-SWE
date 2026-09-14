@@ -7128,3 +7128,37 @@ and two task families**, unanimous across seeds at 17/19. Every conditional in t
 from bundling the belief head with the pool-dependent cost head. The headline is one sentence:
 *replacing count-based beliefs with beliefs read from one cheap prefill, changing nothing else,
 cuts cost at matched accuracy at every target on every pool.*
+
+
+---
+
+## 2026-09-14 (late) — what the belief head is doing, and a contaminated file
+
+**Ablation ladder built to answer "is it just a better difficulty estimate plugged into RoR?"**
+`text_belief_preds.py` emits per-problem beliefs from problem LENGTH (chars + words) and from
+statement TF-IDF, matched to the activation pipeline on split, penalty selection and clipping.
+Ladder run with only the belief source varying and constant costs on both sides.
+
+Answer: **it is the activations.** Length buys ~nothing (+2.7/−2.8/−2.2/+5.3/+4.7) and TF-IDF
+recovers at most a third and is negative at 60%. So the result is not "the policy likes having any
+per-problem number". But we capture only **54/27/17/4/9%** of the oracle belief channel, worst at
+the loose end.
+
+**Contamination found.** `content_preds_RANK1.jsonl` has test-split AUC 0.9980 against our probe's
+0.7685. A rank-1 projection cannot gain information, so it was fitted with test labels in scope. Row
+voided; §3b-xiii's rank-1 improvement claim flagged unsupported pending a train-only re-fit.
+
+**A hypothesis of mine reversed.** §3b-xliv argued stopping was nearly closed because four variants
+each bought ~+10% at the tight target and faded. Oracle arms say perfect stopping is worth
+**+44.0%/+65.0% at 80/84%**, where no variant moved anything. With perfect beliefs worth
++65.5%/+73.4% there and perfect routing only +8.3% at 84%, the loose end is a **belief-quality**
+problem and is where the headroom is. Tight-target oracle cells are unreadable (frozen-$R$ arms have
+4–5 points) and are reported as n/a rather than as the raw −445%/−524%.
+
+**Entry-vs-continue confounded by the protocol:** under `scout_first` the scout draw is mandatory so
+`failures.sum()==0` never occurs in the loop and the entry arm never fires. Re-running under
+`free_start`.
+
+**Quantile cost head, re-run after the void first attempt:** only q=0.90 is positive at every target;
+the optimistic tail is negative at tight budgets. Correct sign for the asymmetry argument, small
+magnitude, single seed.

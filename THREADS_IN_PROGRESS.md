@@ -51,6 +51,50 @@ depending on loop order.
 
 ## 0. Headline as it now stands (2026-09-14, evening)
 
+### Read this first: two things found on 2026-09-14 evening
+
+**1. `content_preds_RANK1.jsonl` is CONTAMINATED — do not use it.** Test-split AUC **0.9980** and
+correlation **0.9061** with the true per-problem rate, against 0.7685 / 0.5315 for our honest probe.
+A rank-1 projection can only lose information, so the file was built with test labels in scope. It
+surfaced because the belief ladder's RANK1 arm beat our own at every target and came within a few
+points of the oracle. **§3b-xiii's "collapsing to one scalar is an improvement" may rest on this
+artefact and is unsupported until re-fitted train-only.** Unlike the `*_ORACLE*` files it is not
+labelled diagnostic, so it was being read as a method arm.
+
+**2. The 19/19 claim is about the ACTIVATIONS, not merely about having a per-problem prior**
+(§3b-xlix). Belief-source ladder, only the belief source varying, constant costs both sides, no cost
+head anywhere, TF-IDF and length fitted by the **same** protocol as the activation head:
+
+| belief source | forward pass? | 50% | 60% | 70% | 80% | 84% |
+|---|---|---|---|---|---|---|
+| problem LENGTH | no | +2.7% | −2.8% | −2.2% | +5.3% | +4.7% |
+| TF-IDF of statement | no | +12.2% | −0.3% | +11.8% | +1.2% | +0.3% |
+| kNN on activations | yes | +26.8% | +8.8% | +7.6% | +0.8% | +3.3% |
+| **activations (ours)** | yes | **+40.8%** | **+19.2%** | **+12.0%** | **+2.3%** | **+6.6%** |
+| *ORACLE beliefs* | — | *+75.4%* | *+71.8%* | *+68.7%* | *+65.5%* | *+73.4%* |
+
+Length buys nothing and is negative at two targets; a properly-fitted TF-IDF head recovers at most a
+third and is negative at 60%. **But we capture only 54/27/17/4/9% of the oracle belief channel.**
+
+**3. The direction this sets, which reverses an earlier hypothesis.** §3b-xliv argued the stopping
+channel was nearly closed. Oracle arms on the current setup say otherwise at the *other* end:
+**perfect stopping is worth +44.0%/+65.0% at the 80/84% targets** and every variant we ran moves
+that regime by ~0. Combined with perfect beliefs being worth +65.5%/+73.4% there while perfect
+*routing* is worth only +8.3% at 84%: **the loose end is a BELIEF-QUALITY problem, and it is where
+all the headroom is.** Stop tuning the give-up rule at the tight end where four knobs already
+overlap. *(Tight-target oracle cells are unreadable — the oracle arms attach to the frozen-$R$
+policy with 4–5 points, so its hull cannot span the tight end; reported as n/a, not as numbers.)*
+
+**4. Entry-vs-continue was confounded and is being redone.** Under `scout_first` the scout draw is
+mandatory, so `failures.sum()==0` never occurs in the decision loop and the "entry only" arm never
+fires — it returned ≈0%, exactly as that diagnosis predicts. Re-running under `free_start`.
+
+**5. Quantile cost head (§3b-li):** only $q=0.90$ is positive at every target (+3.8/+1.2/+1.5/+5.5/
++0.8); the optimistic tail is negative at the tight targets. Right sign for the asymmetry argument,
+small magnitude, single seed. Report as directional; do not build on it.
+
+---
+
 ### The clean claim — lead with this
 
 **Replacing count-based beliefs with beliefs read from one cheap prefill, changing nothing else,
