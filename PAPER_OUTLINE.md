@@ -842,6 +842,54 @@ formulation (ROI-Reasoning's). If the margin vs `counts_value` is small, the win
 the contribution claim must shrink to cross-model pricing from one prefill. Reporting only
 `counts` would claim the column as ours. **Report the full grid.**
 
+### 3b-xliii Failure disclosure: at matched accuracy we convert ~100% of failures from shipped wrong answers into announced declines
+
+**Why this is a pure substitution question.** At matched accuracy the failure *rate* is equal by
+construction — both arms fail on the same share of problems. The arms differ only in **what kind of
+failure** they produce. So the quantity to report is the **disclosure rate**, abstentions / failures.
+
+| accuracy | RoR wrong | RoR declines | RoR disclosure | ours wrong | ours declines | **ours disclosure** |
+|---|---|---|---|---|---|---|
+| 35.0% | 65.0% | 0.0% | 0.0% | 0.0% | 64.9% | **100.0%** |
+| 65.0% | 35.1% | 0.0% | 0.0% | 0.0% | 35.9% | **100.0%** |
+| 75.0% | 24.4% | 0.0% | 0.0% | 0.0% | 25.0% | **100.0%** |
+| 80.0% | 19.2% | 0.0% | 0.0% | 1.8% | 18.5% | **91.3%** |
+| 84.8% | 15.2% | 0.0% | 11.7% | 3.5% | — | 23.1% |
+
+**Below 80% accuracy the substitution is one-for-one and total:** RoR's wrong-answer rate and our
+decline rate agree to within a percentage point at every target, and we announce **100%** of our
+failures while RoR announces none — *while also costing 5–49% less*. The advantage collapses at the
+very top (23.1% at 84.8%), where we too are shipping wrong answers; the claim is therefore a
+**budget-constrained-regime** claim, which is the regime the paper is about.
+
+**The exchange rate, which is how to defend it.** Charge $W$ per wrong answer shipped and $A$ per
+decline announced, fold both into the cost axis and rebuild the hulls (linear in the rates, so
+mixtures carry the chord of their charges):
+
+| $W$ | $A$ | 50% | 60% | 70% | 80% |
+|---|---|---|---|---|---|
+| \$0 | \$0 (as reported) | +48.6% | +20.6% | +16.7% | +5.3% |
+| \$0 | \$0.0264 | −38.5% | −25.7% | −0.9% | +0.4% |
+| \$0.0264 | \$0.0264 (equal) | **+26.0%** | **+14.1%** | **+14.2%** | **+5.0%** |
+| \$0.0528 | \$0.0264 (2x) | **+49.5%** | **+34.7%** | **+25.4%** | **+9.5%** |
+
+**Break-even: a wrong answer need only cost 0.44x a decline at the 50% target, 0.55x at 60%, 0.05x
+at 70%, and at 80% we win even if wrong answers are free.** So:
+
+> Under any accounting in which shipping a wrong answer costs at least **0.55x** what announcing a
+> decline costs, our advantage holds at every target measured — and if a wrong answer costs twice a
+> decline, the advantage *grows* to +9.5% to +49.5%.
+
+That is a weak premise. In every deployment we can think of, a silently wrong patch costs *more*
+than a flagged one — review time, and false confidence — so $W > A$, i.e. $W/A > 1 \gg 0.55$.
+
+**This is the strongest defensible form of the claim, and it repairs §3b-xl.** Charging for
+abstention alone made the tight-budget win vanish (−38.5% at 50%), because it prices our mechanism
+and gives RoR's failures a free pass. Charging *both* failure modes — which any honest accounting
+must — restores it at **+26.0% / +14.1% / +14.2% / +5.0%** even at a 1:1 price, and that version
+survives the objection rather than dodging it. **Lead with the symmetric accounting, not with free
+abstention.**
+
 ### 3b-xlii Wasted spend: everyone wastes two thirds of it; what differs is what the waste buys
 
 Dollars spent on episodes that produced no correct answer, from per-episode traces (LCB seed 0,
