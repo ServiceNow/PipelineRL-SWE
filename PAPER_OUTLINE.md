@@ -883,6 +883,28 @@ at 70%, and at 80% we win even if wrong answers are free.** So:
 That is a weak premise. In every deployment we can think of, a silently wrong patch costs *more*
 than a flagged one — review time, and false confidence — so $W > A$, i.e. $W/A > 1 \gg 0.55$.
 
+**But disclosure belongs to the policy CLASS, not to our representation — check before claiming
+it.** `counts_value` (count beliefs + the give-up action on a global price) also discloses **100%**
+of its failures at 64.9% and 75.6% accuracy. So the 100%-vs-0% gap is the value of *having* a
+give-up action, which `PRIOR_ART.md` §4b records as **ROI-Reasoning's**, not ours. Stated correctly:
+
+| | vs **RoR as published** | vs **`counts_value`** |
+|---|---|---|
+| disclosure at ~65% / ~75% | **100% vs 0%** | **100% vs 100% — ties** |
+| cost at that accuracy | \$0.02609 vs \$0.03179 / \$0.05303 vs \$0.06566 | \$0.02609 vs \$0.03023 / \$0.05303 vs \$0.06511 |
+| our advantage | disclosure **and** −18/−19% cost | **cost only, −13.7% / −18.6%** |
+
+So: *"we announce every failure and RoR announces none"* is true, large, and a fair thing to say
+about the prior method — but it is **not evidence for the contribution**, because any policy in this
+class gets it. **What is ours is delivering the same disclosure for 14–19% less money.** Do not let
+the deployability argument smuggle the formulation back in as ours; that is the error §3b-xxxvi
+exists to prevent.
+
+*One narrow place where disclosure is genuinely ours:* at the loose end `counts_value` **cannot
+sustain abstention at all** — it discloses 0.0% at 84.8% and cannot reach the 80% target, while we
+still disclose 91.3% at 79.8% and 23.1% at 84.8%. Better beliefs let the give-up keep firing where
+count beliefs force it off.
+
 **This is the strongest defensible form of the claim, and it repairs §3b-xl.** Charging for
 abstention alone made the tight-budget win vanish (−38.5% at 50%), because it prices our mechanism
 and gives RoR's failures a free pass. Charging *both* failure modes — which any honest accounting
