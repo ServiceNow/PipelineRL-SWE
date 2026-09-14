@@ -121,27 +121,47 @@ def extract(args) -> None:
     # content readouts cut the scaffolding off at the same SEMANTIC position in both models,
     # and the means remove position dependence altogether. The forward pass is the expensive
     # part; extra aggregations of hidden states we already computed are free.
+    # PROMPT ABLATION. The probe has always been given the SOLVING prompt -- the same system
+    # message and problem text the model gets when it is asked to produce a patch. That is one
+    # choice among many and it was never ablated. Reading the same layers under a prompt that asks
+    # the model to *judge* the problem costs exactly the same forward pass, so if it separates
+    # better it is free. --system-prompt replaces the system message; --user-suffix appends an
+    # instruction after the problem text.
+    system_text = args.system_prompt if args.system_prompt else SYSTEM
     H = model.config.hidden_size
     reads = {k: np.zeros((len(pids), len(layers), H), dtype=np.float32)
              for k in ("last", "content_last", "mean", "content_mean")}
+    # Three scalars the forward pass already computed and we were throwing away. Prompt
+    # perplexity is the classic difficulty proxy; the next-token distribution at the last
+    # position says how committed the model is before it writes anything. All free.
+    scal = np.zeros((len(pids), 3), dtype=np.float32)
     n_no_offsets = 0
     with torch.no_grad():
         for i, pid in enumerate(pids):
-            msgs = [{"role": "system", "content": SYSTEM},
-                    {"role": "user", "content": prompts[pid]}]
+            user_text = prompts[pid] + (args.user_suffix or "")
+            msgs = [{"role": "system", "content": system_text},
+                    {"role": "user", "content": user_text}]
             text = tok.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
             enc = tok(text, return_tensors="pt", truncation=True, max_length=args.max_len,
                       return_offsets_mapping=tok.is_fast)
             offsets = enc.pop("offset_mapping", None)
             ids = {k: v.to(model.device) for k, v in enc.items()}
-            hs = model(**ids).hidden_states
+            _out = model(**ids)
+            hs = _out.hidden_states
+            _lg = _out.logits[0].float()
+            _lp = torch.log_softmax(_lg, dim=-1)
+            _tgt = ids["input_ids"][0][1:]
+            scal[i, 0] = float(-_lp[:-1].gather(1, _tgt[:, None]).mean())      # prompt NLL
+            _last = _lp[-1]
+            scal[i, 1] = float(-(_last.exp() * _last).sum())                   # next-token entropy
+            scal[i, 2] = float(_last.max())                                    # next-token max logprob
             n_tok = ids["input_ids"].shape[1]
             # index of the last token belonging to the user's problem text
             c_idx = n_tok - 1
             if offsets is not None:
-                end_char = text.rfind(prompts[pid])
+                end_char = text.rfind(user_text)
                 if end_char >= 0:
-                    end_char += len(prompts[pid])
+                    end_char += len(user_text)
                     starts = offsets[0, :, 0].tolist()
                     cand = [k for k, a in enumerate(starts) if a < end_char]
                     if cand:
@@ -163,7 +183,10 @@ def extract(args) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(out, pre=reads["last"], problem_ids=np.array(pids),
                         layers=np.array(layers), model=args.model,
-                        route_label=args.route_label, **reads)
+                        route_label=args.route_label, scalars=scal,
+                        scalar_names=np.array(["prompt_nll", "next_entropy", "next_max_logprob"]),
+                        system_prompt=system_text, user_suffix=(args.user_suffix or ""),
+                        **reads)
     logger.info("wrote %s (readouts: %s)", out, sorted(reads))
 
 
@@ -305,6 +328,13 @@ def main() -> None:
                     help="Which pooled readout to score. 'last' is the original last-prompt-"
                          "token; the others are the chat-template controls.")
     ap.add_argument("--max-len", type=int, default=8192)
+    ap.add_argument("--system-prompt", default=None, help=(
+        "Replace the solving system message. The probe has always read activations under the "
+        "prompt that asks the model to SOLVE the problem; asking it to judge difficulty instead "
+        "costs the identical forward pass, so any separation gained is free."))
+    ap.add_argument("--user-suffix", default=None, help=(
+        "Text appended after the problem statement, inside the user turn. Same argument: the "
+        "forward pass is already paid for."))
     ap.add_argument("--C", type=float, default=0.05)
     ap.add_argument("--limit", type=int, default=0)
     args = ap.parse_args()
