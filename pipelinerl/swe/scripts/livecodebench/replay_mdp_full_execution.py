@@ -370,6 +370,7 @@ def replay_adaptive(
     problem_statement: str,
     *,
     content_prior: np.ndarray | None = None,
+    belief_split: str | None = None,
     posterior_prior: np.ndarray | None = None,
     argmax_shrink: float = 0.0,
     cross_route_rho: float = 0.0,
@@ -582,7 +583,18 @@ def replay_adaptive(
             bellman_pbar, bellman_decay_s = p_each, None
             belief_source = "content_post"
             p_any = 1.0 - float(np.prod(1.0 - p_each))
-        elif content_prior is not None:
+        elif content_prior is not None and (
+            belief_split is None
+            or (belief_split == "entry" and float(failures.sum()) == 0.0)
+            or (belief_split == "continue" and float(failures.sum()) > 0.0)
+        ):
+            # WHERE does the per-problem prior pay? Count beliefs are s*pi/(s+n): at n=0 every
+            # problem carries the identical vector, so they can only discriminate AFTER buying a
+            # failure. `entry` gives our prior only at depth 0 and falls back to counts once any
+            # failure is observed; `continue` does the reverse. If `entry` recovers the whole
+            # margin, the claim is about the decision to START, not about tracking within an
+            # episode -- and that is a different mechanism from "a better difficulty estimate
+            # plugged into the same machinery".
             # A content prior is a per-problem theta with no depth dependence: one vector
             # per problem, emitted before any draw. Left undecayed it is frozen at depth 0,
             # so p_m*R - c_m never falls and the stop action can never fire -- the `content`
@@ -1181,6 +1193,11 @@ def main() -> None:
         "selected max surplus is biased upward by selection; each value lambda tests "
         "max - lambda*(max - mean) <= 0 instead of max <= 0, so larger lambda gives up earlier. "
         "Emitted as policies `<family>_shrink<lambda>_value`. 0 reproduces the plug-in rule."))
+    parser.add_argument("--belief-split-arms", action=argparse.BooleanOptionalAction,
+                        default=False, help=(
+        "Add `<family>_entry_value` and `<family>_continue_value`: the per-problem prior used ONLY "
+        "at depth 0, or ONLY after a failure has been observed, with count beliefs supplying the "
+        "other half. Localises where the representation pays."))
     parser.add_argument("--posterior-preds", default=None, help=(
         "jsonl of per-problem posteriors over the SUCCESS COUNT k (field `p_k`, one list of K+1 "
         "probabilities per route). Enables the `content_post` family, whose belief update is exact "
@@ -1414,6 +1431,7 @@ def main() -> None:
         capture_trace: bool = False,
         argmax_shrink: float = 0.0,
         cross_route_rho: float = 0.0,
+        belief_split: str | None = None,
         pseudo_count: float | None = None,
         exploration_bonus: bool = False,
         bellman_horizon: int | None = None,
@@ -1444,6 +1462,7 @@ def main() -> None:
                     posterior_prior=(posterior.get(pid) if base == "content_post" else None),
                     argmax_shrink=argmax_shrink,
                     cross_route_rho=cross_route_rho,
+                    belief_split=belief_split,
                     scorer=scorer if base in ("sequential", "sequential_decay") else None,
                     calibrator=calibrator,
                     state_layout=args.state_layout,
@@ -1832,6 +1851,22 @@ def main() -> None:
                         "policy": _pol, "budget": None, "tau": None,
                         "min_success_per_cost": None, "value_of_correct": _r,
                         "bellman_horizon": _h, **_aggregate(_out),
+                    })
+
+    # Entry / continue split of the per-problem prior.
+    if args.belief_split_arms and content:
+        _fams = [f for f, h, l in value_arms if h is None and not l and f.startswith("content")]
+        print(f"belief-split sweep: {len(_fams)} families x 2 halves")
+        for _fam in _fams:
+            for _half in ("entry", "continue"):
+                _pol = f"{_fam}_{_half}_value"
+                for _r in value_grid:
+                    _out = run(test_idx, unconstrained_budget, _fam, None, None, _r,
+                               belief_split=_half)
+                    rows.append({
+                        "policy": _pol, "budget": None, "tau": None,
+                        "min_success_per_cost": None, "value_of_correct": _r,
+                        "bellman_horizon": None, **_aggregate(_out),
                     })
 
     # Winner's-curse sweep: same value frontier, but the stop test runs on a shrunk max.
