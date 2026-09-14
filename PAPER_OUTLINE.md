@@ -883,37 +883,53 @@ even there the matched grid cuts it to **+5.1% / +5.8%** at tight targets and **
 ones (§3b-xxxvii). On the two single-commit pools it buys **zero**. So across all four pools the
 cost advantage is overwhelmingly **representation**, which is the part that is ours.
 
-### 3b-xxxix Accuracy on covered instances is degenerate here — report coverage instead
+### 3b-xxxix Accuracy on covered instances: informative at the loose end, degenerate at the tight end — and the reason is the whole difference between the two policies
 
-Abstention always yields a failure in our accounting, so accuracy on the covered set is exactly
-$\text{overall}/(1-\text{abstention rate})$. Computed on the LCB matched-grid run:
+Abstention always yields a failure in our accounting, so every episode ends in one of **three**
+states, not two: solved, abstained, or **covered-and-wrong**, where
+$\text{covered-and-wrong} = 1 - \text{solved} - \text{abstained}$. The third state is where
+conditional accuracy lives.
 
-| coverage | overall accuracy | accuracy **on covered** | cost |
-|---|---|---|---|
-| 100.0% | 84.8% | 84.8% | \$0.16862 |
-| 94.4% | 84.4% | 89.5% | \$0.14607 |
-| 84.7% | 81.8% | 96.5% | \$0.11252 |
-| 75.0% | 75.0% | **100.0%** | \$0.05303 |
-| 64.1% | 64.1% | **100.0%** | \$0.02609 |
-| 44.9% | 44.9% | **100.0%** | \$0.00638 |
+**Our arm** (`_value`, cap unbinding, so $R$ alone drives it):
 
-**It saturates at 100% below ~80% coverage, for both our arm and `counts_value`.** That is a
-property of the termination rule, not of the router: a sequential policy with a give-up action ends
-either by *succeeding* (covered, correct) or by *giving up* (abstained). "Covered and wrong" happens
-only when draws or budget run out first. So the selective-prediction risk–coverage curve is
-**degenerate for this policy class** and carries no information.
+| cost | solved | abstained | covered-and-wrong | acc on covered | mean attempts |
+|---|---|---|---|---|---|
+| \$0.14951 | 84.8% | 3.5% | **11.7%** | 87.9% | 4.65 |
+| \$0.05303 | 75.0% | 25.0% | **0.0%** | 100.0% | 3.57 |
+| \$0.02609 | 64.1% | 35.9% | **0.0%** | 100.0% | 3.12 |
+| \$0.00638 | 44.9% | 55.1% | **0.0%** | 100.0% | 1.97 |
 
-**Two consequences.**
+**RoR as published** (per-query cap *binds*, no give-up action):
 
-1. **Never report accuracy-on-covered as a headline.** It would read as ~100% accuracy, which is
-   meaningless — and it is gameable in general (abstain on all but the easiest problem). Overall
-   accuracy with abstentions counted as failures is the right and conservative metric, and it is
-   what makes "cost at matched accuracy" a comparison of like workloads against a 100%-coverage
-   baseline such as a fixed model or the Zero Router.
-2. **Say instead what is actually true, which is stronger:** in the operating range **overall
-   accuracy ≈ coverage**, because the give-up fires exactly where the policy would otherwise fail.
-   The claim is therefore *"a correct answer on X% of problems, declined in advance on the rest, at
-   cost C"* — cleaner than any accuracy statement.
+| cost | solved | abstained | covered-and-wrong | acc on covered |
+|---|---|---|---|---|
+| \$0.16660 | 84.8% | 0.0% | 15.2% | 84.8% |
+| \$0.05860 | 74.2% | 0.0% | **25.8%** | 74.2% |
+| \$0.03179 | 64.9% | 0.0% | **35.1%** | 64.9% |
+| \$0.01212 | 35.7% | 0.0% | **64.3%** | 35.7% |
+
+**Two different failure mechanisms, and this is the cleanest statement of the difference.**
+Our value arms run with `unconstrained_budget`, so a per-task budget can never run out; the only
+route to covered-and-wrong is **exhausting draws** (6 per route × 3 routes), which happens only at
+high $R$ where the surplus never crosses zero. At low $R$ the policy gives up long before
+exhaustion, so covered-and-wrong is **exactly zero** and conditional accuracy saturates at 100%.
+RoR has no give-up at all, so **every** one of its failures is covered-and-wrong, and its
+conditional accuracy is identically its overall accuracy. Its per-query cap binds and it burns the
+cap before failing.
+
+> **RoR spends the money and then fails. We decline before spending.** Both end with no correct
+> answer; only one paid for it.
+
+**Reporting rule.** Conditional accuracy is real, not an artefact — but it is *informative only at
+the loose end* (87.9% vs 84.8%) and *trivially 100% at the tight end*, where we buy it by declining.
+Quoting it as a headline would claim ~100% accuracy against RoR's 35.7%, which is true and
+misleading. **Report overall accuracy with abstentions counted as failures**, and carry the
+three-state decomposition as a diagnostic panel — it is the panel that shows the mechanism.
+
+**The derived quantity worth adding: wasted spend** — dollars spent on episodes that produced no
+correct answer. It is the thing RoR does and we do not, and neither cost-at-matched-accuracy nor
+conditional accuracy exposes it directly. Needs per-episode traces (`capture_trace`), which the
+current runs delete; one rerun on one config would give it.
 
 ### 3b-xl Charging for abstention: the fragile half of the margin is the half that is not ours
 
