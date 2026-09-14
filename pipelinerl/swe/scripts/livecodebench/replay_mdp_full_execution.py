@@ -1108,6 +1108,13 @@ def main() -> None:
         "4B at $0.278/M -- so the spread the method exploits is basis-dependent and must be "
         "swept rather than asserted."))
     parser.add_argument("--execution-cost-usd", type=float, default=0.0)
+    parser.add_argument("--budget-grid", choices=("linear", "geometric"), default="linear",
+                        help=(
+        "Spacing law for the budget-swept (RoR) arm. `linear` reproduces the original 17-point "
+        "grid. `geometric` matches the value arm's spacing law, which is the only setting under "
+        "which the two frontiers are swept comparably; use it for any reported comparison."))
+    parser.add_argument("--budget-grid-points", type=int, default=32, help=(
+        "Number of budget points when --budget-grid=geometric. Ignored under `linear`."))
     parser.add_argument("--value-grid-points", type=int, default=24, help=(
         "Number of geometrically spaced R values swept. Too few leaves accuracy targets with no "
         "nearby operating point, which makes 'cheapest arm reaching T' pick a different policy "
@@ -1264,10 +1271,25 @@ def main() -> None:
     # budget-swept RoR cell must be able to as well or the high-cost comparison is unfair to it.
     # The original 12 points are preserved so earlier recorded numbers stay comparable.
     exhaustion_cost = float((expected_costs * K).sum())
-    budgets = sorted(set(
-        [float(x) for x in np.linspace(expected_costs[0], 3.0 * max_cost, 12)]
-        + [float(x) for x in np.linspace(3.0 * max_cost, exhaustion_cost, 6)[1:]]
-    ))
+    # The budget knob and the value knob must be swept under the SAME spacing law, or the
+    # comparison credits one arm for grid density. The linear default puts 12 points at a
+    # ~$0.012 pitch from the cheapest route up, so the entire tight-budget regime -- where the
+    # margin is claimed -- is sampled ~3 times while the value arm's geometric grid puts 8
+    # vertices below $0.02. Mixtures make the baseline frontier continuous, so a sparse grid is
+    # not *unfair* in the sense of crediting RoR with something unreachable; the exposure runs
+    # the other way, because greedy allocation under a cap is not concave in B and a denser grid
+    # can surface points ABOVE the chord. `geometric` is the matched sweep; `linear` is kept as
+    # the default so previously recorded numbers stay reproducible.
+    if args.budget_grid == "geometric":
+        budgets = sorted(set(
+            float(x) for x in np.geomspace(
+                expected_costs[0], exhaustion_cost, args.budget_grid_points)
+        ))
+    else:
+        budgets = sorted(set(
+            [float(x) for x in np.linspace(expected_costs[0], 3.0 * max_cost, 12)]
+            + [float(x) for x in np.linspace(3.0 * max_cost, exhaustion_cost, 6)[1:]]
+        ))
     tau_grid = [float(x) for x in np.linspace(0.05, 0.95, 19)]
     initial_max_ratio = float(np.max(priors / expected_costs))
     marginal_grid = [
