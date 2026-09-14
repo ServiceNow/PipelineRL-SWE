@@ -9,52 +9,49 @@ what does it decide?*
 
 ## 0. Headline as it now stands (2026-09-14)
 
-**Every "vs RoR" number in this line mixed two things. They are now separated.** RoR
-(2607.08665) budgets **per query**; our `_value` arms run with `unconstrained_budget`, so $R$ alone
-traces the frontier and they are a **global**-budget method. A global budget is strictly stronger —
-it reallocates from doomed problems to solvable ones. And abstention-under-a-global-budget is
-**ROI-Reasoning's** (2601.03822), which `PRIOR_ART.md` §4b already records as not ours. So part of
-every margin against `counts` was formulation we cannot claim.
+**Two defects found and fixed in the same pass.** (1) RoR (2607.08665) budgets **per query**; our
+`_value` arms run with `unconstrained_budget`, so they are a **global**-budget method — and
+abstention-under-a-global-budget is **ROI-Reasoning's** (2601.03822), recorded in `PRIOR_ART.md` §4b
+as not ours. (2) The budget arm was swept on 17 **linear** points against the value arm's 96
+**geometric** ones — 3 points below \$0.02 against 55.
 
-**The 2x2** (LCB pool64k, seed 0, 96-point $R$ sweep). Row = representation (**ours**), column =
+**The 2x2, on the matched grid** (LCB pool64k, seed 0). Row = representation (**ours**), column =
 formulation (**theirs**):
 
 | contrast | isolates | 50% | 60% | 70% | 80% | 84% |
 |---|---|---|---|---|---|---|
 | ours vs `counts_value` | **representation**, global dual held | **+45.8%** | **+15.7%** | **+15.2%** | **+5.5%** | **+10.5%** |
-| `content_decay_qcost` vs `counts` | **representation**, RoR's own cap held | **+21.4%** | **+12.9%** | **+17.5%** | **+5.5%** | n/a |
-| `counts_value` vs `counts` | formulation alone | +16.7% | +13.9% | +1.8% | +1.0% | −3.3% |
-| ours vs `counts` | everything — *what we reported until now* | +54.9% | +27.5% | +16.7% | +6.4% | +7.5% |
+| `content_decay_qcost` vs `counts` | **representation**, RoR's own cap held | **+16.9%** | **+6.7%** | **+18.9%** | **+5.8%** | n/a |
+| `counts_value` vs `counts` | formulation alone | +5.1% | +5.8% | +1.8% | −0.2% | −3.3% |
+| ours vs `counts` | everything | +48.6% | +20.6% | +16.7% | +5.3% | +7.5% |
 
-**The claim survives.** Representation is worth **+5.5% to +21.4%** inside RoR's own formulation.
-Formulation alone is worth a lot at tight budgets and **nothing or less** at loose ones (−3.3% at
-84%). The part we can claim is real and it is not the knapsack.
+**The matched grid cost us 6.3 and 6.9 points at the two tight targets** (54.9→48.6, 27.5→20.6) and
+nothing at 70% and above. **But it moved the attribution in our favour:** formulation alone fell
+from +16.7%/+13.9% to **+5.1%/+5.8%**, and is negative at 80% and 84%. Most of what looked like "the
+global budget is worth a lot when money is tight" was RoR's missing grid points.
 
-**Candidate headline number** — matched to a reference a reader already understands, rather than a
-grid target:
+**Headline to lead with — anchored, and fully attributable:**
 
-> At the accuracy of the best single model in the pool (gpt-oss-120b, 68.77%), our router costs
-> **$0.0341 vs $0.0452** — **24.5% less than calling that model on everything**, and **17.8% less
-> than RoR**. Holding RoR's own per-query formulation fixed so only the beliefs change, **16.0%**.
+> At the accuracy `gpt-oss-120b` reaches when called on every problem (68.77%), the router costs
+> **\$0.0341 against \$0.0452** — **24.5% less than calling that model on everything**, and **17.8%
+> less than RoR**. At this operating point our arm under RoR's *own* per-query formulation lands at
+> the same \$0.0341, so the entire margin is the representation and none of it is the formulation.
 
-**Mechanism, and why the parts are complementary (+20.4pt over independent at 50%).** Count beliefs
-are $s\pi_m/(s+n_m)$: at $n_m=0$ **every problem has the identical belief vector**, so
-`counts_value` **cannot abstain selectively at entry** — it must pay for failures to discriminate.
-It abstains at **41.6%** at the 50% target and still costs more than us. *Abstention only pays if
-you know what to abstain on before spending.* The global dual supplies the give-up action; the
-activation prior makes it selective.
+**Mechanism (structural, from the code not a fit).** Count beliefs are $s\pi_m/(s+n_m)$: at $n_m=0$
+**every problem carries the identical belief vector**, so `counts_value` **cannot abstain
+selectively at entry** — it must buy failures to discriminate. It abstains at **41.6%** at the 50%
+target and still costs more than us. *Abstention only pays if you know what to abstain on before
+spending.* Hence the interaction: **+27.5pt** over independent components at 50%, +8.5pt at 60%.
 
-**Status of the three other pools:** the 2x2 has **not** been run on TACO / SWE-V / RouterBench.
-Their published numbers are the conflated `ours vs counts` row. **A paper headline cannot be set
-until that decomposition is run on all four.**
+**Graphs:** https://claude.ai/code/artifact/23d6da83-6b81-46d8-bf0e-749cf68af553
 
-**Also open:** the budget-swept arms (`counts`, `content_decay_qcost`) were swept on a 17-point
-**linear** grid against the value arm's 96 **geometric** points — 3 points below \$0.02 against 55.
-`--budget-grid geometric` added; the matched rerun is in flight (§3b-xxxv). The `counts_value` row
-above is grid-invariant and already final; the two rows touching budget-swept arms are provisional.
+**Status of the three other pools:** the 2x2 has **not** been run on TACO / SWE-V / RouterBench, and
+their numbers are still the conflated row on the old linear grid. **No paper headline can be fixed
+until that decomposition is run on all four** — and on the tight targets it should be expected to
+come down, as LCB's did.
 
-**Blocking before a draft:** the 2x2 on the other three pools; matched-grid rerun; bootstrap SWE-V
-(one split only); more TACO seeds; independent replication (§5).
+**Blocking before a draft:** the 2x2 + matched grid on the other three pools; seeds (this is n=1);
+bootstrap SWE-V (one split only); more TACO seeds; independent replication (§5).
 
 ---
 

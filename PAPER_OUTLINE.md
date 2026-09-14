@@ -844,46 +844,60 @@ the contribution claim must shrink to cross-model pricing from one prefill. Repo
 
 ### 3b-xxxvii The 2x2, run: how much is representation and how much is formulation
 
-LCB pool64k, seed 0, `content_decay_qcost` beliefs + cost head, 96-point $R$ sweep. Cost at matched
-accuracy; positive = ours cheaper.
+LCB pool64k, seed 0, **matched 96-point geometric budget grid and 96-point $R$ sweep** (§3b-xxxv).
+Cost at matched accuracy; positive = ours cheaper.
 
 | contrast | isolates | 50% | 60% | 70% | 80% | 84% |
 |---|---|---|---|---|---|---|
-| **ours vs `counts_value`** | **representation, formulation held at global dual** | **+45.8%** | **+15.7%** | **+15.2%** | **+5.5%** | **+10.5%** |
-| **`content_decay_qcost` vs `counts`** | **representation, formulation held at RoR's per-query cap** | **+21.4%** | **+12.9%** | **+17.5%** | **+5.5%** | n/a |
-| `counts_value` vs `counts` | formulation alone (ROI-Reasoning's) | +16.7% | +13.9% | +1.8% | +1.0% | **−3.3%** |
-| ours vs `counts` | everything — *what has been reported to date* | +54.9% | +27.5% | +16.7% | +6.4% | +7.5% |
+| **ours vs `counts_value`** | **representation**, formulation held at global dual | **+45.8%** | **+15.7%** | **+15.2%** | **+5.5%** | **+10.5%** |
+| **`content_decay_qcost` vs `counts`** | **representation**, formulation held at RoR's per-query cap | **+16.9%** | **+6.7%** | **+18.9%** | **+5.8%** | n/a |
+| `counts_value` vs `counts` | formulation alone | +5.1% | +5.8% | +1.8% | **−0.2%** | **−3.3%** |
+| ours vs `counts` | everything — *what was reported before this section* | +48.6% | +20.6% | +16.7% | +5.3% | +7.5% |
 
-**The headline survives the decomposition.** Representation is worth **+5.5% to +21.4%** inside
-RoR's *own* per-query formulation, and **+5.5% to +45.8%** inside ours. Formulation alone is worth
-a lot at tight budgets (+16.7%/+13.9%) and **nothing or less than nothing** at loose ones (+1.0%,
-−3.3%). So the thing we can claim is real, and it is not the knapsack.
+**The matched grid moved the attribution in our favour.** Formulation alone was +16.7%/+13.9% at
+the two tight targets under the sparse grid; under the matched grid it is **+5.1%/+5.8%**, and it is
+**negative** at 80% and 84%. So most of what looked like "the global budget is worth a lot when money
+is tight" was **RoR's missing grid points**, not the formulation. Representation is worth
+**+5.8% to +18.9%** inside RoR's own formulation and **+5.5% to +45.8%** inside ours.
 
-**The two are strongly complementary at tight budgets, and that is mechanistic:**
+**The complementarity is larger, not smaller:**
 
 | target | repr. alone | form. alone | if independent | actual | **interaction** |
 |---|---|---|---|---|---|
-| 50% | 21.4% | 16.7% | 34.5% | **54.9%** | **+20.4pt** |
-| 60% | 12.9% | 13.9% | 25.0% | 27.5% | +2.5pt |
-| 70% | 17.5% | 1.8% | 19.0% | 16.7% | −2.3pt |
-| 80% | 5.5% | 1.0% | 6.5% | 6.4% | −0.1pt |
+| 50% | 16.9% | 5.1% | 21.1% | **48.6%** | **+27.5pt** |
+| 60% | 6.7% | 5.8% | 12.1% | 20.6% | **+8.5pt** |
+| 70% | 18.9% | 1.8% | 20.3% | 16.7% | −3.6pt |
+| 80% | 5.8% | −0.2% | 5.6% | 5.3% | −0.3pt |
 
 **Why.** Count beliefs are $\hat p_m = s\,\pi_m/(s + n_m)$, so at $n_m = 0$ **every problem has the
 identical belief vector** — the route prior. The code says it: *"Count beliefs have no per-problem
-prior, so observed failures are their ONLY channel for learning that a problem is hard"*
-(`:595`). Hence `counts_value` **cannot abstain selectively at entry**: with no failures observed
-the surplus $p_mR - c_m$ is the same number on every problem and the give-up is all-or-nothing. Its
-only route to discrimination is to **pay for failures first**. That is visible in the arm — it
-abstains at **41.6%** at the 50% target and *still* costs more than ours.
+prior, so observed failures are their ONLY channel for learning that a problem is hard"* (`:595`).
+Hence `counts_value` **cannot abstain selectively at entry**: with no failures observed the surplus
+$p_mR - c_m$ is the same number on every problem and the give-up is all-or-nothing. Its only route
+to discrimination is to **pay for failures first**. Visible in the arm — it abstains at **41.6%** at
+the 50% target and *still* costs more than ours.
 
 So: **abstention is only worth having if you can tell which problems to abstain on before paying.**
 The global dual supplies the give-up action (ROI-Reasoning's); per-problem priors from activations
-make it *selective* (ours). Neither alone gets the tight-budget number. This is the strongest
-version of the contribution claim available and it is the one to lead with.
+make it *selective* (ours). Neither alone gets the tight-budget number — and under the matched grid
+the formulation alone gets almost none of it.
 
-*Grid status:* the `counts_value`-vs-ours row is **grid-invariant** — both arms are 96-point $R$
-sweeps, untouched by §3b-xxxv. The two rows involving budget-swept arms (`counts`,
-`content_decay_qcost`) are **pending** the matched geometric sweep. Single seed; seeds needed.
+**The anchor to lead with.** At the accuracy `gpt-oss-120b` reaches when called on every problem
+(68.77%, \$0.04519):
+
+| policy | cost | vs RoR | vs calling the model on everything |
+|---|---|---|---|
+| RoR as published | \$0.04152 | — | +8.1% |
+| `counts_value` | \$0.04065 | +2.1% | +10.1% |
+| **`content_decay_qcost`** (ours, their cap) | **\$0.03412** | **+17.8%** | **+24.5%** |
+| **ours** | **\$0.03412** | **+17.8%** | **+24.5%** |
+
+At this operating point the two of ours are **indistinguishable to five decimals**, so the entire
++17.8% is the representation and none of it is the formulation. That makes it the cleanest
+attributable headline available.
+
+*Caveats:* single seed. The 2x2 has **not** been run on TACO / SWE-V / RouterBench, whose published
+numbers are still the conflated `ours vs counts` row on a linear grid.
 
 ### 3b-xxxv The two arms were not swept under the same spacing law
 
@@ -909,7 +923,24 @@ thing a reviewer pulls on.
 arm's spacing law. `linear` remains the default so previously recorded numbers stay reproducible.
 This is the matched-comparison rule that has already produced two wrong retractions in this line.
 
-<!-- RESULT PENDING: LCB linear vs geo96, 2x2, seed 0 -->
+**Result of the matched sweep (LCB, seed 0).** The defect was real and it cut where predicted —
+the tight end — but it cut the **formulation** effect far harder than ours.
+
+| target | | RoR cost, linear 17 | RoR cost, matched 96 | ours vs RoR, linear | ours vs RoR, **matched** |
+|---|---|---|---|---|---|
+| 50% | | \$0.01728 | **\$0.01515** | +54.9% | **+48.6%** |
+| 60% | | \$0.02499 | **\$0.02282** | +27.5% | **+20.6%** |
+| 70% | | \$0.04494 | \$0.04494 | +16.7% | +16.7% |
+| 80% | | \$0.09273 | \$0.09162 | +6.4% | +5.3% |
+| 84% | | \$0.15041 | \$0.15041 | +7.5% | +7.5% |
+
+RoR gains most at the tight end (12.3% cheaper at the 50% target, 8.7% at 60%) and nothing at 70%
+and above, where its linear grid was already dense enough. **Our margin against it falls by 6.3 and
+6.9 points at the two tight targets and is unchanged elsewhere.** The claim survives; it is smaller.
+
+The matched grid also helps `content_decay_qcost` — our beliefs under RoR's cap — from 11 hull
+vertices to 15 and from \$0.01359 to \$0.01260 at the 50% target. Both budget-swept arms were
+under-sampled; fixing it is not a one-sided concession.
 
 ### 3b-xxxiv Which RoR are we beating? Both, and they must be reported separately
 

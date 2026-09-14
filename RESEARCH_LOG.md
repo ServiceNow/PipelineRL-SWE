@@ -7079,5 +7079,16 @@ of crediting RoR with the unreachable; the exposure runs the other way, since gr
 under a cap is not concave in $B$ and a denser grid can surface points *above* the chord. Added
 `--budget-grid geometric --budget-grid-points N`; `linear` stays default for reproducibility.
 
-**Not yet done:** the 2x2 on TACO / SWE-V / RouterBench — their published numbers are still the
-conflated row, so no paper headline can be set yet.
+**The matched sweep landed.** RoR gains 12.3% at the 50% target and 8.7% at 60%, nothing at 70%+.
+Our margin falls 54.9→48.6 and 27.5→20.6 and is unchanged elsewhere. **But the attribution moved
+toward us:** formulation alone fell from +16.7%/+13.9% to +5.1%/+5.8% and is negative at 80%/84%, so
+most of the apparent "global budget wins at tight budgets" was RoR's missing grid points. Both
+budget-swept arms were under-sampled — `content_decay_qcost` went 11 hull vertices to 15 — so the
+fix is not a one-sided concession. Complementarity grows: interaction +27.5pt at 50%, +8.5pt at 60%.
+
+**Anchor for the headline.** At gpt-oss-120b's own accuracy (68.77%, $0.04519): ours $0.03412,
+RoR $0.04152 -- 24.5% under the model, 17.8% under RoR, and our arm under RoR's *own* per-query cap
+lands at the same $0.03412, so all of it is representation.
+
+**Not yet done:** the 2x2 + matched grid on TACO / SWE-V / RouterBench — their published numbers are
+still the conflated row on the old linear grid, so no paper headline can be set yet. n=1 seed.
