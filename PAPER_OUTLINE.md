@@ -915,13 +915,49 @@ only when draws or budget run out first. So the selective-prediction risk–cove
    The claim is therefore *"a correct answer on X% of problems, declined in advance on the rest, at
    cost C"* — cleaner than any accuracy statement.
 
-**The real unpriced cost, and the experiment that closes it.** Abstention is free in our accounting.
-If a declined problem is escalated to a human or to a model outside the pool, it carries a cost we
-never charge, and part of the tight-budget advantage is simply declining work. **Charge the
-abstention** — re-run with a per-abstention price (the most expensive route's cost is the natural
-first choice, a human-time proxy the honest one) and report the price at which the advantage
-vanishes. That number belongs in the paper whether or not it is flattering. *Not yet run; no flag
-for it in `replay_mdp_full_execution.py`.*
+### 3b-xl Charging for abstention: the fragile half of the margin is the half that is not ours
+
+Abstention is free in our accounting, so part of the tight-budget advantage may be nothing but
+declining work. No rerun is needed to charge it — a point's priced cost is
+$\text{realised spend} + A \cdot \text{abstention rate}$, and the hulls rebuild on the priced axis.
+This prices declining as a **pure cost penalty with no accuracy credit**: you pay to dispose of the
+problem and are not credited with solving it. (Escalation that also *solves* the problem is a
+different policy class and a separate experiment.)
+
+**Against RoR, which never abstains, the tight-budget win does not survive a serious price.**
+
+| price of one abstention | 50% | 60% | 70% | 80% |
+|---|---|---|---|---|
+| \$0 (as reported) | +48.6% | +20.6% | +16.7% | +5.3% |
+| \$0.00500 | +32.1% | +11.8% | +13.3% | +4.3% |
+| \$0.02638 (= one gpt-oss-120b call) | **−38.5%** | **−25.7%** | −0.9% | +0.4% |
+
+Break-even: **0.56×** the dearest route at the 50% target, **0.45×** at 60%, 0.95× at 70%, 1.07× at
+80%. So if disposing of a declined problem costs even half a gpt-oss-120b call, the tight-budget
+advantage over RoR is gone. **This belongs in the paper.**
+
+**Against `counts_value`, which also abstains and is also charged, the advantage is robust to any
+price.**
+
+| price of one abstention | 50% | 60% | 70% | 80% |
+|---|---|---|---|---|
+| \$0 | +45.8% | +15.7% | +15.2% | +5.5% |
+| \$0.02638 (= one gpt-oss-120b call) | **+23.9%** | **+10.6%** | **+12.9%** | **+6.0%** |
+| \$0.05277 (2x) | +16.9% | +7.9% | +11.2% | **+6.4%** |
+
+It even *grows* at the 80% target as the price rises, because our abstentions are better targeted.
+
+**Read the two tables together — they fall exactly on the attribution line.** The part of the margin
+that collapses under an abstention price is the part that comes from *having* a give-up action at
+all, which is **ROI-Reasoning's** contribution and which RoR simply lacks. The part that is
+**ours** — better beliefs, hence better-targeted abstention — survives a price of twice the dearest
+route in the pool. That is the strongest form of the claim, and it is the one to lead with:
+
+> Against a baseline that abstains on the same budget with count-based beliefs, activation beliefs
+> cut cost at matched accuracy by **+6.0% to +23.9%** *even when every abstention is charged the
+> price of a full gpt-oss-120b call.*
+
+*Caveat:* LCB seed 0 only; the same sweep should be run on every seed and on TACO.
 
 ### 3b-xxxvii The 2x2, run: how much is representation and how much is formulation
 
