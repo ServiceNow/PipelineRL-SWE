@@ -842,6 +842,87 @@ formulation (ROI-Reasoning's). If the margin vs `counts_value` is small, the win
 the contribution claim must shrink to cross-model pricing from one prefill. Reporting only
 `counts` would claim the column as ours. **Report the full grid.**
 
+### 3b-xxxviii Only two of the four pools were ever conflated — and the reason is structural
+
+**The formulation column is worth exactly nothing wherever there is no resampling.** With constant
+beliefs $p_m$ and constant per-route costs $c_m$, $\arg\max_m(p_m R - c_m)$ picks the **same model
+for every problem**, and the give-up is all-or-nothing. So the "global dual + count beliefs" arm
+traces precisely the fixed-model hull — RouterBench's own **Zero Router**. The dual has nothing to
+allocate *between* until some problems can consume more draws than others.
+
+Measured, not argued:
+
+| pool | resample depth | `base rate + global R` vs fixed-model hull |
+|---|---|---|
+| RouterBench (11 models, 14,599 test) | none | **−0.1% to +0.2%** |
+| SWE-bench Verified (5 routes, 369) | none | **+0.0%** at every target |
+
+**Consequence: SWE-V and RouterBench were never conflated.** Their published baselines were already
+the constant-belief arm — i.e. the `counts_value` cell, the honest one. Confirmation: the SWE-V
+"RoR cost" row recorded in §3b-xxxiii reads \$0.00260 / \$0.00347 / \$0.00433 / \$0.00477 at the
+30/40/50/55% targets, and an independently rebuilt Zero Router reproduces those four numbers
+**exactly**. So **+11.7% to +37.4% on SWE-V and the RouterBench gains are representation-only as
+they stand** and need no correction.
+
+| pool | has a per-query-cap arm? | was the baseline conflated? |
+|---|---|---|
+| LiveCodeBench | yes | **yes** — corrected in §3b-xxxvii |
+| TACO | yes | **yes** — rerun in flight |
+| SWE-bench Verified | no | no — already representation-only |
+| RouterBench | no | no — already representation-only |
+
+*Do not read my SWE-V reconstruction as a revision of the numbers.* Rebuilding the probe from the
+stored activations (5-fold ridge, `content_last`, hand-set $\alpha=3000$, route AUCs 0.628–0.718)
+gives a **weaker** predictor than the recorded one and hence smaller margins (+1.2% to +19.5%). That
+is my probe being worse, not the decomposition biting — exactly the matched-comparison trap that has
+already caused two wrong retractions here. **The recorded SWE-V numbers stand;** the reconstruction
+establishes only what the *baseline* is.
+
+**Why this matters for the claim.** Formulation buys something only on the two resampling pools, and
+even there the matched grid cuts it to **+5.1% / +5.8%** at tight targets and **negative** at loose
+ones (§3b-xxxvii). On the two single-commit pools it buys **zero**. So across all four pools the
+cost advantage is overwhelmingly **representation**, which is the part that is ours.
+
+### 3b-xxxix Accuracy on covered instances is degenerate here — report coverage instead
+
+Abstention always yields a failure in our accounting, so accuracy on the covered set is exactly
+$\text{overall}/(1-\text{abstention rate})$. Computed on the LCB matched-grid run:
+
+| coverage | overall accuracy | accuracy **on covered** | cost |
+|---|---|---|---|
+| 100.0% | 84.8% | 84.8% | \$0.16862 |
+| 94.4% | 84.4% | 89.5% | \$0.14607 |
+| 84.7% | 81.8% | 96.5% | \$0.11252 |
+| 75.0% | 75.0% | **100.0%** | \$0.05303 |
+| 64.1% | 64.1% | **100.0%** | \$0.02609 |
+| 44.9% | 44.9% | **100.0%** | \$0.00638 |
+
+**It saturates at 100% below ~80% coverage, for both our arm and `counts_value`.** That is a
+property of the termination rule, not of the router: a sequential policy with a give-up action ends
+either by *succeeding* (covered, correct) or by *giving up* (abstained). "Covered and wrong" happens
+only when draws or budget run out first. So the selective-prediction risk–coverage curve is
+**degenerate for this policy class** and carries no information.
+
+**Two consequences.**
+
+1. **Never report accuracy-on-covered as a headline.** It would read as ~100% accuracy, which is
+   meaningless — and it is gameable in general (abstain on all but the easiest problem). Overall
+   accuracy with abstentions counted as failures is the right and conservative metric, and it is
+   what makes "cost at matched accuracy" a comparison of like workloads against a 100%-coverage
+   baseline such as a fixed model or the Zero Router.
+2. **Say instead what is actually true, which is stronger:** in the operating range **overall
+   accuracy ≈ coverage**, because the give-up fires exactly where the policy would otherwise fail.
+   The claim is therefore *"a correct answer on X% of problems, declined in advance on the rest, at
+   cost C"* — cleaner than any accuracy statement.
+
+**The real unpriced cost, and the experiment that closes it.** Abstention is free in our accounting.
+If a declined problem is escalated to a human or to a model outside the pool, it carries a cost we
+never charge, and part of the tight-budget advantage is simply declining work. **Charge the
+abstention** — re-run with a per-abstention price (the most expensive route's cost is the natural
+first choice, a human-time proxy the honest one) and report the price at which the advantage
+vanishes. That number belongs in the paper whether or not it is flattering. *Not yet run; no flag
+for it in `replay_mdp_full_execution.py`.*
+
 ### 3b-xxxvii The 2x2, run: how much is representation and how much is formulation
 
 LCB pool64k, seed 0, **matched 96-point geometric budget grid and 96-point $R$ sweep** (§3b-xxxv).
