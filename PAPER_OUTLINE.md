@@ -842,6 +842,38 @@ formulation (ROI-Reasoning's). If the margin vs `counts_value` is small, the win
 the contribution claim must shrink to cross-model pricing from one prefill. Reporting only
 `counts` would claim the column as ours. **Report the full grid.**
 
+### 3b-xlv TACO on the matched grid: the headline arm's cost claim RETRACTS above 40%, but the representation claim survives
+
+3 seeds, matched geometric budget grid, strict `counts` baseline (mean ± sd, sign test across seeds):
+
+| contrast | 35% | 40% | 45% | 50% | 55% |
+|---|---|---|---|---|---|
+| ours vs **RoR as published** | +35.5±2.9 (3/3) | +20.2±2.3 (3/3) | **−5.7±4.0 (0/3)** | **−12.5±4.6 (0/3)** | **−31.8±5.1 (0/3)** |
+| ours vs `counts_value` | +34.4±2.3 | +18.9±1.8 | −7.5±3.3 | +8.0±1.3 | −21.6±3.6 |
+| **our beliefs only** vs `counts_value` | **+33.6±1.1** | **+29.3±0.2** | **+2.2±2.0** | **+7.3±1.9** | **+1.1±0.8** |
+| our **cost head** only vs `counts_value` | +26.3±1.6 | +16.9±0.6 | **−21.6±4.5** | +8.0±0.5 | −5.0±3.3 |
+| formulation alone | +1.6±1.0 | +1.7±1.0 | +1.7±1.0 | −22.4±6.4 | −8.5±6.1 |
+
+**RETRACT §3b-xxxiv's TACO row.** It recorded +45.7/+42.5/+21.4/+13.1/+9.1 against "RoR as
+published". On the matched grid the same contrast is **+35.5/+20.2/−5.7/−12.5/−31.8**, losing at
+three of five targets with 0/3 seeds. The old numbers were the **linear** budget grid, which
+under-samples RoR by 3 points below \$0.02 (§3b-xxxv). *The TACO cost claim holds only at the two
+tightest targets.*
+
+**But the representation claim survives intact, and the diagnosis is clean.** Our **belief head
+alone** is **positive at all five targets** (+33.6/+29.3/+2.2/+7.3/+1.1). What breaks the full arm
+is the **cost head**: −21.6% at 45% and −5.0% at 55%. That is exactly what §3b-xiii predicted for
+this pool — on TACO the two heads are nearly orthogonal (PC1 carries only **43.7%** against LCB's
+71.4%), difficulty and expense are separate properties, and TACO's cost $R^2$ is the weakest we
+measure. **On TACO the cost head is actively harmful above 40% and the belief head is not.**
+
+**What this implies for the paper, and it is not a fudge.** The deployable arm is not fixed across
+pools: whether to include the cost head is a **per-pool decision that must be made on calibration**,
+exactly as `--select-alpha` and the target-space choice already are. Reporting one arm everywhere
+either wastes the belief head's TACO win or imports the cost head's TACO loss. **Report the
+factorization on every pool, select the arm on calibration, and say so.** What must never be done is
+selecting it on test, which is what quoting the better of the two post hoc would amount to.
+
 ### 3b-xliv Six method variants, run. Two work, two are marginal, one is mixed, one was void
 
 LCB 64k, seed 0, matched geometric grid, each against **its own run's** control so nothing is
