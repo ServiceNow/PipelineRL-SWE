@@ -43,6 +43,14 @@ ap.add_argument("--select-alpha", action="store_true", help=(
     "Choose the ridge penalty per route by dollar-space R2 on the CALIBRATION split -- the same "
     "split the shrinkage step already uses. Helps 4 of 6 route-dataset cells."))
 ap.add_argument("--alpha-grid", default="1e1,1e2,1e3,1e4,1e5,1e6,1e7")
+ap.add_argument("--cost-quantile", type=float, default=None, help=(
+    "Predict a QUANTILE of the per-draw cost instead of its mean. The rule compares p*R against "
+    "c, and E[c] is not obviously the right functional: cost is right-skewed (ICC 0.841, so 16% "
+    "is within-problem draw noise) and the two errors are not symmetric -- under a cap, "
+    "under-pricing can exhaust the episode while over-pricing only forgoes a buy. Duan's smearing "
+    "already rescales exp(log-fit) from the conditional MEDIAN to the mean; this replaces that "
+    "mean with the q-th quantile of the same train residual distribution, so q=0.5 is the median, "
+    "larger q is a conservative (stingier) policy and smaller q a bolder one. Omit for the mean."))
 ap.add_argument("--cap", type=float, default=0.0, help=(
     "Exclude draws at or above this completion length from the cost target. DEFAULT OFF, and it "
     "should stay off: truncation censors the LATENT length but not the PAID cost -- a draw that "
@@ -166,7 +174,9 @@ for j, s in enumerate(slots):
             scf.transform(F[tr]), y[tr]).predict(scf.transform(F))), 1.0, None)
 
     direct = None
-    if not a.no_target_space_select and cal.sum() > 10:
+    # The direct fit regresses on TOKENS, so it is a mean estimator by construction and would
+    # silently override the quantile. Disable it whenever a quantile is requested.
+    if not a.no_target_space_select and cal.sum() > 10 and a.cost_quantile is None:
         y_tok = np.array([_mean_tokens(p) for p in pk])
         md = Ridge(alpha=alpha).fit(sc.transform(X[tr]), y_tok[tr])
         cand = np.clip(md.predict(sc.transform(X)), 1.0, None)
@@ -188,7 +198,16 @@ for j, s in enumerate(slots):
     # Duan's smearing estimator: E[tokens] = exp(pred) * mean(exp(residual)) on TRAIN only.
     # Without it, exp() of a log-space fit returns a conditional median and systematically
     # under-prices every route, which would bias the policy toward buying too much.
-    smear = float(np.mean(np.exp(y[tr] - pred[tr])))
+    # Duan's smearing rescales to the MEAN. --cost-quantile swaps in the q-th quantile of the
+    # same residual distribution, which is the retransformation that targets a quantile rather
+    # than a mean (a monotone transform preserves quantiles, so no bias correction is needed --
+    # only the choice of which point of the residual law to multiply through).
+    if a.cost_quantile is None:
+        smear = float(np.mean(np.exp(y[tr] - pred[tr])))
+    else:
+        smear = float(np.quantile(np.exp(y[tr] - pred[tr]), a.cost_quantile))
+        print(f"  {s:8s} quantile q={a.cost_quantile:g}: factor {smear:.4f} "
+              f"(mean factor would be {float(np.mean(np.exp(y[tr] - pred[tr]))):.4f})")
     tokens = direct if direct is not None else np.exp(pred) * smear
     if free is not None:
         M = np.c_[np.ones(int(cal.sum())), tokens[cal], free[cal]]

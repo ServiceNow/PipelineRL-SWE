@@ -1108,6 +1108,15 @@ def main() -> None:
         "4B at $0.278/M -- so the spread the method exploits is basis-dependent and must be "
         "swept rather than asserted."))
     parser.add_argument("--execution-cost-usd", type=float, default=0.0)
+    parser.add_argument("--capped-value-family", default=None, help=(
+        "Sweep a per-episode CAP and the global price R JOINTLY for this family, instead of "
+        "pinning the cap at unconstrained. Motivated by an observed anomaly: the capped arm beats "
+        "the priced arm at mid accuracy yet cannot reach the top, so neither knob dominates and "
+        "the two-constraint policy is a distinct member of the class -- it is neither RoR's cap "
+        "nor ROI-Reasoning's price. Emitted as one policy `<family>_cappedvalue` so its hull is "
+        "the 2-D frontier."))
+    parser.add_argument("--capped-value-budgets", type=int, default=12, help=(
+        "Number of geometric cap points in the joint sweep. Cost is this x the value grid."))
     parser.add_argument("--budget-grid", choices=("linear", "geometric"), default="linear",
                         help=(
         "Spacing law for the budget-swept (RoR) arm. `linear` reproduces the original 17-point "
@@ -1695,6 +1704,27 @@ def main() -> None:
                         "min_success_per_cost_value": None,
                     })
         print(f"adaptive-R: {len(_targets)} targets x {len(_fams)} families, eta={args.adaptive_r_eta}")
+
+    # Two-constraint frontier: a per-episode cap AND the global price, swept jointly. The cap
+    # binds the within-episode spend (RoR's knob); R prices correctness across episodes (the
+    # Lagrangian). Neither alone dominates -- measured on LCB, the capped arm wins at 70-80% and
+    # cannot reach 84%, while the priced arm reaches 84% and loses in the middle -- so the product
+    # grid is a policy class strictly containing both edges.
+    if args.capped_value_family:
+        _fam = args.capped_value_family
+        _caps = sorted(set(float(x) for x in np.geomspace(
+            expected_costs[0], exhaustion_cost, args.capped_value_budgets)))
+        _pol = f"{_fam}_cappedvalue"
+        print(f"joint (cap, R) sweep for {_fam}: "
+              f"{len(_caps)} caps x {len(value_grid)} prices = {len(_caps)*len(value_grid)} runs")
+        for _cap in _caps:
+            for _r in value_grid:
+                _out = run(test_idx, _cap, _fam, None, None, _r)
+                rows.append({
+                    "policy": _pol, "budget": _cap, "tau": None,
+                    "min_success_per_cost": None, "value_of_correct": _r,
+                    "bellman_horizon": None, **_aggregate(_out),
+                })
 
     # Value-controlled frontier. One scalar R drives escalation and stopping jointly,
     # so there is no budget grid and no calibration-selected abstention threshold.
