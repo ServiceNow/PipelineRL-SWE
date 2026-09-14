@@ -842,6 +842,40 @@ formulation (ROI-Reasoning's). If the margin vs `counts_value` is small, the win
 the contribution claim must shrink to cross-model pricing from one prefill. Reporting only
 `counts` would claim the column as ours. **Report the full grid.**
 
+### 3b-xli The "representation" row bundles two of our components — split it
+
+`counts_value` -> `content_decay_qcost_value` changes **three** things: the belief prior
+(counts -> activations), the Beta-Bernoulli decay, and the dollar-space cost head. Calling all of
+that "the representation" is the same class of error as attributing the formulation column to us.
+Every single-factor cell already exists; the formulation is held at the global dual throughout.
+
+**LCB seed 0, matched grid, cost saved vs `counts_value`:**
+
+| swap | 50% | 60% | 70% | 80% | 84% |
+|---|---|---|---|---|---|
+| `counts_qcost_value` — **our cost head only** | **+40.5%** | +8.1% | +9.5% | +4.1% | +8.5% |
+| `content_decay_value` — **our beliefs only**, decay matched | **+40.8%** | **+19.2%** | **+12.0%** | +2.3% | +6.6% |
+| `content_decay_qcost_value` — **both** (ours) | +45.8% | +15.7% | +15.2% | +5.5% | +10.5% |
+| *`content_value` — beliefs, decay REMOVED* | *−18.1%* | *−29.0%* | *+1.1%* | *+6.8%* | *+18.2%* |
+
+**Both components are individually large, and they are strongly sub-additive.** At the 50% target
++40.5% and +40.8% compose to +45.8%, not the +64.8% independence would predict. They are partly
+redundant by construction: both exist to stop money going to expensive hopeless problems, one by
+seeing the problem is hard, the other by seeing the route is dear. Same pattern §3b-xx found on the
+strict-improvement floors (+2.90 / +3.88 / +5.07).
+
+**`content_value` is a structurally broken cell — do not read it as "beliefs alone".** Without the
+decay the belief never falls, so $p_mR - c_m$ never crosses zero and **the give-up action is
+disabled**; the arm was measured abstaining 0.0% at every point above 55%. The code states this at
+`:545`. The valid single-factor belief swap is `content_decay_value`, which applies the same
+analytic $s/(s+n)$ the count family already uses, so only the *prior* differs.
+
+**Relabel §3b-xxxvii accordingly.** Its "representation" row is **our two activation heads together**
+(beliefs + cost head), not one thing. Both are ours — `PRIOR_ART.md` §1 records that cross-model
+per-query *cost* prediction is the piece no prior work does — but the paper must report them split,
+because a reader who assumes "representation = the belief head" would over-credit the belief head by
+roughly a factor of two at the tight targets.
+
 ### 3b-xxxviii Only two of the four pools were ever conflated — and the reason is structural
 
 **The formulation column is worth exactly nothing wherever there is no resampling.** With constant
