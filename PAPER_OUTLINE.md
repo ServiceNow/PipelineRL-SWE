@@ -842,6 +842,50 @@ formulation (ROI-Reasoning's). If the margin vs `counts_value` is small, the win
 the contribution claim must shrink to cross-model pricing from one prefill. Reporting only
 `counts` would claim the column as ours. **Report the full grid.**
 
+### 3b-lii The smallest model in the pool is also the BEST encoder — and success has almost no label noise
+
+Two measurements that together say belief quality is worth attacking and say how.
+
+**1. There is essentially no irreducible label noise on success.** Between-problem share of the
+variance in observed per-problem rates (ICC), with binomial sampling variance removed:
+
+| route | ICC | draw noise |
+|---|---|---|
+| scout | **0.975** | 2.5% |
+| oss20 | **0.917** | 8.3% |
+| oss120 | **0.924** | 7.6% |
+
+Unlike **cost**, whose ICC is 0.841 and whose ceiling is therefore materially below $R^2=1$
+(§3b-xxix), success is nearly deterministic per problem: 92–98% of the spread is real
+between-problem signal. **So the oracle-belief headroom of §3b-l (+65.5%/+73.4% at the loose
+targets, of which we capture 4%/9%) is genuinely reachable, not a mirage of draw noise.** Belief
+quality is the right thing to attack.
+
+**2. Scaling the probe does not help. The 4B scout is the best encoder we have.** Identical probe
+pipeline, identical split and penalty selection, only the model whose prefill is read changes; AUC
+on the held-out test split:
+
+| encoder | prefill cost | AUC → scout | AUC → oss20 | AUC → oss120 | mean |
+|---|---|---|---|---|---|
+| **4B scout** | **\$0.000149** | **0.8703** | **0.9066** | 0.8261 | **0.8677** |
+| gpt-oss-20b | \$0.000709 (4.8x) | 0.8429 | 0.8851 | 0.8256 | 0.8512 |
+| gpt-oss-120b | \$0.006345 (**42.6x**) | 0.8601 | 0.8895 | **0.8366** | 0.8620 |
+
+**The cheapest encoder is the best on average, and 42x cheaper than the dearest.** It is also a
+clean instance of the **encoder-target decoupling** the prefill-router paper reports (`PRIOR_ART.md`
+§1): the scout's hidden states predict `gpt-oss-20b`'s success **better than gpt-oss-20b's own
+hidden states do** (0.9066 against 0.8851). Only for `gpt-oss-120b` does the target's own prefill
+win, and by 0.011 AUC for 42x the price.
+
+**This strengthens the cost case on quality grounds rather than merely on price.** The usual
+objection — "you used a small probe to make the economics work; a bigger probe would predict
+better" — is false here and measurably so. **Report this table.**
+
+*Caveat on comparability:* these AUCs use a binarised label (rate > 0.5) and a kernel-ridge head
+with the penalty selected on calibration, so they are **not** the deployed head's numbers (which
+predicts the rate and scores 0.7685 on oss120). The protocol is identical across the three
+encoders, so the **relative** ranking is sound; the absolute level is not the deployed probe's.
+
 ### 3b-l Oracle bounds: the loose end is where everything is left, and it is a BELIEF problem
 
 Two oracle arms on the current setup (LCB, matched grid), each replacing exactly one component and
