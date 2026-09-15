@@ -2427,11 +2427,17 @@ already is the allocator; no separate experiment is needed.)*
 
 ### 4.1 Sequential and budgeted test-time model selection *(closest)*
 
-- **RoR — "Resample or Reroute?"** (2607.08665, Chen). Formalises resampling the committed model
-  and rerouting to another as competing uses of one per-query budget, allocating each unit to
-  whichever action has the highest estimated marginal correctness per dollar. Evaluated by replay
-  on an eleven-model open-weight pool over four benchmarks. **Our primary baseline**; it has the
-  same action space but count-based beliefs, no stop action, and per-model constant costs.
+- **RoR — "Resample or Reroute? Recoverable Stopping Debt Without Identified Action Selection"**
+  (2607.08665 v3, Teng-Ruei Chen). **This entry was substantially wrong until 2026-09-15; see
+  `PRIOR_ART.md` §0.** It formalises resample-vs-reroute as competing uses of a second call after a
+  fallible verifier accepts a candidate, and establishes that recoverable stopping debt exists
+  (+2.59pp on MBPP+). It is a **negative-result** paper: *"current evidence does not identify when
+  to resample rather than reroute."* It has **two** primary models (Qwen2.5-7B/14B), not eleven —
+  that was RouterBench conflated in — and **no budget-allocation framework**; it disclaims the
+  greedy rule as *"a transparent heuristic, not a proof of horizon-optimal control."*
+  **Therefore our `counts` arm is our own construction and must not be labelled "RoR as
+  published".** Rename it *count-belief greedy allocation under a per-query cap*. Correct in the old
+  entry: no stop action, count-based beliefs, per-model constant costs by parameter count.
 - **How Much of the Routing Gap Is Real?** (2607.03436). Companion analysis showing that part of
   the celebrated router-to-oracle gap is single-draw label noise no router can capture, since the
   per-instance oracle is built from one sample under stochastic decoding. Motivates evaluating at

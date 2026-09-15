@@ -9,6 +9,46 @@ Format: what they do / what they do NOT do / what that leaves us.
 
 ---
 
+## 0. RoR (2607.08665) — RE-READ 2026-09-15. Our description of it was substantially WRONG.
+
+**"Resample or Reroute? Recoverable Stopping Debt Without Identified Action Selection"**,
+Teng-Ruei Chen. v1 2026-07-09, v2 2026-07-10, **v3 2026-09-02**. Checked against the arXiv HTML
+because it is our primary baseline and the description is load-bearing on every table.
+
+| what this project has been saying | what the paper actually is |
+|---|---|
+| "an **eleven-model** open-weight pool" | **two** primary models — Qwen2.5-7B-Instruct and 14B-Instruct; Llama-3.1-8B and Nemotron-Nano-9B added post-outcome |
+| "over **four** benchmarks" | MBPP+ (primary, **152 queries**), LiveCodeBench (diagnostic), BigCodeBench (prospective gate), plus historical replays |
+| "allocating each unit to whichever action has the highest estimated **marginal correctness per dollar**" | **no such allocation framework exists.** A pathwise cap $\sum_t c_{A_{it}} \le B$ is stated generically, and the paper explicitly disclaims the greedy rule: *"The greedy rule is a transparent heuristic, not a proof of horizon-optimal control."* |
+| implicitly, a positive method we beat | **a NEGATIVE-result paper**: *"Stopping debt exists, but current evidence does not identify when to resample rather than reroute."* Neither tested controller beats fixed rerouting. |
+| "no stop action" | **correct** — the action space is resample-or-reroute; declining to answer is absent |
+| "count-based beliefs", "per-model constant costs by parameter count" | broadly correct |
+
+**Probable source of the error: RouterBench.** *That* is the eleven-model pool (§7). The two appear
+to have been merged at some point and the merged description propagated.
+
+**The consequence, and it is the same class of error as the augmented-RoR conflation (§3b-xxxiv).**
+Our `counts` arm — count beliefs, greedy value-per-cost, a per-query cap as the knob — **is our own
+construction, not a published method.** Labelling it *"RoR as published"* in every table is wrong.
+
+**What to do, and it does not invalidate any measurement:**
+1. **Rename the arm.** Call it what it is: *count-belief greedy allocation under a per-query cap*.
+   It remains a reasonable, standard baseline; only the attribution was false.
+2. **Cite RoR for what it does do** — formalising resample-vs-reroute as competing uses of a second
+   call after a fallible verifier accepts, and establishing that recoverable stopping debt exists
+   (+2.59pp). Do **not** cite it for a budget-allocation method.
+3. **Stop describing it as the method we beat.** Its headline is that the resample/reroute choice is
+   *not identified* by current evidence. Our claim should be positioned against that honestly — we
+   supply a belief that makes the choice identifiable, which is a *response* to their negative
+   result rather than an improvement on a positive one. That is a **better** framing than the one
+   we had.
+
+*Verification caveat:* read via automated extraction of the arXiv HTML. The quoted strings are
+reliable, but a human read of v3 is required before submission — particularly to confirm there is
+no budget-allocation section the extraction missed.
+
+---
+
 ## 1. Prefill-activation router — "LLM Router: Rethinking Routing with Prefill Activations" (2603.20895)
 
 **The closest work, and the one we have overclaimed against twice.**
