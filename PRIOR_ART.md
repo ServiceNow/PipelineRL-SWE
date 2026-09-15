@@ -113,6 +113,44 @@ allocation rule in detail.*
 
 ---
 
+## 0b. THE CLOSEST WORK TO OUR MDP IS NOT IN THE LLM LITERATURE — and we cite none of it
+
+**Gap found 2026-09-15.** Every entry in this file is a 2024–2026 LLM paper. Our formulation
+(§3b-lv) — a budget-constrained sequential search over noisy alternatives, relaxed by a Lagrange
+multiplier, solved by backward induction, with the achievable set taken as a convex hull — is
+**textbook decision theory**. A reviewer from that side will recognise it immediately, and finding
+it uncited reads far worse than citing it and claiming less.
+
+**Be honest about what this means: our mathematical contribution is close to zero.** The formulation
+is known; what is ours is the *belief source* (one cheap prefill), the *cross-model* application, and
+the empirical result. Position it that way deliberately rather than being corrected into it.
+
+| classical work | why it is the closest | what it covers of ours |
+|---|---|---|
+| **Weitzman (1979), "Optimal Search for the Best Alternative"** — *Pandora's box* | $n$ alternatives, each with a known reward distribution and an **inspection cost**; open sequentially, stop when what you hold beats the reservation value of every unopened box | **This is routing-with-resampling.** A route is a box; a draw is an opening. Weitzman's reservation-value index is the ancestor of our $p_mR - c_m$ rule, and his optimality proof is the reason a myopic index can be right at all |
+| **Altman (1999), *Constrained Markov Decision Processes*** | Lagrangian relaxation of a constrained MDP; the optimal constrained policy is a **randomised mixture of deterministic policies**, and the achievable set is a convex hull | **This is our entire frontier construction.** "Mixtures count, so compare hulls" is his theorem, not our idea. **Most important missing citation.** |
+| **Gittins index; Whittle (1988) restless bandits** | decoupling a budget-coupled multi-armed problem by a common multiplier, giving a per-arm index | **This is the $R$ sweep.** Per-problem decoupling under a common price is the Whittle relaxation exactly |
+| **Badanidiyuru, Kleinberg & Slivkins, "Bandits with Knapsacks"** | online decisions under hard budget constraints, with regret guarantees | the online version of our allocation; we solve offline in the dual, they solve online |
+| **Golovin & Krause, adaptive submodularity** | adaptive stochastic optimisation under a budget, with greedy guarantees | when greedy *is* near-optimal here — relevant to RoR v1's greedy rule and to why our lookahead helps |
+| **Correlated Pandora's box** (Chawla, Gergatsouli et al.) | Pandora's box where box values are **correlated** | **exactly our cross-route $\rho$ problem** (§3b-xliv item 5): independence over-values "try another route", and this literature has the machinery |
+| Wald, sequential analysis / SPRT | optimal stopping of a sampling process | the stopping half of the rule |
+
+**Where this leaves the contribution claim, stated honestly:**
+
+1. **Not ours:** the Lagrangian relaxation, the convex-hull frontier, the index-policy form, backward
+   induction. All classical. Cite Altman and Weitzman explicitly in §3.
+2. **Not ours:** resample-vs-reroute as competing uses of one budget (RoR v1, §0).
+3. **Ours:** per-problem beliefs from one cheap prefill of a model that never generates; the
+   cross-model cost head; and the empirical finding that this is what makes the sequential rule
+   work (19/19, §3b-xlvi) while count-based beliefs do not.
+4. **Ours, more weakly:** applying horizon-optimal backward induction here where the prior work used
+   a greedy index and explicitly disclaimed optimality — but note this is *applying* known
+   machinery, not inventing it.
+
+*Citations above are from memory and MUST be verified before use — author, year, venue and exact
+claim. This project has been burned twice in one day by an unverified paraphrase (§0), and the
+Pandora's-box and correlated-Pandora's-box attributions are the least certain here.*
+
 ## 1. Prefill-activation router — "LLM Router: Rethinking Routing with Prefill Activations" (2603.20895)
 
 **The closest work, and the one we have overclaimed against twice.**
