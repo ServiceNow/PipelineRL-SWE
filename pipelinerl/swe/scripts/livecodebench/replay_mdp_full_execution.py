@@ -370,6 +370,7 @@ def replay_adaptive(
     problem_statement: str,
     *,
     content_prior: np.ndarray | None = None,
+    observed: np.ndarray | None = None,
     random_route: bool = False,
     belief_split: str | None = None,
     posterior_prior: np.ndarray | None = None,
@@ -460,8 +461,16 @@ def replay_adaptive(
             cost_est[mi] = ((cost_update_weight * float(expected_costs[mi]) + _cost_obs_sum[mi])
                             / (cost_update_weight + _cost_obs_n[mi]))
         route_attempt_counts[slots[mi]] += 1
-        if outcomes[mi, draw]:
-            return True, draw
+        # WEAK VERIFIER. The policy stops on what the VERIFIER says, and is scored on the truth.
+        # With `observed` None the two coincide, which is an ORACLE verifier -- the assumption
+        # every result in this document has made, and a strong one: RoR v1 works with "an
+        # imperfect verifier" and reports gains "verifier-gated, shrinking as verifier quality
+        # degrades". Our weak signal false-accepts 11.01% of draws, so a policy trusting it stops
+        # believing it won when it did not.
+        _seen = outcomes[mi, draw] if observed is None else observed[mi, draw]
+        if _seen:
+            _truth = bool(outcomes[mi, draw])
+            return (True if _truth else "false_accept"), draw
         failures[mi] += 1
         attempts.append(records[(problem_id, slots[mi], draw)])
         return False, draw
@@ -471,6 +480,8 @@ def replay_adaptive(
         first, _ = attempt(0)
         if first is True:
             return finish(True, False)
+        if first == "false_accept":
+            return finish(False, False)   # verifier accepted a wrong answer; episode ends
         if first is None:
             return finish(False, False)
         entered_router = True
@@ -919,6 +930,8 @@ def replay_adaptive(
             decision_trace.append(decision)
         if result is True:
             return finish(True, False)
+        if result == "false_accept":
+            return finish(False, False)   # verifier accepted a wrong answer; episode ends
 
     return finish(False, False)
 
@@ -1202,6 +1215,13 @@ def main() -> None:
         "selected max surplus is biased upward by selection; each value lambda tests "
         "max - lambda*(max - mean) <= 0 instead of max <= 0, so larger lambda gives up earlier. "
         "Emitted as policies `<family>_shrink<lambda>_value`. 0 reproduces the plug-in rule."))
+    parser.add_argument("--verifier", choices=("oracle", "weak"), default="oracle", help=(
+        "Which signal the policy STOPS on. `oracle` (default, and what every result so far "
+        "assumes) lets it see true correctness -- a strong assumption the related literature "
+        "generally does not make: RoR works with \"an imperfect verifier\" and reports gains "
+        "\"verifier-gated, shrinking as verifier quality degrades\". `weak` stops on "
+        "weak_verifier_outcome and still SCORES on the truth, so a false accept ends the episode "
+        "with a wrong answer shipped."))
     parser.add_argument("--budget-aware-bok-arm", action=argparse.BooleanOptionalAction,
                         default=False, help=(
         "Add `budget_aware_best_of_k`: per cap, choose the route and depth maximising the "
@@ -1315,6 +1335,14 @@ def main() -> None:
     if "execution_outcome" not in data:
         raise ValueError("Full-execution replay requires a schema-v2 tensor bundle")
     outcomes = data["execution_outcome"].astype(bool)
+    observed = None
+    if args.verifier == "weak":
+        if "weak_verifier_outcome" not in data:
+            raise ValueError("--verifier weak requires weak_verifier_outcome in the tensor bundle")
+        observed = data["weak_verifier_outcome"].astype(bool)
+        _v = data["valid"].astype(bool)
+        print(f"WEAK VERIFIER: agrees with truth on {100*(observed[_v]==outcomes[_v]).mean():.2f}% "
+              f"of valid draws; false accepts {100*((observed&~outcomes)[_v]).mean():.2f}%")
     valid = data["valid"].astype(bool)
     pids = [str(value) for value in data["problem_ids"]]
     slots = [str(value) for value in data["model_slots"]]
@@ -1485,6 +1513,7 @@ def main() -> None:
                     cross_route_rho=cross_route_rho,
                     belief_split=belief_split,
                     random_route=random_route,
+                    observed=(observed[int(pi)] if observed is not None else None),
                     scorer=scorer if base in ("sequential", "sequential_decay") else None,
                     calibrator=calibrator,
                     state_layout=args.state_layout,
