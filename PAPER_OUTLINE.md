@@ -1313,6 +1313,52 @@ sets the level (ratios now 0.47–0.85 at $q{=}0.25$ against 1.24–1.94 at $q{=
 this codebase: any downstream affine recalibration will annihilate an upstream level knob. Check
 that variants differ before reading their results.*
 
+### 3b-lvii DISCLOSURE LARGELY RETRACTED for execution-verified domains — and what replaces it is cleaner
+
+**The objection, and it is correct.** In a domain with a cheap verifier, a delivered wrong answer
+and an announced decline are *the same object*: you run the unit tests, they fail, and you now know.
+Converting one into the other costs a test execution. §3b-xliii's headline — "we announce 100% of
+our failures and RoR announces none" — **does not survive this** on LiveCodeBench, TACO or
+SWE-bench Verified, because in all three the policy's own success signal *is* test execution. RoR
+finishes its budget knowing every draw it made failed; it can say so for free.
+
+**Scope of the retraction.**
+
+| pool | cheap verifier at decision time? | is the disclosure claim available? |
+|---|---|---|
+| LiveCodeBench | yes — tests | **no** |
+| TACO | yes — tests | **no** |
+| SWE-bench Verified | yes — tests | **no** |
+| RouterBench | **no** — MMLU/ARC-style graded answers | yes, but it is the one pool with no resampling |
+
+So the disclosure framing survives only where we have the *least* interesting policy, and must be
+dropped from the headline. **What was true and stays true:** RoR has no stop action, so it *spends*
+its whole cap before discovering the failure, while we stop early. That is a **cost** difference,
+which the cost claim already measures — not a separate deployability axis.
+
+**The good news, and it repairs §3b-xl.** If the verifier converts wrong answers to declines, the
+honest accounting charges **every failure equally** rather than charging only *our* abstentions.
+And at matched accuracy the failure rate is equal **by construction**, so this adds a near-identical
+constant to both arms:
+
+| charge per failure | 50% | 60% | 70% | 80% | 84% |
+|---|---|---|---|---|---|
+| \$0 (as reported) | +48.6% | +20.6% | +16.7% | +5.3% | +7.5% |
+| \$0.02638 (= a full gpt-oss-120b call) | **+26.0%** | **+14.1%** | **+14.2%** | **+5.0%** | **+7.3%** |
+| \$0.05277 (2x) | +18.5% | +10.7% | +12.3% | +4.7% | +7.1% |
+| \$0.26383 (**10x**) | **+6.0%** | **+6.0%** | **+6.0%** | +3.4% | +5.9% |
+
+**The advantage cannot be priced away.** Adding a constant to both numerator and denominator drags
+the ratio toward 1, so the percentage shrinks — but the sign cannot flip, and even at **ten times**
+the dearest route's price per failure we remain +3.4% to +6.0% at every target. §3b-xl's alarming
+−38.5% came entirely from an **asymmetric** charge: pricing our give-up while letting RoR's failures
+go free. Under a verifier that is simply the wrong accounting.
+
+**Lesson for the paper.** Do not claim a deployability axis that a domain's own verifier collapses.
+State instead: *in verifier-rich domains the benefit is purely cost, and it survives charging every
+failure at ten times the dearest route.* Reserve the disclosure argument for verifier-poor settings
+and mark it explicitly as an extrapolation we have not measured.
+
 ### 3b-xliii Failure disclosure: at matched accuracy we convert ~100% of failures from shipped wrong answers into announced declines
 
 **Why this is a pure substitution question.** At matched accuracy the failure *rate* is equal by
