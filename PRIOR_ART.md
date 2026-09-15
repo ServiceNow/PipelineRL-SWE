@@ -160,6 +160,47 @@ NeurIPS 2023 — confirmed.
 *Still unverified and lower priority:* Badanidiyuru/Kleinberg/Slivkins (Bandits with Knapsacks) and
 Golovin & Krause (adaptive submodularity). Check before citing.
 
+## 0c. "Is Escalation Worth It? A Decision-Theoretic Characterization of LLM Cascades" (2605.06350)
+
+Dylan Bouchard, **7 May 2026 — two months BEFORE RoR v1**. Found 2026-09-15 and **not previously in
+this file, though it is a closer antecedent to §3b-lv than anything that was.**
+
+*They do:* a decision-theoretic treatment of cascades grounded in *"constrained optimization and
+duality"*, with *"budget- and quality-constrained formulations"*, cost-quality frontiers over model
+pools, and multi-stage $k$-model cascades with switching points. The decision rule is Lagrangian:
+**"a single shadow price equalizes marginal quality-per-cost across stage boundaries."** Validated
+across five benchmarks and eight models.
+
+*They do NOT:* **resample** the same model (deterministic threshold cascades that escalate to a
+*different* model only); have an **abstain/give-up** action; or solve an **MDP** — it is Lagrangian
+duality over threshold cascades, not backward induction over a state lattice.
+
+**What this costs us, and it is worth knowing now rather than in review.** The **shadow-price
+framing for LLM routing is Bouchard's**, published before Chen and before us. §3b-lv derives R as
+the dual of a global budget as though that were setup rather than prior art; it is prior art. **Cite
+it in §3 alongside Altman.** Between Bouchard (duality for cascades), Chen v1 (resample-vs-reroute
+under one budget) and Altman/Weitzman (the machinery), **we own none of the formulation.**
+
+**What it leaves us, which is the same list the rest of this file converges on:**
+
+| | Bouchard | Chen v1 | Chen v3 | ours |
+|---|---|---|---|---|
+| shadow price / duality | **yes** | yes | dropped | yes |
+| resample the same model | no | **yes** | yes | yes |
+| abstain / give up | no | no | no | **yes** |
+| MDP, backward induction, horizon-optimal | no | no (greedy; v3 disclaims) | no | **yes** |
+| per-problem beliefs from a non-generating probe | no (confidence) | no (counts) | no | **yes** |
+| cross-model per-query cost prediction | no | no (parameter count) | no | **yes** |
+
+**The strategic read.** This area is crowded and moving fast — Bouchard May, Chen July, ModelSwitch
+and several adaptive-self-consistency papers in the same window. Nobody owns the setting, and the
+formulation was never going to be our differentiator. **The belief source is, and that is exactly
+what §3b-xlvi measures (19/19) and §3b-xlix isolates against length and TF-IDF.** Lead with it.
+
+*Verification note: read via automated extraction of the abstract page. The shadow-price quote
+should be confirmed against the PDF before citing, and the paper read properly for whether any
+resampling variant appears in the body.*
+
 ## 1. Prefill-activation router — "LLM Router: Rethinking Routing with Prefill Activations" (2603.20895)
 
 **The closest work, and the one we have overclaimed against twice.**
