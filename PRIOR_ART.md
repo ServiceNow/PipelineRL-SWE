@@ -127,12 +127,12 @@ the empirical result. Position it that way deliberately rather than being correc
 
 | classical work | why it is the closest | what it covers of ours |
 |---|---|---|
-| **Weitzman (1979), "Optimal Search for the Best Alternative"** — *Pandora's box* | $n$ alternatives, each with a known reward distribution and an **inspection cost**; open sequentially, stop when what you hold beats the reservation value of every unopened box | **This is routing-with-resampling.** A route is a box; a draw is an opening. Weitzman's reservation-value index is the ancestor of our $p_mR - c_m$ rule, and his optimality proof is the reason a myopic index can be right at all |
-| **Altman (1999), *Constrained Markov Decision Processes*** | Lagrangian relaxation of a constrained MDP; the optimal constrained policy is a **randomised mixture of deterministic policies**, and the achievable set is a convex hull | **This is our entire frontier construction.** "Mixtures count, so compare hulls" is his theorem, not our idea. **Most important missing citation.** |
+| **Weitzman (1979), "Optimal Search for the Best Alternative", *Econometrica* 47(3):641–654** — *Pandora's box* ✅VERIFIED | $n$ alternatives, each with a known reward distribution and an **inspection cost**; open sequentially, stop when what you hold beats the reservation value of every unopened box | **This is routing-with-resampling.** A route is a box; a draw is an opening. Weitzman's reservation-value index is the ancestor of our $p_mR - c_m$ rule, and his optimality proof is the reason a myopic index can be right at all |
+| **Altman (1999), *Constrained Markov Decision Processes*, Chapman & Hall/CRC** ✅VERIFIED | Lagrangian relaxation of a constrained MDP; the optimal constrained policy is a **randomised mixture of deterministic policies**, and the achievable set is a convex hull | **This is our entire frontier construction.** "Mixtures count, so compare hulls" is his theorem, not our idea. **Most important missing citation.** |
 | **Gittins index; Whittle (1988) restless bandits** | decoupling a budget-coupled multi-armed problem by a common multiplier, giving a per-arm index | **This is the $R$ sweep.** Per-problem decoupling under a common price is the Whittle relaxation exactly |
 | **Badanidiyuru, Kleinberg & Slivkins, "Bandits with Knapsacks"** | online decisions under hard budget constraints, with regret guarantees | the online version of our allocation; we solve offline in the dual, they solve online |
 | **Golovin & Krause, adaptive submodularity** | adaptive stochastic optimisation under a budget, with greedy guarantees | when greedy *is* near-optimal here — relevant to RoR v1's greedy rule and to why our lookahead helps |
-| **Correlated Pandora's box** (Chawla, Gergatsouli et al.) | Pandora's box where box values are **correlated** | **exactly our cross-route $\rho$ problem** (§3b-xliv item 5): independence over-values "try another route", and this literature has the machinery |
+| **Gergatsouli et al., "Weitzman's Rule for Pandora's Box with Correlations", NeurIPS 2023** ✅VERIFIED | Pandora's box where box values are **correlated** | **exactly our cross-route $\rho$ problem** (§3b-xliv item 5): independence over-values "try another route", and this literature has the machinery |
 | Wald, sequential analysis / SPRT | optimal stopping of a sampling process | the stopping half of the rule |
 
 **Where this leaves the contribution claim, stated honestly:**
@@ -147,9 +147,18 @@ the empirical result. Position it that way deliberately rather than being correc
    a greedy index and explicitly disclaimed optimality — but note this is *applying* known
    machinery, not inventing it.
 
-*Citations above are from memory and MUST be verified before use — author, year, venue and exact
-claim. This project has been burned twice in one day by an unverified paraphrase (§0), and the
-Pandora's-box and correlated-Pandora's-box attributions are the least certain here.*
+**Verified 2026-09-15.** Weitzman: *Econometrica* 47(3):641–654, 1979 — confirmed, and the survey
+literature notes his index rule *"was later recognized to be a special case of Gittins's optimal
+algorithm for Bayesian bandits"*, so **Weitzman and Gittins are one lineage, not two**; cite them
+together. Altman: Chapman & Hall/CRC 1999, ISBN 9780849303821 — confirmed, and the load-bearing
+claim is verified verbatim: **"deterministic policies are not optimal for constrained MDPs"**, with
+optimal *mixed* stationary-deterministic policies obtained through a "mixing policy" that samples a
+policy and then commits to it. **That is our convex-hull frontier, as a theorem from 1999.**
+Correlated variant: Gergatsouli et al., *"Weitzman's Rule for Pandora's Box with Correlations"*,
+NeurIPS 2023 — confirmed.
+
+*Still unverified and lower priority:* Badanidiyuru/Kleinberg/Slivkins (Bandits with Knapsacks) and
+Golovin & Krause (adaptive submodularity). Check before citing.
 
 ## 1. Prefill-activation router — "LLM Router: Rethinking Routing with Prefill Activations" (2603.20895)
 
