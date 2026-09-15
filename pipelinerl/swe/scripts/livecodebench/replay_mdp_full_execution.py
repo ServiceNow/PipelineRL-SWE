@@ -1202,6 +1202,11 @@ def main() -> None:
         "selected max surplus is biased upward by selection; each value lambda tests "
         "max - lambda*(max - mean) <= 0 instead of max <= 0, so larger lambda gives up earlier. "
         "Emitted as policies `<family>_shrink<lambda>_value`. 0 reproduces the plug-in rule."))
+    parser.add_argument("--budget-aware-bok-arm", action=argparse.BooleanOptionalAction,
+                        default=False, help=(
+        "Add `budget_aware_best_of_k`: per cap, choose the route and depth maximising the "
+        "pool-level 1-(1-pi_m)^K subject to K*c_m <= cap, and spend the cap resampling that one "
+        "route. RoR v1's fifth baseline; our fixed best_of_K arms are weaker than it."))
     parser.add_argument("--random-allocation-arm", action=argparse.BooleanOptionalAction,
                         default=False, help=(
         "Add `random_allocation`: spend the per-episode cap on uniformly chosen affordable routes, "
@@ -1869,6 +1874,39 @@ def main() -> None:
                         "min_success_per_cost": None, "value_of_correct": _r,
                         "bellman_horizon": _h, **_aggregate(_out),
                     })
+
+    # BUDGET-AWARE best-of-K, the fifth RoR v1 baseline. Our best_of_{K} arms fix K in advance,
+    # which is weaker than what v1 compares against: given a cap B, pick the single route m and the
+    # depth K maximising the pool-level 1-(1-pi_m)^K subject to K*c_m <= B, then spend the whole
+    # cap resampling THAT route. It uses pool-level priors only -- no per-problem information --
+    # so it sits on the same rung as `counts` and isolates "commit to one model and resample" from
+    # "reroute between models".
+    if args.budget_aware_bok_arm:
+        print(f"budget-aware best-of-K arm: {len(budgets)} budgets")
+        for _b in budgets:
+            _best, _plan = -1.0, None
+            for _m in range(len(slots)):
+                _k = int(_b // max(float(expected_costs[_m]), 1e-12))
+                _k = min(_k, int(K))
+                if _k < 1:
+                    continue
+                _v = 1.0 - (1.0 - float(priors[_m])) ** _k
+                if _v > _best:
+                    _best, _plan = _v, [_m] * _k
+            if _plan is None:
+                continue
+            _out = []
+            for _pi in test_idx:
+                for _oi in range(args.num_orderings):
+                    _r = replay_fixed(outcomes[int(_pi)], valid[int(_pi)],
+                                      realized_costs[int(_pi)], orderings[int(_pi), _oi], _plan)
+                    _r["problem_id"] = pids[int(_pi)]; _r["ordering_index"] = _oi
+                    _out.append(_r)
+            rows.append({
+                "policy": "budget_aware_best_of_k", "budget": _b, "tau": None,
+                "min_success_per_cost": None, "value_of_correct": None,
+                "bellman_horizon": None, **_aggregate(_out),
+            })
 
     # Random allocation, swept over the same budget grid as `counts`.
     if args.random_allocation_arm:
