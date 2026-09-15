@@ -842,6 +842,63 @@ formulation (ROI-Reasoning's). If the margin vs `counts_value` is small, the win
 the contribution claim must shrink to cross-model pricing from one prefill. Reporting only
 `counts` would claim the column as ours. **Report the full grid.**
 
+### 3b-liii §3b-xxxi CLOSED: learned sigma works, and our probe beats it
+
+The comparison §3b-xxxi said had never existed — learned per-problem $\sigma$ against our probe, on
+the 64k pool, **in one replay** so seed, draw orderings and budget grid cannot confound the belief
+source. Factorized scorer trained on the 64k reachable dataset; control is `counts_value`.
+
+| arm | 50% | 60% | 70% | 80% | 84% |
+|---|---|---|---|---|---|
+| **learned $\sigma$** (factorized scorer) | +12.8% | +4.2% | +4.8% | −0.3% | +7.3% |
+| **our probe, beliefs only** | **+40.8%** | **+19.2%** | **+12.0%** | +2.3% | +6.6% |
+| our probe + cost head | +45.8% | +15.7% | +15.2% | +5.5% | +10.5% |
+| learned $\sigma$, Bellman h2 | +11.2% | +2.8% | +5.9% | −0.0% | +9.7% |
+| **ours, Bellman h2** | +41.0% | +15.4% | **+16.7%** | **+10.4%** | **+13.6%** |
+
+Head to head (positive = ours cheaper): beliefs-only **+32.1/+15.7/+7.6/+2.6/−0.8%**, full arm
+**+37.9/+12.1/+11.0/+5.8/+3.4%**.
+
+**Answer: learned $\sigma$ works — it beats count beliefs at four of five targets — but our probe
+beats it at four of five.** The open question is closed: *it works, and it does not beat ours.* This
+also retires the "predict $\sigma$ per problem" direction: a learned decay is a one-parameter
+summary of what the prefill already carries in full.
+
+**A second finding, and it matters more.** `ours + Bellman h2` is **+10.4%/+13.6%** at the 80/84%
+targets against the myopic arm's +5.5%/+10.5%. h2 is worse at the tight end and **better at the
+loose end** — which is exactly the regime §3b-l identified as holding all the remaining headroom and
+where no other variant moved anything. **The lookahead is the one structural lever that acts where
+we are weakest.** Select the horizon per operating point on calibration, as with the cost head.
+
+### 3b-liv Entry vs continue, done correctly: at tight budgets most of the value is the decision to START
+
+Re-run under `--start-protocol free_start`, where the policy may decline before buying anything.
+(The first attempt was confounded: under `scout_first` the scout draw is mandatory, so
+`failures.sum() == 0` never occurs in the decision loop and the entry arm never fired — §3b-xlix.)
+
+| the per-problem prior is allowed to act... | 50% | 60% | 70% | 80% | 84% |
+|---|---|---|---|---|---|
+| **only at ENTRY** (depth 0), counts after | **+25.0%** | +5.1% | +0.6% | −1.3% | +1.0% |
+| **only on CONTINUE**, counts at entry | **+40.8%** | **+16.8%** | **+10.8%** | +4.3% | +5.0% |
+| everywhere (full) | +43.3% | +20.6% | +11.9% | +1.6% | +6.5% |
+
+**This answers "is it just a better difficulty estimate plugged into RoR's machinery?" — and the
+answer is *it depends on the budget*, which is itself the finding.**
+
+- **At loose budgets, yes.** Entry contributes ~0 and the whole margin is CONTINUE: the prior is
+  being tracked through the episode, which *is* the same machinery with a better input.
+- **At the tight budget, no.** Entry alone is worth **+25.0% of the full +43.3%** — 58% of the
+  margin — at a decision point where count beliefs are **structurally incapable** of discriminating,
+  since $s\pi/(s+n)$ at $n=0$ is identical for every problem. That is not a better estimate in the
+  same machinery; it is discrimination where the baseline has none.
+
+The two halves are **sub-additive** (25.0 + 40.8 ≫ 43.3), as every pair of our components has been.
+
+**Consistent with three earlier measurements:** `free_start` helps our arm and helps RoR by *exactly*
+0.0% (§3b-xliv); `counts_value` abstains at 41.6% and still costs more (§3b-xxxvii); and the
+representation x formulation interaction is +27.5pt at the tight target and ~0 at the loose one.
+**All four are the same mechanism seen from different angles.**
+
 ### 3b-lii The smallest model in the pool is also the BEST encoder — and success has almost no label noise
 
 Two measurements that together say belief quality is worth attacking and say how.
