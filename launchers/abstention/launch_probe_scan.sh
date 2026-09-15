@@ -2,6 +2,11 @@
 # Encoder x prompt scan for the probe. Both axes are FREE at inference: every candidate is one
 # prefill of a small model, and changing the prompt costs the identical forward pass.
 #
+# ONE EAI JOB PER CANDIDATE, submitted in parallel. The first two attempts batched all 11
+# extractions into a single "&&" chain and both died partway -- once on shell quoting, once on a
+# gated repo -- taking every later extraction with them, including all three prompt variants. A
+# chain also serialises work that has no dependencies. Independent runs go in independent jobs.
+#
 # 3b-lii measured that scaling the probe does NOT help -- the 4B scout beats gpt-oss-20b and -120b
 # on average at 1/42 the price -- so the open question is not size but FAMILY, SPECIALISATION and
 # PROMPT. This scan varies all three and leaves the cost case untouched.
@@ -56,17 +61,23 @@ for spec in "${MODELS[@]}"; do
 done
 
 if [[ "${SUBMIT}" != "1" ]]; then
-  echo "Prepared but not submitted. ${#CMDS[@]} extractions -> ${OUT}"
+  echo "Prepared but not submitted. ${#CMDS[@]} INDEPENDENT jobs -> ${OUT}"
   printf '  %s\n' "${MODELS[@]}"
   echo "  + 3 prompt variants on the current scout (judge / plain / suffix)"
   echo; echo "Submit with:  SUBMIT=1 bash ${BASH_SOURCE[0]}"
   exit 0
 fi
 
-JOINED=$(printf ' ; %s' "${CMDS[@]}"); JOINED=${JOINED:3}
-make -C "${REPO_ROOT}" job \
-  JOB_NAME="probe_scan_${TIMESTAMP}" ENV=pipeline-rl CONDA_EXE=/opt/conda/bin/conda \
-  SNAPSHOT="${SNAPSHOT}" NPROC=1 GPU=1 GPU_MEM=80 CPU=8 CPU_MEM=64 \
-  COMMAND="export HF_HUB_DISABLE_IMPLICIT_TOKEN=1 && export PYTHONPATH=/mnt/llmd/results/exps/aristides/envs/accel:\${PYTHONPATH:-} && mkdir -p ${OUT} && ${JOINED}"
-echo "Job: probe_scan_${TIMESTAMP}"
-echo "Output: ${OUT}"
+mkdir -p "${OUT}"
+i=0
+for c in "${CMDS[@]}"; do
+  i=$((i+1))
+  TAG=$(sed -n 's/.*--route-label \([A-Za-z0-9_]*\).*/\1/p' <<< "$c")
+  make -C "${REPO_ROOT}" job \
+    JOB_NAME="probescan_${TAG}_${TIMESTAMP}" ENV=pipeline-rl CONDA_EXE=/opt/conda/bin/conda \
+    SNAPSHOT="${SNAPSHOT}" NPROC=1 GPU=1 GPU_MEM=80 CPU=8 CPU_MEM=64 \
+    COMMAND="export HF_HUB_DISABLE_IMPLICIT_TOKEN=1 && export PYTHONPATH=/mnt/llmd/results/exps/aristides/envs/accel:\${PYTHONPATH:-} && ${c}" \
+    >/dev/null 2>&1 && echo "  submitted probescan_${TAG}_${TIMESTAMP}" \
+    || echo "  FAILED TO SUBMIT probescan_${TAG}_${TIMESTAMP}"
+done
+echo "${i} jobs submitted -> ${OUT}"
