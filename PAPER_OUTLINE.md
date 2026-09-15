@@ -879,6 +879,40 @@ wrong and you ship believing you won, so disclosure is worth something again. **
 the dial that controls whether the disclosure argument is available at all** — state it as a
 function, not as a yes or no.
 
+### 3b-lxi Does the MDP earn its keep? The SEQUENTIAL structure does; the deep lookahead does not
+
+Our own results are awkward for a paper that leads with "MDP": the exact solve does not beat h=2
+(§3b-lviii), h=2 barely beats myopic, and the headline arm **is** myopic (h=1). So the question has
+to be asked directly: what part of the machinery is actually load-bearing?
+
+**Test: same beliefs, single-commit versus sequential** (vs `counts_value`, LCB seed 0):
+
+| arm | 50% | 60% | 70% | 80% | 84% |
+|---|---|---|---|---|---|
+| **single-commit**, our beliefs | +15.1% | **−10.0%** | *unreachable* | *unreachable* | *unreachable* |
+| **sequential**, our beliefs | **+40.8%** | **+19.2%** | **+12.0%** | +2.3% | +6.6% |
+
+**The sequential structure is what earns its keep, on three counts.** It **more than doubles** the
+tight-budget gain (+15.1 → +40.8); it **turns a loss into a gain** at 60% (−10.0 → +19.2); and most
+importantly it **extends the reachable range** — single-commit routing on this pool cannot reach the
+70% target *at any price*, while the sequential policy reaches 84.8%. Resampling is what buys the
+high-accuracy regime; no amount of better single-commit routing gets there.
+
+**So justify the three components we actually use, not "the MDP":**
+
+| component | evidence it pays | verdict |
+|---|---|---|
+| **sequential resample/reroute** | +15.1→+40.8 at 50%, −10.0→+19.2 at 60%, and 70%+ unreachable without it | **load-bearing** |
+| **stop action (zero-value abstention)** | `counts` cannot discriminate at entry; the interaction term is +27.5pt at the tight target (§3b-xxxvii) | **load-bearing** |
+| global price rather than a per-episode cap | +5.1%/+5.8% at tight targets, ~0 or negative at loose (§3b-xxxvii) | **marginal** |
+| **deep lookahead (h>2)** | h=4/6/18 identical to each other and no better than h=2; 84% *degrades* 3.9→2.9 | **does NOT pay** |
+
+**Write it this way and the awkwardness disappears.** We are not claiming exact dynamic programming
+helps — we measured that it does not, and we explain why (§3b-lviii: the transition model, not the
+search depth, is the binding constraint). We are claiming that **a sequential policy with a stop
+action, driven by per-problem beliefs, beats a single-commit router with the same beliefs** — which
+is exactly what the table shows, and which is the claim RoR v1 made and v3 withdrew.
+
 ### 3b-lviii The EXACT solve does not beat h=2 — the transition model caps the lookahead, not the depth
 
 §3b-lv predicted that raising the horizon should help, since truncation under-values continuation
