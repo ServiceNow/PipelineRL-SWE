@@ -23,6 +23,37 @@ version will not find the method we benchmark against. **Always cite `arXiv:2607
 | method | *"allocate each unit of budget between resampling and rerouting so that expected correctness is maximized"*; *"an online resample-or-reroute (RoR) allocation policy driven by estimated marginal correctness per unit cost"* | **no allocation framework**; disclaims the greedy rule as *"a transparent heuristic, not a proof of horizon-optimal control"* |
 | claim | **positive** — favourable cost-quality Pareto front against single-route, one-commit-router, budget-aware best-of-K, cascade and random-allocation baselines | **negative** — *"current evidence does not identify when to resample rather than reroute"* |
 
+**The author's own words (arXiv comments field), which settle what happened:**
+
+> *"v3: substantive methodological reconstruction of v1-v2. The budget-allocation, learned-router,
+> cost-oracle and broad Pareto claims are not retained; replaced by a three-gate identification
+> framework with fresh MBPP+, LiveCodeBench and preregistered BigCodeBench evidence.
+> v2: corrected Phi-4 cost (14.7B)"*
+
+**Read this carefully — "not retained" is not "was wrong".** The author does not claim the v1
+numbers were false, and nothing in v3 identifies an error in them. What changed is the *evidentiary
+bar*: v3 adopts preregistered support gates, exact-fold exchangeable references and query-cluster
+intervals, and the broad v1 claims do not survive **that** standard. v1 asked "does budget-aware
+allocation beat naive baselines?"; v3 asks "can you identify, per instance, which of resample or
+reroute is right?" **Both answers can be true at once** — a greedy allocation can beat naive
+baselines on average while the per-instance action remains unidentified.
+
+**And we have independent evidence the v1 policy does work, mildly.** Our own replay of it beats a
+fixed `gpt-oss-120b` by **+8.1%** at that model's own accuracy (§3b-xxxvii anchor). So the
+v1-style policy is not an artefact; it is a real but modest gain, which is exactly what v1 reported.
+
+**The genuine risk this creates for us, and it is not a novelty risk.** The author abandoned
+budget-allocation and Pareto claims *after raising his own evidentiary standard*. A reviewer who
+reads v3 may hold **us** to that bar — preregistration, exchangeable references, explicit support
+gates. Our strongest answer is the seed unanimity already in hand (5/5 at every LCB target, 3/3 on
+TACO, 19/19 targets across four pools), and our weakest points are the single-split results. **Fix
+the single-split results before submission; that is where this bites.**
+
+**Also note what is *no longer* claimed by anyone:** the learned-router and cost-oracle results are
+withdrawn too. That does not widen our *novelty* space — v1 remains published and citable prior art
+regardless of later withdrawal — but it does mean **there is no standing positive result in the
+literature for budget-aware resample-vs-reroute allocation.** Ours would be the first that survives.
+
 **Unchanged across versions, and these are what our baseline relies on:** no give-up/abstain
 action, count-based beliefs, per-model constant costs proxied by parameter count in billions.
 
