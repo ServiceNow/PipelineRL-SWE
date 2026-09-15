@@ -49,6 +49,41 @@ gates. Our strongest answer is the seed unanimity already in hand (5/5 at every 
 TACO, 19/19 targets across four pools), and our weakest points are the single-split results. **Fix
 the single-split results before submission; that is where this bites.**
 
+**Who owns the sequential formulation — the decisive split, and it favours us.**
+
+v1 claims the *framing* and a *greedy* rule, and is explicit about both:
+*"no previous work treats resampling the committed model and rerouting to an alternative model as
+competing uses of a single per-query cost budget"*, and the method is
+*"an online resample-or-reroute (RoR) allocation policy driven by estimated marginal correctness per
+unit cost"*. A greedy index on marginal value per dollar — which is exactly what our `counts` arm
+implements.
+
+**v3 then disclaims horizon-optimality outright:** *"The greedy rule is a transparent heuristic, not
+a proof of horizon-optimal control."*
+
+| component | whose |
+|---|---|
+| resample-vs-reroute as competing uses of one budget | **his (v1)** — cite it, it is the framing |
+| greedy allocation by marginal correctness per unit cost | **his (v1)** — this is our `counts` arm |
+| **backward induction over the failure-count lattice; horizon-optimal control** | **ours** — and v3 says in terms that he does *not* have it |
+| **abstention as the zero action of the Lagrangian** | ours in this setting; the *idea* of abstention-under-budget is ROI-Reasoning's (§4b) |
+| global budget solved in the dual | neither — textbook constrained-MDP / Neyman-Pearson |
+| **per-problem beliefs from one cheap prefill** | **ours** |
+
+So the answer to "was the MDP his?" is **no**. He has the *framing* and a *greedy heuristic on it*,
+and explicitly says the heuristic is not horizon-optimal control. **The Bellman lattice is the gap
+he names and does not fill.** And v3 fills it no better — it abandons allocation entirely for an
+identification framework. That makes §3b-lv (the formalisation) and the horizon sweep a direct
+contribution against a gap the prior author states himself, which is the strongest possible form of
+this argument.
+
+**A practical warning about reading this line of work.** All three versions are extremely dense and
+use heavy bespoke terminology ("two-sided FIT action support", "recoverable stopping debt",
+"exact-fold exchangeable reference"). This project has already been burned twice by paraphrase — the
+eleven-model/four-benchmark description that turned out to be v1-specific, and an in-session claim
+that the author had "retracted" v1 when the comments field says only "not retained". **Quote this
+paper verbatim, always with a version number, and never summarise it from memory.**
+
 **Also note what is *no longer* claimed by anyone:** the learned-router and cost-oracle results are
 withdrawn too. That does not widen our *novelty* space — v1 remains published and citable prior art
 regardless of later withdrawal — but it does mean **there is no standing positive result in the
