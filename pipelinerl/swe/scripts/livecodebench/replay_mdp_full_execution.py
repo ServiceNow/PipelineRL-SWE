@@ -370,6 +370,7 @@ def replay_adaptive(
     problem_statement: str,
     *,
     content_prior: np.ndarray | None = None,
+    random_route: bool = False,
     belief_split: str | None = None,
     posterior_prior: np.ndarray | None = None,
     argmax_shrink: float = 0.0,
@@ -418,6 +419,7 @@ def replay_adaptive(
     # static estimate discards evidence. This shrinks the prefill estimate toward the running mean
     # of observed costs on the same route, exactly as the belief decays toward observed failures.
     # Same-route only: cross-route cost transfer is catastrophic (R2 -3.7 scout->oss120).
+    rng_route = np.random.default_rng(abs(hash(problem_id)) % (2**32))
     cost_est = np.asarray(expected_costs, dtype=float).copy()
     _cost_obs_sum = np.zeros(len(slots), dtype=float)
     _cost_obs_n = np.zeros(len(slots), dtype=float)
@@ -765,6 +767,13 @@ def replay_adaptive(
             selection = {mi: ratios[mi] for mi in action_values}
         else:
             selection = action_values
+        if random_route:
+            # RANDOM ALLOCATION -- the null baseline RoR v1 compares against
+            # ("single-route, one-commit-router, budget-aware best-of-K, cascade, and
+            # random-allocation baselines"). Spend the cap on uniformly chosen affordable routes.
+            # It has no beliefs at all, so it isolates how much of any arm's frontier is the
+            # POOL's own cost/accuracy structure rather than the routing decision.
+            selection = {mi: float(rng_route.random()) for mi in selection}
 
         decision: dict[str, Any] | None = None
         if capture_trace:
@@ -1193,6 +1202,12 @@ def main() -> None:
         "selected max surplus is biased upward by selection; each value lambda tests "
         "max - lambda*(max - mean) <= 0 instead of max <= 0, so larger lambda gives up earlier. "
         "Emitted as policies `<family>_shrink<lambda>_value`. 0 reproduces the plug-in rule."))
+    parser.add_argument("--random-allocation-arm", action=argparse.BooleanOptionalAction,
+                        default=False, help=(
+        "Add `random_allocation`: spend the per-episode cap on uniformly chosen affordable routes, "
+        "with no beliefs at all. This is the null baseline RoR v1 compares itself against, and it "
+        "isolates how much of any frontier is the pool's own cost/accuracy structure rather than "
+        "the routing decision."))
     parser.add_argument("--belief-split-arms", action=argparse.BooleanOptionalAction,
                         default=False, help=(
         "Add `<family>_entry_value` and `<family>_continue_value`: the per-problem prior used ONLY "
@@ -1432,6 +1447,7 @@ def main() -> None:
         argmax_shrink: float = 0.0,
         cross_route_rho: float = 0.0,
         belief_split: str | None = None,
+        random_route: bool = False,
         pseudo_count: float | None = None,
         exploration_bonus: bool = False,
         bellman_horizon: int | None = None,
@@ -1463,6 +1479,7 @@ def main() -> None:
                     argmax_shrink=argmax_shrink,
                     cross_route_rho=cross_route_rho,
                     belief_split=belief_split,
+                    random_route=random_route,
                     scorer=scorer if base in ("sequential", "sequential_decay") else None,
                     calibrator=calibrator,
                     state_layout=args.state_layout,
@@ -1852,6 +1869,17 @@ def main() -> None:
                         "min_success_per_cost": None, "value_of_correct": _r,
                         "bellman_horizon": _h, **_aggregate(_out),
                     })
+
+    # Random allocation, swept over the same budget grid as `counts`.
+    if args.random_allocation_arm:
+        print(f"random-allocation arm: {len(budgets)} budgets")
+        for _b in budgets:
+            _out = run(test_idx, _b, "counts", None, random_route=True)
+            rows.append({
+                "policy": "random_allocation", "budget": _b, "tau": None,
+                "min_success_per_cost": None, "value_of_correct": None,
+                "bellman_horizon": None, **_aggregate(_out),
+            })
 
     # Entry / continue split of the per-problem prior.
     if args.belief_split_arms and content:
