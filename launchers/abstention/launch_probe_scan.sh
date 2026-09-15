@@ -22,8 +22,8 @@ MODELS=(
   "Qwen/Qwen3-4B-Thinking-2507|q4t|same size, reasoning-tuned"
   "Qwen/Qwen2.5-Coder-1.5B-Instruct|c15|code-specialised"
   "Qwen/Qwen2.5-Coder-3B-Instruct|c3|code-specialised"
-  "google/gemma-2-2b-it|g2|different family, general"
-  "meta-llama/Llama-3.2-1B-Instruct|l1|different family, general, tiny"
+  "/mnt/llmd/base_models/gemma-2-2b-it|g2|different family, general"
+  "/mnt/llmd/base_models/Llama-3.2-1B-Instruct|l1|different family, general, tiny"
 )
 # Prompt variants, all on the CURRENT scout so the two axes stay separable. The text is written
 # to FILES: prompt text has newlines and shell metacharacters, and passing it inline through a job
@@ -43,14 +43,17 @@ How difficult is this problem, and how likely is a strong model to solve it in o
 TXT
 
 CMDS=()
-for spec in "${MODELS[@]}"; do
-  IFS='|' read -r M TAG _ <<< "$spec"
-  CMDS+=("python pipelinerl/swe/scripts/livecodebench/pool_activation_probe.py --phase extract --model ${M} --route-label ${TAG} --prompts-file ${PROMPTS} --activations ${OUT}/enc_${TAG}.npz --max-len 8192")
-done
+# Prompt variants run FIRST and the chain is ";"-separated, not "&&". The first scan lost all
+# three prompt extractions because a gated repo failed eight commands in: with "&&" one bad
+# model kills everything after it, and the prompt ablation is the part we most want.
 S=Qwen/Qwen3-4B-Instruct-2507
 CMDS+=("python pipelinerl/swe/scripts/livecodebench/pool_activation_probe.py --phase extract --model ${S} --route-label pjudge --prompts-file ${PROMPTS} --activations ${OUT}/prompt_judge.npz --max-len 8192 --system-prompt-file ${PDIR}/judge_sys.txt")
 CMDS+=("python pipelinerl/swe/scripts/livecodebench/pool_activation_probe.py --phase extract --model ${S} --route-label pplain --prompts-file ${PROMPTS} --activations ${OUT}/prompt_plain.npz --max-len 8192 --system-prompt-file ${PDIR}/plain_sys.txt")
 CMDS+=("python pipelinerl/swe/scripts/livecodebench/pool_activation_probe.py --phase extract --model ${S} --route-label psuffix --prompts-file ${PROMPTS} --activations ${OUT}/prompt_suffix.npz --max-len 8192 --user-suffix-file ${PDIR}/difficulty_suffix.txt")
+for spec in "${MODELS[@]}"; do
+  IFS='|' read -r M TAG _ <<< "$spec"
+  CMDS+=("python pipelinerl/swe/scripts/livecodebench/pool_activation_probe.py --phase extract --model ${M} --route-label ${TAG} --prompts-file ${PROMPTS} --activations ${OUT}/enc_${TAG}.npz --max-len 8192")
+done
 
 if [[ "${SUBMIT}" != "1" ]]; then
   echo "Prepared but not submitted. ${#CMDS[@]} extractions -> ${OUT}"
@@ -60,7 +63,7 @@ if [[ "${SUBMIT}" != "1" ]]; then
   exit 0
 fi
 
-JOINED=$(printf ' && %s' "${CMDS[@]}"); JOINED=${JOINED:4}
+JOINED=$(printf ' ; %s' "${CMDS[@]}"); JOINED=${JOINED:3}
 make -C "${REPO_ROOT}" job \
   JOB_NAME="probe_scan_${TIMESTAMP}" ENV=pipeline-rl CONDA_EXE=/opt/conda/bin/conda \
   SNAPSHOT="${SNAPSHOT}" NPROC=1 GPU=1 GPU_MEM=80 CPU=8 CPU_MEM=64 \
