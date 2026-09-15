@@ -201,6 +201,41 @@ what §3b-xlvi measures (19/19) and §3b-xlix isolates against length and TF-IDF
 should be confirmed against the PDF before citing, and the paper read properly for whether any
 resampling variant appears in the body.*
 
+## 0d. Rejecting a verifier's ACCEPTANCE — explored, and we must position against it
+
+Checked 2026-09-15 after asking whether the policy should be allowed to distrust a positive
+verification signal. **It is not virgin territory.**
+
+**What RoR does, verbatim from v1's method section:** *"The main experiment assumes a reliable
+verifier: a policy stops as soon as a drawn answer is verified correct (early stopping)."* So v1
+**cannot** reject an acceptance. It handles imperfection two other ways: a **parametric degradation**
+(*"with quality q, final selection succeeds with probability q·1{any drawn sample correct}"* — a
+**false-reject** model applied at final selection, not false accepts mid-episode), and a real
+agreement/base-test verifier whose *"measured base-verifier false-accept rate is only **1.0%**"*, at
+which *"RoR under this real verifier nearly matches its perfect-verifier ceiling (0.897 vs 0.897)."*
+
+**⚠ Our weak verifier is 11x more adversarial than theirs** — 11.01% false accepts against 1.0%. At
+1% the oracle assumption is nearly free; at 11% our ceiling collapses 84.8% → 62.1% (§3b-lx). **We
+are not testing the same regime and must say so**, rather than presenting our collapse as a
+contradiction of their result.
+
+**Prior work that DOES model distrusting an acceptance:**
+
+| work | what it does | what it does not |
+|---|---|---|
+| **"Belief-Guided Inference Control for LLM Services via Verifiable Observations"** (2604.27536, Yuan, Lin, Chen, Xu, Yang, Ngai; 30 Apr 2026) | a **POMDP** whose latent state is *response reliability*, verifiable observations aggregated into a **belief state**, explicitly a *"budgeted sequential decision problem"* deciding *"whether the default low-cost response is sufficiently reliable or whether additional computation should be allocated"* | binary default-vs-escalate; **no resampling** of the same model; **no abstain action**; no per-problem prefill belief |
+| **AutoMix** (self-verification + a **meta-verifier**, POMDP framing) | the meta-verifier decides whether to *trust* the self-verification — literally rejecting an acceptance | binary routing; no budget sweep; no abstain ⚠ *recalled, NOT verified — check before citing* |
+
+**Consequence for us, stated plainly.** The POMDP-with-noisy-verifier framing is **taken** (April 2026,
+two months before RoR v1). Our optional-accept arm is not a new formulation; it is that formulation
+applied to a **multi-route pool with resampling and an abstain action**, with $q_m = P(\text{correct}
+\mid \text{weak PASS on route } m)$ measured per route (0.725 / 0.939 / 0.951 — a scout acceptance is
+far less trustworthy than a gpt-oss-120b one).
+
+**What remains ours in this regime, if the arm works:** resampling *and* rerouting *and* abstaining
+under a noisy verifier, with the accept/continue decision driven by a per-problem prefill belief.
+None of the three above has that combination. **But claim the combination, not the idea.**
+
 ## 1. Prefill-activation router — "LLM Router: Rethinking Routing with Prefill Activations" (2603.20895)
 
 **The closest work, and the one we have overclaimed against twice.**

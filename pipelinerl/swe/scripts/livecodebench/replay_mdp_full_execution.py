@@ -371,6 +371,7 @@ def replay_adaptive(
     *,
     content_prior: np.ndarray | None = None,
     observed: np.ndarray | None = None,
+    accept_values: np.ndarray | None = None,
     random_route: bool = False,
     belief_split: str | None = None,
     posterior_prior: np.ndarray | None = None,
@@ -420,6 +421,7 @@ def replay_adaptive(
     # static estimate discards evidence. This shrinks the prefill estimate toward the running mean
     # of observed costs on the same route, exactly as the belief decays toward observed failures.
     # Same-route only: cross-route cost transfer is catastrophic (R2 -3.7 scout->oss120).
+    held_q, held_true = 0.0, False
     rng_route = np.random.default_rng(abs(hash(problem_id)) % (2**32))
     cost_est = np.asarray(expected_costs, dtype=float).copy()
     _cost_obs_sum = np.zeros(len(slots), dtype=float)
@@ -470,7 +472,18 @@ def replay_adaptive(
         _seen = outcomes[mi, draw] if observed is None else observed[mi, draw]
         if _seen:
             _truth = bool(outcomes[mi, draw])
-            return (True if _truth else "false_accept"), draw
+            if accept_values is None:
+                return (True if _truth else "false_accept"), draw
+            # OPTIONAL ACCEPT. Forcing a stop on every weak PASS is not a decision problem -- it is
+            # injected noise the policy cannot act on. Instead the PASS BANKS a candidate worth
+            # R*q_m, q_m = P(correct | weak PASS on route m), and the policy then chooses between
+            # banking it and buying more. q is strongly route-dependent (0.72 scout / 0.94 oss20 /
+            # 0.95 oss120), so 'do I trust this acceptance?' has real structure. This is the
+            # decision RoR v3 calls unidentified.
+            nonlocal held_q, held_true
+            if float(accept_values[mi]) > held_q:
+                held_q = float(accept_values[mi]); held_true = _truth
+            return None, draw
         failures[mi] += 1
         attempts.append(records[(problem_id, slots[mi], draw)])
         return False, draw
@@ -847,7 +860,11 @@ def replay_adaptive(
                 if argmax_shrink > 0.0 and len(_vals) > 1:
                     _mean = sum(_vals) / len(_vals)
                     _mx = _mx - argmax_shrink * (_mx - _mean)
-                value_stop = _mx <= 0.0
+                # Stopping is worth R*held_q now, not 0: with nothing banked this is the original
+                # zero-crossing; with a candidate in hand the bar to keep buying rises.
+                _floor = (held_q * float(value_of_correct)
+                          if (accept_values is not None and value_of_correct is not None) else 0.0)
+                value_stop = _mx <= _floor
         # Diagnostic upper bound: replace only the stopping decision with perfect
         # knowledge of the stored future outcomes. Route scores, rankings, costs,
         # capacities, R, and Bellman horizon remain untouched. This deliberately
@@ -932,7 +949,11 @@ def replay_adaptive(
             return finish(True, False)
         if result == "false_accept":
             return finish(False, False)   # verifier accepted a wrong answer; episode ends
+        if accept_values is not None and held_q > 0.0 and value_stop:
+            return finish(held_true, False)   # chose to bank the candidate it holds
 
+    if accept_values is not None:
+        return finish(held_true, held_q == 0.0)   # abstained iff nothing was accepted
     return finish(False, False)
 
 
@@ -1215,6 +1236,11 @@ def main() -> None:
         "selected max surplus is biased upward by selection; each value lambda tests "
         "max - lambda*(max - mean) <= 0 instead of max <= 0, so larger lambda gives up earlier. "
         "Emitted as policies `<family>_shrink<lambda>_value`. 0 reproduces the plug-in rule."))
+    parser.add_argument("--optional-accept", action=argparse.BooleanOptionalAction,
+                        default=False, help=(
+        "With --verifier weak, a PASS BANKS a candidate worth R*q_m instead of forcing a stop, and "
+        "the policy chooses between banking it and buying more. Without this the weak verifier is "
+        "not a decision problem at all -- just noise the policy cannot act on."))
     parser.add_argument("--verifier", choices=("oracle", "weak"), default="oracle", help=(
         "Which signal the policy STOPS on. `oracle` (default, and what every result so far "
         "assumes) lets it see true correctness -- a strong assumption the related literature "
@@ -1336,6 +1362,7 @@ def main() -> None:
         raise ValueError("Full-execution replay requires a schema-v2 tensor bundle")
     outcomes = data["execution_outcome"].astype(bool)
     observed = None
+    accept_q = None
     if args.verifier == "weak":
         if "weak_verifier_outcome" not in data:
             raise ValueError("--verifier weak requires weak_verifier_outcome in the tensor bundle")
@@ -1343,6 +1370,7 @@ def main() -> None:
         _v = data["valid"].astype(bool)
         print(f"WEAK VERIFIER: agrees with truth on {100*(observed[_v]==outcomes[_v]).mean():.2f}% "
               f"of valid draws; false accepts {100*((observed&~outcomes)[_v]).mean():.2f}%")
+
     valid = data["valid"].astype(bool)
     pids = [str(value) for value in data["problem_ids"]]
     slots = [str(value) for value in data["model_slots"]]
@@ -1357,6 +1385,15 @@ def main() -> None:
 
     manifest = load_split_manifest(tensor_dir / "split_manifest.json", pids)
     train_idx, cal_idx, test_idx = split_indices(manifest, pids)
+    if observed is not None and args.optional_accept:
+        # q_m = P(correct | weak PASS on route m), fitted on TRAIN only. Strongly route-dependent,
+        # which is the point: a scout PASS is far less trustworthy than a gpt-oss-120b one, so
+        # "do I trust this acceptance?" is a real decision rather than a coin flip.
+        accept_q = np.array([
+            float(outcomes[train_idx, _m, :][(valid & observed)[train_idx, _m, :]].mean())
+            for _m in range(len(slots))])
+        print("OPTIONAL ACCEPT: q = P(correct | weak PASS) = "
+              + ", ".join(f"{_s}={_q:.3f}" for _s, _q in zip(slots, accept_q)))
     if args.eval_split == "calibration":
         # Hyperparameters must be chosen on the policy's own objective, not on a predictor metric
         # that is invariant to prediction SPREAD -- three separate interventions (belief C on AUC,
@@ -1514,6 +1551,7 @@ def main() -> None:
                     belief_split=belief_split,
                     random_route=random_route,
                     observed=(observed[int(pi)] if observed is not None else None),
+                    accept_values=accept_q,
                     scorer=scorer if base in ("sequential", "sequential_decay") else None,
                     calibrator=calibrator,
                     state_layout=args.state_layout,
