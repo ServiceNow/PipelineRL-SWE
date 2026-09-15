@@ -842,6 +842,43 @@ formulation (ROI-Reasoning's). If the margin vs `counts_value` is small, the win
 the contribution claim must shrink to cross-model pricing from one prefill. Reporting only
 `counts` would claim the column as ours. **Report the full grid.**
 
+### 3b-lx The belief claim SURVIVES a weak verifier but roughly halves — and the ceiling collapses
+
+Policy stops on `weak_verifier_outcome` (11.01% false accepts) and is still **scored on the truth**,
+so a false accept ends the episode with a wrong answer shipped. Ours vs `counts_value`, formulation
+held fixed:
+
+| verifier | 50% | 60% | 70% | 80% | 84% | top accuracy reachable |
+|---|---|---|---|---|---|---|
+| **oracle** (what every prior result assumed) | +40.8% | +19.2% | +12.0% | +2.3% | +6.6% | **84.8%** |
+| **weak** (11% false accepts) | **+19.6%** | **+10.5%** | unreachable | unreachable | unreachable | **62.1%** |
+
+*(beliefs + cost head: +45.8/+15.7/+15.2/+5.5/+10.5 oracle, +13.3/+16.2 weak.)*
+
+**Three things, and all of them must be in the paper.**
+
+1. **The claim survives.** At every target the weak verifier can reach, activation beliefs still beat
+   count beliefs — **+19.6% and +10.5%**. The result is not an artefact of assuming an oracle.
+2. **It roughly halves.** +40.8 → +19.6 and +19.2 → +10.5. **We reproduce RoR v1's own ablation
+   exactly** — *"gains are verifier-gated, shrinking as verifier quality degrades"* — which makes
+   this corroboration of the prior work rather than a weakness of ours.
+3. **The ceiling collapses from 84.8% to 62.1%**, and this is the bigger deal. With an 11%
+   false-accept rate the policy *cannot* reach the high-accuracy regime at any price, because
+   episodes terminate on a lie. **Every result we report at the 70/80/84% targets is conditional on
+   a verifier far better than the weak one.**
+
+**Reporting rule.** Report both verifiers side by side, and state the top reachable accuracy for
+each. Do **not** report 70/80/84% targets without saying they require a near-oracle verifier. The
+honest headline is *"activation beliefs cut cost at matched accuracy by +19.6%/+10.5% under a
+realistic verifier and +40.8%/+19.2% under a perfect one"* — which is still the strongest claim in
+this document that survives every objection raised against it.
+
+**This also settles §3b-lvii properly.** Under the oracle verifier a wrong answer converts to a
+decline for free, so disclosure is worthless; under the weak verifier 11% of accepted answers are
+wrong and you ship believing you won, so disclosure is worth something again. **Verifier quality is
+the dial that controls whether the disclosure argument is available at all** — state it as a
+function, not as a yes or no.
+
 ### 3b-lviii The EXACT solve does not beat h=2 — the transition model caps the lookahead, not the depth
 
 §3b-lv predicted that raising the horizon should help, since truncation under-values continuation
