@@ -107,8 +107,14 @@ def extract(args) -> None:
     # device_map="auto" shards across whatever GPUs the job was given. gpt-oss ships MXFP4;
     # without triton_kernels transformers dequantizes to bf16, which is why the 120b job asks
     # for four cards rather than one.
-    model = AutoModelForCausalLM.from_pretrained(
-        args.model, dtype=torch.bfloat16, device_map="auto", output_hidden_states=True)
+    # `dtype=` is the current transformers spelling; older versions want `torch_dtype=` and
+    # raise TypeError from the model constructor, which is how the first probe_scan job died on
+    # an image whose transformers predates the rename. Try both rather than pinning a version.
+    _kw = dict(device_map="auto", output_hidden_states=True)
+    try:
+        model = AutoModelForCausalLM.from_pretrained(args.model, dtype=torch.bfloat16, **_kw)
+    except TypeError:
+        model = AutoModelForCausalLM.from_pretrained(args.model, torch_dtype=torch.bfloat16, **_kw)
     model.eval()
     n_layers = model.config.num_hidden_layers
     layers = sorted({int(round(f * n_layers)) for f in LAYER_FRACTIONS})
