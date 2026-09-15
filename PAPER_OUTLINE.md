@@ -842,6 +842,65 @@ formulation (ROI-Reasoning's). If the margin vs `counts_value` is small, the win
 the contribution claim must shrink to cross-model pricing from one prefill. Reporting only
 `counts` would claim the column as ours. **Report the full grid.**
 
+### 3b-lviii The EXACT solve does not beat h=2 — the transition model caps the lookahead, not the depth
+
+§3b-lv predicted that raising the horizon should help, since truncation under-values continuation
+and makes stopping too attractive. Run on LCB, matched grid, against the **myopic** arm:
+
+| horizon | 50% | 60% | 70% | 80% | 84% | lattice nodes |
+|---|---|---|---|---|---|---|
+| **h=2** | −8.8% | −5.4% | **+1.3%** | **+4.2%** | +3.9% | 4 |
+| h=4 | −8.8% | −6.1% | −0.7% | +2.2% | **+4.5%** | 20 |
+| h=6 | −8.8% | −6.1% | −0.7% | +1.6% | +3.6% | 56 |
+| **h=18 (exact, nothing truncated)** | −8.8% | −6.1% | −0.7% | +1.6% | **+2.9%** | 342 |
+
+**The prediction was half right and the interesting half is wrong.** Lookahead *does* help at the
+loose end — h=2 is +4.2%/+3.9% at the 80/84% targets against myopic — but **going deeper than 2 adds
+nothing and at 84% actively hurts** (3.9 → 4.5 → 3.6 → **2.9**). h=4, h=6 and h=18 are essentially
+identical at the tight end, so the solve has converged; the differences are not search error.
+
+**Diagnosis, pre-registered in §3b-lv and now supported.** At $h \ge 2$ the lattice reuses the root
+belief at every node, asserting failing route $m$ says nothing about route $m'$ — which is false.
+Independence *over*-values continuation while truncation *under*-values it, and the two partially
+cancel at $h{=}2$. Deeper search removes the truncation error while **compounding** the transition
+error, so the net is flat-to-negative. **The value of the lookahead is capped by the quality of the
+transition model, not by the depth of the search.**
+
+**This is the same shape as the belief finding, and the two should be reported together.** More
+exact optimisation over a wrong model buys nothing; the binding constraint is the model. Use
+**h=2**, and say why — not because deeper is expensive (342 nodes is free) but because deeper is
+*not better* until the transition model is fixed.
+
+### 3b-lix The null ladder: random allocation BEATS the count-based greedy rule
+
+All on one budget grid, relative to `counts` (the RoR v1 policy), positive = cheaper at that accuracy:
+
+| arm | information available | 50% | 60% | 70% | 80% | 84% |
+|---|---|---|---|---|---|---|
+| **random allocation** | **none at all** | **+3.5%** | **+4.2%** | **+6.6%** | **+4.4%** | **+1.4%** |
+| budget-aware best-of-K | pool prior, one route | −22.0% | −13.7% | +11.5% | −11.7% | — |
+| `counts` (RoR v1) | pool prior, may reroute | — | — | — | — | — |
+| **ours** | **per-problem** | **+48.6%** | **+20.6%** | **+16.7%** | **+5.3%** | **+7.5%** |
+
+**Choosing routes uniformly at random is cheaper than the count-based greedy rule at every target.**
+That is a real result about the baseline, not a bug: the density rule $p_m/c_m$ is scale-invariant in
+cost, so with a pool prior it systematically prefers the cheapest route and over-buys scout draws,
+while random selection diversifies. A rule with *no information* beats a rule with *pool-level
+information used badly*.
+
+**Three consequences.**
+
+1. **Report random allocation.** RoR v1 names it as a baseline and it is the one that exposes this.
+2. **"We beat RoR" is the weaker claim; "we beat random" is the load-bearing one.** Ours is +46.7%
+   over random at the 50% target and positive at all five. Lead with that comparison, or a reader
+   who runs the null themselves will find the embarrassment first.
+3. **It sharpens the per-problem claim.** Pool-level beliefs are not merely *less* useful than
+   per-problem ones — plugged into a density rule they are *worse than nothing*. That is exactly
+   why `counts` cannot discriminate at entry (§3b-liv) and why the interaction term is large.
+
+*Single seed, one pool. Replicate before it goes in the paper — this is a strong claim about a
+published baseline and it needs seeds.*
+
 ### 3b-lvi Probe scan: code-specialisation HURTS, the solving prompt hurts, and the free scalars are redundant
 
 Eleven candidates, one protocol (same manifest split, kernel-ridge head, penalty per route on
