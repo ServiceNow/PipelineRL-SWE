@@ -842,6 +842,70 @@ formulation (ROI-Reasoning's). If the margin vs `counts_value` is small, the win
 the contribution claim must shrink to cross-model pricing from one prefill. Reporting only
 `counts` would claim the column as ours. **Report the full grid.**
 
+### 3b-lv The method, stated properly — and why we were truncating at h=2 for no reason
+
+**Setup.** Problems $i = 1..N$. Routes $m = 1..M$, route $m$ having $K_m$ available draws at cost
+$c_m$ each. Within an episode the state is the failure-count vector
+$\mathbf{n} = (n_1,\dots,n_M)$; $p_m(\mathbf{n})$ is the probability the next draw on route $m$
+succeeds given $\mathbf{n}$. Actions: buy one draw on some route, or stop.
+
+**The global problem.** Maximise expected solves under one batch budget:
+
+$$\max \sum_i \mathbb{E}[\mathbb{1}\{\text{solved}_i\}] \quad\text{s.t.}\quad \sum_i \mathbb{E}[\text{cost}_i] \le B.$$
+
+**Lagrangian relaxation.** With multiplier $\lambda \ge 0$ the objective decouples across problems;
+dividing by $\lambda$ and writing $R = 1/\lambda$ — the **dollar value of a correct answer** — each
+problem independently solves $\max\ \mathbb{E}[\mathbb{1}\{\text{solved}\}]\,R - \mathbb{E}[\text{cost}]$.
+Sweeping $R$ traces the frontier; this is the standard convexification, the same one that makes
+randomised tests admissible in Neyman–Pearson.
+
+**The per-problem MDP.** Backward induction over the failure-count lattice:
+
+$$V(\mathbf{n}) \;=\; \max\Big(\,\underbrace{0}_{\text{stop}},\ \max_m\ \big[\,p_m(\mathbf{n})\,R \;-\; c_m \;+\; (1-p_m(\mathbf{n}))\,V(\mathbf{n}+\mathbf{e}_m)\,\big]\Big)$$
+
+with $V \equiv 0$ once every route is exhausted. **The zero in the outer max is abstention** — it is
+not an added mechanism but the null action's value, and it fires exactly under complementary
+slackness (§3b-xxxvi).
+
+**Beliefs.** $p_m(\mathbf{n}) = \theta_m \cdot \sigma/(\sigma + n_m)$, a Beta–Bernoulli decay.
+The **baseline** sets $\theta_m = \pi_m$, the pool-level route prior — *identical for every
+problem*, which is why count beliefs cannot discriminate at $\mathbf{n} = \mathbf{0}$ (§3b-liv).
+**Ours** sets $\theta_m$ from one prefill of the cheapest model. §3b-liii closed the question of
+learning $\sigma$ per problem: it works, and the prefill beats it.
+
+**Horizon.** Truncating the recursion at depth $h$ sets $V = 0$ beyond depth $h$:
+
+| $h$ | what it is | lattice nodes per decision |
+|---|---|---|
+| 1 | **the myopic rule** $\max(0,\max_m[p_mR - c_m])$ — verified byte-identical | 1 |
+| 2 | what every result in this document used | 4 |
+| 4 | | 20 |
+| 6 | | 56 |
+| **18** | $\sum_m K_m$ — **nothing truncated, the exact solve** | **342** |
+
+**We have been truncating at $h=2$ for no reason.** The exact solve is 342 nodes per decision on
+this pool — 85x the $h=2$ cost and still negligible. There was never a computational barrier; $h=2$
+was inherited and never revisited.
+
+**What the truncation does, and the prediction it makes.** Setting $V = 0$ beyond depth $h$
+*underestimates* $V(\mathbf{n})$, because a real continuation has non-negative value. Under-valuing
+continuation makes the stop action (value exactly 0) relatively more attractive, so **a truncated
+policy gives up too early**. Raising $h$ should therefore help most where you want to keep buying —
+loose budgets — and matter least at tight ones.
+
+**That is exactly what was measured.** $h{=}2$ against the myopic arm: **+10.4%/+13.6% at the 80/84%
+targets** and *worse* at 50% (§3b-liii, §3b-xliv). The loose end is where §3b-l says all the
+remaining headroom is.
+
+**And it predicts an interaction with the cross-route correction.** At $h \ge 2$ the lattice reuses
+the root belief at every node, asserting that failing route $m$ says nothing about route $m'$
+(§3b-xliv item 5). That assumption *over*-values continuation, while truncation *under*-values it —
+opposite signs. So the two partially cancel at $h{=}2$, and **the independence error should grow
+with $h$**: the deeper the lookahead, the more compounding an unrealistic transition model does.
+**If the exact solve underperforms $h{=}2$ at tight budgets, that is the diagnosis, not a failure of
+exact dynamic programming.** Sweep launched over $h \in \{2,4,6,18\} \times \rho \in \{0, 0.1, 0.25\}$
+to test it.
+
 ### 3b-liii §3b-xxxi CLOSED: learned sigma works, and our probe beats it
 
 The comparison §3b-xxxi said had never existed — learned per-problem $\sigma$ against our probe, on
