@@ -2427,9 +2427,12 @@ already is the allocator; no separate experiment is needed.)*
 
 ### 4.1 Sequential and budgeted test-time model selection *(closest)*
 
-- **RoR — "Resample or Reroute? Recoverable Stopping Debt Without Identified Action Selection"**
-  (2607.08665 v3, Teng-Ruei Chen). **This entry was substantially wrong until 2026-09-15; see
-  `PRIOR_ART.md` §0.** It formalises resample-vs-reroute as competing uses of a second call after a
+- **RoR — "Resample or Reroute? Budget-Aware Test-Time Model Selection"** (**arXiv:2607.08665v1**,
+  Teng-Ruei Chen). **Cite the version: v3 (2026-09-02) is a substantially different paper under a
+  changed title — see `PRIOR_ART.md` §0.** v1 is what our `counts` arm reproduces: an eleven-model
+  pool over four benchmarks, with *"an online resample-or-reroute (RoR) allocation policy driven by
+  estimated marginal correctness per unit cost"*, reporting a favourable cost-quality Pareto front.
+  v3 instead reports that It formalises resample-vs-reroute as competing uses of a second call after a
   fallible verifier accepts a candidate, and establishes that recoverable stopping debt exists
   (+2.59pp on MBPP+). It is a **negative-result** paper: *"current evidence does not identify when
   to resample rather than reroute."* It has **two** primary models (Qwen2.5-7B/14B), not eleven —

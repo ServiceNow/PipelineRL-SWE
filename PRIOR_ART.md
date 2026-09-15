@@ -9,43 +9,41 @@ Format: what they do / what they do NOT do / what that leaves us.
 
 ---
 
-## 0. RoR (2607.08665) — RE-READ 2026-09-15. Our description of it was substantially WRONG.
+## 0. RoR (2607.08665) — the paper was REWRITTEN between v1 and v3. Cite the version.
 
-**"Resample or Reroute? Recoverable Stopping Debt Without Identified Action Selection"**,
-Teng-Ruei Chen. v1 2026-07-09, v2 2026-07-10, **v3 2026-09-02**. Checked against the arXiv HTML
-because it is our primary baseline and the description is load-bearing on every table.
+Our description was **accurate for v1**. arXiv 2607.08665 has since been replaced by a
+substantially different paper under a changed title, and anyone pulling the default (latest)
+version will not find the method we benchmark against. **Always cite `arXiv:2607.08665v1`.**
 
-| what this project has been saying | what the paper actually is |
-|---|---|
-| "an **eleven-model** open-weight pool" | **two** primary models — Qwen2.5-7B-Instruct and 14B-Instruct; Llama-3.1-8B and Nemotron-Nano-9B added post-outcome |
-| "over **four** benchmarks" | MBPP+ (primary, **152 queries**), LiveCodeBench (diagnostic), BigCodeBench (prospective gate), plus historical replays |
-| "allocating each unit to whichever action has the highest estimated **marginal correctness per dollar**" | **no such allocation framework exists.** A pathwise cap $\sum_t c_{A_{it}} \le B$ is stated generically, and the paper explicitly disclaims the greedy rule: *"The greedy rule is a transparent heuristic, not a proof of horizon-optimal control."* |
-| implicitly, a positive method we beat | **a NEGATIVE-result paper**: *"Stopping debt exists, but current evidence does not identify when to resample rather than reroute."* Neither tested controller beats fixed rerouting. |
-| "no stop action" | **correct** — the action space is resample-or-reroute; declining to answer is absent |
-| "count-based beliefs", "per-model constant costs by parameter count" | broadly correct |
+| | **v1** (2026-07-09) — *what we reproduce* | **v3** (2026-09-02) — *what arXiv serves today* |
+|---|---|---|
+| title | "Resample or Reroute? **Budget-Aware Test-Time Model Selection for Large Language Models**" | "Resample or Reroute? **Recoverable Stopping Debt Without Identified Action Selection**" |
+| pool | **eleven-model** open-weight pool | **two** primary (Qwen2.5-7B/14B) + 2 post-hoc |
+| benchmarks | **four**, of differing difficulty | MBPP+ (152 queries), LCB, BigCodeBench |
+| method | *"allocate each unit of budget between resampling and rerouting so that expected correctness is maximized"*; *"an online resample-or-reroute (RoR) allocation policy driven by estimated marginal correctness per unit cost"* | **no allocation framework**; disclaims the greedy rule as *"a transparent heuristic, not a proof of horizon-optimal control"* |
+| claim | **positive** — favourable cost-quality Pareto front against single-route, one-commit-router, budget-aware best-of-K, cascade and random-allocation baselines | **negative** — *"current evidence does not identify when to resample rather than reroute"* |
 
-**Probable source of the error: RouterBench.** *That* is the eleven-model pool (§7). The two appear
-to have been merged at some point and the merged description propagated.
+**Unchanged across versions, and these are what our baseline relies on:** no give-up/abstain
+action, count-based beliefs, per-model constant costs proxied by parameter count in billions.
 
-**The consequence, and it is the same class of error as the augmented-RoR conflation (§3b-xxxiv).**
-Our `counts` arm — count beliefs, greedy value-per-cost, a per-query cap as the knob — **is our own
-construction, not a published method.** Labelling it *"RoR as published"* in every table is wrong.
+**What this means for us — and it is favourable, not awkward.**
 
-**What to do, and it does not invalidate any measurement:**
-1. **Rename the arm.** Call it what it is: *count-belief greedy allocation under a per-query cap*.
-   It remains a reasonable, standard baseline; only the attribution was false.
-2. **Cite RoR for what it does do** — formalising resample-vs-reroute as competing uses of a second
-   call after a fallible verifier accepts, and establishing that recoverable stopping debt exists
-   (+2.59pp). Do **not** cite it for a budget-allocation method.
-3. **Stop describing it as the method we beat.** Its headline is that the resample/reroute choice is
-   *not identified* by current evidence. Our claim should be positioned against that honestly — we
-   supply a belief that makes the choice identifiable, which is a *response* to their negative
-   result rather than an improvement on a positive one. That is a **better** framing than the one
-   we had.
+1. **Our `counts` arm is a faithful reproduction of v1's published policy.** The label "RoR as
+   published" is correct *provided the version is stated*. Say so explicitly in the paper.
+2. **The author has since weakened the positive claim to a negative one.** v3's headline is that
+   the resample-vs-reroute choice is **not identified** by available evidence. Our contribution —
+   a per-problem belief that makes the choice identifiable, and a give-up action that neither
+   version has — is therefore a **direct answer to an open problem the original author now states
+   outright**, rather than an incremental gain over a standing positive result. That is a stronger
+   position for §1 of the paper.
+3. **Do not cite v1's Pareto-front result as if it stands.** Cite v1 for the *formulation and the
+   policy we compare against*; cite v3 for the *identification problem we address*.
+4. Reviewers pulling the bare arXiv ID will see v3. **Anticipate it in the related-work text** in
+   one sentence, or the mismatch will read as carelessness.
 
-*Verification caveat:* read via automated extraction of the arXiv HTML. The quoted strings are
-reliable, but a human read of v3 is required before submission — particularly to confirm there is
-no budget-allocation section the extraction missed.
+*Verified 2026-09-15 by fetching both v1 and v3 abstracts, plus the v3 HTML full text. A human read
+of v1's method section is still required before submission to confirm the `counts` arm matches its
+allocation rule in detail.*
 
 ---
 
