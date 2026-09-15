@@ -842,6 +842,59 @@ formulation (ROI-Reasoning's). If the margin vs `counts_value` is small, the win
 the contribution claim must shrink to cross-model pricing from one prefill. Reporting only
 `counts` would claim the column as ours. **Report the full grid.**
 
+### 3b-lvi Probe scan: code-specialisation HURTS, the solving prompt hurts, and the free scalars are redundant
+
+Eleven candidates, one protocol (same manifest split, kernel-ridge head, penalty per route on
+calibration, scored on test). Mean test AUC over the three routes, `mean+last` readout unless
+stated. **Absolute levels are not the deployed head's** (binarised label); the ranking is the claim.
+
+**Encoder axis — the user's hypothesis was right: general beats code-specialised.**
+
+| encoder | params | specialisation | mean AUC |
+|---|---|---|---|
+| **Qwen3-4B-Instruct** (current scout) | 4B | general | **0.8673** |
+| Qwen3-4B-Thinking | 4B | reasoning | 0.8577 (**0.8729** on `content_last`) |
+| **Qwen3-0.6B** | **0.6B** | general | **0.8528** |
+| Qwen3-1.7B | 1.7B | general | 0.8513 |
+| Qwen2.5-**Coder**-1.5B | 1.5B | **code** | 0.8422 |
+| Qwen2.5-**Coder**-3B | 3B | **code** | 0.8399 |
+| Llama-3.2-1B-Instruct | 1B | general, other family | 0.8362 |
+
+**A 0.6B general model beats a 3B code-specialised one** (0.8528 vs 0.8399). Code-specialisation is
+*negative* at matched scale: both Coder models sit below every general Qwen3 including the one
+5x smaller. The plausible mechanism is that a code-tuned model's representation collapses toward
+"what code do I emit", discarding the difficulty signal we need. **And Qwen3-0.6B is within 0.0145
+AUC of the 4B scout at roughly a sixth of the prefill cost** — a further cost reduction available if
+the policy gap is as small as the AUC gap.
+
+**Prompt axis — the SOLVING prompt was hurting, and the judge prompt is not the fix.**
+
+| system prompt on the 4B scout | mean AUC | vs current |
+|---|---|---|
+| "expert competitive programmer … output only Python code" (**current**) | 0.8673 | — |
+| "You are an expert at assessing … do not solve it" (**judge**) | 0.8692 | +0.0019 |
+| solving prompt + difficulty question appended (**suffix**) | 0.8716 | +0.0043 |
+| **"You are a helpful assistant." (plain)** | **0.8765** | **+0.0092** |
+
+**Removing task framing beats both solving and judging framing.** The purpose-built judge prompt is
+worth almost nothing (+0.0019) while simply *deleting* the competitive-programmer instruction is
+worth five times as much. The prompt was never ablated and it was the wrong one — though the
+magnitude is small, and **§3b-lvii must confirm it reaches the policy before it is claimed**.
+
+**Readout matters, and concatenation can hurt.** `last` and `content_last` beat `mean` almost
+everywhere, and for Qwen3-4B-Thinking `content_last` alone (0.8729) beats `mean+last` (0.8577).
+Concatenating a weak readout with a strong one dilutes it. **Select the readout on calibration.**
+
+**The free scalars are a null result — report it.** Prompt NLL, next-token entropy and next-token
+max log-prob score 0.61–0.78 *alone*, so they carry real signal, but concatenating them onto the
+activations moves the mean AUC by **≤0.0002 on every candidate**. The activations already contain
+everything these three scalars know. *A free signal still has to be non-redundant, and this one
+is not.*
+
+*Gemma-2-2b failed to extract:* its chat template rejects a system role (`jinja2 TemplateError:
+System role not supported`). Cross-family evidence therefore rests on Llama-3.2-1B alone, which is
+the weakest candidate in the scan — so "Qwen is the better family" is **not** established here.
+
 ### 3b-lv The method, stated properly — and why we were truncating at h=2 for no reason
 
 **Setup.** Problems $i = 1..N$. Routes $m = 1..M$, route $m$ having $K_m$ available draws at cost
