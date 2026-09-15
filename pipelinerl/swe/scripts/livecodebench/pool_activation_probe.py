@@ -127,6 +127,10 @@ def extract(args) -> None:
     # the model to *judge* the problem costs exactly the same forward pass, so if it separates
     # better it is free. --system-prompt replaces the system message; --user-suffix appends an
     # instruction after the problem text.
+    if args.system_prompt_file:
+        args.system_prompt = Path(args.system_prompt_file).read_text()
+    if args.user_suffix_file:
+        args.user_suffix = Path(args.user_suffix_file).read_text()
     system_text = args.system_prompt if args.system_prompt else SYSTEM
     H = model.config.hidden_size
     reads = {k: np.zeros((len(pids), len(layers), H), dtype=np.float32)
@@ -332,6 +336,10 @@ def main() -> None:
         "Replace the solving system message. The probe has always read activations under the "
         "prompt that asks the model to SOLVE the problem; asking it to judge difficulty instead "
         "costs the identical forward pass, so any separation gained is free."))
+    ap.add_argument("--system-prompt-file", default=None, help=(
+        "Read --system-prompt from a file. Prompt text contains newlines and shell metacharacters, "
+        "so passing it inline through a job COMMAND is a quoting trap; a file is not."))
+    ap.add_argument("--user-suffix-file", default=None, help="Read --user-suffix from a file.")
     ap.add_argument("--user-suffix", default=None, help=(
         "Text appended after the problem statement, inside the user turn. Same argument: the "
         "forward pass is already paid for."))

@@ -25,20 +25,32 @@ MODELS=(
   "google/gemma-2-2b-it|g2|different family, general"
   "meta-llama/Llama-3.2-1B-Instruct|l1|different family, general, tiny"
 )
-# prompt variants, all on the CURRENT scout so the axes are separable
-JUDGE_SYS="You are an expert at assessing programming problems. Do not solve the problem. Judge how difficult it is and how likely a strong model is to solve it on one attempt."
-PLAIN_SYS="You are a helpful assistant."
-SUFFIX=$'\n\nHow difficult is this problem, and how likely is a strong model to solve it in one attempt?'
+# Prompt variants, all on the CURRENT scout so the two axes stay separable. The text is written
+# to FILES: prompt text has newlines and shell metacharacters, and passing it inline through a job
+# COMMAND is a quoting trap (it broke the first submit on an unquoted "?").
+PDIR=${PDIR:-/mnt/llmd/results/exps/aristides/reason/probe_prompts}
+mkdir -p "${PDIR}"
+cat > "${PDIR}/judge_sys.txt" <<'TXT'
+You are an expert at assessing programming problems. Do not solve the problem. Judge how difficult
+it is, and how likely a strong model is to solve it on a single attempt.
+TXT
+cat > "${PDIR}/plain_sys.txt" <<'TXT'
+You are a helpful assistant.
+TXT
+cat > "${PDIR}/difficulty_suffix.txt" <<'TXT'
+
+How difficult is this problem, and how likely is a strong model to solve it in one attempt?
+TXT
 
 CMDS=()
 for spec in "${MODELS[@]}"; do
   IFS='|' read -r M TAG _ <<< "$spec"
-  CMDS+=("python pipelinerl/swe/scripts/livecodebench/pool_activation_probe.py --phase extract --model '${M}' --route-label ${TAG} --prompts-file '${PROMPTS}' --activations '${OUT}/enc_${TAG}.npz' --max-len 8192")
+  CMDS+=("python pipelinerl/swe/scripts/livecodebench/pool_activation_probe.py --phase extract --model ${M} --route-label ${TAG} --prompts-file ${PROMPTS} --activations ${OUT}/enc_${TAG}.npz --max-len 8192")
 done
 S=Qwen/Qwen3-4B-Instruct-2507
-CMDS+=("python pipelinerl/swe/scripts/livecodebench/pool_activation_probe.py --phase extract --model '${S}' --route-label pjudge --prompts-file '${PROMPTS}' --activations '${OUT}/prompt_judge.npz' --max-len 8192 --system-prompt \"${JUDGE_SYS}\"")
-CMDS+=("python pipelinerl/swe/scripts/livecodebench/pool_activation_probe.py --phase extract --model '${S}' --route-label pplain --prompts-file '${PROMPTS}' --activations '${OUT}/prompt_plain.npz' --max-len 8192 --system-prompt \"${PLAIN_SYS}\"")
-CMDS+=("python pipelinerl/swe/scripts/livecodebench/pool_activation_probe.py --phase extract --model '${S}' --route-label psuffix --prompts-file '${PROMPTS}' --activations '${OUT}/prompt_suffix.npz' --max-len 8192 --user-suffix \"${SUFFIX}\"")
+CMDS+=("python pipelinerl/swe/scripts/livecodebench/pool_activation_probe.py --phase extract --model ${S} --route-label pjudge --prompts-file ${PROMPTS} --activations ${OUT}/prompt_judge.npz --max-len 8192 --system-prompt-file ${PDIR}/judge_sys.txt")
+CMDS+=("python pipelinerl/swe/scripts/livecodebench/pool_activation_probe.py --phase extract --model ${S} --route-label pplain --prompts-file ${PROMPTS} --activations ${OUT}/prompt_plain.npz --max-len 8192 --system-prompt-file ${PDIR}/plain_sys.txt")
+CMDS+=("python pipelinerl/swe/scripts/livecodebench/pool_activation_probe.py --phase extract --model ${S} --route-label psuffix --prompts-file ${PROMPTS} --activations ${OUT}/prompt_suffix.npz --max-len 8192 --user-suffix-file ${PDIR}/difficulty_suffix.txt")
 
 if [[ "${SUBMIT}" != "1" ]]; then
   echo "Prepared but not submitted. ${#CMDS[@]} extractions -> ${OUT}"
