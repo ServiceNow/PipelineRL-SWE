@@ -65,12 +65,21 @@ def score(X):
 
 
 def load_npz(f):
+    """Return each readout SEPARATELY as well as concatenated.
+
+    A prompt effect should concentrate in `last` -- the token at the generation marker, where the
+    instruction's influence is strongest -- and wash out in `mean`, which averages over ~537
+    problem tokens against a ~30-token system message. Scoring only the concatenation would dilute
+    exactly the signal the prompt ablation exists to detect, so break the readouts out.
+    """
     z = np.load(f, allow_pickle=True)
     ai = {str(p): i for i, p in enumerate(z["problem_ids"])}
     idx = [ai[p] for p in pk]
-    X = np.concatenate([z[q].reshape(z[q].shape[0], -1) for q in ("mean", "last")], axis=1)[idx]
+    R = {q: z[q].reshape(z[q].shape[0], -1)[idx]
+         for q in ("mean", "last", "content_mean", "content_last") if q in z.files}
+    R["mean+last"] = np.concatenate([R["mean"], R["last"]], axis=1)
     sc = z["scalars"][idx] if "scalars" in z.files else None
-    return X, sc
+    return R, sc
 
 
 files = sorted(Path(a.scan_dir).glob("*.npz"))
@@ -79,10 +88,14 @@ print(f"{'candidate':24s}{'features':>10s}" + "".join(f"{('AUC '+s):>12s}" for s
 print("-" * (34 + 12 * len(slots) + 9))
 rowsout = []
 for f in files:
-    X, sc = load_npz(f)
-    aucs = score(X)
-    rowsout.append((f.stem, "activations", np.mean(aucs)))
-    print(f"{f.stem:24s}{X.shape[1]:10d}" + "".join(f"{v:12.4f}" for v in aucs) + f"{np.mean(aucs):9.4f}")
+    R, sc = load_npz(f)
+    X = R["mean+last"]
+    for q in ("mean", "last", "content_last", "mean+last"):
+        if q not in R: continue
+        v = score(R[q])
+        tag = f.stem if q == "mean+last" else f"  [{q}]"
+        rowsout.append((f.stem, q, np.mean(v)))
+        print(f"{tag:24s}{R[q].shape[1]:10d}" + "".join(f"{x:12.4f}" for x in v) + f"{np.mean(v):9.4f}")
     if sc is not None and np.isfinite(sc).all():
         s_only = score(sc)
         both = score(np.c_[X, sc * X.std() / (sc.std(0) + 1e-8)])
