@@ -372,6 +372,7 @@ def replay_adaptive(
     content_prior: np.ndarray | None = None,
     observed: np.ndarray | None = None,
     accept_values: np.ndarray | None = None,
+    cap_on_realised: bool = False,
     random_route: bool = False,
     belief_split: str | None = None,
     posterior_prior: np.ndarray | None = None,
@@ -452,7 +453,13 @@ def replay_adaptive(
         nonlocal spent_budget, realized_spend
         draw, new_ptr = _next_valid_draw(orderings[mi], int(ptr[mi]), valid[mi])
         ptr[mi] = new_ptr
-        if draw is None or spent_budget + cost_est[mi] > budget:
+        # The cap is checked against ESTIMATED running spend by default, which is why a third of
+        # RoR's episodes exceed their own cap by up to 22x: cost_est is a per-route constant while
+        # spend is charged at realised cost. --cap-on-realised checks the money actually spent, so
+        # the cap bounds realised spend to B plus at most one draw's overshoot. Only a per-problem
+        # cost head makes that bound tight rather than merely correct.
+        _running = realized_spend if cap_on_realised else spent_budget
+        if draw is None or _running + cost_est[mi] > budget:
             return None, draw
         ptr[mi] += 1
         spent_budget += float(cost_est[mi])
@@ -483,7 +490,7 @@ def replay_adaptive(
             nonlocal held_q, held_true
             if float(accept_values[mi]) > held_q:
                 held_q = float(accept_values[mi]); held_true = _truth
-            return None, draw
+            return "banked", draw
         failures[mi] += 1
         attempts.append(records[(problem_id, slots[mi], draw)])
         return False, draw
@@ -495,6 +502,8 @@ def replay_adaptive(
             return finish(True, False)
         if first == "false_accept":
             return finish(False, False)   # verifier accepted a wrong answer; episode ends
+        if first == "banked":
+            entered_router = True         # candidate in hand; the policy may still buy more
         if first is None:
             return finish(False, False)
         entered_router = True
@@ -507,7 +516,8 @@ def replay_adaptive(
         for mi in range(len(slots)):
             draw, new_ptr = _next_valid_draw(orderings[mi], int(ptr[mi]), valid[mi])
             ptr[mi] = new_ptr
-            if draw is not None and spent_budget + cost_est[mi] <= budget:
+            if draw is not None and ((realized_spend if cap_on_realised else spent_budget)
+                                     + cost_est[mi] <= budget):
                 available.append(mi)
         if not available:
             break
@@ -908,6 +918,8 @@ def replay_adaptive(
                     "oracle_has_remaining_success": oracle_has_remaining_success,
                 })
                 decision_trace.append(decision)
+            if accept_values is not None and held_q > 0.0:
+                return finish(held_true, False)   # banked the candidate it was holding
             return finish(False, True)
 
         oracle_route = None
@@ -949,12 +961,59 @@ def replay_adaptive(
             return finish(True, False)
         if result == "false_accept":
             return finish(False, False)   # verifier accepted a wrong answer; episode ends
-        if accept_values is not None and held_q > 0.0 and value_stop:
-            return finish(held_true, False)   # chose to bank the candidate it holds
 
     if accept_values is not None:
         return finish(held_true, held_q == 0.0)   # abstained iff nothing was accepted
     return finish(False, False)
+
+
+def replay_agreement(
+    outcomes: np.ndarray,
+    valid: np.ndarray,
+    realized_costs: np.ndarray,
+    expected_costs: np.ndarray,
+    orderings: np.ndarray,
+    code_ids: np.ndarray,
+    budget: float,
+    threshold: int,
+) -> dict[str, Any]:
+    """Agreement-gated escalation -- the label-free baseline RoR v1 instantiates as a "deployable"
+    verifier, and the family ModelSwitch belongs to.
+
+    Cheapest route first. Draw; stop on success. On failure, look at the draws already taken on
+    this route: if `threshold` of them produced the SAME normalised program, the model is stuck in
+    one mode and resampling it again is wasted, so escalate. Otherwise resample here.
+
+    It uses no probe, no training and no labels -- only whether the model repeats itself -- which
+    is why it is the baseline a reader reaches for first. Agreement is informative exactly where
+    the escalate decision lives: on this pool 61.0% of scout cells contain two identical draws
+    against 22-25% for the larger models.
+    """
+    n_routes = outcomes.shape[0]
+    ptr = np.zeros(n_routes, dtype=int)
+    spend, attempts = 0.0, 0
+    seen: list[list[int]] = [[] for _ in range(n_routes)]
+    mi = 0
+    while mi < n_routes:
+        draw, new_ptr = _next_valid_draw(orderings[mi], int(ptr[mi]), valid[mi])
+        ptr[mi] = new_ptr
+        if draw is None or spend + float(expected_costs[mi]) > budget:
+            mi += 1
+            continue
+        ptr[mi] += 1
+        attempts += 1
+        spend += float(realized_costs[mi, draw])
+        if outcomes[mi, draw]:
+            return {"correct": True, "realized_spend": spend, "attempts": attempts,
+                    "entered_router": True, "abstained": False}
+        seen[mi].append(int(code_ids[mi, draw]))
+        counts_ = {}
+        for cid in seen[mi]:
+            counts_[cid] = counts_.get(cid, 0) + 1
+        if max(counts_.values()) >= threshold:
+            mi += 1          # it keeps writing the same program: escalate
+    return {"correct": False, "realized_spend": spend, "attempts": attempts,
+            "entered_router": True, "abstained": False}
 
 
 def replay_fixed(
@@ -1236,6 +1295,10 @@ def main() -> None:
         "selected max surplus is biased upward by selection; each value lambda tests "
         "max - lambda*(max - mean) <= 0 instead of max <= 0, so larger lambda gives up earlier. "
         "Emitted as policies `<family>_shrink<lambda>_value`. 0 reproduces the plug-in rule."))
+    parser.add_argument("--accept-preds", default=None, help=(
+        "jsonl of per-problem q = P(correct | weak PASS) per route (field `q_accept`). Replaces "
+        "the pool-level constant used by --optional-accept. Per-problem q is strongly bimodal, so "
+        "the constant averages away exactly the signal the accept decision needs."))
     parser.add_argument("--optional-accept", action=argparse.BooleanOptionalAction,
                         default=False, help=(
         "With --verifier weak, a PASS BANKS a candidate worth R*q_m instead of forcing a stop, and "
@@ -1253,6 +1316,17 @@ def main() -> None:
         "Add `budget_aware_best_of_k`: per cap, choose the route and depth maximising the "
         "pool-level 1-(1-pi_m)^K subject to K*c_m <= cap, and spend the cap resampling that one "
         "route. RoR v1's fifth baseline; our fixed best_of_K arms are weaker than it."))
+    parser.add_argument("--cap-on-realised", action=argparse.BooleanOptionalAction,
+                        default=False, help=(
+        "Check the per-episode cap against REALISED spend rather than estimated. Without it "
+        "the cap bounds only planned spend -- measured, a third of RoR's episodes exceed "
+        "their own cap, by up to 22x."))
+    parser.add_argument("--agreement-arm", action=argparse.BooleanOptionalAction, default=False,
+                        help=(
+        "Add `agreement_gated`: escalate when the current route repeats itself (N identical "
+        "normalised programs), resample otherwise. Label-free, probe-free, training-free -- the "
+        "baseline a reader reaches for first, and RoR v1's own deployable verifier."))
+    parser.add_argument("--agreement-threshold", type=int, default=2)
     parser.add_argument("--random-allocation-arm", action=argparse.BooleanOptionalAction,
                         default=False, help=(
         "Add `random_allocation`: spend the per-episode cap on uniformly chosen affordable routes, "
@@ -1363,6 +1437,7 @@ def main() -> None:
     outcomes = data["execution_outcome"].astype(bool)
     observed = None
     accept_q = None
+    accept_by_problem: dict[str, np.ndarray] = {}
     if args.verifier == "weak":
         if "weak_verifier_outcome" not in data:
             raise ValueError("--verifier weak requires weak_verifier_outcome in the tensor bundle")
@@ -1385,6 +1460,31 @@ def main() -> None:
 
     manifest = load_split_manifest(tensor_dir / "split_manifest.json", pids)
     train_idx, cal_idx, test_idx = split_indices(manifest, pids)
+
+    # Normalised-program identities for the agreement baseline. Comments, docstrings and all
+    # whitespace stripped, then hashed: two draws "agree" when they are the same program modulo
+    # formatting. Built here rather than in the tensors so older bundles still load.
+    code_ids = None
+    if args.agreement_arm:
+        import hashlib, re as _re
+        _pi = {p: i for i, p in enumerate(pids)}
+        _si = {s_: i for i, s_ in enumerate(slots)}
+        code_ids = np.full(outcomes.shape, -1, dtype=np.int64)
+        _seen: dict[str, int] = {}
+        _n = 0
+        for _line in open(tensor_dir / "draw_records.jsonl"):
+            _r = json.loads(_line)
+            _p, _s, _d = str(_r["problem_id"]), str(_r["model_slot"]), int(_r["draw_index"])
+            if _p not in _pi or _s not in _si or _d >= outcomes.shape[2]:
+                continue
+            _c = _re.sub(r"\s+", "", _re.sub(r'"""[\s\S]*?"""', "",
+                         _re.sub(r"#.*", "", str(_r.get("code", "")))))
+            _h = hashlib.md5(_c.encode()).hexdigest()
+            if _h not in _seen:
+                _seen[_h] = len(_seen)
+            code_ids[_pi[_p], _si[_s], _d] = _seen[_h]
+            _n += 1
+        print(f"agreement: {_n} draws hashed into {len(_seen)} distinct normalised programs")
     if observed is not None and args.optional_accept:
         # q_m = P(correct | weak PASS on route m), fitted on TRAIN only. Strongly route-dependent,
         # which is the point: a scout PASS is far less trustworthy than a gpt-oss-120b one, so
@@ -1394,6 +1494,15 @@ def main() -> None:
             for _m in range(len(slots))])
         print("OPTIONAL ACCEPT: q = P(correct | weak PASS) = "
               + ", ".join(f"{_s}={_q:.3f}" for _s, _q in zip(slots, accept_q)))
+        if args.accept_preds:
+            # PER-PROBLEM q. The pool constant averages over a bimodal population -- on LCB 35.7%
+            # of problems have q=0 on the scout (every acceptance false) and 56.6% have q=1. A
+            # constant cannot tell those apart; the probe can, from the SAME forward pass the
+            # belief head already paid for.
+            for _row in _read_jsonl(Path(args.accept_preds)):
+                accept_by_problem[str(_row["problem_id"])] = np.asarray(
+                    _row["q_accept"][: len(slots)], dtype=float)
+            print(f"  per-problem q from {args.accept_preds}: {len(accept_by_problem)} problems")
     if args.eval_split == "calibration":
         # Hyperparameters must be chosen on the policy's own objective, not on a predictor metric
         # that is invariant to prediction SPREAD -- three separate interventions (belief C on AUC,
@@ -1517,6 +1626,7 @@ def main() -> None:
         argmax_shrink: float = 0.0,
         cross_route_rho: float = 0.0,
         belief_split: str | None = None,
+        cap_on_realised: bool = False,
         random_route: bool = False,
         pseudo_count: float | None = None,
         exploration_bonus: bool = False,
@@ -1550,8 +1660,10 @@ def main() -> None:
                     cross_route_rho=cross_route_rho,
                     belief_split=belief_split,
                     random_route=random_route,
+                    cap_on_realised=args.cap_on_realised,
                     observed=(observed[int(pi)] if observed is not None else None),
-                    accept_values=accept_q,
+                    accept_values=(accept_by_problem.get(pid, accept_q)
+                                   if accept_by_problem else accept_q),
                     scorer=scorer if base in ("sequential", "sequential_decay") else None,
                     calibrator=calibrator,
                     state_layout=args.state_layout,
@@ -1971,6 +2083,27 @@ def main() -> None:
                     _out.append(_r)
             rows.append({
                 "policy": "budget_aware_best_of_k", "budget": _b, "tau": None,
+                "min_success_per_cost": None, "value_of_correct": None,
+                "bellman_horizon": None, **_aggregate(_out),
+            })
+
+    # Agreement-gated escalation, on the same budget grid as every other baseline.
+    if args.agreement_arm:
+        if code_ids is None:
+            raise ValueError("--agreement-arm needs draw_records.jsonl with a `code` field")
+        print(f"agreement-gated arm: {len(budgets)} budgets, threshold={args.agreement_threshold}")
+        for _b in budgets:
+            _out = []
+            for _pi in test_idx:
+                for _oi in range(args.num_orderings):
+                    _r = replay_agreement(
+                        outcomes[int(_pi)], valid[int(_pi)], realized_costs[int(_pi)],
+                        expected_costs, orderings[int(_pi), _oi], code_ids[int(_pi)],
+                        _b, int(args.agreement_threshold))
+                    _r["problem_id"] = pids[int(_pi)]; _r["ordering_index"] = _oi
+                    _out.append(_r)
+            rows.append({
+                "policy": "agreement_gated", "budget": _b, "tau": None,
                 "min_success_per_cost": None, "value_of_correct": None,
                 "bellman_horizon": None, **_aggregate(_out),
             })
