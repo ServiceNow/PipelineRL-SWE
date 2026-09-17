@@ -259,6 +259,8 @@ def _solve_bellman_action_values(
     horizon: int,
     raw_belief_at: Callable[[tuple[int, ...]], np.ndarray] | None = None,
     cross_route_rho: float = 0.0,
+    posterior: np.ndarray | None = None,
+    base_failures: np.ndarray | None = None,
 ) -> tuple[dict[int, float], float]:
     """Exact backward induction over the reachable failure-count lattice.
 
@@ -304,6 +306,30 @@ def _solve_bellman_action_values(
         function isolates the transition model and nothing else.
         """
         if raw_belief_at is None:
+            if posterior is not None:
+                # VALUE OF INFORMATION. Every other belief model reuses the ROOT prediction at each
+                # lattice node, so a draw is valued only for the chance it succeeds -- never for
+                # what FAILING would teach. With a posterior over the success count k, the
+                # successor's belief is the exact Bayes update, so the lookahead prices the
+                # information a draw buys. This is the term Gittins includes and Weitzman's
+                # reservation value encodes, and it is the one channel through which a
+                # distributional belief can affect a risk-neutral rule at all.
+                _K = posterior.shape[1] - 1
+                _j = np.arange(_K + 1)
+                out = np.empty(n_routes, dtype=float)
+                for m_ in range(n_routes):
+                    n_obs = int((base_failures[m_] if base_failures is not None else 0)
+                                + offsets[m_])
+                    post = posterior[m_].astype(float)
+                    if n_obs > 0:
+                        lik = np.ones(_K + 1)
+                        for i_ in range(n_obs):
+                            lik = lik * np.clip(_K - _j - i_, 0, None) / max(_K - i_, 1)
+                        post = post * lik
+                    tot = float(post.sum())
+                    post = post / tot if tot > 1e-300 else np.full(_K + 1, 1.0 / (_K + 1))
+                    out[m_] = float((post * _j).sum()) / max(_K - n_obs, 1)
+                return np.clip(out, 1e-9, 1.0)
             if cross_route_rho <= 0.0:
                 return pbar
             # ANALYTIC cross-route transition. The default asserts routes are conditionally
@@ -780,6 +806,8 @@ def replay_adaptive(
                 bellman_horizon,
                 raw_belief_at=raw_belief_at,
                 cross_route_rho=cross_route_rho,
+                posterior=(posterior_prior if belief_source == "content_post" else None),
+                base_failures=failures,
             )
             action_values = {
                 mi: root_action_values[mi] for mi in available if mi in root_action_values

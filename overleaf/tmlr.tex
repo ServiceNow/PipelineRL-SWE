@@ -13,19 +13,18 @@
 \usepackage{xspace}
 \usepackage{multirow}
 
-\title{Explore Before You Route: Post-Scout Routing with\\Proxy-Supervised Pre-Training for Code Repair Agents}
+\title{Whether, Not Which: Cross-Model Selective Prediction\\from One Cheap Prefill}
 
 % Authors must not appear in the submitted version.
 \author{Anonymous Authors}
 
-\newcommand{\fix}{\marginpar{FIX}}
-\newcommand{\new}{\marginpar{NEW}}
-\newcommand{\scout}{\textsc{Scout}\xspace}
-\newcommand{\methodname}{post-scout routing\xspace}
-\newcommand{\Methodname}{Post-Scout Routing\xspace}
+\newcommand{\scout}{\textsc{scout}\xspace}
+\newcommand{\rormethod}{\textsc{ror}\xspace}
+\newcommand{\eg}{e.g.\xspace}
+\newcommand{\ie}{i.e.\xspace}
 
-\def\month{MM}
-\def\year{YYYY}
+\def\month{09}
+\def\year{2026}
 \def\openreview{\url{https://openreview.net/forum?id=XXXX}}
 
 \begin{document}
@@ -33,631 +32,1270 @@
 \maketitle
 
 \begin{abstract}
-Routing software repair tasks across a portfolio of models requires estimates
-of which model will succeed on each task---but this is hard from the problem
-statement alone, because input context rarely reveals which solver will produce
-a valid patch.
-We study \emph{post-scout routing}: always run a cheap 4B scout model first,
-then route based on the combined context of the problem and scout attempt.
-The scout output is load-bearing: on a 286-task SWE-Smith evaluation set,
-a post-scout router achieves ROC-AUC 0.720 and 75.6\% accuracy at
-70\% abstention, compared to ROC-AUC 0.652 and 65.1\% for an input-only ablation
-trained on the same 1{,}500 real execution labels---a +10.5 point gain at the
-high-abstention regime.
-A two-stage proxy pre-training procedure further reduces the real-label
-budget: post-scout proxy+real training with as few as 50 real labels
-(ROC-AUC 0.698) already exceeds input-only routing with 1{,}500 labels.
-Finally, the same predicted reward vectors that drive abstention enable a
-flexible cost-aware local routing policy: by tuning a single inference-time
-penalty $\lambda$---without retraining---the router traces a Pareto frontier
-from 18\% cost reduction ($\lambda{=}0$) to over 85\% cost reduction,
-demonstrating that the scout output simultaneously improves task-difficulty
-estimation and enables fine-grained routing.
+Given a pool of language models and a cost budget, a policy must decide, per query, whether to
+spend another draw, on which model, or to give up.  We show that a single quantity --- a
+\emph{shared, model-independent difficulty estimate}, read from one cheap model's prefill before
+any generation --- is enough to drive all three decisions, and we characterise exactly what it can
+and cannot do.  Used for the \emph{whether}-to-attempt decision, it is the difference between a
+working and a failing budgeted policy: replacing count-based beliefs with beliefs read from one
+cheap prefill, changing nothing else, cuts cost at matched accuracy at \textbf{19 of 19 accuracy
+targets across four pools and two task families}, including out-of-domain SWE-bench Verified.  The
+value flows through abstention, and the mechanism is a knapsack: order problems by difficulty, and
+the budget decides where the line goes.  Used for the \emph{which}-model decision, the same scalar
+fails everywhere we test it --- on a deliberately complementary five-lab pool, every probe variant
+captures none of the available routing gain, and on RouterBench the decomposition inverts: the
+shared scalar is worse than not routing at all, while the model$\times$problem interaction carries
+the entire gain.  Which half applies to a given pool is predictable in advance from measurable pool
+structure.  The scalar transfers to models whose weights are never touched: the ordering is free,
+and probabilities cost $\sim$25 labels on pools where the probe is strong (and do not transfer at
+all where it is weak).  Methodologically, we introduce a shuffled-prediction control that separates
+real information from a decision rule's mere response to per-problem dispersion --- a control no
+routing paper we surveyed runs --- and a set of accounting corrections (matched budget grids,
+randomised convex-hull frontiers, symmetric failure charges, fitting shared hyperparameters for
+both arms) without which most of these comparisons are silently rigged in one direction.
 \end{abstract}
 
 \section{Introduction}
+\label{sec:intro}
 
-Large language models for software repair span a wide range of cost and
-reliability.
-A 4-billion-parameter model costs a fraction of a 120-billion-parameter model
-per token, but the larger model solves a substantially higher fraction of repair
-tasks.
-An organization running a portfolio of models benefits from a router that
-directs each task to the cheapest solver likely to succeed---and escalates to a
-powerful external model only when the local portfolio is expected to fail.
+Deploying a pool of language models raises a sequential decision problem.  For each query an
+operator may buy another draw from a model, switch models, or stop and return no answer, all under
+a cost budget.  Prior work has formalised this as a resample-or-reroute problem
+\citep{chen2026ror}, as threshold cascades solved by duality \citep{bouchard2026escalation}, and
+as budgeted inference with a trained skip action \citep{zhao2026roi}; the underlying mathematics
+--- Lagrangian relaxation of a constrained MDP, index policies, the value of inspection --- is
+classical \citep{altman1999constrained,weitzman1979optimal,gittins1979bandit,
+badanidiyuru2018knapsacks}.  What all of these systems lack is a per-query \emph{belief} about the
+problem itself: every method we survey either conditions only on pool-level constants
+\citep{chen2026ror} or requires fine-tuning the answering model itself \citep{zhao2026roi}.
 
-Standard routing approaches predict solver quality from the task input alone.
-For code repair, this is difficult: two tasks with similar-looking bug reports
-may require fundamentally different fix strategies, and one model may succeed
-where another fails for reasons not apparent from the problem statement.
-Cascade systems \citep{chen2024frugalgpt} alleviate this by calling solvers
-sequentially and stopping when a learned confidence threshold is met,
-but this requires running each solver before deciding to continue---and a
-full cascade that observes all four model outputs before routing is
-60$\times$ more expensive than simply observing the scout output.
+This paper studies one specific belief source and what it is for.  A single forward pass of the
+cheapest model in the pool --- a \emph{prefill}, with no generated tokens --- yields hidden states
+from which simple linear heads predict each route's success probability and cost for the query at
+hand.  Difficulty estimation from hidden states is established
+\citep{llmalreadyknows2025,jeirt2025,irtnet2025,cmirt2026}; one model's activations predicting
+another model's success is established \citep{prefillrouter2026,encodefailures2026}.  Our claims
+are therefore not about the existence of the signal but about what it is \emph{for}: which
+decisions it can support, under what accounting it demonstrably pays, and where it structurally
+fails.
 
-We propose running a cheap \emph{scout} model as the first step,
-then routing based on the scout attempt.
-The scout exposes structure that the problem statement cannot:
-whether the model can localize the bug, which files and functions are relevant,
-whether the fix involves simple substitution or structural change,
-and whether the attempt is a format failure.
-All of this information is available before invoking any additional solver.
+The characterisation has one positive and one negative half, and both are needed.
 
-A key practical challenge is label cost.
-Execution-based labels require running the full SWE-bench evaluation harness
-for every (task, model, attempt) triple.
-We address this with two-stage training: first pre-train on dense proxy rewards
-(patch-similarity scores, cheap to compute without test execution), then
-fine-tune on a small number of real labels.
-With this procedure, post-scout routing with only 50 real labels already
-outperforms input-only routing with 1{,}500 real labels.
+\paragraph{The positive half: whether.}
+Placed inside a sequential cost-constrained policy, per-problem beliefs strictly beat the
+count-based beliefs of the prior formulation.  Isolating the belief source --- the same policy,
+the same formulation, constant costs on both sides --- reduces cost at matched accuracy at
+\textbf{19 of 19 accuracy targets across four pools and two task families}
+(Section~\ref{sec:headline}).  The mechanism is not routing: with the give-up action disabled the
+same beliefs are worth nothing, and with it enabled they are worth up to $+43.7\%$
+(Section~\ref{sec:mechanism}).  Abstention at a binding budget is \emph{reallocation} --- skip
+expensive problems to afford cheap ones --- so the policy is a knapsack over problems, not a
+router over models.  In its cleanest form, one prefill and one ordering close 65--73\% of the
+oracle gap in selective prediction on three benchmarks, with no MDP, no cost model and no budget
+parameter (Section~\ref{sec:selective}).
 
-Beyond abstention, the same predicted reward vectors support cost-aware
-\emph{local routing} via a single inference-time penalty coefficient $\lambda$.
-By increasing $\lambda$, the router trades accuracy for cost reduction without
-any retraining, tracing a Pareto frontier that is inaccessible to an
-input-only router without per-task cost proxies.
+\paragraph{The negative half: which.}
+The same scalar cannot support model selection.  On a deliberately complementary pool --- five API
+models from five labs, 52.6\% of problems contested, $+13.5$pt of available routing gain --- a
+one-dimensional latent router uses one model 171 times out of 171, and every richer variant we
+tried performs \emph{worse} (Section~\ref{sec:whethernotwhich}).  On RouterBench
+\citep{hu2024routerbench} the decomposition inverts: the shared scalar is worse than not routing
+at all ($-0.60\%$ AIQ) while the interaction term carries the entire gain ($+4.52\%$).  The
+unifying observation is that a prompt representation carries \emph{shared factors} (this problem
+is hard; this model is verbose) and not \emph{interaction terms} (this model rambles on this
+problem); success decomposes the same way, which is why abstention works and routing does not
+(Section~\ref{sec:unification}).
 
-Our contributions are:
-\begin{itemize}
-\item We demonstrate that the 4B scout attempt is a load-bearing signal:
-  post-scout routing achieves ROC-AUC 0.720 and 75.6\% accuracy at 70\%
-  abstention versus 0.483 and 65.1\% for input-only routing on the same
-  1{,}500 real labels---a gap that grows with abstention rate.
-\item We show that proxy pre-training dramatically reduces the real-label
-  budget: post-scout proxy+real with $N{=}50$ real labels (ROC-AUC 0.698)
-  exceeds input-only routing with 1{,}500 real labels (ROC-AUC 0.652),
-  a 30$\times$ label reduction.
-\item We establish that the same predicted rewards enable flexible inference-time
-  cost-aware routing via $\lambda$ tuning, tracing a Pareto frontier from 18\%
-  to over 85\% cost reduction relative to always-120B, without retraining.
-\end{itemize}
+\paragraph{Transfer.}
+Because the scalar is shared across the pool, it transfers to models whose weights are never
+available: the \emph{ordering} is free (AUC is invariant to the affine transform a two-parameter
+link can apply), and \emph{probabilities} cost about 25 labels per new model on pools where the
+probe reaches AUC $\approx 0.79$ --- beating each new model's own base rate by $\sim$24\% of Brier
+--- while on a pool where the probe is weak the base rate wins at every label budget
+(Section~\ref{sec:transfer}).
 
-\section{Problem Formulation}
-\label{sec:problem}
+\paragraph{Methodology.}
+A persistent hazard in this area is that comparisons are rigged by accounting.  We introduce and
+report four corrections that apply beyond this method: a \emph{shuffled-prediction control} that
+separates information from mere dispersion (92--69\% of the belief head's gain survives it; only
+31--49\% of the cost head's does; Section~\ref{sec:mechanism}); matched budget grids (an
+under-sampled baseline grid manufactured most of an apparent formulation advantage;
+Section~\ref{sec:robust}); the randomised convex-hull frontier, which is the achievable set of a
+constrained MDP \citep{altman1999constrained}; and the rule that every conditioned quantity must
+be selected on the objective the policy optimises, never on a predictor metric that is invariant
+to what the policy consumes (Section~\ref{sec:diagnostics}).
 
-\paragraph{Repair tasks and solver portfolio.}
-Let $\mathcal{X}$ denote a distribution of software repair tasks,
-where $x \in \mathcal{X}$ consists of a natural-language issue description
-and relevant repository file contents.
-We have a portfolio of $K+1$ local solvers
-$\mathcal{M} = \{m_0, m_1, \ldots, m_K\}$,
-ordered by increasing cost.
-Solver $m_i$ produces a patch $y_i = m_i(x)$,
-and the real reward $r_i(x) \in \{0, 1\}$ is 1 if the patch passes
-the task's test suite and 0 otherwise.
-Beyond the local portfolio we have access to an external frontier model
-$m_\mathrm{ext}$ (e.g.\ Claude Sonnet) at substantially higher cost.
+\subsection{Contributions}
+\label{sec:contributions}
 
-\paragraph{Scout and post-scout context.}
-We designate $m_0$ as the \emph{scout}: the cheapest model, always run first.
-After observing $y_0 = m_0(x)$, the router has access to the
-\emph{post-scout context}
+Ordered by how well they replicate.  Several claims made during this project were retracted on
+further measurement; the survivors are these.
+
+\begin{enumerate}
+\item \textbf{C0 (framing).}  The object is a shared difficulty scalar, and the paper is about
+what it is for.  Its existence is not our claim \citep{jeirt2025,llmalreadyknows2025}.  Ours:
+one cheap prefill reads it better than the deployable text baselines under matched pipelines
+(Section~\ref{sec:battery}); it transfers cross-model including to weights never touched
+(Section~\ref{sec:transfer}); and the decision-theoretic and validation machinery below holds for
+any difficulty signal.
+\item \textbf{C1.}  A per-problem difficulty prior, inside a sequential cost-constrained rule,
+strictly beats count-based beliefs: 0 of 401 accuracy levels negative on LiveCodeBench (floor
+$+2.90\%$) and 0 of 401 on TACO (floor $+0.93\%$) with costs held constant on both sides; in
+budget units, $+26.5$pt and $+25.8$pt at a $0.25\times$ budget (Sections~\ref{sec:headline}
+and~\ref{sec:reprform}).
+\item \textbf{C1b.}  The belief and cost heads are \emph{substitutes, not complements}: each alone
+buys $\sim$$+25$pt at a $0.25\times$ budget, stacking buys $-2\%$ to $-17\%$, and on one pool they
+are literally one scalar (correlation $-0.52$ to $-0.71$; first principal component carries
+71.4\%) while on another they are nearly orthogonal (PC1 43.7\%) --- which predicts in advance
+where the cost head fails (Section~\ref{sec:headline}).
+\item \textbf{C2.}  The value flows through abstention, and the mechanism is a knapsack.  With the
+give-up action the beliefs are worth up to $+43.7\%$; without it, $\sim$0\%.  Stopping is exactly
+$\max_m Q(s,m)\le 0$ --- complementary slackness, not an added mechanism
+(Section~\ref{sec:mechanism}).
+\item \textbf{C2b (the most portable piece).}  The \emph{shuffled-prediction control}: permuting
+predictions across problems while preserving marginals separates information from dispersion.  No
+routing paper we surveyed runs this control, and without it ``conditioned beats constant'' is not
+a claim about prediction quality (Section~\ref{sec:mechanism}).
+\item \textbf{C3.}  Cross-model transfer: the ordering is free, the probabilities cost
+$\sim$25 labels --- or nothing at all, measurably, on pools where the probe is weak
+(Section~\ref{sec:transfer}).
+\item \textbf{C4.}  A scope law with two measured regimes.  On our pools (29--40\% of problems
+unsolved by the entire pool) the prompt representation carries the shared factor and not the
+interaction: six of seven applications needing the interaction fail for one identifiable cause.
+On a 91.4\%-contested pool the decomposition inverts: shared scalar $-0.60\%$ AIQ, interaction
+$+4.52\%$.  Same probe, opposite decomposition, and contested mass predicts which
+(Sections~\ref{sec:whethernotwhich} and~\ref{sec:unification}).
+\item \textbf{C5.}  Selective prediction is the cleanest form of the result: gap to oracle closed
+64.9\% / 72.7\% / 43.8\% on three benchmarks; wasted spend at 50\% coverage cut 62\% / 54\% /
+43\%.  No MDP, no cost model, no budget parameter (Section~\ref{sec:selective}).
+\end{enumerate}
+
+\paragraph{Prior art, stated compactly.}
+The resample-vs-reroute framing as competing uses of a per-query budget, and the greedy
+allocation policy we reproduce as our main baseline, are \citet{chen2026ror}
+(\textbf{arXiv:2607.08665v1}; we cite the version explicitly because v3
+\citep{chen2026rorv3} is a substantially different paper under a changed title that withdraws the
+allocation framework and reports a negative identification result --- which is the open problem
+our belief source addresses).  The shadow-price treatment of cascades is
+\citet{bouchard2026escalation}.  The Lagrangian machinery, the randomised-mixtures theorem and the
+convex-hull achievable set are \citet{altman1999constrained}; the reservation-value index is
+\citet{weitzman1979optimal}; per-problem decoupling under a common price is the Whittle relaxation
+\citep{whittle1988restless,gittins1979bandit}.  The \emph{goal} of budgeted inference with an
+available skip action is \citet{zhao2026roi}; the rule $\max(0,\max_m(p_mR-c_m))$ itself is the
+textbook Lagrangian dual of a constrained allocation, and we claim neither the goal nor the rule.
+Encoder-target decoupling is \citet{prefillrouter2026}; we replicate it
+(Section~\ref{sec:transfer}).  \emph{What survives as ours:} per-problem beliefs for an entire
+heterogeneous pool from one prefill of a model that never generates; cross-model per-query cost
+prediction; and the empirical finding that this is what makes the sequential rule work where
+count-based beliefs do not.
+
+\section{Related work}
+\label{sec:related}
+
+\paragraph{Sequential and budgeted model selection.}
+\citet{chen2026ror} formalise resample-vs-reroute as competing uses of a second call after a
+fallible verifier accepts a candidate, allocate a per-query budget by an online greedy rule
+driven by estimated marginal correctness per unit cost, and report a favourable cost--quality
+Pareto front against single-route, one-commit-router, budget-aware best-of-$K$, cascade and
+random-allocation baselines.  We reproduce that policy as our count-belief baseline.  Version 3
+of the same arXiv ID \citep{chen2026rorv3} reconstructs the paper around a three-gate
+identification framework and concludes that ``current evidence does not identify when to resample
+rather than reroute'' --- a negative result that makes the per-problem belief question we answer
+sharper, not moot: a policy cannot act on a distinction it cannot identify.  \citet{zhao2026roi}
+budget a \emph{batch} of tasks under a global constraint with a trained solve-or-skip token, via
+two fine-tuning stages of the answering model; \citet{bouchard2026escalation} derive Lagrangian
+switching rules for threshold cascades.  \citet{seqroute2026} route within a shared multi-turn
+budget without resampling or abstention; \citet{clusterescalate2026} escalate from clusters;
+\citet{ucci2026} calibrate cascade thresholds from token margins; \citet{automix2024} mix models
+behind a meta-verifier over self-verification; \citet{beliefguided2026} formalise
+default-vs-escalate as a POMDP over response reliability with verifiable observations.  None of
+these estimates a per-problem success and cost for every member of a pool from one non-generating
+forward pass, and none combines resampling, rerouting and abstention under one price.
+\citet{routingsurvey2026} map the routing/cascading distinction; \citet{routinggap2026} show part
+of the celebrated router-to-oracle gap is single-draw label noise no router can capture, which is
+why our tensors are multi-draw.
+
+\paragraph{Activation-based prediction.}
+\citet{prefillrouter2026} route from prefill hidden states and show encoder-target decoupling:
+one model's activations can predict another model's success better than the target's own.  Their
+router is single-commit, has no give-up action, prices cost by median training output tokens, and
+trains jointly on full datasets with no label-efficiency analysis.  \citet{encodefailures2026}
+probe a model's own pre-generation activations for its own success; \citet{scouting2026} feed a
+searcher's hidden states to a router and honestly report that their no-router ablation ties.
+\citet{quit2026knowing} formalise mid-generation abstention for a single model.
+\citet{llmalreadyknows2025} read difficulty from the target model's own initial hidden state and
+spend it on adaptive self-consistency; \citet{predictivescheduling2026} allocate a fixed token
+budget across a batch from the target's own hidden states.  All of these are same-model;
+ours is the cross-model direction.
+
+\paragraph{Difficulty and Item Response Theory.}
+Decomposing correctness into a shared item difficulty plus per-model ability is IRT, with an
+active LLM line: \citet{jeirt2025}, \citet{irtnet2025} (routing from sentence embeddings),
+\citet{cmirt2026} (unseen questions), and adaptive testing \citep{adaptivetesting2025}.  A Rasch
+analysis of 67 models \citep{rasch2026} independently finds that most apparent routing headroom
+is explained by a single latent difficulty dimension.  We claim no novelty for the latent; our
+differentiators are the prefill source, the cost-constrained sequential setting with a give-up
+action, and pool-extension label efficiency.
+
+\paragraph{Cost prediction.}
+\citet{howmuchleft2026} decode total response length from the prompt's last hidden state;
+\citet{entropylength2026} predict output length for batching; \citet{egtp2026} and
+\citet{trail2026} predict a model's own output length for scheduling.  All are own-model; the
+cross-model direction --- one cheap prefill pricing \emph{other} models inside a
+budget-constrained decision --- is the piece none of them do.
+\citet{latencyrouting2026} and \citet{perquerycost2026} predict per-query cost for routing from
+query embeddings toward latency objectives; \citet{semanticagreement2025} defer to a larger model
+on semantic disagreement among ensemble generations, text-only.
+
+\paragraph{Benchmarks.}
+RouterBench \citep{hu2024routerbench} provides an 11-model pool with real pricing; its
+non-decreasing convex hull of the individual models (the ``Zero Router'') is the correct
+non-adaptive baseline and its own learned routers ``generally do not significantly outperform''
+it --- we position against that hull, not against their routers.  \citet{llmrouterbench2026},
+\citet{routingplateau2026}, \citet{coderouterbench2026}, \citet{universallatent2026} and
+\citet{routingcollapse2026} cover related ground.
+
+\paragraph{Agentic stopping.}
+Adjacent in modality rather than mechanism: milestone-confidence early exit \citep{eet2026},
+gradient-based run killing \citep{agentstop2026}, cheap trajectory monitors with restarts
+\citep{failfast2026}, value-head escalation for software agents \citep{swerouter2026}, and
+plan--execute cascades \citep{cope2026}.  These stop or escalate a \emph{single} model's run;
+none prices a multi-model pool or abstains under a budget.
+
+\paragraph{Classical foundations.}
+Our formulation is textbook decision theory and we cite it as such: inspection-cost search and
+reservation-value indices \citep{weitzman1979optimal,gittins1979bandit}, Lagrangian relaxation of
+constrained MDPs with randomised mixtures of deterministic policies \citep{altman1999constrained},
+restless-bandit decoupling under a common multiplier \citep{whittle1988restless}, bandits with
+knapsacks \citep{badanidiyuru2018knapsacks}, adaptive submodularity for when greedy is
+near-optimal \citep{golovin2011adaptive}, correlated Pandora variants for the cross-route coupling
+we approximate away \citep{gergatsouli2023weitzman}, and sequential analysis for the stopping half
+\citep{wald1945sequential}.
+
+\section{Setting: budgeted sequential model selection}
+\label{sec:setting}
+
+\subsection{The per-problem MDP}
+\label{sec:mdp}
+
+A pool of $M$ routes (models) $\{1,\dots,M\}$, each able to produce up to $K$ i.i.d.\ draws for a
+query $x$.  Draw $k$ of route $m$ yields an outcome $y_{m,k}\in\{0,1\}$ (verified correct or not)
+at realised cost $c_{m,k}>0$ dollars.  Outcomes are fixed offline in a correctness tensor, so all
+policies are compared by \emph{replay} on identical draws (Section~\ref{sec:setup}).
+
+After some draws have been spent, the state is
 \[
-    z = (x,\, y_0).
+s \;=\; \bigl(x,\; \mathbf{n},\; \mathbf{r}\bigr),
+\qquad \mathbf{n}=(n_1,\dots,n_M),\quad \mathbf{r}=(r_1,\dots,r_M),
 \]
-The routing decision is made from $z$, before any further solver is called.
-The action space is
+where $n_m$ counts \emph{failed} draws from route $m$ and $r_m$ the draws remaining.  The episode
+ends on the first success, so every live state has all draws so far failed.  The action space is
+$\mathcal{A}(s)=\{m : r_m>0\}\cup\{\bot\}$: buy one more draw on any route with capacity, or
+abstain ($\bot$), ending the episode with no answer.  Every route is available at every step;
+``resample'' and ``reroute'' are just names for the two cases of the same action
+($n_m>0$ vs.\ $n_m=0$), as in \citet{chen2026ror}.
+
+\subsection{The global budget and its dual}
+\label{sec:dual}
+
+The batch-level problem is
 \[
-    a \in \{0, 1, \ldots, K, \text{ext}\},
+\max \;\sum_i \E\bigl[\mathbb{1}\{\text{solved}_i\}\bigr]
+\quad\text{s.t.}\quad
+\sum_i \E[\text{cost}_i] \;\le\; B .
 \]
-where $a = 0$ means accept the scout output, $a \in \{1,\ldots,K\}$ means
-invoke the $a$-th local solver, and $a = \text{ext}$ means escalate to the
-external model.
+With multiplier $\lambda\ge0$ the Lagrangian decouples across problems; writing $R = 1/\lambda$
+--- \emph{the dollar value of a correct answer} --- each problem independently solves
+$\max\;\E[\mathbb{1}\{\text{solved}\}]\,R - \E[\text{cost}]$, and sweeping $R$ traces the
+cost--accuracy frontier.  This is the standard convexification: by
+\citet{altman1999constrained}, the achievable set of a constrained MDP is the convex hull of its
+deterministic policies, and the optimal constrained policy is a randomised mixture of them ---
+which is exactly why we compare hulls, not grid points (Section~\ref{sec:robust}).  The same
+construction makes randomised tests admissible in Neyman--Pearson and underlies index policies for
+budget-coupled selection \citep{weitzman1979optimal,whittle1988restless,gittins1979bandit,
+badanidiyuru2018knapsacks}; for LLM cascades the shadow-price framing is
+\citet{bouchard2026escalation}.  The \emph{goal} of budgeted inference over many tasks with
+skipping available is \citet{zhao2026roi}.
 
-\paragraph{Abstention as escalation.}
-In the deployment scenario we study, the router makes a \emph{binary}
-decision for each task: either invoke the best local solver $m_K$
-(the 120B model), or abstain and escalate to the external model $m_\mathrm{ext}$.
-There is no within-portfolio routing in the abstention evaluation;
-the question is purely whether the local portfolio is worth attempting at all.
-We refer to this binary call-or-escalate decision as \emph{abstention}.
-
-Formally, the router assigns each task a scalar confidence score
-$s_\theta(z) \in \mathbb{R}$, higher meaning more confidence that the
-best local solver will succeed.
-Tasks above the threshold are sent to $m_K$; tasks below are escalated
-to $m_\mathrm{ext}$.
-The primary evaluation metric is the \emph{ROC AUC}:
+Within an episode, backward induction over the failure-count lattice gives
 \[
-    \mathrm{ROC\text{-}AUC}
-    \;=\; \Pr\!\left[s_\theta(z^+) > s_\theta(z^-)\right],
+V(\mathbf{n}) \;=\; \max\Bigl(\,\underbrace{0}_{\text{stop}},\;
+\max_m\;\bigl[\,p_m(\mathbf{n})\,R \;-\; c_m \;+\; (1-p_m(\mathbf{n}))\,V(\mathbf{n}+\mathbf{e}_m)\,\bigr]\Bigr),
 \]
-where $z^+$ is a task on which $m_K$ succeeds and $z^-$ is one on which
-it fails, drawn independently.
-A random signal scores 0.5; a perfect signal scores 1.0.
-We additionally report \emph{accuracy at abstention rate $\alpha$}:
+with $V\equiv0$ once every route is exhausted.  \textbf{The zero in the outer max is
+abstention.}  It is not an added mechanism but the null action's value, and it fires exactly under
+complementary slackness: the marginal dollar buys more accuracy elsewhere in the batch.  The
+density rule of \citet{chen2026ror} ranks routes by $p_m/c_m$, a ratio of positive quantities
+with no zero to cross, so it \emph{cannot} stop --- which is why we rank by \emph{surplus}
+$p_mR-c_m$, which has a sign.
+
+We deliberately do not claim the sequential machinery as a contribution; Section~\ref{sec:mechanism}
+measures which components pay, and the answer is specific: the \emph{sequential} structure and the
+stop action are load-bearing, the global price is marginal, and deep lookahead beyond $h{=}2$ does
+not pay.
+
+\subsection{Baselines, controls, and the naming problem}
+\label{sec:arms}
+
+Because three prior works use three different budget formulations, arm naming is load-bearing
+\citep{chen2026ror,zhao2026roi}:
+
+\begin{center}
+\small
+\begin{tabular}{llll}
+\toprule
+baseline & budget & ranking statistic & abstains? \\
+\midrule
+\citet{chen2026ror} (v1) & \textbf{per-query} cap & density $p/c$ & no \\
+\citet{zhao2026roi} & global batch (trained policy) & ROI (implicit) & yes (trained token) \\
+ours & global, solved in the dual at price $R$ & surplus $pR-c$ & yes (zero-value action) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Our ``count beliefs'' arm caps spend per episode and ranks by density: a faithful reimplementation
+of the published policy of \citet{chen2026ror}.  A global budget is strictly more powerful than a
+per-query cap --- it can move money from a doomed problem to a solvable one --- so \emph{any}
+margin against the capped baseline bundles a formulation advantage that is
+\citet{zhao2026roi}'s (and the textbook's), not ours.  The arm that isolates what is actually ours
+is \emph{count beliefs under our global dual} --- identical formulation, identical abstention
+machinery, only the belief source differing.  Section~\ref{sec:reprform} reports the full $2\times
+2$ and shows the formulation column is worth $+5.1\%$ to $+5.8\%$ at tight targets and negative
+at loose ones on the matched grid: nearly all of every margin we report is representation.
+
+\section{Method}
+\label{sec:method}
+
+\subsection{The probe: one prefill, two linear heads}
+\label{sec:probe}
+
+All beliefs and costs come from one forward pass of the cheapest route.  Let $h(x)\in\R^d$ be the
+mean-pooled last-layer-fraction hidden state of the \scout over the prompt tokens, computed
+\emph{before any generation} --- one prefill, no decode:
 \[
-    \mathrm{ACC}(\alpha) \;=\;
-    \frac{1}{|\mathcal{R}(\alpha)|} \sum_{x \in \mathcal{R}(\alpha)} r_K(x),
+h(x)=\frac{1}{|T(x)|}\sum_{t\in T(x)} h^{(\ell)}_t(x).
 \]
-the fraction of retained tasks (top $1{-}\alpha$ by score) on which
-$m_K$ succeeds.
+Mean pooling rather than last-token is a deliberate control: chat templates end differently
+across model families, and reading position $N{-}1$ compares different objects across models
+(Section~\ref{sec:diagnostics}).  Features are \emph{rich}: all layers $\times$ \{mean, last\},
+concatenated ($d\approx 40{,}960$), which is free at inference --- the forward pass already
+computes every hidden state --- and improves every head substantially over single-layer features.
 
-\paragraph{Oracle and random baselines.}
-The oracle sets $s_\theta(z) = r_K(x)$: it abstains on exactly the tasks
-that $m_K$ fails on, achieving ROC-AUC $= 1.0$.
-The random baseline scores tasks uniformly at random (ROC-AUC $= 0.5$).
-On our 286-task evaluation set, $m_K$ (120B) fails on $52.8\%$ of tasks
-and the overall 120B success rate is $47.2\%$.
-
-\paragraph{Cost-aware local routing.}
-Beyond abstention, the router's predicted reward vector
-$\hat{\mathbf{r}}_\theta(z) \in [0,1]^K$ can be used to select among
-local routes.
-Define the size-adjusted cost of route $r$ as
+Two linear heads per route, fit on the training split only, with $\ell$ and regularisation chosen
+on the calibration split and never on test:
 \[
-    c_r \;=\; \frac{\mathrm{params}_r}{4} \times \mathbb{E}[\text{output\_tokens}_r],
+\hat\theta_m(x)=\sigma\!\bigl(w_m^\top h(x)+b_m\bigr),
+\qquad
+\hat T_m(x)=\exp\!\bigl(\hat\beta_m^\top h(x)\bigr)\cdot\hat\varsigma_m ,
 \]
-where $\mathrm{params}_r$ is the model size in billions.
-The cost-penalised utility of route $r$ is
+where $\hat T_m$ predicts expected total tokens in log space with Duan's smearing estimator
+\citep{duan1983smearing} restoring the conditional mean, and the head is \emph{fitted and shrunk
+in dollar space} --- the space the policy acts in.  The cost estimate is
+$\hat c_m(x)=\rho_m\,\hat T_m(x)$.
+
+\paragraph{Cost of the method.}
+Training: 551 problem-level labels, 0.16 CPU-seconds for all heads, ${\approx}40$\,KB of
+parameters.  Inference: one 4B prefill (\$0.000149), already paid for under the mandatory-scout
+protocol; the decision rule itself is arithmetic.  Crucially $h(x)$ comes from \emph{one} model,
+so the pool's other members need never expose weights --- outcomes at training time and a price
+at decision time suffice.
+
+\subsection{Beliefs}
+\label{sec:beliefs}
+
+Let $\theta_m(x)\in(0,1)$ be the probability that a \emph{fresh} draw from route $m$ solves $x$.
+After $n_m$ failures, a Beta--Bernoulli posterior with pseudo-count $\sigma$ gives the decayed
+belief
 \[
-    \hat{u}_r(z) \;=\; \hat{r}_r(z) \;-\; \lambda \cdot c_r(z),
+p_m(s)\;=\;\theta_m(x)\cdot\frac{\sigma}{\sigma+n_m}.
 \]
-and the router selects $\arg\max_r \hat{u}_r(z)$.
-Varying $\lambda \geq 0$ at inference time---without retraining---trades
-task reward for cost reduction, tracing a Pareto frontier.
-For the post-scout router, $c_r(z)$ is estimated per-task using the scout
-output token count as a proxy for task difficulty.
+Failures on route $m$ depress only route $m$: the routes are treated as conditionally independent
+\emph{given $x$}.  This assumption is measured, not assumed.  Unconditionally the routes are
+strongly coupled --- on clean LiveCodeBench, gpt-oss-120b's pass@1 is 97.7\% when the scout
+succeeded on draw 0 and 69.9\% once the scout has failed once --- but that coupling \emph{is
+problem difficulty}, which $\hat\theta_m(x)$ already reads off the prompt.  Conditioning on
+$\hat\theta$, the scout-failure count adds essentially nothing to log-loss ($0.36886 \to
+0.36875$).  \textbf{The probe performs the belief propagation that a coupled posterior would
+otherwise have to do}, which is why the factorised form loses nothing here --- and why a
+cross-route-coupled version of the baseline does not close the gap
+(Section~\ref{sec:diagnostics}).
 
-\section{Architecture}
-\label{sec:arch}
+Three belief sources differ only in where $\theta$ comes from:
 
-\paragraph{Shared encoder.}
-All router variants use \texttt{Qwen/Qwen3-Embedding-8B} as the text encoder,
-fine-tuned with LoRA adapters on the query, key, value, and output projections
-(\texttt{q\_proj}, \texttt{k\_proj}, \texttt{v\_proj}, \texttt{o\_proj}).
-We use rank 32, alpha 64, and LoRA dropout 0.05.
-The encoder is run with Flash Attention 2 in bf16 with gradient checkpointing.
-A two-layer MLP with hidden size 1{,}024 maps the \texttt{[EOS]} token
-embedding to the prediction target.
+\begin{center}
+\small
+\begin{tabular}{lll}
+\toprule
+family & $\theta_m$ & conditioned on the query? \\
+\midrule
+count beliefs (\citet{chen2026ror}-style) & $\bar\theta_m$, the train-set marginal solve rate & no \\
+prefill beliefs & $\hat\theta_m(x)$ from the probe, decayed as above & yes \\
+\bottomrule
+\end{tabular}
+\end{center}
 
-\paragraph{Post-scout router.}
-The post-scout router encodes the full post-scout context $z = (x, y_0)$:
-the repair prompt (problem statement and file context) followed by the scout
-output $y_0$.
-Its prediction head outputs a vector $\hat{\mathbf{r}}_\theta(z) \in [0,1]^4$,
-one scalar per route, predicting the probability that each solver $m_i$ will
-succeed on the task.
-The abstention score is the mean predicted reward,
-$s_\theta(z) = \frac{1}{4}\sum_{i=0}^{3} \hat{r}_i$.
+Count beliefs have no per-problem prior, so observed failures are their \emph{only} channel for
+learning that a problem is hard --- and that channel is worth 28 points of pass@1
+(Section~\ref{sec:diagnostics}).  At $\mathbf{n}=\mathbf{0}$ every problem has the identical belief
+vector, which is why the count arm cannot abstain selectively at entry
+(Section~\ref{sec:mechanism}).
 
-\paragraph{Input-only router.}
-The input-only router is an ablation that encodes only $x$, not $y_0$.
-It shares the same architecture, head structure, and training objective
-as the post-scout router.
-This directly measures the marginal value of the scout attempt.
+\paragraph{The decay constant must be fitted for both arms.}
+$\sigma=2.0$ was inherited from \citet{chen2026ror} unfitted --- by them and, until we fitted it,
+by us.  Maximum-likelihood constants on calibration are $0.5$--$1.35$ for our beliefs and
+$0.25$--$1.09$ for count beliefs; $\sigma{=}2$ loses all six route$\times$dataset held-out
+log-loss cells.  Crucially, giving \emph{both} methods their own fitted constant costs us more
+than it gains: on TACO our utility-level win goes from 57/96 swept prices to 46/96
+(Section~\ref{sec:diagnostics}).  \textbf{An unfitted hyperparameter in the baseline is a silent
+advantage for whoever tunes theirs}; any paper reusing a prior method's pseudo-count should fit
+it for both arms before claiming a win.
 
-\paragraph{Cascade verifier.}
-The cascade verifier encodes a single route's context $(x, y_i)$---the
-problem paired with one solver's output---and predicts whether that solver
-succeeded.
-It produces a scalar $\hat{p}_\theta(x, y_i) \in [0,1]$.
-At inference time, the verifier is applied to $y_0$ (the scout output),
-and the resulting score is used as the abstention signal:
-$s_\theta(z) = \hat{p}_\theta(x, y_0)$.
-This is the fairest comparison to the post-scout router, since both observe
-exactly $(x, y_0)$ at decision time and pay the same scout cost.
-By contrast, a cascade that observes all four solver outputs before routing
-has a strictly later information state and a 60$\times$ higher decision cost
-(Section~\ref{sec:cascade_cost}).
+\subsection{Decision rule and abstention}
+\label{sec:rule}
 
-\section{Training}
-\label{sec:training}
-
-\paragraph{Training objective.}
-For all router variants, we optimise binary cross-entropy against per-route
-success labels:
+At a live state, the value of spending one draw on route $m$ is $Q(s,m)=p_m(s)\cdot R - c_m(x)$,
+and abstaining is worth exactly zero:
 \[
-    \mathcal{L}_\mathrm{BCE}(\theta)
-    = -\frac{1}{N} \sum_{n=1}^{N}
-      \sum_{i=0}^{K}
-      \left[
-        r_i^{(n)} \log \hat{r}_i^{(n)}
-        + (1 - r_i^{(n)}) \log (1 - \hat{r}_i^{(n)})
-      \right].
+\pi(s)=\begin{cases}
+\bot & \text{if } \max_{m} Q(s,m)\;\le\;0,\\[4pt]
+\arg\max_{m} Q(s,m) & \text{otherwise.}
+\end{cases}
 \]
-We additionally train a route-delta auxiliary term that directly
-supervises pairwise reward differences:
-\[
-    \mathcal{L}_\mathrm{aux}(\theta)
-    = \frac{1}{N} \sum_{n=1}^{N}
-      \sum_{i < j}
-      \left[
-        (\hat{r}_i^{(n)} - \hat{r}_j^{(n)}) - (r_i^{(n)} - r_j^{(n)})
-      \right]^2.
-\]
-The full real-label fine-tuning objective is
-$\mathcal{L} = \mathcal{L}_\mathrm{BCE} + \lambda_\mathrm{aux}
-\mathcal{L}_\mathrm{aux}$
-with $\lambda_\mathrm{aux} = 1.0$.
+Abstention needs no threshold and no extra head: it is the zero-value action.
+$Q$ is \emph{not} scale-invariant, and that matters: the density rule ranks routes identically at
+every valuation and always prefers the cheapest, whereas the dollar difference lets an expensive
+route win when the problem looks solvable and lets \emph{every} route lose when it does not.
 
-\paragraph{Proxy labels.}
-Real execution labels require running the full test suite for each
-(task, solver) pair.
-As a cheaper alternative, we compute a \emph{proxy reward} by comparing
-the predicted patch to the gold patch:
-\[
-    \tilde{r}_i(x) = \frac{1}{|F|} \sum_{f \in F}
-      \operatorname{SequenceMatcher}(\hat{d}_f,\, d_f^*),
-\]
-where $F$ is the union of files in the predicted and gold diffs,
-$\hat{d}_f$ is the predicted file-level unified diff,
-$d_f^*$ is the gold file-level unified diff,
-and SequenceMatcher returns the normalised longest-common-subsequence ratio.
-Format errors receive $\tilde{r}_i = 0$.
-The proxy reward lies in $[0,1]$ and is cheap to compute without test execution.
+\subsection{Baselines as special cases}
+\label{sec:special}
 
-\paragraph{Two-stage training.}
-In the first stage (\emph{proxy pre-training}), the model is trained on a
-trace-expanded dataset of ${\sim}12{,}000$ tasks with proxy labels:
-\[
-    \theta_\mathrm{proxy} = \arg\min_\theta\;
-    \mathcal{L}_\mathrm{BCE}(\theta;\, \tilde{r}).
-\]
-In the second stage (\emph{real fine-tuning}), the proxy-pre-trained weights
-are fine-tuned on $N$ tasks with real execution labels:
-\[
-    \theta_\mathrm{final} = \arg\min_\theta\; \mathcal{L}(\theta;\, r),
-    \quad \theta \leftarrow \theta_\mathrm{proxy}.
-\]
-The second stage uses only model weights from the first stage, not optimizer
-state, and runs for 10 epochs.
+\begin{center}
+\small
+\begin{tabular}{ll}
+\toprule
+setting & recovers \\
+\midrule
+$\theta_m=\bar\theta_m$, $c_m=\bar c_m$, per-query cap & count-belief greedy allocation \citep{chen2026ror} \\
+$K=1$, no $\bot$ & single-commit routing \citep{prefillrouter2026} \\
+$\hat\theta_m(x)$, $c_m=\bar c_m$ & prefill beliefs, constant cost \\
+$\hat\theta_m(x)$, $\hat c_m(x)$ & full method \\
+\bottomrule
+\end{tabular}
+\end{center}
 
-\section{Experimental Setup}
+Every arm differs from its twin in exactly one term, so any gap is attributable to that term
+alone --- subject to the attribution rule we learned the hard way
+(Section~\ref{sec:diagnostics}): \emph{to attribute a gain to component X, hold every other
+component fixed on both sides}; an arm that changes two things belongs in no single-component
+cell.
+
+\section{Experimental setup}
 \label{sec:setup}
 
-\paragraph{Dataset.}
-We evaluate on a 286-task SWE-Smith evaluation set with real execution labels.
-SWE-Smith \citep{li2025swesmith} generates software repair tasks from real
-GitHub repositories by introducing synthetic bugs and recording gold patches.
-Our evaluation subset covers Python, Go, Java, Rust, TypeScript, and other
-languages.
-All real execution labels are obtained by running the SWE-bench evaluation
-harness on AWS and recording per-instance pass/fail outcomes.
+\paragraph{Pools.}
+\begin{center}
+\small
+\begin{tabular}{lcccc}
+\toprule
+pool & problems & split & draws$\times$routes & notes \\
+\midrule
+LiveCodeBench & 892 & temporal 551/170/171 & $6\times3$ & primary \\
+TACO (medium+hard) & 883 & random 547/168/168 & $6\times3$ & secondary \\
+SWE-bench Verified & 369 & single split & $1\times5$ & out-of-domain \\
+RouterBench \citep{hu2024routerbench} & 36{,}497 & 60\% train & $1\times11$ & their benchmark \\
+API peers (five labs) & 171 test & calibration split & $1\times5$ & transfer \\
+\bottomrule
+\end{tabular}
+\end{center}
+The three-route cascade is \textbf{Qwen3-4B-Instruct-2507} (the \scout), \textbf{gpt-oss-20b},
+and \textbf{gpt-oss-120b}, all served locally under vLLM at a 65{,}536-token cap, priced from
+measured serving throughput on self-hosted nodes.  The five-model peer pool
+(deepseek-v4-flash, glm-5, kimi-k2.5, minimax-m2.7, qwen3-max) comes from five different labs
+via API.  SWE-bench Verified follows \citet{jimenez2024swebench}.
 
-The training set for full-supervision runs contains 1{,}500 tasks with real
-labels.
-The proxy pre-training dataset is a trace-expanded collection of
-${\sim}12{,}000$ tasks with proxy rewards computed from scout traces.
-For sample efficiency experiments, we subsample
-$N \in \{50, 100, 200, 500, 1000\}$
-tasks from the real-label training set with a fixed random seed.
+\paragraph{Protocol.}
+All policies are compared by replay on the stored correctness tensors: identical draws, identical
+verifier outcomes, identical costs.  Statistics are problem-clustered paired bootstrap (5{,}000
+resamples); draw-ordering seeds are varied (5 on LiveCodeBench, 3 on TACO) and results reported
+mean$\pm$sd; budget grids are \emph{matched} geometric grids of 96 points on both sides
+(Section~\ref{sec:robust}); frontiers are randomised convex hulls
+(Section~\ref{sec:robust}); every conditioned quantity is selected on a held-out calibration
+split, test touched once.
 
-\paragraph{Solver portfolio.}
-Our four local solvers are:
-\begin{enumerate}
-\item \textbf{Scout 4B} (\texttt{Qwen/Qwen3-4B-Instruct-2507}):
-  size-adjusted cost 942 units; always run first; output forms $y_0$.
-\item \textbf{OSS-20B} (\texttt{openai/gpt-oss-20b}):
-  size-adjusted cost 11{,}588 units.
-\item \textbf{Qwen-30B} (\texttt{Qwen/Qwen3-Coder-30B-A3B-Instruct}):
-  size-adjusted cost 6{,}997 units.
-\item \textbf{OSS-120B} (\texttt{openai/gpt-oss-120b}):
-  size-adjusted cost 37{,}483 units; strongest local solver; abstention
-  target $m_K$.
-\end{enumerate}
-Size-adjusted cost is computed as $\mathrm{params}/4 \times \text{avg output
-tokens}$.
-The oracle abstention rate is 52.8\% (120B fails on just over half of tasks);
-the 120B base success rate is 47.2\%.
-All solvers use the same SEARCH/REPLACE repair scaffold with a structured
-thinking block and a \texttt{<solution>} section.
+\paragraph{Pool structure, which decides which half of the paper applies.}
+\label{sec:poolstructure}
 
-\paragraph{External escalation target.}
-We evaluate Claude Sonnet as the external frontier model $m_\mathrm{ext}$.
-Claude results establish the performance ceiling for the abstention pipeline.
+\begin{center}
+\small
+\begin{tabular}{lcccc}
+\toprule
+pool & best single & oracle & contested & pool-unsolvable \\
+\midrule
+RouterBench (11 models) & 84.3\% & 96.1\% & \textbf{91.4\%} & \textbf{3.9\%} \\
+API peers (5 labs) & 71.9\% & 85.4\% & 52.6\% & 14.6\% \\
+SWE-bench Verified (5) & 62.3\% & 71.3\% & 55.0\% & 28.7\% \\
+LiveCodeBench cascade & 68.9\% & 72.5\% & 46.1\% & 8.3\% \\
+TACO cascade & --- & 60.0\% & --- & 40.0\% \\
+\bottomrule
+\end{tabular}
+\end{center}
 
-\paragraph{Router training details.}
-All routers use the \texttt{Qwen/Qwen3-Embedding-8B} backbone with LoRA rank
-32, alpha 64, on \texttt{q/k/v/o\_proj} and additionally
-\texttt{gate/up/down\_proj} for the MLP layers.
-Training uses AdamW with weight decay 0.01, warmup ratio 0.06,
-batch size 1, and gradient accumulation 8.
-Real-label fine-tuning runs for 10 epochs at learning rate $10^{-5}$;
-proxy pre-training runs for 5 epochs at learning rate $2\times10^{-5}$.
-All runs use 4 A100 GPUs with Accelerate DDP, Flash Attention 2, and bf16.
-
-\paragraph{Evaluation metric.}
-Our primary metric is the abstention ROC-AUC (Section~\ref{sec:problem}),
-computed over a 200-point uniform grid of $\alpha$ values from 0 to 0.85
-as a raw trapezoid integral (not normalised by range).
-We also report point-wise accuracy at abstention rates 30\%, 50\%, and 70\%.
+\emph{Contested} = fraction of problems solved by more than one model; \emph{pool-unsolvable} =
+solved by none.  RouterBench is maximally favourable to routing and useless for abstention; our
+pools are the reverse.  These numbers are measurable before deployment and predict which half of
+the paper's claim applies (Section~\ref{sec:whethernotwhich}).
 
 \section{Results}
 \label{sec:results}
 
-\subsection{Scout Attempt Is a Load-Bearing Input}
-\label{sec:main_results}
+\subsection{The probe clears the baselines the difficulty-prediction literature demands}
+\label{sec:battery}
 
-\begin{table}[t]
-\centering
+Difficulty estimation is an established field, and its existence demands cheap, deployable
+baselines \citep{llmalreadyknows2025,irtnet2025}.  Under a matched pipeline --- identical target
+(pool-solvability), identical estimator (\texttt{RidgeCV}) over the same 25-point penalty grid,
+identical manifest split --- the probe beats them everywhere:
+
+\begin{center}
 \small
-\begin{tabular}{llcccc}
+\begin{tabular}{lcccc}
 \toprule
-Method & Labels & ROC-AUC & ACC@30\% & ACC@50\% & ACC@70\% \\
+benchmark & human easy/med/hard & prompt length & TF-IDF & \textbf{prefill activations} \\
 \midrule
-Random & --- & 0.500 & 47.0 & 47.2 & 47.9 \\
-\midrule
-Input-only router & 1500 real & 0.652 & 54.5 & 59.4 & 65.1 \\
-Cascade verifier, route-0 & 1500 real & 0.688 & 54.0 & 60.8 & 69.8 \\
-\textbf{Post-scout router (ours)} & 1500 real & \textbf{0.720} & \textbf{54.5} & \textbf{65.0} & \textbf{75.6} \\
-\midrule
-Oracle & --- & 1.000 & 67.5 & 94.4 & 100.0 \\
+LiveCodeBench (171) & 0.755 & 0.711 & 0.729 & \textbf{0.824} \\
+TACO (168) & 0.434 & 0.375 & 0.746 & \textbf{0.885} \\
 \bottomrule
 \end{tabular}
-\caption{Abstention ROC-AUC and accuracy at three abstention rates on the
-286-task SWE-Smith evaluation set.
-The abstention decision is binary: call the 120B model or escalate to Claude.
-Cascade verifier route-0 and the post-scout router both observe exactly
-$(x, y_0)$ at decision time (same compute).
-The post-scout router substantially outperforms both baselines,
-with the gap over input-only growing from 0.0 pp at 30\% abstention
-to \textbf{10.5 pp} at 70\% abstention.}
-\label{tab:main}
-\end{table}
+\end{center}
 
-Table~\ref{tab:main} shows the main comparison between all methods at the same
-real-label budget (1{,}500 tasks).
-At 30\% abstention, the post-scout and input-only routers are tied (54.5\%),
-but the gap grows steadily---by 70\% abstention,
-the post-scout router is \textbf{10.5 points ahead} of input-only
-(75.6\% vs.\ 65.1\%).
-The cascade verifier at route-0 (which sees the same $(x,y_0)$ context) is
-intermediate: ROC-AUC 0.688 vs.\ 0.720 for post-scout.
+Activations beat TF-IDF on solvability by $+0.095$ / $+0.139$ AUC, and on per-query cost $R^2$ at
+every one of six routes (by $+0.12$ to $+0.42$), with TF-IDF at or below zero on four of six.
+The human-difficulty column is benchmark metadata that does not exist for an arbitrary user query,
+reported only as a reference --- and the probe beats it on both pools.  The LiveCodeBench
+comparison is temporal (train on contests through 2024-09, test on 2025 contests), so $0.824$ was
+measured on genuinely future problems.  TF-IDF is nonetheless the right baseline to keep, because
+it is genuinely deployable at test time with no GPU forward pass; that it loses by this margin is
+the result.
 
-Figure~\ref{fig:abstention_curves} plots the full abstention curves.
-The growing gap at higher abstention rates is the key finding:
-the scout attempt reveals information about task solvability that is
-especially useful for identifying the hardest tasks---those where even
-the 120B model fails.
+\subsection{Headline: the belief head is positive on 19 of 19 targets across four pools}
+\label{sec:headline}
 
-Signal diagnostics confirm this interpretation.
-The post-scout signal (mean pred\_reward) has Spearman correlation 0.381 with
-true 120B success, compared to 0.263 for input-only---a 45\% improvement in
-rank correlation.
-The post-scout signal also separates the success/failure distributions
-more cleanly (mean-separation 0.105 vs.\ 0.062 for input-only),
-reflecting that the scout output surfaces task-structural signals
-(format failures, localizability, edit scope) that are invisible from
-the prompt alone.
+Everything conditional in this project came from reporting a \emph{bundled} arm.  Isolate the
+belief head --- formulation held at the global dual, \textbf{costs held constant and identical on
+both sides} --- and the result is not conditional at all:
 
-\begin{figure}[t]
-\centering
-\includegraphics[width=0.88\linewidth]{figures/abstention_curves.pdf}
-\caption{Accuracy on retained tasks as a function of abstention rate on the
-286-task SWE-Smith evaluation set.
-The vertical dashed line at 52.8\% marks the oracle abstention rate
-(fraction of tasks the 120B model fails on).
-The post-scout router dominates all baselines; the gap over input-only grows
-with abstention rate, reaching 10.5 pp at 70\% abstention.}
-\label{fig:abstention_curves}
-\end{figure}
-
-\subsection{The Cascade Comparison: Cost vs.\ Quality}
-\label{sec:cascade_cost}
-
-The cascade verifier at route-0 (ROC-AUC 0.688) is the only \emph{fair}
-comparison to the post-scout router: both observe the same information
-$(x, y_0)$ and pay the same decision cost (running the 4B scout only,
-size-adjusted cost 942 units).
-The post-scout router's multi-route counterfactual head outperforms
-the cascade verifier's single-route prediction head by 0.032 ROC-AUC at this
-information state.
-
-The ``full cascade'' baseline that observes all four model outputs before
-routing is a fundamentally different decision point.
-Running all four solvers costs 57{,}011 size-adjusted units before the
-routing decision is made---\textbf{60.5$\times$} the cost of the post-scout
-abstention step.
-For perspective, the 120B run alone (37{,}483 units) costs 40$\times$ more
-than post-scout's entire decision pipeline.
-At that decision cost, abstention is largely moot: you have already paid
-for the most expensive model.
-Even at this 60$\times$ cost premium, a full cascade mean over four routes
-achieves ROC-AUC 0.752---only \textbf{+0.032} over post-scout (0.720).
-The marginal quality gain from a 60$\times$ cost increase is negligible.
-
-\subsection{Sample Efficiency from Proxy Pre-Training}
-\label{sec:sample_eff}
-
-\begin{table}[t]
-\centering
+\begin{center}
 \small
-\begin{tabular}{llcccc}
+\begin{tabular}{lccccc}
 \toprule
-Training & $N$ real & ROC-AUC & ACC@50\% & ACC@70\% \\
+pool & \multicolumn{5}{c}{cost saved at matched accuracy, prefill beliefs vs.\ count beliefs} \\
 \midrule
-Input-only (real only) & 1500 & 0.652 & 59.4 & 65.1 \\
-\midrule
-Post-scout proxy+real & 50  & 0.698 & 61.5 & 70.9 \\
-Post-scout proxy+real & 100 & 0.695 & 60.8 & 69.8 \\
-Post-scout proxy+real & 200 & 0.701 & 60.8 & 68.6 \\
-Post-scout proxy+real & 500 & 0.706 & 61.5 & 72.1 \\
-Post-scout proxy+real & 1000 & 0.713 & 62.9 & 74.4 \\
-\textbf{Post-scout (real only)} & \textbf{1500} & \textbf{0.720} & \textbf{65.0} & \textbf{75.6} \\
+LiveCodeBench (5 seeds) & 50\% \textbf{+40.5$\pm$1.0} & 60\% \textbf{+19.6$\pm$2.4} & 70\% \textbf{+16.5$\pm$2.6} & 80\% \textbf{+4.6$\pm$1.6} & 84\% \textbf{+5.4$\pm$2.1} \\
+\quad sign test & 5/5 & 5/5 & 5/5 & 5/5 & 5/5 \\
+TACO (3 seeds) & 35\% \textbf{+33.6$\pm$1.1} & 40\% \textbf{+29.3$\pm$0.2} & 45\% \textbf{+2.2$\pm$2.0} & 50\% \textbf{+7.3$\pm$1.9} & 55\% \textbf{+1.1$\pm$0.8} \\
+\quad sign test & 3/3 & 3/3 & 2/3 & 3/3 & 2/3 \\
+RouterBench (14{,}599) & 60\% \textbf{+35.2} & 70\% \textbf{+76.9} & 75\% \textbf{+75.1} & 80\% \textbf{+50.8} & 84\% \textbf{+22.9} \\
+SWE-bench Verified & 30\% \textbf{+19.5} & 40\% \textbf{+9.5} & 50\% \textbf{+3.4} & 55\% \textbf{+1.2} & --- \\
 \bottomrule
 \end{tabular}
-\caption{Sample efficiency of proxy pre-training for the post-scout router.
-Even with only 50 real execution labels, proxy+real training achieves
-ROC-AUC 0.698---already \textbf{+0.046} above input-only routing with
-\textbf{30$\times$ more labels} (ROC-AUC 0.652 at $N{=}1500$).
-Performance improves monotonically from $N{=}50$ to $N{=}1500$.}
-\label{tab:sample_eff}
-\end{table}
+\end{center}
 
-Table~\ref{tab:sample_eff} and Figure~\ref{fig:sample_efficiency} show the
-sample efficiency of proxy pre-training for the post-scout router.
-The key finding is that proxy+real training with only 50 real labels
-(ROC-AUC 0.698) already exceeds input-only routing with 30$\times$ more labels
-(ROC-AUC 0.652 at $N{=}1500$).
-Performance improves monotonically from $N{=}50$ to $N{=}1500$:
-ROC-AUC 0.698, 0.695, 0.701, 0.706, 0.713, 0.720.
+\textbf{19 of 19 targets positive, across four pools and two task families} (competitive
+programming and software engineering), unanimous across seeds at 17 of the 19 where seeds exist.
+One sentence: \emph{replacing count-based beliefs with beliefs read from one cheap prefill,
+changing nothing else, reduces cost at matched accuracy at every accuracy target on every pool we
+have.}  (The SWE-bench row uses a deliberately weak probe reconstruction; the recorded probe is
+stronger, so this row is conservative.)
 
-Accuracy at 70\% abstention follows the same trend: 70.9\% at $N{=}50$
-rising to 75.6\% at $N{=}1500$, consistently above input-only's 65.1\%.
-The slight dip at $N{=}100$ ($\to N{=}200$) is within noise
-for a 286-task evaluation set; the trend is clearly positive.
+\paragraph{Why this read as a pile of conditionals until the heads were unbundled.}
+The reported arm bundled the belief head with the cost head, and the cost head is genuinely
+pool-dependent: a large win on LiveCodeBench and \emph{actively harmful on TACO above 40\%}
+($-21.6\%$ at the 45\% target).  C1b predicted exactly this: on TACO the two heads are nearly
+orthogonal (PC1 43.7\% vs.\ LiveCodeBench's 71.4\%) and TACO's cost $R^2$ is the weakest we
+measure, because TACO's top rung costs \$0.49 per unit of accuracy against LiveCodeBench's \$0.18
+--- the expensive route must be bought at loose budgets, and mis-pricing it is directly costly.
+The strict-improvement scan over 401 accuracy levels makes the split exact:
 
-\begin{figure}[t]
-\centering
-\includegraphics[width=0.78\linewidth]{figures/sample_efficiency.pdf}
-\caption{Abstention ROC-AUC versus number of real execution labels $N$,
-for the post-scout router with proxy pre-training (blue curve).
-The orange dashed line shows input-only routing at $N{=}1500$.
-With as few as 50 real labels, proxy+real post-scout routing
-exceeds input-only routing at 30$\times$ the label count.
-The blue star marks the full real-only post-scout run at $N{=}1500$.}
-\label{fig:sample_efficiency}
-\end{figure}
+\begin{center}
+\small
+\begin{tabular}{lcc}
+\toprule
+held fixed on both sides & LiveCodeBench & TACO \\
+\midrule
+costs = constant; \textbf{beliefs alone} & \textbf{0/401 negative, floor $+2.90\%$} & \textbf{0/401, floor $+0.93\%$} \\
+beliefs = counts; \textbf{cost head alone} & \textbf{0/401, floor $+3.88\%$} & 159/401 negative, floor $-21.63\%$ \\
+both changed (full method) & \textbf{0/401, floor $+5.07\%$} & 63/401 negative, floor $-11.83\%$ \\
+\emph{redundancy:} beliefs added on cost head & 28/401, $-2.13\%$ & 24/401, $-3.94\%$ \\
+\emph{redundancy:} cost head added on beliefs & 155/401, $-4.06\%$ & 200/401, $-17.20\%$ \\
+\bottomrule
+\end{tabular}
+\end{center}
 
-\subsection{Cost-Aware Routing via Inference-Time Lambda}
-\label{sec:routing_pareto}
+The two heads are \emph{substitutes}, not complements: each alone buys ${\sim}+25$pt at the tight
+budget (beliefs $+26.5$/$+25.8$pt; cost head $+25.9$/$+24.5$pt at a $0.25\times$ budget) and each
+is a strict improvement on LiveCodeBench; adding the second on top of the first buys nothing and
+often costs.  They are two readouts of \emph{one} prefill, so this is what redundancy should look
+like --- pay for the probe once, spend it on whichever head the pool supports, and choose on
+calibration.
 
-The same predicted reward vectors that drive abstention also enable flexible
-cost-aware routing within the local portfolio.
-By varying the cost penalty $\lambda$ at inference time---without
-retraining---the post-scout router traces a Pareto frontier
-(Figure~\ref{fig:routing_pareto}).
+\subsection{Representation vs.\ formulation: the $2\times2$}
+\label{sec:reprform}
 
-At $\lambda{=}0$ (pure reward maximisation), the post-scout router achieves
-42.3\% success rate at 82.1\% of the always-120B cost---an 18\% cost
-reduction.
-At $\lambda{\approx}3{\times}10^{-6}$, the frontier passes through
-39.2\% success rate at 34.9\% cost (65\% cheaper than always-120B).
-At $\lambda{\approx}10^{-5}$, the router achieves 33.2\% success rate
-at 11.5\% cost---over 88\% cost reduction.
+Because a global dual is strictly more powerful than a per-query cap, margins against the capped
+baseline conflate our representation with a formulation advantage that belongs to the constrained-MDP
+machinery \citep{altman1999constrained,zhao2026roi}.  Running all four cells under a matched
+96-point geometric grid:
 
-The post-scout router dominates the input-only router at the high-quality
-end of the frontier.
-This advantage arises because the post-scout router uses the scout output
-token count as a per-task cost proxy: tasks with longer scout outputs tend
-to be harder and more expensive across all routes, enabling sharper
-cost-reward trade-offs.
-The input-only router must use flat historical averages for cost estimation,
-losing the per-task signal.
+\begin{center}
+\small
+\begin{tabular}{llccccc}
+\toprule
+contrast & isolates & 50\% & 60\% & 70\% & 80\% & 84\% \\
+\midrule
+ours vs.\ count beliefs + give-up & \textbf{representation} & \textbf{+45.8\%} & \textbf{+15.7\%} & \textbf{+15.2\%} & \textbf{+5.5\%} & \textbf{+10.5\%} \\
+prefill beliefs vs.\ counts under the cap & \textbf{representation} & +16.9\% & +6.7\% & +18.9\% & +5.8\% & n/a \\
+count beliefs + give-up vs.\ counts & formulation alone & +5.1\% & +5.8\% & +1.8\% & $-0.2$\% & $-3.3$\% \\
+ours vs.\ counts & everything & +48.6\% & +20.6\% & +16.7\% & +5.3\% & +7.5\% \\
+\bottomrule
+\end{tabular}
+\end{center}
 
-The oracle (cheapest succeeding route per task) achieves 55.9\% success rate
-at 10.3\% of always-120B cost---89\% cheaper while delivering higher
-accuracy than always-120B (47.2\%).
-The large gap between the oracle and learned routers
-indicates substantial room for improvement in calibration and cost estimation.
+Formulation alone is $+5.1\%$/$+5.8\%$ at the two tight targets and \emph{negative} at 80\% and
+84\%: most of what looked like ``the global budget wins when money is tight'' was the baseline's
+under-sampled grid (Section~\ref{sec:robust}), not the formulation.  The complementarity between
+formulation and representation is real at the tight end (interaction $+27.5$pt at the 50\%
+target) and has a structural cause: count beliefs $\hat p_m = s\,\pi_m/(s+n_m)$ are \emph{identical
+for every problem at $n_m=0$}, so the count arm cannot abstain selectively at entry --- it must
+buy failures to discriminate, and it abstains at 41.6\% at the 50\% target and still costs more.
+Abstention is only worth having if you can tell which problems to abstain on before paying: the
+dual supplies the give-up action, the prefill makes it selective.
 
-\begin{figure}[t]
-\centering
-\includegraphics[width=0.88\linewidth]{figures/routing_pareto.pdf}
-\caption{Cost--reward Pareto frontier for the local routing portfolio.
-X-axis: average inference cost as a percentage of always-120B
-(size-adjusted: model\_params/4 $\times$ output\_tokens).
-The post-scout router (blue) dominates the input-only router (orange dashed)
-at the high-quality end.
-Fixed-model baselines are shown as filled markers.
-The black star is the oracle (cheapest succeeding route per task).
-Three annotated $\lambda$ values illustrate the inference-time cost-reward
-trade-off without retraining.}
-\label{fig:routing_pareto}
-\end{figure}
+\paragraph{The anchor point.}
+At the accuracy gpt-oss-120b reaches when called on every problem (68.77\%, \$0.04519):
 
-\section{Discussion}
+\begin{center}
+\small
+\begin{tabular}{lccc}
+\toprule
+policy & cost & vs.\ \citet{chen2026ror} & vs.\ always-120b \\
+\midrule
+\citet{chen2026ror} (v1) & \$0.04152 & --- & +8.1\% \\
+count beliefs + give-up & \$0.04065 & +2.1\% & +10.1\% \\
+\textbf{ours} & \textbf{\$0.03412} & \textbf{+17.8\%} & \textbf{+24.5\%} \\
+\bottomrule
+\end{tabular}
+\end{center}
 
-\paragraph{Why does the scout attempt help?}
-The input-only and post-scout routers share architecture, objective,
-and training data; the only difference is whether $y_0$ is included.
-The large gap at high abstention rates (Table~\ref{tab:main}) shows that
-the scout attempt contains information about task solvability not recoverable
-from the problem statement alone.
-The scout reveals \emph{structural} properties: whether the bug is in a
-function the model can locate, whether the edit is local or requires global
-refactoring, and whether format failures (common at higher difficulty)
-are already occurring.
-These signals are only observable after a model has attempted the task,
-but they are available at the cost of the cheapest model in the portfolio.
+At this operating point the two ``ours'' arms are indistinguishable to five decimals, so the
+entire margin is representation.
 
-\paragraph{The abstention signal and its limitations.}
-The abstention signal (mean predicted reward) is a byproduct of multi-route
-success prediction: the router is not directly trained to predict task
-solvability, but the mean of four route-level predictions correlates with it.
-Training directly on a binary solvability target---does any local solver
-succeed?---is a natural next step that may close the gap to the oracle.
+\subsection{The mechanism: a knapsack over problems}
+\label{sec:mechanism}
 
-\paragraph{Routing utility vs.\ abstention.}
-Abstention and local routing are complementary decisions from the same
-predicted reward vector.
-Abstention handles ``will the local portfolio fail?'';
-local routing handles ``which cheap solver to use when the portfolio will
-succeed?''
-The lambda-tuned Pareto frontier shows both decisions can be made from a
-single inference pass over the post-scout context.
+\paragraph{The shuffled-prediction control.}
+With constant per-route belief \emph{and} constant per-route cost, the utility $p_mR-c_m$ is
+identical for every problem: the baseline can only attempt-everything or attempt-nothing (measured:
+0.0\% abstention).  \emph{Any} per-problem dispersion unlocks partial abstention, informative or
+not --- so ``conditioned beats constant'' conflates two things.  The control permutes the
+predicted vectors across problem ids (marginals preserved exactly, pairing destroyed) and re-runs
+the full replay:
 
-\paragraph{Limitations.}
-The oracle gap is large: the oracle achieves 55.9\% success at 10\% cost,
-while the best learned router achieves only 42.3\% at 82\% cost
-($\lambda{=}0$).
-Closing this gap requires better calibration of per-task difficulty and
-route selection.
-Our proxy reward does not capture semantic correctness or test coverage,
-which limits its utility as a signal for route ranking (as opposed to
-task-level solvability).
-The four-model portfolio is a fixed snapshot; adding new models requires
-re-collecting labels.
+\begin{center}
+\small
+\begin{tabular}{llccccc}
+\toprule
+ & head & baseline & shuffled & real & dispersion & \textbf{\% information} \\
+\midrule
+LCB & beliefs & 26.8\% & 28.8\% & 52.7\% & +2.0pt & \textbf{92\%} \\
+LCB & cost & 26.8\% & 40.4\% & 53.3\% & +13.6pt & 49\% \\
+TACO & beliefs & 19.6\% & 27.1\% & 43.7\% & +7.5pt & \textbf{69\%} \\
+TACO & cost & 19.6\% & 35.5\% & 42.6\% & +15.9pt & 31\% \\
+\bottomrule
+\end{tabular}
+\end{center}
 
-\section{Related Work}
+The belief head survives the null on both benchmarks --- 92\% and 69\% of its gain is destroyed by
+shuffling, so it carries real per-problem information.  The cost head does not, and TACO is where
+it fails hardest (31\%), resolving an apparent contradiction: TACO's cost head predicts
+\emph{success} at chance yet still appeared to buy $+23$pt at a tight budget.  It was mostly
+buying dispersion.  \textbf{Report the shuffled arm beside every conditioned arm}; it is the only
+comparison that separates ``we predicted something useful'' from ``we gave a degenerate decision
+rule something to vary on'', and no routing paper we surveyed runs it.
 
-\paragraph{LLM routing and cascades.}
-FrugalGPT \citep{chen2024frugalgpt} trains a quality estimator and
-selects a sequence of LLM calls to balance accuracy and cost.
-RouteLLM \citep{ong2024routellm} and RouterBench \citep{hu2024routerbench}
-study routing from prompts and preference data.
-Router-R1 \citep{zhang2025routerr1} and RadialRouter
-\citep{jin-etal-2025-radialrouter} explore reinforcement-learning-based
-routing for math and coding tasks.
-RouterEval \citep{huang-etal-2025-routereval} provides a systematic benchmark
-for router evaluation.
-Post-scout routing is distinguished by conditioning on one fixed cheap
-attempt and predicting counterfactual outcomes for all solvers simultaneously,
-at a fraction of the cascade's decision cost.
+\paragraph{The null ladder: random allocation beats the count-based greedy rule.}
+Choosing routes uniformly at random --- \emph{no information at all} --- is cheaper than the
+count-based density rule at every accuracy target ($+3.5\%$ to $+6.6\%$), because the density
+$p_m/c_m$ is scale-invariant in cost and systematically over-buys the cheapest route, while random
+selection diversifies.  Ours beats random allocation by $+46.7\%$ at the 50\% target and is
+positive at all five.  ``We beat \citet{chen2026ror}'' is the weaker claim; \textbf{``we beat
+random'' is the load-bearing one}: pool-level beliefs plugged into a density rule are not merely
+less useful than per-problem ones --- they are worse than nothing.  (Single seed, one pool;
+replicated before quotation.)
 
-\paragraph{Software engineering agents.}
-SWE-Bench \citep{jimenez2024swebench} established repository-level issue
-resolution as a benchmark for LLM agents.
-SWE-Smith \citep{li2025swesmith} scales the dataset by generating
-synthetic bugs from real repositories.
-SWE-RL \citep{wei2025swerl} trains agents with RL on dense patch-similarity
-rewards; we adopt the same proxy reward formulation for router supervision.
-Concurrent work on agentic scaffolding \citep{yang2024sweagent} focuses on
-improving single-model solve rates; routing is complementary.
+\paragraph{Entry vs.\ continue.}
+Re-running under a start protocol where the policy may decline before buying anything:
 
-\paragraph{Verification and value estimation.}
-Process reward models (PRMs) and outcome reward models (ORMs) are widely used
-to score reasoning chains \citep{lightman2023verify}.
-Our cascade verifier is an ORM that evaluates a completed patch attempt.
-The post-scout router extends this to counterfactual multi-route prediction,
-predicting outcomes for solvers that have not yet been called.
+\begin{center}
+\small
+\begin{tabular}{lccccc}
+\toprule
+the per-problem prior acts\ldots & 50\% & 60\% & 70\% & 80\% & 84\% \\
+\midrule
+only at entry (depth 0), counts after & \textbf{+25.0\%} & +5.1\% & +0.6\% & $-1.3$\% & +1.0\% \\
+only on continue, counts at entry & \textbf{+40.8\%} & \textbf{+16.8\%} & \textbf{+10.8\%} & +4.3\% & +5.0\% \\
+everywhere (full) & +43.3\% & +20.6\% & +11.9\% & +1.6\% & +6.5\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+At tight budgets, entry alone is worth $+25.0\%$ of the full $+43.3\%$ --- 58\% of the margin ---
+at a decision point where count beliefs are \emph{structurally incapable} of discriminating.  At
+loose budgets the whole margin is \emph{continue}: the prior is tracked through the episode, which
+\emph{is} the same machinery with a better input.  The two halves are sub-additive, as every pair
+of our components has been.
+
+\paragraph{What the sequential structure is for.}
+Same beliefs, single-commit versus sequential, against the honest baseline:
+
+\begin{center}
+\small
+\begin{tabular}{lccccc}
+\toprule
+arm & 50\% & 60\% & 70\% & 80\% & 84\% \\
+\midrule
+single-commit, our beliefs & +15.1\% & $-10.0$\% & \multicolumn{3}{c}{unreachable at any price} \\
+\textbf{sequential, our beliefs} & \textbf{+40.8\%} & \textbf{+19.2\%} & \textbf{+12.0\%} & \textbf{+2.3\%} & \textbf{+6.6\%} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The sequential structure more than doubles the tight-budget gain, turns a loss into a gain at
+60\%, and --- most importantly --- extends the reachable range: single-commit routing on this pool
+cannot reach the 70\% target at any price, while the sequential policy reaches 84.8\%.
+Resampling buys the high-accuracy regime.  This is the claim \citet{chen2026ror} made (v1) and
+\citet{chen2026rorv3} withdrew the optimality framing for; our contribution here is the
+\emph{measurement}, not the machinery.
+
+\paragraph{Component verdicts.}
+
+\begin{center}
+\small
+\begin{tabular}{lll}
+\toprule
+component & evidence it pays & verdict \\
+\midrule
+sequential resample/reroute & $+15.1\!\to\!+40.8$ at 50\%; $-10.0\!\to\!+19.2$ at 60\%; & \textbf{load-bearing} \\
+ & 70\%+ unreachable without it & \\
+stop action (zero-value abstention) & counts cannot discriminate at entry; & \textbf{load-bearing} \\
+ & interaction $+27.5$pt at the tight target & \\
+global price vs.\ per-episode cap & $+5.1\%$/$+5.8\%$ at tight targets, & marginal \\
+ & ${\sim}0$ or negative at loose & \\
+deep lookahead ($h>2$) & $h{=}4/6/18$ identical to each other and no & does not pay \\
+ & better than $h{=}2$; 84\% degrades & \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{It is the activations, not merely a per-problem prior}
+\label{sec:activations}
+
+The headline compares against count beliefs, which have \emph{no} per-problem prior at all; the
+ladder below varies \emph{only} the belief source --- constant costs on both sides, no cost head,
+same formulation, grid, seed and split, text baselines fitted under the identical protocol:
+
+\begin{center}
+\small
+\begin{tabular}{lcccccc}
+\toprule
+belief source & forward pass? & 50\% & 60\% & 70\% & 80\% & 84\% \\
+\midrule
+problem length (chars + words) & no & +2.7\% & $-2.8$\% & $-2.2$\% & +5.3\% & +4.7\% \\
+TF-IDF of the statement & no & +12.2\% & $-0.3$\% & +11.8\% & +1.2\% & +0.3\% \\
+$k$NN on activations & yes & +26.8\% & +8.8\% & +7.6\% & +0.8\% & +3.3\% \\
+\textbf{activations (ours)} & yes & \textbf{+40.8\%} & \textbf{+19.2\%} & \textbf{+12.0\%} & \textbf{+2.3\%} & \textbf{+6.6\%} \\
+\emph{oracle beliefs} & --- & \emph{+75.4\%} & \emph{+71.8\%} & \emph{+68.7\%} & \emph{+65.5\%} & \emph{+73.4\%} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Three conclusions.  (i) It is not ``any per-problem prior'': problem length buys essentially
+nothing and is negative at two targets.  (ii) It is the activations specifically, not the text: a
+properly-fitted TF-IDF head recovers at most a third of the gain and is negative at 60\%.
+(iii) \textbf{The channel is far from exhausted}: against the oracle belief we capture
+54\,/\,27\,/\,17\,/\,4\,/\,9\% of the available cost saving at the five targets.  The loose end is
+a \emph{belief-quality} problem, and it is where all the headroom is
+(Section~\ref{sec:diagnostics}).
+
+\subsection{Cross-model transfer: the ordering is free, the probabilities cost $\sim$25 labels}
+\label{sec:transfer}
+
+\paragraph{The claim.}
+AUC is invariant to a positive affine transform, so a two-parameter response curve cannot change a
+ranking: the \emph{ordering} of a new model's success transfers with \emph{no labels}.  Labels buy
+calibration.  Fitting the difficulty latent from only the three local routes, then applying it to
+five models it has never seen (one per lab, API-only, weights never touched), with an
+$N$-label two-parameter link scored by Brier on 171 test problems against each peer's own base
+rate:
+
+\begin{center}
+\small
+\begin{tabular}{lcccccc}
+\toprule
+peer & solve rate & AUC & Brier $N{=}10$ & \textbf{$N{=}25$} & $N{=}170$ & base rate $N{=}25$ \\
+\midrule
+deepseek & 0.702 & 0.746 & 0.2247 & \textbf{0.1902} & 0.1812 & 0.2192 \\
+glm-5 & 0.620 & 0.812 & 0.2064 & \textbf{0.1986} & 0.1822 & 0.2559 \\
+kimi & 0.719 & 0.790 & 0.1943 & \textbf{0.1794} & 0.1629 & 0.2134 \\
+minimax & 0.544 & 0.811 & 0.2572 & \textbf{0.1986} & 0.1815 & 0.2668 \\
+qwen3-max & 0.520 & 0.787 & 0.2441 & \textbf{0.2062} & 0.1925 & 0.2616 \\
+\midrule
+\textbf{mean} & & \textbf{0.789} & 0.2253 & \textbf{0.1946} & 0.1801 & \textbf{0.2434} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The latent beats the new model's base rate for every peer at every $N$, by ${\sim}24\%$ of Brier
+at $N{=}25$, and saturates at $N\approx25$ ($0.1946 \to 0.1857 \to 0.1801$ for $25\to50\to170$).
+The result survives the label-quality problem (one peer has 25.7\% empty and 38.6\% truncated
+outputs; dropping it moves the mean by 0.001).  Within the local pool, 25 labels through the
+shared latent beat 550 labels of a dedicated high-dimensional probe (test AUC 0.7898 vs.\
+0.7755), because there are only two parameters to fit.
+
+\paragraph{The boundary condition, measured.}
+The transfer does \emph{not} work everywhere.  On SWE-bench Verified the new model's base rate
+wins at every $N$ up to all 219 available: the latent ranks better than a dedicated probe (AUC
+0.616--0.670 vs.\ 0.517--0.629) but is \emph{worse calibrated than simply knowing how often the
+new model succeeds}.  The discriminating quantity is the latent's own strength: peer AUC
+0.746--0.812 on LiveCodeBench against 0.616--0.670 on SWE-V.  \textbf{Pool extension works where
+the probe is strong and fails where it is weak}, which is a boundary condition, not a
+contradiction, and it is measurable before committing to a pool.
+
+\paragraph{The smallest model is also the best encoder.}
+Scaling the probe (identical pipeline, identical split, only the prefill model changes): the 4B
+scout is the best encoder on average (mean test AUC 0.8677) and 42$\times$ cheaper to prefill than
+the dearest alternative (gpt-oss-120b, 0.8620); a \textbf{0.69B} model retains 95\% of pool-solvability
+AUC (0.818 vs.\ 0.865) while solving almost nothing itself.  A model far too weak to solve these
+problems still separates solvable from hopeless --- the probe reads a property of the
+\emph{problem}, not of the solver.  This replicates \emph{encoder-target decoupling}
+\citep{prefillrouter2026} on a sequential pool and strengthens it on cost grounds: the usual
+objection ``a bigger probe would predict better'' is false here and measurably so.  Consistent
+with \citet{prefillrouter2026}, larger open-weight encoders do not improve the signal here either;
+we read this as the signal being problem-level difficulty rather than a property of
+representational geometry, and state it as a competing hypothesis with an ablation rather than a
+refutation.
+
+\subsection{Whether, not which: the shared scalar does not route}
+\label{sec:whethernotwhich}
+
+\paragraph{A complementary pool, and none of the gain is captured.}
+The five-lab peer pool has abundant routing headroom: best single model 71.9\%, union 85.4\%,
+52.6\% of problems contested.  Our cascade pool offers $+3.6$pt between best and union; the peer
+pool offers $+13.5$pt.  Every probe variant we tried captures none of it:
+
+\begin{center}
+\small
+\begin{tabular}{lcccc}
+\toprule
+router & accuracy & cost & acc/\$ & models used \\
+\midrule
+1-D shared latent (2 params/model) & 70.2\% & \$0.0169 & \textbf{41.4} & \textbf{1 of 5} \\
+latent + 8 shared PCA dims & 70.8\% & \$0.0226 & 31.4 & 5 of 5 \\
+per-model probe on activations & 64.9\% & \$0.0284 & 22.9 & 5 of 5 \\
+always best single model & 71.9\% & \$0.0321 & 22.4 & --- \\
+\textbf{oracle cheapest-that-solves} & \textbf{85.4\%} & \$0.0179 & \textbf{47.7} & --- \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The collapse is structural, not a fitting failure.  All five response curves are monotone in the
+\emph{same} scalar with similar slopes, so the ordering is nearly constant across problems: one
+model dominates the whole latent range and $\arg\max$ picks it 171/171 times.  A one-dimensional
+latent can express \emph{how hard is this problem} --- which is a threshold, i.e.\ abstention ---
+but not \emph{which model suits this problem}, which requires the ordering to change.  Adding
+dimensions makes it worse (31.4 and 22.9 vs.\ 41.4): extra variance, no signal.  \textbf{The
+failure is not dimensionality; the information is not in the prompt representation.}
+
+\paragraph{RouterBench: the decomposition inverts.}
+On RouterBench \citep{hu2024routerbench} (11 models, 3.8\% pool-unsolvable, 91.4\% contested),
+with the scout's activations extracted for every prompt and their Zero Router and AIQ metric:
+weighted AIQ is $+3.91\%$ for activations against $+2.43\%$ for TF-IDF and $-6.03\%$ for the
+shuffled control.  Decomposed: information $+9.94\%$; \textbf{interaction $+4.52\%$};
+\textbf{abstention $+0.10\%$} --- and \textbf{the shared scalar alone is $-0.60\%$, worse than not
+routing at all}.  On a 91.4\%-contested pool, all of the gain is the model$\times$problem
+interaction; on our pools (29--40\% unsolvable) the interaction is unlearnable and the shared
+scalar carries everything.  \emph{Same probe, opposite decomposition, and contested mass predicts
+which.}  Two honesty notes: $+3.91\%$ is a modest win in a regime where RouterBench's own routers
+``generally do not significantly outperform'' the Zero Router --- we do not claim to beat their
+routers --- and an oracle-dataset router (told which benchmark each prompt came from) is worth
+$-0.07\%$, so none of the gain is benchmark identification.
+
+\subsection{The unification: shared factors are predictable, interaction terms are not}
+\label{sec:unification}
+
+Decomposing both success and cost on the peer pool gives one mechanism for every positive and
+negative result in the paper:
+
+\begin{center}
+\small
+\begin{tabular}{lll}
+\toprule
+component & what it is & predictable from a prefill? \\
+\midrule
+rank-1 problem factor & ``this problem is long / hard'' & \textbf{yes} --- the shared latent \\
+rank-1 model factor & ``this model is verbose, that one terse'' & \textbf{yes} --- a constant \\
+\textbf{the 27.9\% interaction} & ``\emph{this} model rambles on \emph{this} problem'' & \textbf{no} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Per-peer cost is partly predictable from the scout's activations (dollar $R^2$ of 0.390, 0.246,
+0.158, 0.144, 0.032 across the five peers), but \textbf{the cost \emph{ratio} between peers is
+not: 0 of 10 pairs positive} --- and the ratio is exactly what route selection compares.  The
+structure genuinely exists: the peer log-cost matrix is not rank-1 (first singular component
+explains 72.1\%), model verbosity constants span 14$\times$, and the cheaper model genuinely
+changes from problem to problem.  There is something to route on; we cannot see it.
+
+\emph{Success} = shared difficulty (predictable, so \textbf{abstention works}) + interaction
+(invisible, so \textbf{routing fails}).  \emph{Cost} = shared length (predictable, so the cost
+\textbf{level} works) + verbosity constant + interaction (invisible, so the cost \textbf{ratio}
+fails).  One mechanism explains six symptoms: per-candidate probing buys nothing once its probes
+are priced (Section~\ref{sec:diagnostics}); extra PCA dimensions make routing worse;
+cost ratios are negatively predictable; the one-dimensional router collapses to one model; TACO's
+cost head fails where the shared component is weakest; and beliefs pay only through the give-up
+action.  The claim is falsifiable: find a representation that predicts the interaction term, and
+routing becomes possible.
+
+\subsection{Selective prediction: the cleanest form}
+\label{sec:selective}
+
+Score every problem by predicted pool-solvability from the one scout prefill, attempt the top
+$c$ fraction, and measure \emph{risk} --- the share of attempted problems that nothing in the pool
+solves (pure wasted spend).  No MDP, no cost model, no budget parameter:
+
+\begin{center}
+\small
+\begin{tabular}{lcccccc}
+\toprule
+benchmark & $n$ & unsolvable & AUC & AURC & oracle risk & \textbf{gap closed} \\
+\midrule
+LiveCodeBench & 171 & 15.2\% & 0.759 & 0.062 & 0.013 & \textbf{64.9\%} \\
+TACO & 168 & 41.1\% & 0.838 & 0.185 & 0.100 & \textbf{72.7\%} \\
+SWE-bench Verified & 369 & 28.7\% & 0.703 & 0.182 & 0.046 & \textbf{43.8\%} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Wasted spend at 50\% coverage: 5.8\% vs.\ 15.2\% ($-62\%$), 19.0\% vs.\ 41.1\% ($-54\%$), and
+16.3\% vs.\ 28.7\% ($-43\%$), respectively.  One cheap prefill, one ranking, and the money spent
+on problems nothing can solve is roughly halved --- including out of domain, where the probe is
+weakest (SWE-bench's 43.8\% is consistent with its lower AUC, and is a floor: the recorded probe
+is stronger than the reconstruction used here).
+
+\subsection{Robustness and honest accounting}
+\label{sec:robust}
+
+\paragraph{Matched budget grids.}
+The budget-swept (baseline) arm's grid was 17 linear points; ours, 96 geometric.  Below \$0.02
+that is 3 points vs.\ 55, exactly where tight-budget claims were read.  Under the matched grid the
+baseline gains most at the tight end (12.3\% cheaper at the 50\% target, 8.7\% at 60\%) and our
+margin falls from $+54.9$ to $+48.6$ and $+27.5$ to $+20.6$ --- and, critically, the
+\emph{formulation} attribution falls from $+16.7$/$+13.9\%$ to $+5.1$/$+5.8\%$, turning negative
+at loose targets (Section~\ref{sec:reprform}).  A sparse grid is not conservative: greedy
+allocation under a cap is not concave in budget, so a denser grid can surface points above the
+chord.  \textbf{Sweep both arms under the same spacing law.}
+
+\paragraph{The frontier must be convexified.}
+``Cheapest arm reaching target $T$'' evaluates a family at a single swept operating point, and the
+comparison silently switches arm when no point lands near $T$ --- seed sd fell 2--4$\times$ at
+exactly the unstable cells once mixtures were allowed on both sides, at the cost of cutting the
+flattering numbers too ($+56.0 \to +42.2\%$ at 50\%).  Randomised mixtures are achievable by
+construction \citep{altman1999constrained}, so the hull --- not the grid --- is the frontier.  All
+frontier numbers in this paper are hulls, and utility at the matched price $R$ is reported
+alongside as the objective-level check (84 of 96 swept prices won, unanimous across 8 seeds, with
+the 12 losses being the 12 lowest prices --- the probe fee and nothing else, the honest floor of
+the method).
+
+\paragraph{Charging for abstention.}
+Abstention is free in our accounting, so part of the tight-budget advantage might be nothing but
+declining work.  Pricing every abstention at a full gpt-oss-120b call (\$0.02638): against the
+\emph{capped} baseline the tight-budget win collapses ($-38.5\%$ at 50\%) --- but that collapsed
+part is the value of \emph{having} a give-up action at all, which is \citet{zhao2026roi}'s and the
+textbook's contribution, not ours.  Against the honest baseline (count beliefs under the same
+dual, which also abstains and is also charged) the advantage is robust to any price:
+$+23.9$/$+10.6$/$+12.9$/$+6.0\%$ at one full-call price, $+16.9$ to $+6.4\%$ at double, and it
+\emph{grows} at the 80\% target as the price rises, because our abstentions are better targeted.
+\textbf{Against a baseline that abstains on the same budget with count-based beliefs, activation
+beliefs cut cost at matched accuracy even when every abstention is charged the price of the
+dearest route.}
+
+\paragraph{A weak verifier: the claim survives but roughly halves.}
+All results above assume the verifier's acceptances are correct.  Under a verifier with an
+11.01\% false-accept rate (11$\times$ the 1.0\% of \citet{chen2026ror}'s agreement verifier ---
+we are testing a more adversarial regime, not the same one), scored against the truth so a false
+accept ends the episode with a wrong answer shipped: the belief claim survives at every reachable
+target but halves ($+40.8 \to +19.6\%$ at 50\%, $+19.2 \to +10.5\%$ at 60\%), reproducing
+\citet{chen2026ror}'s own verifier-gating ablation --- corroboration of the prior work, not a
+weakness of ours.  The bigger effect is the ceiling: reachable accuracy collapses from 84.8\% to
+62.1\%, because episodes terminate on a lie.  \textbf{Every high-target number in this paper is
+conditional on a near-oracle verifier}, and we report both regimes side by side.  Letting the
+policy \emph{distrust} a positive verification signal --- banking a candidate worth $R\,q_m$ and
+continuing --- recovers 6.3 points of that ceiling; the framing is taken (a POMDP with a noisy
+verifier; \citet{beliefguided2026}), the combination (multi-route resampling, rerouting and
+abstention with per-route acceptance reliability) is not, and per-problem $q_m$ is predictable
+(ICC 0.964/0.856/0.882) because public-test verifier failure is systematic rather than random.
+
+\paragraph{Symmetric failure accounting.}
+In verifier-rich domains a delivered wrong answer and an announced decline are the same object up
+to one test execution, so an honest accounting charges \emph{every} failure equally, not only our
+abstentions.  At matched accuracy the failure rate is equal by construction, so this adds a
+near-identical constant to both arms --- and the advantage survives any charge: $+26.0$/$+14.1$/
+$+14.2$/$+5.0$/$+7.3\%$ at a 1:1 price and still $+3.4$ to $+6.0\%$ at \emph{ten times} the
+dearest route's price per failure.  The advantage cannot be priced away; it merely shrinks toward
+the ratio 1 as any constant charge must.  An earlier asymmetric accounting (pricing our give-up
+while letting the baseline's failures go free) produced an alarming $-38.5\%$ and was wrong.
+
+\paragraph{The cap does not bound realised spend.}
+A per-query cap implemented against \emph{estimated} costs bounds planned spend only: a third of
+the capped baseline's episodes exceed their cap (up to 22.3$\times$), because realised costs drift
+from estimates and nothing corrects the drift.  A genuinely binding cap requires predicting the
+\emph{next} draw's cost, which a per-query cost head enables and constant per-route costs cannot.
+Relatedly, the three-state decomposition (solved / abstained / covered-and-wrong) shows the two
+policy families fail differently: our value arms' failures are almost all \emph{declines}, the
+capped baseline's are almost all \emph{shipped wrong answers}.  Wasted spend is the norm for
+every arm (63.5--95.9\% of all spend, rising as the budget tightens) --- at matched accuracy we
+waste 16--18\% fewer dollars, and what our waste buys (a flagged decline rather than a silently
+wrong answer) is a deployment argument, not a cost one.
+
+\paragraph{Price ratio: the method needs a dearest-to-cheapest gap.}
+The spread the method exploits is basis-dependent, and the threshold is higher than we first
+reported: at a 3$\times$ price ratio the method is catastrophic ($-118.9\%$ at the 65\% target),
+at 6$\times$ still negative at three of four targets, at 10$\times$ break-even, and a solid win
+needs ${\sim}25\times$, at which point the result is stable through list price (40$\times$).  Our
+pool contains two mixture-of-experts models, for which the ratio swings from 1.3$\times$ (active
+parameters, flat GPU price) to 40$\times$ (total parameters, our node estimate) on accounting
+alone --- so \textbf{we state the threshold in the units the operator pays and report the full
+sweep}, rather than asserting transfer.  Parameter count, the standard proxy in this literature
+\citep{chen2026ror}, overstates the headroom on MoE pools.
+
+\subsection{Diagnostics: where the remaining headroom lives}
+\label{sec:diagnostics}
+
+\paragraph{Oracle bounds.}
+Replacing exactly one component with ground truth, at the 80/84\% accuracy targets where nothing
+we tried moves anything: perfect \textbf{stopping} is worth $+44.0$/$+65.0\%$, perfect
+\textbf{routing} only $+8.3\%$ at 84\%, perfect \textbf{beliefs} $+65.5$/$+73.4\%$ --- of which we
+capture 4\% and 9\%.  Tight-target oracle cells are unreadable (the oracle arms attach to a
+frozen-price policy whose hull cannot span the tight end) and are reported as n/a rather than as
+numbers.  \textbf{The loose end is a belief-quality problem}: at high coverage the binding
+constraint is knowing which problems are hopeless, not choosing among routes, and no structural
+variant can manufacture that.  This overturns an earlier hypothesis of ours that the stopping
+channel was nearly closed: stopping is untouched exactly where it matters most.
+
+\paragraph{There is essentially no irreducible label noise in success.}
+Between-problem ICC of observed per-problem solve rates, binomial variance removed, is
+0.975/0.917/0.924 across the three routes: 92--98\% of the spread is real between-problem signal,
+so the oracle-belief headroom is genuinely reachable, not a mirage of draw noise.  (Cost is
+different: its ICC is 0.841, so its ceiling is materially below $R^2{=}1$.)
+
+\paragraph{Lookahead does not pay; the transition model caps it.}
+The exact solve ($h{=}18$, 342 lattice nodes --- the truncation was inherited and never
+revisited; 85$\times$ the $h{=}2$ cost and still negligible) does not beat $h{=}2$: $h{=}4$, 6
+and 18 are essentially identical at the tight end and $h{=}18$ is \emph{worse} at 84\% (3.9 $\to$
+2.9\%).  Diagnosis: at $h\ge2$ the lattice reuses the root belief at every node, asserting that
+failing route $m$ says nothing about route $m'$ --- which is false (and is exactly the correlated
+Pandora problem \citep{gergatsouli2023weitzman}).  Independence over-values continuation while
+truncation under-values it; deeper search removes the truncation error while compounding the
+transition error.  \textbf{More exact optimisation over a wrong model buys nothing} --- the same
+shape as the belief finding.
+
+\paragraph{A learned per-problem decay works, and our probe beats it.}
+A factorised scorer that emits its own per-problem decay learns something true (ground-truth
+hazard ratios split cleanly by difficulty) and beats count beliefs at four of five targets ---
+but our probe beats \emph{it} at four of five (beliefs-only, one replay so nothing else differs:
+$+32.1$/$+15.7$/$+7.6$/$+2.6$/$-0.8\%$).  A learned decay is a one-parameter summary of what the
+prefill already carries in full.
+
+\paragraph{Select every component on the objective the policy optimises.}
+Four interventions each improved their own predictor metric and each made the frontier worse
+(belief penalty on AUC: $+0.024$ AUC, $-4.3$pt floor; cost penalty on $R^2$; cross-route coupling
+$+0.024$ AUC, $-23.8$pt; isotonic recalibration: perfect by construction, $-0.4$ to $-1.9$pt).
+The cause is structural: AUC is invariant to monotone transforms, the rule
+$\arg\max_m(p_mR-c_m)$ consumes \emph{values}, and abstention fires on $\max_m Q \le 0$ ---
+better-regularised predictors are more \emph{compressed}, and the rule needs \emph{spread}.
+Selecting on the calibration frontier instead trades regimes rather than dominating ($+3.88$pt at
+$0.25\times$ on 5/5 seeds, $-2.60$pt at $1.0\times$).  \textbf{A head with strictly better ranking
+can make the policy worse.}
+
+\paragraph{The strongest honest baseline variant does not close the gap.}
+Giving count beliefs a cross-route difficulty channel (a second decay on other routes' failures,
+swept over its coupling constant) makes our margin \emph{larger}, not smaller
+($+51.7$/$+21.2$/$+12.6$/$+7.1\%$ vs.\ $+45.8$/$+12.9$/$+12.1$/$+5.5\%$ against plain counts):
+letting the baseline infer difficulty from observed failures makes it spend more, not less ---
+consistent with the entry-decision analysis, since observed failures are the only channel count
+beliefs have, and they are expensive.
+
+\paragraph{Per-candidate probing loses once priced.}
+Probing every model in the pool --- one prefill each, including the 120B --- costs 48.5$\times$
+our single scout probe.  Given away free, per-candidate probing wins at five of six targets
+($+0.6$ to $+8.6$pt), so the better predictor does convert; charged what it costs, it is worse at
+\emph{all six}, by 10.9 to 38.5pt.  The extra signal is worth less than one prefill on the 120B.
+The deployment argument (one model's weights, not the pool's) rests on price, not on a failure to
+convert --- and this is the same conclusion the peer-pool routing analysis reaches from the other
+direction.
+
+\paragraph{Method variants, and the pattern that matters.}
+Six structural variants were run against their own controls: a two-constraint policy (per-episode
+cap \emph{and} global price swept jointly; $+4.1$/$+7.1$/$+11.4$/$+2.4\%$, the best new result ---
+neither the cap nor the pure Lagrangian), an exact posterior over success counts ($+11.0$/$+5.7$/
+$+5.9\%$ tight/mid), a free-start protocol ($+9.2$/$+2.2\%$ for us and \emph{exactly $+0.0\%$ at
+every target for the count baseline}, because its beliefs are identical at entry --- a mechanism
+confirmation), a winner's-curse shrink ($+12.1\%$ tight only), a cross-route coupling correction
+(mixed), and a quantile cost head (directional; only the conservative tail positive).  Four of
+five improving variants peak at the 50\% target around $+8$ to $+12\%$ and fade by 80\%: they are
+all the \emph{same} intervention --- improving the give-up decision --- and will stack
+sub-additively.  \textbf{Stop tuning the give-up rule at the tight end; the loose end is a belief
+problem} (Section~\ref{sec:diagnostics}).
+
+\section{Limitations}
+\label{sec:limitations}
+
+\begin{enumerate}
+\item \textbf{Pool composition.}  Two primary benchmarks, both competitive programming, plus
+SWE-bench Verified as an out-of-domain check (single split, $n{=}369$) and RouterBench for the
+opposite regime.  The interaction-is-unlearnable claim rests on six failed applications across
+our pools and one inverted decomposition on RouterBench; more regimes would sharpen it.
+\item \textbf{The cost head is a contribution with a documented failure mode.}  It is a strict
+improvement on LiveCodeBench and actively harmful on TACO above the 40\% target; the choice is a
+per-pool decision made on calibration, never post hoc on test.  Cost prediction fails on runaway
+generation, which is prompt-unpredictable by measurement.
+\item \textbf{Price-ratio dependency.}  A solid win needs a ${\sim}25\times$ dearest-to-cheapest
+ratio; MoE accounting can move a pool across that threshold on basis alone
+(Section~\ref{sec:robust}).
+\item \textbf{Verifier conditionality.}  High-target results assume a near-oracle verifier; under
+an 11\%-false-accept verifier the ceiling collapses from 84.8\% to 62.1\% and the gain halves
+(Section~\ref{sec:robust}).
+\item \textbf{Seed and split coverage.}  The null-ladder result, the method variants, the
+RouterBench decomposition and the SWE-bench rows rest on single seeds or single splits; the
+headline table is 5-seed/3-seed.  Every number should be reproduced at budgets, seeds and pools
+where it was not measured before being relied on.
+\item \textbf{Serving configuration.}  Outcomes were collected under our own serving stack;
+another provider's defaults could shift absolute solve rates.  All comparisons are
+within-collection.
+\item \textbf{The readout correction} (mean- vs.\ last-token pooling reverses cross-model
+orderings because chat templates end differently) is measured on 3 models on one benchmark.
+\item \textbf{Lower ceiling than the baseline at maximum price.}  With the value of a correct
+answer driven arbitrarily high, both policies buy everything and converge; our abstention forgoes
+the last tenths of a percent of the pool ceiling, and utility at matched price is reported
+alongside the frontier for exactly this reason.
+\end{enumerate}
 
 \section{Conclusion}
+\label{sec:conclusion}
 
-We proposed \methodname for software repair agents:
-always run a cheap 4B scout model, observe its attempt, then route to the
-best local solver or escalate to an external model.
-On a 286-task SWE-Smith evaluation set, the scout output is load-bearing:
-the post-scout router achieves ROC-AUC 0.720 and 75.6\% accuracy at 70\%
-abstention, compared to ROC-AUC 0.652 and 65.1\% for an input-only ablation
-with identical supervision---a +10.5 pp gain at the high-abstention regime.
-The fairest cascade comparison (verifier at the same $(x,y_0)$ decision point)
-reaches ROC-AUC 0.688; a full 4-model cascade costs 60$\times$ more and gains
-only +0.032 ROC-AUC.
+A single shared difficulty scalar, read from one cheap model's prefill before anything runs, is
+enough to drive a budgeted sequential policy --- and what it is \emph{for} is now measured rather
+than assumed.  It supports the \emph{whether}-to-attempt decision, where it turns a
+count-belief policy into one that cuts cost at matched accuracy at every target on every pool we
+have (19/19), because abstention at a binding budget is a knapsack over problems and the prefill
+supplies the per-problem information the knapsack needs.  It does not support the
+\emph{which}-model decision, on pools where routing headroom is abundant, for a reason that is
+measurable in advance: a prompt representation carries shared factors and not interaction terms.
+It transfers to models whose weights are never touched, free as an ordering and at ${\sim}25$
+labels as a probability --- or not at all, measurably, where the probe is weak.  The remaining
+headroom is belief quality at high coverage, where we recover single-digit percentages of what
+perfect beliefs are worth, and the open problem is one we can now state precisely: find more
+per-problem information in the prompt, or buy a little evidence.  Everything the formulation
+needs beyond that is classical \citep{altman1999constrained,weitzman1979optimal}, and the
+formulation column was never ours; the representation was, and the controls needed to show it
+--- shuffled predictions, matched grids, hull frontiers, symmetric charges, jointly fitted
+hyperparameters --- are, we think, the most portable thing in this paper.
 
-Two-stage proxy pre-training dramatically reduces the real-label budget:
-post-scout proxy+real with only 50 real labels (ROC-AUC 0.698) exceeds
-input-only routing at 30$\times$ the label count (ROC-AUC 0.652).
-Finally, the same predicted rewards enable flexible inference-time cost-aware
-routing without retraining, from 18\% to over 88\% cost reduction.
-The oracle---cheapest succeeding route per task---achieves 55.9\% success
-at 10\% of always-120B cost, indicating a large calibration gap and an
-exciting direction for future work.
+\paragraph{Reproducibility.}
+All results are replays over stored correctness tensors; every headline number traces to a
+committed script and a named run.  We release the replay harness, the pool-construction code, and
+the probe training pipeline.
 
 \bibliography{tmlr}
 \bibliographystyle{tmlr}
+
+\appendix
+
+\section{Terminology}
+\label{app:terminology}
+
+\begin{center}
+\small
+\begin{tabular}{lp{11.5cm}}
+\toprule
+term & meaning \\
+\midrule
+\scout & the cheapest model in the pool; its prefill is computed before any generation \\
+prefill beliefs & per-route success probabilities $\hat\theta_m(x)$ from one scout forward pass \\
+count beliefs & pool-level priors decayed by observed failures only \citep{chen2026ror} \\
+give-up / abstention ($\bot$) & the zero-value action of the utility rule \\
+$R$ & the dollar value of a correct answer; the Lagrangian dual of the budget \\
+count-belief baseline & the published policy of \citet{chen2026ror} (arXiv:2607.08665v1): density rule under a per-query cap \\
+honest baseline & count beliefs under our global dual (formulation held fixed) \\
+contested & fraction of problems solved by more than one model \\
+pool-unsolvable & fraction of problems solved by no model in the pool \\
+budget units & spend as a multiple of calling the largest model on everything \\
+hull frontier & the convex hull of a policy family's (cost, accuracy) operating points \\
+matched grid & both budget-swept arms swept under the same 96-point geometric spacing \\
+shuffled control & predictions permuted across problems, marginals preserved \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Full method variants}
+\label{app:variants}
+
+Cost at matched accuracy vs.\ each run's own control (LiveCodeBench 64k pool, seed 0, matched
+geometric grid; single seed --- hypotheses, not claims):
+
+\begin{center}
+\small
+\begin{tabular}{lcccccl}
+\toprule
+variant & 50\% & 60\% & 70\% & 80\% & 84\% & verdict \\
+\midrule
+two-constraint (cap $\times$ price) & +4.1\% & +7.1\% & \textbf{+11.4\%} & +2.4\% & --- & works \\
+posterior over $k$ (exact Bayes) & \textbf{+11.0\%} & +5.7\% & +5.9\% & +0.9\% & $-6.5$\% & works, tight/mid \\
+free start (ours) & +9.2\% & +2.2\% & $-1.4$\% & $-2.2$\% & $-1.4$\% & marginal \\
+winner's-curse shrink & +12.1\% & +1.2\% & +0.8\% & +2.1\% & +0.3\% & marginal \\
+cross-route $\rho$ & +8.0\% & +2.0\% & $-0.7$\% & $-3.6$\% & $-2.9$\% & mixed \\
+quantile cost head ($q{=}0.90$) & +3.8\% & +1.2\% & +1.5\% & +5.5\% & +0.8\% & directional \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{The single-shot routing view}
+\label{app:singleshoot}
+
+Reported in the routing literature's own units (one commit, no resampling), routing by the probe
+works --- and it is the weak half:
+
+\begin{center}
+\small
+\begin{tabular}{lccc}
+\toprule
+policy & accuracy & cost & acc/\$ \\
+\midrule
+LCB, always gpt-oss-120b & 68.9\% & \$0.0393 & 17.5 \\
+\textbf{LCB, routed by the probe} & 67.7\% & \$0.0343 & \textbf{19.8} \\
+LCB, oracle (cheapest that solves) & 72.5\% & \$0.0290 & 24.9 \\
+TACO, always gpt-oss-120b & 47.6\% & \$0.0429 & 11.1 \\
+\textbf{TACO, routed by the probe} & 48.2\% & \$0.0390 & \textbf{12.4} \\
+TACO, oracle & 54.8\% & \$0.0320 & 17.1 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Routing gains are worth $+12$--$13\%$ cost-efficiency --- 22--31\% of the oracle's available
+gain, against the abstention channel's up to $+43.7\%$.  Two diagnostics explain why: density
+routing degenerates in one shot (it picks the cheap model almost always and cannot recover), and
+this pool has a dominant model, so there is rarely a cheaper route that also works.  Routing
+headroom is a property of the \emph{pool}, not the router --- which is also why the peer pool
+(Section~\ref{sec:whethernotwhich}) is the right place to test the which-model claim, and why it
+fails there too.
 
 \end{document}
