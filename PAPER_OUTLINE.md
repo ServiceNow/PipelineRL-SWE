@@ -1443,6 +1443,42 @@ sets the level (ratios now 0.47–0.85 at $q{=}0.25$ against 1.24–1.94 at $q{=
 this codebase: any downstream affine recalibration will annihilate an upstream level knob. Check
 that variants differ before reading their results.*
 
+### 3b-lxvi ⚠ RouterBench is WEAKER than the headline numbers suggest — the probe is largely learning task identity
+
+**Do not quote the +22.9% to +76.9% cost savings.** They are computed on a **pooled** evaluation and
+are inflated by task identification, not difficulty prediction.
+
+**The evidence.** Variance decomposition of the probe's own predictions on the held-out split, by
+dataset:
+
+| | between-dataset share of variance |
+|---|---|
+| **the probe's predictions** | **0.681** |
+| **true success** | **0.154** |
+
+The probe puts **68% of its variance on a dimension carrying 15% of the real variance.** Training is
+**pooled over ~85 datasets** (HellaSwag, GSM8K, 60+ MMLU subjects, MBPP, Chinese riddles…), so
+"which dataset is this" is by far the cheapest signal to learn, and a pooled evaluation pays for it:
+route GSM8K to the math-strong model, HellaSwag elsewhere. Real routing, but **task** routing.
+
+**Per-dataset evaluation removes it and the gain collapses:** 12.67pp mean vertical gain pooled →
+~2–5pp per dataset → **+3.91% AIQ**, which `PRIOR_ART.md` §7 already places in the regime where
+RouterBench's *own* KNN and MLP routers *"generally do not significantly outperform the Zero
+Router"*. Per-dataset we win on 5 of 6 headline sets and tie/lose on winogrande.
+
+**Report AIQ (+3.91%) as the RouterBench result, and nothing else.** State the decomposition as a
+limitation rather than letting a reader find it.
+
+**Two things this does NOT undermine.** (i) The shuffled control still drops hard on every dataset
+(MMLU 0.7472→0.6932, HellaSwag 0.8244→0.7023), so the probe carries real per-problem information —
+the question is only how much of it is task-level. (ii) **LCB and TACO are single-task pools**, so
+the dataset-identity shortcut was never available there and their results cannot be contaminated
+this way.
+
+**The fix, if we want RouterBench to carry weight:** train per-dataset, or residualise dataset
+identity out of the target, forcing the probe onto the within-task difficulty that the truth is 85%
+made of. Either outcome is informative. *Not run.*
+
 ### 3b-lxii Baselines vs controls: `counts_value` is NOT a baseline, and the price cannot be ablated of abstention
 
 **Two structural facts that reorganise the paper's comparison section.**

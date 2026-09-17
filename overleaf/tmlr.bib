@@ -1,39 +1,522 @@
-@article{chen2024frugalgpt,
-  title         = {FrugalGPT: How to Use Large Language Models While Reducing Cost and Improving Performance},
-  author        = {Chen, Lingjiao and Zaharia, Matei and Zou, James},
-  journal       = {Transactions on Machine Learning Research},
-  year          = {2024},
-  note          = {Also available as arXiv:2305.05176},
-  url           = {https://arxiv.org/abs/2305.05176},
-  doi           = {10.48550/arXiv.2305.05176},
-  eprint        = {2305.05176},
+% =====================================================================
+% Bibliography for "Whether, Not Which: Cross-Model Selective Prediction
+% from One Cheap Prefill"
+%
+% Attribution rules enforced (see PRIOR_ART.md):
+%   * RoR is cited as arXiv:2607.08665v1 for the formulation and the policy
+%     we compare against; arXiv:2607.08665v3 is a substantially different
+%     paper under a changed title and is cited separately for the
+%     identification claim it now makes.
+%   * The shadow-price/duality framing for LLM routing is Bouchard's.
+%   * The Lagrangian relaxation, the randomised-mixtures theorem and the
+%     convex-hull achievable set are Altman's; the reservation-value index
+%     is Weitzman's.
+%   * The goal of budgeted inference with a trained skip action is
+%     ROI-Reasoning's; the rule max(0, max_m pR - c) is the textbook
+%     Lagrangian dual and is claimed by neither.
+%   * Encoder-target decoupling is the prefill-router paper's; we replicate.
+%
+% Entries marked "AUTHOR LIST TODO" are arXiv-era papers whose author lists
+% are not recorded in the repo docs; verify against arXiv before submission.
+% =====================================================================
+
+% ---------------------------------------------------------------------
+
+@article{chen2026ror,
+  title         = {Resample or Reroute? Budget-Aware Test-Time Model Selection for Large Language Models},
+  author        = {Chen, Teng-Ruei},
+  journal       = {arXiv preprint arXiv:2607.08665v1},
+  year          = {2026},
+  url           = {https://arxiv.org/abs/2607.08665v1},
+  eprint        = {2607.08665},
   archivePrefix = {arXiv},
-  primaryClass  = {cs.LG}
+  note          = {Version 1 (2026-07-09). Version 3 (2026-09-02) is a substantially different paper under the changed title ``Resample or Reroute? Recoverable Stopping Debt Without Identified Action Selection''; see \citet{chen2026rorv3}. We compare against the policy as published in v1.}
 }
 
-@article{dekoninck2024unified,
-  title         = {A Unified Approach to Routing and Cascading for {LLM}s},
-  author        = {Dekoninck, Jasper and Baader, Maximilian and Vechev, Martin},
-  journal       = {arXiv preprint},
-  year          = {2024},
-  url           = {https://arxiv.org/abs/2410.10347},
-  doi           = {10.48550/arXiv.2410.10347},
-  eprint        = {2410.10347},
+@article{chen2026rorv3,
+  title         = {Resample or Reroute? Recoverable Stopping Debt Without Identified Action Selection},
+  author        = {Chen, Teng-Ruei},
+  journal       = {arXiv preprint arXiv:2607.08665v3},
+  year          = {2026},
+  url           = {https://arxiv.org/abs/2607.08665v3},
+  eprint        = {2607.08665},
+  archivePrefix = {arXiv},
+  note          = {Version 3 (2026-09-02). Retains resample-vs-reroute under a fallible verifier but withdraws the budget-allocation framework of v1 and reports that the resample-vs-reroute choice is not identified by available evidence.}
+}
+
+@article{bouchard2026escalation,
+  title         = {Is Escalation Worth It? A Decision-Theoretic Characterization of {LLM} Cascades},
+  author        = {Bouchard, Dylan},
+  journal       = {arXiv preprint arXiv:2605.06350},
+  year          = {2026},
+  url           = {https://arxiv.org/abs/2605.06350},
+  eprint        = {2605.06350},
   archivePrefix = {arXiv},
   primaryClass  = {cs.CL}
 }
 
-@article{ong2024routellm,
-  title         = {RouteLLM: Learning to Route {LLM}s with Preference Data},
-  author        = {Ong, Isaac and Almahairi, Amjad and Wu, Vincent and Chiang, Wei-Lin and Wu, Tianhao and Gonzalez, Joseph E. and Kadous, M. Waleed and Stoica, Ion},
-  journal       = {arXiv preprint},
-  year          = {2024},
-  url           = {https://arxiv.org/abs/2406.18665},
-  doi           = {10.48550/arXiv.2406.18665},
-  eprint        = {2406.18665},
+@article{zhao2026roi,
+  title         = {{ROI-Reasoning}: Rational Optimization for Inference via Pre-Computation Meta-Cognition},
+  author        = {{Zhao, Qi, and Sun}},
+  journal       = {arXiv preprint arXiv:2601.03822},
+  year          = {2026},
+  url           = {https://arxiv.org/abs/2601.03822},
+  eprint        = {2601.03822},
   archivePrefix = {arXiv},
-  primaryClass  = {cs.LG}
+  primaryClass  = {cs.CL},
+  note          = {AUTHOR LIST TODO: recorded as ``Zhao, Qi, Sun'' in repo notes; verify against arXiv.}
 }
+
+@article{prefillrouter2026,
+  title         = {{LLM} Router: Rethinking Routing with Prefill Activations},
+  author        = {{TODO-verify}},
+  journal       = {arXiv preprint arXiv:2603.20895},
+  year          = {2026},
+  url           = {https://arxiv.org/abs/2603.20895},
+  eprint        = {2603.20895},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CL},
+  note          = {AUTHOR LIST TODO. Source of the encoder-target decoupling claim we replicate.}
+}
+
+@article{llmalreadyknows2025,
+  title         = {The {LLM} Already Knows: Estimating {LLM}-Perceived Question Difficulty via Hidden Representations},
+  author        = {{TODO-verify}},
+  journal       = {arXiv preprint arXiv:2509.12886},
+  year          = {2025},
+  url           = {https://arxiv.org/abs/2509.12886},
+  eprint        = {2509.12886},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CL},
+  note          = {AUTHOR LIST TODO.}
+}
+
+@article{predictivescheduling2026,
+  title         = {Predictive Scheduling for Efficient Inference-Time Reasoning},
+  author        = {{TODO-verify}},
+  journal       = {arXiv preprint arXiv:2602.01237},
+  year          = {2026},
+  url           = {https://arxiv.org/abs/2602.01237},
+  eprint        = {2602.01237},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CL},
+  note          = {AUTHOR LIST TODO.}
+}
+
+@article{encodefailures2026,
+  title         = {{LLM}s Encode Their Failures},
+  author        = {{TODO-verify}},
+  journal       = {arXiv preprint arXiv:2602.09924},
+  year          = {2026},
+  url           = {https://arxiv.org/abs/2602.09924},
+  eprint        = {2602.09924},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CL},
+  note          = {AUTHOR LIST TODO.}
+}
+
+@article{scouting2026,
+  title         = {Scouting: Cross-Model Activation Signals for Routing Code-Generation Models},
+  author        = {{TODO-verify}},
+  journal       = {arXiv preprint arXiv:2608.04804},
+  year          = {2026},
+  url           = {https://arxiv.org/abs/2608.04804},
+  eprint        = {2608.04804},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CL},
+  note          = {AUTHOR LIST TODO; title as recorded in repo notes.}
+}
+
+@inproceedings{quit2026knowing,
+  title         = {Knowing When to Quit},
+  author        = {{TODO-verify}},
+  booktitle    = {International Conference on Machine Learning (ICML)},
+  year          = {2026},
+  note          = {arXiv:2604.18419. AUTHOR LIST TODO.}
+}
+
+@article{beliefguided2026,
+  title         = {Belief-Guided Inference Control for {LLM} Services via Verifiable Observations},
+  author        = {{Yuan, Lin, Chen, Xu, Yang, and Ngai}},
+  journal       = {arXiv preprint arXiv:2604.27536},
+  year          = {2026},
+  url           = {https://arxiv.org/abs/2604.27536},
+  eprint        = {2604.27536},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CL},
+  note          = {AUTHOR LIST TODO: given-name initials not recorded in repo notes.}
+}
+
+@inproceedings{automix2024,
+  title         = {{AutoMix}: Automatically Mixing Language Models},
+  author        = {Aggarwal, Pranjal and Murahari, Vishvak and Rajpurohit, Tanmay and Kalyan, Ashwin and Narasimhan, Karthik and Deshpande, Ameet},
+  booktitle     = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year          = {2024},
+  note          = {Author list recalled from memory; verify before submission.}
+}
+
+@article{semanticagreement2025,
+  title         = {Semantic Agreement Enables Efficient Open-Ended {LLM} Cascades},
+  author        = {{TODO-verify}},
+  journal       = {arXiv preprint arXiv:2509.21837},
+  year          = {2025},
+  url           = {https://arxiv.org/abs/2509.21837},
+  eprint        = {2509.21837},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CL},
+  note          = {AUTHOR LIST TODO.}
+}
+
+@article{seqroute2026,
+  title         = {{SeqRoute}: Budget-Aware Sequential Routing for Multi-Turn {LLM} Sessions},
+  author        = {{TODO-verify}},
+  journal       = {arXiv preprint arXiv:2605.25424},
+  year          = {2026},
+  url           = {https://arxiv.org/abs/2605.25424},
+  eprint        = {2605.25424},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CL},
+  note          = {AUTHOR LIST TODO; title as recorded in repo notes.}
+}
+
+@article{clusterescalate2026,
+  title         = {Cluster, Route, Escalate},
+  author        = {{TODO-verify}},
+  journal       = {arXiv preprint arXiv:2606.27457},
+  year          = {2026},
+  url           = {https://arxiv.org/abs/2606.27457},
+  eprint        = {2606.27457},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CL},
+  note          = {AUTHOR LIST TODO.}
+}
+
+@article{ucci2026,
+  title         = {{UCCI}: Calibrated Cascade Thresholds from Token-Margin Signals},
+  author        = {{TODO-verify}},
+  journal       = {arXiv preprint arXiv:2605.18796},
+  year          = {2026},
+  url           = {https://arxiv.org/abs/2605.18796},
+  eprint        = {2605.18796},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CL},
+  note          = {AUTHOR LIST TODO; title as recorded in repo notes.}
+}
+
+@article{routingsurvey2026,
+  title         = {Dynamic Model Routing and Cascading: A Survey},
+  author        = {{TODO-verify}},
+  journal       = {arXiv preprint arXiv:2603.04445},
+  year          = {2026},
+  url           = {https://arxiv.org/abs/2603.04445},
+  eprint        = {2603.04445},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CL},
+  note          = {AUTHOR LIST TODO.}
+}
+
+@article{routinggap2026,
+  title         = {How Much of the Routing Gap Is Real?},
+  author        = {{TODO-verify}},
+  journal       = {arXiv preprint arXiv:2607.03436},
+  year          = {2026},
+  url           = {https://arxiv.org/abs/2607.03436},
+  eprint        = {2607.03436},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CL},
+  note          = {AUTHOR LIST TODO.}
+}
+
+@article{jeirt2025,
+  title         = {{JE-IRT}: Joint Embedding Item Response Theory for {LLM} Evaluation},
+  author        = {{TODO-verify}},
+  journal       = {arXiv preprint arXiv:2509.22888},
+  year          = {2025},
+  url           = {https://arxiv.org/abs/2509.22888},
+  eprint        = {2509.22888},
+  archivePrefix = {arXiv},
+  note          = {AUTHOR LIST TODO; title as recorded in repo notes.}
+}
+
+@article{irtnet2025,
+  title         = {{IrtNet}: Item Response Theory with Sentence Embeddings for {LLM} Evaluation and Routing},
+  author        = {{TODO-verify}},
+  journal       = {arXiv preprint arXiv:2510.00844},
+  year          = {2025},
+  url           = {https://arxiv.org/abs/2510.00844},
+  eprint        = {2510.00844},
+  archivePrefix = {arXiv},
+  note          = {AUTHOR LIST TODO; title as recorded in repo notes.}
+}
+
+@article{cmirt2026,
+  title         = {Contextual Multidimensional Item Response Theory for Predicting {LLM} Performance on Unseen Questions},
+  author        = {{TODO-verify}},
+  journal       = {arXiv preprint arXiv:2608.22295},
+  year          = {2026},
+  url           = {https://arxiv.org/abs/2608.22295},
+  eprint        = {2608.22295},
+  archivePrefix = {arXiv},
+  note          = {AUTHOR LIST TODO; title as recorded in repo notes.}
+}
+
+@article{adaptivetesting2025,
+  title         = {Adaptive Testing of Large Language Models},
+  author        = {{TODO-verify}},
+  journal       = {arXiv preprint arXiv:2511.04689},
+  year          = {2025},
+  url           = {https://arxiv.org/abs/2511.04689},
+  eprint        = {2511.04689},
+  archivePrefix = {arXiv},
+  note          = {AUTHOR LIST TODO; title as recorded in repo notes.}
+}
+
+@inproceedings{egtp2026,
+  title         = {{EGTP}: Expected Generation Token Prediction for {LLM} Serving},
+  author        = {{TODO-verify}},
+  booktitle     = {International Conference on Learning Representations (ICLR)},
+  year          = {2026},
+  note          = {AUTHOR LIST TODO; title as recorded in repo notes.}
+}
+
+@article{trail2026,
+  title         = {{TRAIL}: Response-Length Prediction from Serving-Model Activations},
+  author        = {{TODO-verify}},
+  journal       = {arXiv preprint},
+  year          = {2026},
+  note          = {AUTHOR LIST TODO; title as recorded in repo notes; arXiv ID not recorded.}
+}
+
+@article{howmuchleft2026,
+  title         = {How Much Is Left? Decoding Response Length from Prompt Hidden States},
+  author        = {{TODO-verify}},
+  journal       = {arXiv preprint arXiv:2607.05316},
+  year          = {2026},
+  url           = {https://arxiv.org/abs/2607.05316},
+  eprint        = {2607.05316},
+  archivePrefix = {arXiv},
+  note          = {AUTHOR LIST TODO; title as recorded in repo notes.}
+}
+
+@inproceedings{entropylength2026,
+  title         = {Predicting {LLM} Output Length via Entropy-Guided Representations},
+  author        = {{TODO-verify}},
+  booktitle     = {International Conference on Learning Representations (ICLR)},
+  year          = {2026},
+  note          = {arXiv:2602.11812. AUTHOR LIST TODO.}
+}
+
+@article{latencyrouting2026,
+  title         = {Latency-Aware {LLM} Routing},
+  author        = {{TODO-verify}},
+  journal       = {arXiv preprint arXiv:2607.18253},
+  year          = {2026},
+  url           = {https://arxiv.org/abs/2607.18253},
+  eprint        = {2607.18253},
+  archivePrefix = {arXiv},
+  note          = {AUTHOR LIST TODO.}
+}
+
+@article{perquerycost2026,
+  title         = {Learned Per-Query Cost Predictors for {LLM} Routing},
+  author        = {{TODO-verify}},
+  journal       = {arXiv preprint arXiv:2604.03527},
+  year          = {2026},
+  url           = {https://arxiv.org/abs/2604.03527},
+  eprint        = {2604.03527},
+  archivePrefix = {arXiv},
+  note          = {AUTHOR LIST TODO; title as recorded in repo notes.}
+}
+
+@article{llmrouterbench2026,
+  title         = {{LLMRouterBench}: A Large-Scale Benchmark for {LLM} Routing},
+  author        = {{TODO-verify}},
+  journal       = {arXiv preprint arXiv:2601.07206},
+  year          = {2026},
+  url           = {https://arxiv.org/abs/2601.07206},
+  eprint        = {2601.07206},
+  archivePrefix = {arXiv},
+  note          = {AUTHOR LIST TODO.}
+}
+
+@article{routingplateau2026,
+  title         = {The Routing Plateau},
+  author        = {{TODO-verify}},
+  journal       = {arXiv preprint arXiv:2606.07587},
+  year          = {2026},
+  url           = {https://arxiv.org/abs/2606.07587},
+  eprint        = {2606.07587},
+  archivePrefix = {arXiv},
+  note          = {AUTHOR LIST TODO.}
+}
+
+@article{coderouterbench2026,
+  title         = {{CodeRouterBench}: A Task-by-Model Outcome Matrix for Code Generation},
+  author        = {{TODO-verify}},
+  journal       = {arXiv preprint arXiv:2606.22902},
+  year          = {2026},
+  url           = {https://arxiv.org/abs/2606.22902},
+  eprint        = {2606.22902},
+  archivePrefix = {arXiv},
+  note          = {AUTHOR LIST TODO; title as recorded in repo notes.}
+}
+
+@article{rasch2026,
+  title         = {A Rasch Analysis of 67 Large Language Models},
+  author        = {{TODO-verify}},
+  journal       = {arXiv preprint arXiv:2606.27288},
+  year          = {2026},
+  url           = {https://arxiv.org/abs/2606.27288},
+  eprint        = {2606.27288},
+  archivePrefix = {arXiv},
+  note          = {AUTHOR LIST TODO; title as recorded in repo notes.}
+}
+
+@article{universallatent2026,
+  title         = {Zero-Shot Routing via a Universal Latent Space},
+  author        = {{TODO-verify}},
+  journal       = {arXiv preprint arXiv:2601.06220},
+  year          = {2026},
+  url           = {https://arxiv.org/abs/2601.06220},
+  eprint        = {2601.06220},
+  archivePrefix = {arXiv},
+  note          = {AUTHOR LIST TODO.}
+}
+
+@article{routingcollapse2026,
+  title         = {Routing Collapse},
+  author        = {{TODO-verify}},
+  journal       = {arXiv preprint arXiv:2602.03478},
+  year          = {2026},
+  url           = {https://arxiv.org/abs/2602.03478},
+  eprint        = {2602.03478},
+  archivePrefix = {arXiv},
+  note          = {AUTHOR LIST TODO.}
+}
+
+@article{cope2026,
+  title         = {{COPE}: A Plan--Execute Cascade for {LLM} Code Generation},
+  author        = {{TODO-verify}},
+  journal       = {Transactions on Machine Learning Research},
+  year          = {2026},
+  note          = {arXiv:2506.11578. AUTHOR LIST TODO.}
+}
+
+@article{eet2026,
+  title         = {{EET}: Early Exit for Agentic {LLM} Generation},
+  author        = {{TODO-verify}},
+  journal       = {Findings of the Association for Computational Linguistics: ACL},
+  year          = {2026},
+  note          = {arXiv:2601.05777. AUTHOR LIST TODO.}
+}
+
+@article{agentstop2026,
+  title         = {{AgentStop}: Killing Unpromising {LLM} Agent Runs},
+  author        = {{TODO-verify}},
+  journal       = {Proceedings of the ACM Conference on Computers and Communication (CAIS)},
+  year          = {2026},
+  note          = {arXiv:2604.15075. AUTHOR LIST TODO.}
+}
+
+@article{failfast2026,
+  title         = {FailFast--RestartSmart: Cheap Monitors for Aborting and Restarting {LLM} Agent Runs},
+  author        = {{TODO-verify}},
+  journal       = {arXiv preprint arXiv:2608.03222},
+  year          = {2026},
+  url           = {https://arxiv.org/abs/2608.03222},
+  eprint        = {2608.03222},
+  archivePrefix = {arXiv},
+  note          = {AUTHOR LIST TODO; title as recorded in repo notes.}
+}
+
+@article{swerouter2026,
+  title         = {{SWE-Router}: Escalation for Software Engineering Agents from Partial Trajectories},
+  author        = {{TODO-verify}},
+  journal       = {arXiv preprint arXiv:2607.00053},
+  year          = {2026},
+  url           = {https://arxiv.org/abs/2607.00053},
+  eprint        = {2607.00053},
+  archivePrefix = {arXiv},
+  note          = {AUTHOR LIST TODO; title as recorded in repo notes.}
+}
+
+% ---------------------------------------------------------------------
+% Classical decision theory / constrained MDPs (verified in PRIOR_ART.md)
+
+@article{weitzman1979optimal,
+  title         = {Optimal Search for the Best Alternative},
+  author        = {Weitzman, Martin L.},
+  journal       = {Econometrica},
+  volume        = {47},
+  number        = {3},
+  pages         = {641--654},
+  year          = {1979}
+}
+
+@book{altman1999constrained,
+  title         = {Constrained Markov Decision Processes},
+  author        = {Altman, Eitan},
+  publisher     = {Chapman \& Hall/CRC},
+  year          = {1999},
+  isbn          = {9780849303821}
+}
+
+@article{whittle1988restless,
+  title         = {Restless Bandits: The Allocation of Effort},
+  author        = {Whittle, Peter},
+  journal       = {Journal of Applied Probability},
+  volume        = {25A},
+  pages         = {287--295},
+  year          = {1988}
+}
+
+@article{gittins1979bandit,
+  title         = {Bandit Processes and Dynamic Allocation Indices},
+  author        = {Gittins, John C.},
+  journal       = {Journal of the Royal Statistical Society: Series B},
+  volume        = {41},
+  number        = {2},
+  pages         = {148--177},
+  year          = {1979}
+}
+
+@article{badanidiyuru2018knapsacks,
+  title         = {Bandits with Knapsacks},
+  author        = {Badanidiyuru, Ashwinkumar and Kleinberg, Robert and Slivkins, Aleksandrs},
+  journal       = {Journal of the ACM},
+  volume        = {65},
+  number        = {3},
+  year          = {2018}
+}
+
+@inproceedings{golovin2011adaptive,
+  title         = {Adaptive Submodularity: Theory and Applications in Active Learning and Stochastic Optimization},
+  author        = {Golovin, Daniel and Krause, Andreas},
+  booktitle     = {Journal of Artificial Intelligence Research},
+  volume        = {42},
+  pages         = {427--486},
+  year          = {2011}
+}
+
+@inproceedings{gergatsouli2023weitzman,
+  title         = {Weitzman's Rule for {Pandora}'s Box with Correlations},
+  author        = {Gergatsouli, Evangelia and Rezende, Brendan and Rozenfeld, Alkis and Tzamos, Christos},
+  booktitle     = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year          = {2023}
+}
+
+@article{wald1945sequential,
+  title         = {Sequential Tests of Statistical Hypotheses},
+  author        = {Wald, Abraham},
+  journal       = {The Annals of Mathematical Statistics},
+  volume        = {16},
+  number        = {2},
+  pages         = {117--186},
+  year          = {1945}
+}
+
+% ---------------------------------------------------------------------
+% Benchmarks and datasets (retain from previous draft where still cited)
 
 @article{hu2024routerbench,
   title         = {RouterBench: A Benchmark for Multi-{LLM} Routing System},
@@ -47,92 +530,14 @@
   primaryClass  = {cs.LG}
 }
 
-@article{li2025knnrouter,
-  title         = {Rethinking Predictive Modeling for {LLM} Routing: When Simple kNN Beats Complex Learned Routers},
-  author        = {Li, Yang},
-  journal       = {arXiv preprint},
-  year          = {2025},
-  url           = {https://arxiv.org/abs/2505.12601},
-  doi           = {10.48550/arXiv.2505.12601},
-  eprint        = {2505.12601},
-  archivePrefix = {arXiv},
-  primaryClass  = {cs.LG}
-}
-
-@article{li2025llmbandit,
-  title         = {{LLM} Bandit: Cost-Efficient {LLM} Generation via Preference-Conditioned Dynamic Routing},
-  author        = {Li, Yang},
-  journal       = {arXiv preprint},
-  year          = {2025},
-  url           = {https://arxiv.org/abs/2502.02743},
-  doi           = {10.48550/arXiv.2502.02743},
-  eprint        = {2502.02743},
-  archivePrefix = {arXiv},
-  primaryClass  = {cs.LG}
-}
-
-@article{zhang2025routerr1,
-  title         = {Router-R1: Teaching {LLM}s Multi-Round Routing and Aggregation via Reinforcement Learning},
-  author        = {Zhang, Haozhen and Feng, Tao and You, Jiaxuan},
-  journal       = {arXiv preprint},
-  year          = {2025},
-  url           = {https://arxiv.org/abs/2506.09033},
-  doi           = {10.48550/arXiv.2506.09033},
-  eprint        = {2506.09033},
-  archivePrefix = {arXiv},
-  primaryClass  = {cs.CL}
-}
-
-@inproceedings{jin-etal-2025-radialrouter,
-  title     = {RadialRouter: Structured Representation for Efficient and Robust Large Language Models Routing},
-  author    = {Jin, Ruihan and Shao, Pengpeng and Wen, Zhengqi and Wu, Jinyang and Feng, Mingkuan and Zhang, Shuai and Tao, Jianhua},
-  booktitle = {Findings of the Association for Computational Linguistics: EMNLP 2025},
-  month     = nov,
-  year      = {2025},
-  address   = {Suzhou, China},
-  publisher = {Association for Computational Linguistics},
-  pages     = {14587--14600},
-  doi       = {10.18653/v1/2025.findings-emnlp.787},
-  url       = {https://aclanthology.org/2025.findings-emnlp.787/}
-}
-
-@inproceedings{huang-etal-2025-routereval,
-  title     = {RouterEval: A Comprehensive Benchmark for Routing {LLM}s to Explore Model-level Scaling Up in {LLM}s},
-  author    = {Huang, Zhongzhan and Ling, Guoming and Lin, Yupei and Chen, Yandong and Zhong, Shanshan and Wu, Hefeng and Lin, Liang},
-  booktitle = {Findings of the Association for Computational Linguistics: EMNLP 2025},
-  month     = nov,
-  year      = {2025},
-  address   = {Suzhou, China},
-  publisher = {Association for Computational Linguistics},
-  pages     = {3860--3887},
-  doi       = {10.18653/v1/2025.findings-emnlp.208},
-  url       = {https://aclanthology.org/2025.findings-emnlp.208/}
-}
-
-@article{wei2025swerl,
-  title         = {SWE-RL: Advancing {LLM} Reasoning via Reinforcement Learning on Open Software Evolution},
-  author        = {Wei, Yuxiang and Duchenne, Olivier and Copet, Jade and Carbonneaux, Quentin and Zhang, Lingming and Fried, Daniel and Synnaeve, Gabriel and Singh, Rishabh and Wang, Sida I.},
-  journal       = {arXiv preprint},
-  year          = {2025},
-  url           = {https://arxiv.org/abs/2502.18449},
-  doi           = {10.48550/arXiv.2502.18449},
-  eprint        = {2502.18449},
-  archivePrefix = {arXiv},
-  primaryClass  = {cs.SE},
-  note          = {Accepted to NeurIPS 2025 (per arXiv metadata)}
-}
-
-@article{pan2024swegym,
-  title         = {Training Software Engineering Agents and Verifiers with SWE-Gym},
-  author        = {Pan, Jiayi and Wang, Xingyao and Neubig, Graham and Jaitly, Navdeep and Ji, Heng and Suhr, Alane and Zhang, Yizhe},
-  journal       = {arXiv preprint},
-  year          = {2024},
-  url           = {https://arxiv.org/abs/2412.21139},
-  doi           = {10.48550/arXiv.2412.21139},
-  eprint        = {2412.21139},
-  archivePrefix = {arXiv},
-  primaryClass  = {cs.SE},
-  note          = {Accepted to ICML 2025 (per arXiv metadata)}
+@inproceedings{jimenez2024swebench,
+  title     = {SWE-bench: Can Language Models Resolve Real-World GitHub Issues?},
+  author    = {Jimenez, Carlos E. and Yang, John and Wettig, Alexander and Yao, Shunyu and Pei, Kexin and Press, Ofir and Narasimhan, Karthik},
+  booktitle = {International Conference on Learning Representations (ICLR)},
+  year      = {2024},
+  url       = {https://arxiv.org/abs/2310.06770},
+  eprint    = {2310.06770},
+  archivePrefix = {arXiv}
 }
 
 @article{li2025swesmith,
@@ -141,45 +546,17 @@
   journal       = {arXiv preprint},
   year          = {2025},
   url           = {https://arxiv.org/abs/2504.21798},
-  doi           = {10.48550/arXiv.2504.21798},
   eprint        = {2504.21798},
   archivePrefix = {arXiv},
   primaryClass  = {cs.SE}
 }
 
-@article{yang2024sweagent,
-  title         = {SWE-agent: Agent-Computer Interfaces Enable Automated Software Engineering},
-  author        = {Yang, John and Jimenez, Carlos E. and Wettig, Alexander and Lieret, Kilian and Yao, Shunyu and Narasimhan, Karthik and Press, Ofir},
-  journal       = {arXiv preprint},
-  year          = {2024},
-  url           = {https://arxiv.org/abs/2405.15793},
-  doi           = {10.48550/arXiv.2405.15793},
-  eprint        = {2405.15793},
-  archivePrefix = {arXiv},
-  primaryClass  = {cs.SE}
-}
-
-@article{lightman2023verify,
-  title         = {Let's Verify Step by Step},
-  author        = {Lightman, Hunter and Kosaraju, Vineet and Burda, Yuri and Edwards, Harri and Baker, Bowen and Lee, Teddy and Leike, Jan and Schulman, John and Sutskever, Ilya and Cobbe, Karl},
-  journal       = {arXiv preprint},
-  year          = {2023},
-  url           = {https://arxiv.org/abs/2305.20050},
-  doi           = {10.48550/arXiv.2305.20050},
-  eprint        = {2305.20050},
-  archivePrefix = {arXiv},
-  primaryClass  = {cs.LG}
-}
-
-@inproceedings{jimenez2024swebench,
-  title     = {SWE-bench: Can Language Models Resolve Real-World GitHub Issues?},
-  author    = {Jimenez, Carlos E. and Yang, John and Wettig, Alexander and Yao, Shunyu and Pei, Kexin and Press, Ofir and Narasimhan, Karthik},
-  booktitle = {International Conference on Learning Representations (ICLR)},
-  year      = {2024},
-  note      = {Also available as arXiv:2310.06770},
-  url       = {https://arxiv.org/abs/2310.06770},
-  doi       = {10.48550/arXiv.2310.06770},
-  eprint    = {2310.06770},
-  archivePrefix = {arXiv},
-  primaryClass  = {cs.CL}
+@article{duan1983smearing,
+  title         = {A Smearing Estimate: A Nonparametric Retransformation Method},
+  author        = {Duan, Naihua},
+  journal       = {Journal of the American Statistical Association},
+  volume        = {78},
+  number        = {383},
+  pages         = {605--610},
+  year          = {1983}
 }
