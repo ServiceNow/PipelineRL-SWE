@@ -1443,6 +1443,118 @@ sets the level (ratios now 0.47–0.85 at $q{=}0.25$ against 1.24–1.94 at $q{=
 this codebase: any downstream affine recalibration will annihilate an upstream level knob. Check
 that variants differ before reading their results.*
 
+### 3b-lxii Baselines vs controls: `counts_value` is NOT a baseline, and the price cannot be ablated of abstention
+
+**Two structural facts that reorganise the paper's comparison section.**
+
+**1. `counts_value` abstains up to 73.2%** (41.6% at the 60% target), so it is count beliefs plus
+**our** give-up mechanism. Putting it in a baseline table hands the baseline our contribution and
+then reports a modest margin — backwards. It is the **control** for the belief ablation (formulation
+held fixed, only the belief source differs) and belongs in the ablation section. Arms with **zero**
+abstention are the baselines: `counts` (RoR v1), random allocation, budget-aware best-of-K,
+agreement-gating, and the fixed-model hull.
+
+**2. A price-swept policy cannot be ablated of abstention.** Removing the stop action from
+`counts_value` collapses all 35 of its zero-abstention operating points to a **single point** —
+\$0.17275–\$0.17324, accuracy 84.8%–84.8%. Ours likewise (9 points, \$0.1686–\$0.1698, 84.8%).
+**The price controls spend only through the stop decision**; with no stop, every $R$ produces the
+same behaviour — buy everything, hit the ceiling.
+
+| budget control | stop action | result |
+|---|---|---|
+| **cap**, no price | none | a curve — **this is `counts` / RoR v1** |
+| **price**, no stop | none | **degenerate: one point** |
+| **price** + stop | zero-value action | a curve — **ours** |
+
+**So the cap and abstention are alternative mechanisms for budget control, not independent
+features.** This is why RoR *needs* a cap: its density rule $p/c$ never crosses zero, so it has no
+stop, so it has no other way to regulate spend (§3b-xxxvi). **Put this table in the paper** — it
+pre-empts the "ablate abstention" request by showing the ablation is not constructible, and it
+reframes the formulation axis as *"is spend better controlled by refusing to pay past a cap, or by
+declining problems that are not worth it?"*
+
+### 3b-lxiii The per-episode cap does NOT bound realised spend — a third of RoR's episodes exceed it
+
+The feasibility check is `spent_budget + cost_est[mi] > budget`, where `spent_budget` accumulates
+**estimated** cost while money is charged at **realised** cost. Measured on RoR's own arm:
+
+| cap $B$ | max realised | ratio | episodes over $B$ |
+|---|---|---|---|
+| \$0.00084 | \$0.01868 | **22.3x** | 31.5% |
+| \$0.01508 | \$0.16670 | 11.1x | 38.9% |
+| \$0.03643 | \$0.35019 | 9.6x | 35.0% |
+
+**Retract any claim that the cap is a hard per-episode guarantee** — including one made in session.
+It bounds *planned* spend only.
+
+**Per-episode spend distribution at ~70% accuracy** (the comparison the mean hides):
+
+| arm | acc | mean | p50 | p95 | p99 | max |
+|---|---|---|---|---|---|---|
+| `counts` (cap) | 71.5% | \$0.04900 | \$0.01197 | \$0.20690 | \$0.31182 | \$0.35019 |
+| **ours** (price) | 69.6% | **\$0.03723** | **\$0.00947** | **\$0.16892** | \$0.31515 | \$0.55408 |
+
+**We are cheaper at the mean, median and p95, and worse only in the extreme tail.** Report the
+distribution, not the mean: it costs nothing, it answers the obvious deployment question, and the
+finding is favourable. *(Indicative — from an older run whose traces survived, not the matched grid.)*
+
+**`--cap-on-realised` checks the money actually spent**, bounding realised spend to $B$ plus at most
+one draw's overshoot. Its **tightness depends on predicting the next draw's cost**, which a
+per-problem cost head does and constant per-route costs cannot — so a genuinely binding cap is
+something only our cost head enables. *In flight.*
+
+### 3b-lxiv Optional accept: letting the policy distrust a verifier recovers 6.3 points of ceiling
+
+*(Weak-verifier regime; kept out of the headline per §3b-lvii but recorded.)*
+
+Forcing a stop on every weak PASS is not a decision problem — it is noise the policy cannot act on.
+Letting a PASS **bank** a candidate worth $R\,q_m$ and continue:
+
+| regime | 50% | 60% | top accuracy |
+|---|---|---|---|
+| oracle verifier | +40.8% | +19.2% | 84.8% |
+| weak, **forced** accept | +19.6% | +10.5% | **62.1%** |
+| weak, **optional** accept | +19.1% | +2.4% (+20.4% with cost head) | **68.4%** |
+
+**6.3 points of ceiling recovered**, about 29% of the 21.5 available to the pool's 83.6%. Partial —
+and the reason is our own thesis unapplied: $q_m$ is a **pool-level** constant (0.725 / 0.939 /
+0.951), so the policy knows *"a scout PASS is 72% reliable in general"* but not *"**this** one is
+not."*
+
+**Per-problem $q$ is predictable, and verifier failure is systematic rather than random.** ICC of
+per-problem $q$ — the between-problem variance share with binomial noise removed — is **0.964 /
+0.856 / 0.882** across the three routes. **Verifier failure is a problem property, not draw noise.**
+The mechanism is visible in the construction: `weak_verifier_outcome = public_resolved`
+(`build_mdp_tensors_v2.py:206`), so a false accept means *the public tests do not cover what the
+hidden tests catch* — fixed across every draw on that problem. A ridge head on the same prefill
+predicts it at test correlation **0.622 / 0.436 / 0.355**. *Policy run in flight.*
+
+**Boundary to state:** this holds for *public-test* verifiers. A sampling verifier — an LLM judge,
+or self-consistency agreement as RoR v1 used — would have far lower ICC and correspondingly less
+predictable $q$. Claim it for systematic verifiers, not for all weak ones.
+
+### 3b-lxv Figures: the frontier is the wrong headline plot
+
+Two presentation findings worth carrying into the writing.
+
+**1. A frontier plot cannot show this result.** Two policies over the same pool trace nearly the
+same curve *by construction*, and a 20% cost saving is a small horizontal shift on any axis. **Log-x
+makes it strictly worse** — it linearises the concavity, so the arms render as near-parallel
+diagonals and the saving reads as a uniform offset. Linear-x at least shows the diminishing returns
+and renders the saving as a visible lens. **Lead with cost-saved-vs-accuracy; demote the frontier to
+a supporting panel.**
+
+**2. The five-target table hides a trough.** Plotted continuously, the advantage over `counts` is
+**strongly non-monotone**: +11.5% at 78%, **+5.3% at 80%**, **+0.6% at 81.2%**, +1.6% at 82%, +7.5%
+at 84%. The quoted targets straddle the trough. Nothing dishonest happened — but **report the curve,
+with the quoted targets marked on it**, or a reviewer who plots it finds the trough first.
+Provisional diagnosis is hull-vertex placement (the §3b-xxxiii mechanism), **not yet verified** —
+and that diagnosis was wrong once already.
+
+Figures are generated by `pipelinerl/swe/scripts/livecodebench/make_paper_figures.py` into
+`analysis/paper_figures/` as SVG; every number is read from replay outputs except the two
+single-split pools, which are marked in the source.
+
 ### 3b-lvii DISCLOSURE LARGELY RETRACTED for execution-verified domains — and what replaces it is cleaner
 
 **The objection, and it is correct.** In a domain with a cheap verifier, a delivered wrong answer
