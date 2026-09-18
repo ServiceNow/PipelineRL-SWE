@@ -639,8 +639,10 @@ def replay_adaptive(
                     post = post * lik
                 tot = float(post.sum())
                 post = post / tot if tot > 1e-300 else np.full(_K + 1, 1.0 / (_K + 1))
-                remaining = max(_K - n_obs, 1)
-                p_each[mi] = float((post * _j).sum()) / remaining
+                # NOT `remaining`: that name holds the per-route draws-left dict the Bellman solve
+                # reads below, and shadowing it with an int crashed every h>=2 posterior arm.
+                _rem = max(_K - n_obs, 1)
+                p_each[mi] = float((post * _j).sum()) / _rem
             p_each = np.clip(p_each, 1e-9, 1.0)
             bellman_pbar, bellman_decay_s = p_each, None
             belief_source = "content_post"
@@ -1612,9 +1614,14 @@ def main() -> None:
     # can surface points ABOVE the chord. `geometric` is the matched sweep; `linear` is kept as
     # the default so previously recorded numbers stay reproducible.
     if args.budget_grid == "geometric":
+        _top = exhaustion_cost
+        if args.cap_on_realised:
+            # Under realised accounting the ceiling must cover the dearest REALISED episode, or the
+            # top cap binds and budget-swept arms are truncated below the pool's real ceiling.
+            _top = max(_top, float((realized_costs * valid).sum(axis=(1, 2)).max()) * 1.05)
         budgets = sorted(set(
             float(x) for x in np.geomspace(
-                expected_costs[0], exhaustion_cost, args.budget_grid_points)
+                expected_costs[0], _top, args.budget_grid_points)
         ))
     else:
         budgets = sorted(set(
