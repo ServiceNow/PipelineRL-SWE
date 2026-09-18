@@ -426,6 +426,11 @@ def replay_adaptive(
     select_by_density: bool = False,
     mandatory_scout: bool = True,
     oracle_stopping: bool = False,
+    hist_mode: str | None = None,
+    hist_entry: dict[str, tuple[np.ndarray, float]] | None = None,
+    hist_recal: dict[str, Any] | None = None,
+    stop_override: str | None = None,
+    stop_theta: np.ndarray | None = None,
 ) -> dict[str, Any]:
     if bellman_horizon is not None:
         if value_of_correct is None:
@@ -455,6 +460,10 @@ def replay_adaptive(
     _cost_obs_n = np.zeros(len(slots), dtype=float)
     spent_budget = 0.0
     realized_spend = 0.0
+    # The most recent failed draw (route index, stored draw index). History beliefs are read from
+    # the problem plus THAT attempt: the replay knows exactly which stored draw failed, so the
+    # lookup is the text a deployed system would see at this state.
+    last_fail: list[tuple[int, int] | None] = [None]
     attempts: list[dict[str, Any]] = []
     route_attempt_counts = {slot: 0 for slot in slots}
     decision_trace: list[dict[str, Any]] = []
@@ -518,6 +527,13 @@ def replay_adaptive(
                 held_q = float(accept_values[mi]); held_true = _truth
             return "banked", draw
         failures[mi] += 1
+        last_fail[0] = (mi, int(draw))
+        if hist_mode in ("B", "D") and hist_entry is not None:
+            # Reading the failure is a second scout prefill (problem + attempt). Charged in full,
+            # with no credit for prefix caching, so the history arms never get information free.
+            _e = hist_entry.get(f"{slots[mi]}:{int(draw)}")
+            if _e is not None:
+                realized_spend += float(_e[1])
         attempts.append(records[(problem_id, slots[mi], draw)])
         return False, draw
 
@@ -703,6 +719,36 @@ def replay_adaptive(
                 bellman_decay_s = None
                 p_each = theta
                 belief_source = "content"
+            if hist_mode is not None and hist_entry is not None:
+                # HISTORY BELIEFS. B: the history probe's prediction for problem + latest failed
+                # attempt, with the count decay applied only to failures it did not read. C: the
+                # count-decayed prompt belief recalibrated on the failure COUNT of every route
+                # (knows which routes failed, never what they produced). D: C plus B's reading.
+                _lf = last_fail[0]
+                _pb = None
+                if _lf is not None:
+                    _e = hist_entry.get(f"{slots[_lf[0]]}:{_lf[1]}")
+                    _pb = None if _e is None else np.asarray(_e[0], dtype=float)
+                if _pb is None:
+                    _pb = np.asarray(hist_entry[""][0], dtype=float)
+                if hist_mode == "B":
+                    _extra = failures.astype(float).copy()
+                    if _lf is not None:
+                        _extra[_lf[0]] -= 1.0
+                    p_each = _pb * decay_s / (decay_s + _extra)
+                else:
+                    def _lg(q: float) -> float:
+                        q = min(max(float(q), 1e-6), 1 - 1e-6)
+                        return float(np.log(q / (1 - q)))
+                    _z = []
+                    for mi, _slot in enumerate(slots):
+                        _c = hist_recal[hist_mode][_slot]
+                        _v = _c["a"] + _c["b"] * _lg(p_each[mi]) + float(np.dot(_c["w"], failures))
+                        if hist_mode == "D":
+                            _v += _c["d"] * _lg(_pb[mi])
+                        _z.append(1.0 / (1.0 + np.exp(-_v)))
+                    p_each = np.asarray(_z, dtype=float)
+                belief_source = f"content_hist{hist_mode}"
             p_any = 1.0 - float(np.prod(1.0 - p_each))
         else:
             p_each = np.asarray([
@@ -895,7 +941,19 @@ def replay_adaptive(
             if not action_values:
                 value_stop = True
             else:
-                _vals = list(action_values.values())
+                if stop_override is not None:
+                    # WHETHER x WHICH. The route is chosen on this family's beliefs; the decision
+                    # to stop is taken on the OTHER belief source. Crossing the two separates the
+                    # value of knowing whether to continue from the value of knowing which route.
+                    if stop_override == "counts":
+                        _ps = np.asarray([pseudo_count * prior[mi] / (pseudo_count + failures[mi])
+                                          for mi in range(len(slots))])
+                    else:
+                        _ds = pseudo_count if decay_pseudo_count is None else decay_pseudo_count
+                        _ps = np.asarray(stop_theta, dtype=float) * _ds / (_ds + failures)
+                    _vals = [float(_ps[mi] * value_of_correct - cost_est[mi]) for mi in action_values]
+                else:
+                    _vals = list(action_values.values())
                 _mx = max(_vals)
                 if argmax_shrink > 0.0 and len(_vals) > 1:
                     _mean = sum(_vals) / len(_vals)
@@ -1420,6 +1478,16 @@ def main() -> None:
         "policy chooses whether to call the scout at all, and this charge keeps the comparison "
         "honest -- without it the probe arms would get their signal for free."))
     parser.add_argument("--content-preds")
+    parser.add_argument("--history-preds", default="", help=(
+        "jsonl {example_id: 'pid||' or 'pid||<slot><draw>', p: [per-route], prefill_usd}: the "
+        "history probe's belief after reading the problem plus that failed draw. Adds the "
+        "`content_histB` family (and C/D with --history-recal). See history_probe_eval.py."))
+    parser.add_argument("--history-recal", default="", help=(
+        "json {C|D: {slot: {a, b, w, d}}}: count-aware recalibration of the prompt belief (C) and "
+        "the same plus the history reading (D). Adds `content_histC` and `content_histD`."))
+    parser.add_argument("--whether-which-arms", action="store_true", help=(
+        "Add the two crossed arms: route choice on one belief source, stop decision on the "
+        "other (`content_decay_stopcounts_value`, `counts_stopcontent_value`)."))
     parser.add_argument("--cost-preds", help=(
         "JSONL of per-problem expected costs: {problem_id, expected_costs:[c_m ...]} in USD, "
         "same units as the training-set constant they replace. Enables the `_qcost` families, "
@@ -1585,6 +1653,26 @@ def main() -> None:
     ])
 
     content: dict[str, np.ndarray] = {}
+    hist_table: dict[str, dict[str, tuple[np.ndarray, float]]] = {}
+    if args.history_preds:
+        import re as _re
+        _slot_re = _re.compile("^(" + "|".join(sorted(map(_re.escape, [str(x) for x in
+                               np.load(Path(args.tensors_dir) / "tensors.npz",
+                                       allow_pickle=True)["model_slots"]]),
+                               key=len, reverse=True)) + r")(\d+)$")
+        for _row in _read_jsonl(Path(args.history_preds)):
+            _pid, _, _h = str(_row["example_id"]).partition("||")
+            if "+" in _h:
+                continue
+            if _h:
+                _m = _slot_re.match(_h)
+                if _m is None:
+                    continue
+                _h = f"{_m.group(1)}:{int(_m.group(2))}"
+            hist_table.setdefault(_pid, {})[_h] = (
+                np.asarray(_row["p"], dtype=float), float(_row.get("prefill_usd", 0.0)))
+        print(f"history beliefs for {len(hist_table)} problems")
+    hist_recal = json.loads(Path(args.history_recal).read_text()) if args.history_recal else None
     if args.content_preds:
         for row in _read_jsonl(Path(args.content_preds)):
             content[str(row["problem_id"])] = np.asarray(row["p_successes"][: len(slots)], dtype=float)
@@ -1678,6 +1766,7 @@ def main() -> None:
         oracle_stopping: bool = False,
         oracle_routing: bool = False,
         q_abstain: float | None = None,
+        stop_override: str | None = None,
     ) -> list[dict[str, Any]]:
         outputs = []
         for pi in indices:
@@ -1696,8 +1785,14 @@ def main() -> None:
                     args.pseudo_count if pseudo_count is None else pseudo_count, slots,
                     records, pid, str(problems[pid]["problem_statement"]),
                     content_prior=(content.get(pid)
-                                   if base in ("content", "content_decay",
-                                               "content_decay_coupled") else None),
+                                   if (base in ("content", "content_decay",
+                                                "content_decay_coupled")
+                                       or base.startswith("content_hist")) else None),
+                    hist_mode=(base[-1] if base.startswith("content_hist") else None),
+                    hist_entry=(hist_table.get(pid) if base.startswith("content_hist") else None),
+                    hist_recal=hist_recal,
+                    stop_override=stop_override,
+                    stop_theta=(content.get(pid) if stop_override == "content" else None),
                     posterior_prior=(posterior.get(pid) if base == "content_post" else None),
                     argmax_shrink=argmax_shrink,
                     cross_route_rho=cross_route_rho,
@@ -1716,8 +1811,9 @@ def main() -> None:
                     bellman_horizon=bellman_horizon,
                     learned_transitions=learned_transitions,
                     capture_trace=capture_trace,
-                    apply_failure_decay=base in ("sequential_decay", "content_decay",
-                                                 "content_decay_coupled"),
+                    apply_failure_decay=(base in ("sequential_decay", "content_decay",
+                                                  "content_decay_coupled")
+                                         or base.startswith("content_hist")),
                     cross_pseudo_count=(args.cross_pseudo_count
                                         if base in ("counts_coupled",
                                                     "content_decay_coupled") else 0.0),
@@ -1759,6 +1855,8 @@ def main() -> None:
         + (["counts_qcost"] if cost_preds else [])
         + (["content_qcost", "content_decay_qcost"] if (content and cost_preds) else [])
         + (scorer_families if scorer else [])
+        + ((["content_histB"] + (["content_histC", "content_histD"] if hist_recal else []))
+           if (content and hist_table) else [])
     )
     if args.oracle_stopping_family and args.oracle_stopping_family not in families:
         raise ValueError(
@@ -2175,6 +2273,18 @@ def main() -> None:
                 "min_success_per_cost": None, "value_of_correct": None,
                 "bellman_horizon": None, **_aggregate(_out),
             })
+
+    if args.whether_which_arms and content:
+        for _fam, _stop in (("content_decay", "counts"), ("counts", "content")):
+            _pol = f"{_fam}_stop{_stop}_value"
+            for _r in value_grid:
+                _out = run(test_idx, unconstrained_budget, _fam, None, None, _r,
+                           stop_override=_stop)
+                rows.append({
+                    "policy": _pol, "budget": None, "tau": None,
+                    "min_success_per_cost": None, "value_of_correct": _r,
+                    "bellman_horizon": None, **_aggregate(_out),
+                })
 
     # Entry / continue split of the per-problem prior.
     if args.belief_split_arms and content:

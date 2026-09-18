@@ -15,8 +15,14 @@ Examples written, per problem (all splits; fitting uses train, Platt uses calibr
   * up to --pairs-per-problem scout-then-other failures:   "scout<k1>+<slot><k2>",
     the order the scout-first protocol actually visits.
 
-Feedback: the failed code and "It passed k of N tests." Test contents never enter a prompt.
-(A public-tests-only variant is kept behind --variant public; not used for now.)
+Variants, which separate three different signals a history can carry:
+  traj   -- trajectory only: which model failed, nothing it produced ("A previous attempt by a
+            small 4B model was judged incorrect."). What the policy already knows as counts.
+  code   -- trajectory + the failed code, no test result.
+  count  -- trajectory + code + "It passed k of N tests.": adds graded verifier feedback, i.e.
+            how CLOSE the attempt came. Assumes a verifier that reports counts.
+  public -- code + public-test verdict only (kept; not used for now).
+Test contents never enter a prompt.
 
 Outputs --out-dir/<variant>_shard<i>.jsonl ({problem_id: example id, prompt}) for
 pool_activation_probe.py --phase extract, and --out-dir/<variant>_manifest.jsonl with
@@ -36,6 +42,11 @@ def attempt_text(rec: dict, variant: str, max_code_chars: int) -> str:
     if len(code) > max_code_chars:
         half = max_code_chars // 2
         code = code[:half] + "\n# ... (truncated) ...\n" + code[-half:]
+    if variant == "traj":
+        return f"A previous attempt by {ROUTE_NAME[rec['model_slot']]} was judged incorrect."
+    if variant == "code":
+        return (f"A previous attempt by {ROUTE_NAME[rec['model_slot']]} was judged incorrect.\n"
+                f"```python\n{code}\n```")
     if variant == "public":
         fb = "It passed the public example tests." if rec.get("weak_verifier_outcome") \
             else "It failed the public example tests."
@@ -52,7 +63,7 @@ def main() -> None:
     ap.add_argument("--tensors-dir", required=True)
     ap.add_argument("--base-prompts", required=True)
     ap.add_argument("--out-dir", required=True)
-    ap.add_argument("--variant", choices=["public", "count"], default="count")
+    ap.add_argument("--variant", choices=["traj", "code", "count", "public"], default="count")
     ap.add_argument("--shards", type=int, default=4)
     ap.add_argument("--pairs-per-problem", type=int, default=4)
     ap.add_argument("--max-code-chars", type=int, default=6000)
