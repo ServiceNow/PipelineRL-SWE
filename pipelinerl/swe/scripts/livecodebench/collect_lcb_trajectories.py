@@ -338,6 +338,9 @@ async def openrouter_call(
     gen_timeout: int = 120,
     empty_retries: int = 2,
     avoid_empty_provider: bool = True,
+    top_p: float | None = None,
+    reasoning_effort: str | None = None,
+    provider_order: list[str] | None = None,
 ) -> dict:
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -354,8 +357,18 @@ async def openrouter_call(
             "max_tokens": max_tokens,
             "temperature": temperature,
         }
+        if top_p is not None:
+            p["top_p"] = top_p
+        if reasoning_effort:
+            # OpenRouter's unified reasoning control; gpt-oss maps it to low/medium/high.
+            p["reasoning"] = {"effort": reasoning_effort}
+        prov: dict = {}
+        if provider_order:
+            prov["order"] = list(provider_order)
         if ignore:
-            p["provider"] = {"ignore": ignore}
+            prov["ignore"] = ignore
+        if prov:
+            p["provider"] = prov
         return p
 
     async def _call(ignore: list[str] | None = None):
@@ -380,6 +393,12 @@ async def openrouter_call(
         # 17 points of solve rate, in a different field. If the answer channel is blank but the
         # reasoning channel carries a fenced code block, the model did answer; grade that.
         answer_from_reasoning = False
+        if "</think>" in content:
+            # A thinking model served without a reasoning parser (local vLLM) returns its
+            # reasoning inline. extract_code takes the FIRST fenced block, which would be a
+            # scratch snippet from the thinking; the answer is what follows </think>.
+            _think, _, content = content.rpartition("</think>")
+            reasoning = (reasoning + "\n" + _think).strip()
         if not content.strip() and "```" in reasoning:
             content = reasoning
             answer_from_reasoning = True

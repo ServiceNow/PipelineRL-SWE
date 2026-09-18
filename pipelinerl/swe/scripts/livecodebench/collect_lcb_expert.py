@@ -91,6 +91,9 @@ async def collect_split(
     eval_timeout: int,
     dataset_revision: str,
     gen_timeout: int = 120,
+    top_p: float | None = None,
+    reasoning_effort: str | None = None,
+    provider_order: list[str] | None = None,
 ) -> None:
     latest = _read_latest(output_path)
     done = {pid: row for pid, row in latest.items() if _is_complete(row, dataset_revision)}
@@ -123,6 +126,9 @@ async def collect_split(
                     title=title,
                     semaphore=request_sem,
                     gen_timeout=gen_timeout,
+                    top_p=top_p,
+                    reasoning_effort=reasoning_effort,
+                    provider_order=provider_order,
                 )
                 code = extract_code(out["full_output"])
                 async with eval_sem:
@@ -183,6 +189,8 @@ async def collect_split(
                 "_lcb_evaluator_commit": LCB_EVALUATOR_COMMIT,
                 "_lcb_dataset_revision": dataset_revision,
                 "_generation_temperature": generation_temperature,
+                "_top_p": top_p,
+                "_reasoning_effort": reasoning_effort,
             }
 
         for index, task in enumerate(asyncio.as_completed([process(row) for row in todo]), 1):
@@ -239,6 +247,11 @@ def main() -> None:
     parser.add_argument("--min-date", default="2023-09-01")
     parser.add_argument("--temporal-cutoff", default="2024-10-01")
     parser.add_argument("--max-tokens", type=int, default=4096)
+    parser.add_argument("--top-p", type=float, default=None)
+    parser.add_argument("--reasoning-effort", default="", choices=["", "low", "medium", "high"],
+                        help="OpenRouter unified reasoning effort (gpt-oss: low/medium/high)")
+    parser.add_argument("--provider-order", default="",
+                        help="comma-separated OpenRouter providers to try first (pins serving)")
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--concurrency", type=int, default=4)
     parser.add_argument("--eval-timeout", type=int, default=10)
@@ -363,6 +376,9 @@ def main() -> None:
                 args.eval_timeout,
                 args.dataset_revision,
                 gen_timeout=args.gen_timeout,
+                top_p=args.top_p,
+                reasoning_effort=args.reasoning_effort or None,
+                provider_order=[x for x in args.provider_order.split(",") if x.strip()] or None,
             )
         )
         validate_split(
