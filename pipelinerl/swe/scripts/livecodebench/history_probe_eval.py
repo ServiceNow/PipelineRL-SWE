@@ -130,8 +130,13 @@ def main():
     cal_all = np.where(sp == "cal")[0]
     COEF = {"C": {}, "D": {}}
     for m in range(M):
-        for name, P_, F in (("C", PC, np.c_[lg(PA[:, m]), nfail]),
-                            ("D", PD, np.c_[lg(PA[:, m]), nfail, lg(PB[:, m])])):
+        # 0/1 "this route has failed" rather than the count: the fitting examples have at most
+        # one failure per route, and a linear term in the COUNT extrapolates to n = 5-6 in the
+        # replay -- on TACO some fitted weights were positive, so beliefs ROSE with every failure
+        # and the policy never stopped. Repeated failures are left to the count decay in PA.
+        failed = (nfail > 0).astype(float)
+        for name, P_, F in (("C", PC, np.c_[lg(PA[:, m]), failed]),
+                            ("D", PD, np.c_[lg(PA[:, m]), failed, lg(PB[:, m])])):
             j = cal_all[np.isfinite(R[cal_all, m])]
             r = R[j, m]
             f = LogisticRegression(C=1e4, max_iter=5000).fit(
@@ -141,7 +146,8 @@ def main():
             _c = f.coef_[0]
             COEF[name][slots[m]] = {"a": float(f.intercept_[0]), "b": float(_c[0]),
                                     "w": [float(x) for x in _c[1:1 + M]],
-                                    "d": float(_c[1 + M]) if name == "D" else 0.0}
+                                    "d": float(_c[1 + M]) if name == "D" else 0.0,
+                                    "indicator": True}
     ARMS = {"A": PA, "C": PC, "B": PB, "D": PD}
 
     def case(i):

@@ -746,7 +746,9 @@ def replay_adaptive(
                     _z = []
                     for mi, _slot in enumerate(slots):
                         _c = hist_recal[hist_mode][_slot]
-                        _v = _c["a"] + _c["b"] * _lg(p_each[mi]) + float(np.dot(_c["w"], failures))
+                        _f = ((failures > 0).astype(float) if _c.get("indicator")
+                              else failures)
+                        _v = _c["a"] + _c["b"] * _lg(p_each[mi]) + float(np.dot(_c["w"], _f))
                         if hist_mode == "D":
                             _v += _c["d"] * _lg(_pb[mi])
                         _z.append(1.0 / (1.0 + np.exp(-_v)))
