@@ -31,7 +31,6 @@ RCOL = ["#8fbff0", "#2a78d6", "#123f78"]           # one hue, light -> dark = ch
 SOLVED, STOPPED = "#1baf7a", "#eb6834"
 METHODS = [  # label, policies
     ("ours", ("content_decay_qcost_value", "content_decay_qcost_cappedvalue")),
-    ("agreement-gated", ("agreement_gated",)),
     ("count-belief greedy (RoR v1)", ("counts",)),
     ("random allocation", ("random_allocation",)),
 ]
@@ -100,11 +99,11 @@ def fig_giveup(eps, chosen, out):
         ax.set_title(f"{_name}\n{100*share:.0f}% of spend on unsolved", loc="left", color=INK,
                      fontsize=7.2)
         ax.set_xticks(x); ax.set_xticklabels([str(i) for i in range(maxd)] + [f"{maxd}+"])
-    fig.supxlabel("draws taken before the episode ended unsolved", fontsize=7.5, y=0.02)
+    fig.supxlabel("draws taken before the episode ended unsolved", fontsize=7.5, y=-0.04)
     np.atleast_1d(axes)[0].set_ylabel("% of all problems")
     h, l = np.atleast_1d(axes)[0].get_legend_handles_labels()
     fig.legend(h, [f"last draw: {x}" for x in l], loc="upper center", ncol=3,
-               bbox_to_anchor=(0.5, -0.06))
+               bbox_to_anchor=(0.5, -0.1))
     fig.savefig(out / "traj_giveup.pdf"); fig.savefig(out / "traj_giveup.svg"); fig.savefig(out / "traj_giveup.png", dpi=160)
     plt.close(fig)
 
