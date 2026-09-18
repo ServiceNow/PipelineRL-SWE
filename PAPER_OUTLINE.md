@@ -1443,6 +1443,51 @@ sets the level (ratios now 0.47–0.85 at $q{=}0.25$ against 1.24–1.94 at $q{=
 this codebase: any downstream affine recalibration will annihilate an upstream level knob. Check
 that variants differ before reading their results.*
 
+### 3b-lxvii Matched accounting, all seeds: we beat agreement-gating 5/5 at every LCB target it can reach
+
+Every capped arm now checks its cap against **realised** spend, as agreement-gating always did (the
+asymmetry that had us at −17.4% against it at 70% on seed 0). "Ours" is the union of the price arm
+and the two-constraint arm — both are our method. Mean ± sd across seeds; positive = ours cheaper.
+
+**LiveCodeBench, 5 seeds**
+
+| ours vs | 50% | 60% | 70% | 75% |
+|---|---|---|---|---|
+| **agreement-gating** | **+35.7±3.6** | **+28.4±2.3** | **+18.4±5.2** | **+10.7±5.1** |
+| count beliefs + cap (RoR v1) | +34.4±4.1 | +25.3±3.5 | +19.6±5.3 | +13.3±2.8 |
+| random allocation | +30.4±5.3 | +12.9±3.8 | +24.0±6.3 | +16.0±3.1 |
+| *seeds positive vs agreement* | *5/5* | *5/5* | *5/5* | *5/5* |
+
+**The seed-0 agreement result replicates and strengthens**: +18.4±5.2 at 70% on average, not +9.6%,
+and positive on every seed at every target agreement can reach.
+
+**TACO, 3 seeds**
+
+| ours vs | 35% | 40% | 45% | 50% | 55% |
+|---|---|---|---|---|---|
+| **agreement-gating** | **+45.9±4.5** | **+48.8±1.3** | **+39.1±1.7** | +0.0±5.7 | −4.4±10.6 |
+| count beliefs + cap (RoR v1) | +43.6±4.2 | +40.9±1.8 | +25.6±1.8 | −2.0±6.0 | +10.7±1.5 |
+| random allocation | +44.1±0.8 | +41.0±1.6 | +28.6±2.9 | −4.5±11.4 | +17.8±3.7 |
+
+**Strong at the tight targets (3/3 seeds, +39 to +49%), a tie at 50%, noisy at 55%.**
+
+**The 50% tie is NOT the cost head.** §3b-xlv found the cost head harmful on TACO above 40%, so the
+obvious suspicion. Checked: the belief-only price arm is **also** behind agreement at 50%
+(−8.3±6.9) while beating it at 55% (+6.2±8.7); the cost head is what costs us at 55% (−15.2±9.7).
+So TACO at 50% is a genuine near-tie with agreement, not a component defect.
+
+**This partly reverses §3b-xlv's TACO retraction — but attribute it correctly.** Against counts the
+full method is now +43.6/+40.9/+25.6/−2.0/+10.7, against the retracted +35.5/+20.2/−5.7/−12.5/−31.8.
+Two things changed at once: the accounting fix (applied to **both** arms) **and** "ours" now includes
+the two-constraint arm, a method component that did not exist when §3b-xlv was written. It is not
+"the accounting fix rescued TACO."
+
+**Top-end numbers (80%, 84%) withheld pending a re-run.** Under realised accounting the budget grid
+still topped out at exhaustion in *expected* costs, so every budget-swept arm was truncated (counts
+reached 79.6% instead of 84.8%) and the comparisons at 80%+ came out `n/a` for an artefactual reason.
+Grid fixed; all 8 seeds re-running. The 50–75% columns above sit well below that ceiling and are
+unaffected.
+
 ### 3b-lxvi ⚠ RouterBench is WEAKER than the headline numbers suggest — the probe is largely learning task identity
 
 **Do not quote the +22.9% to +76.9% cost savings.** They are computed on a **pooled** evaluation and
