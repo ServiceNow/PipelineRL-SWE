@@ -464,6 +464,7 @@ def replay_adaptive(
     # the problem plus THAT attempt: the replay knows exactly which stored draw failed, so the
     # lookup is the text a deployed system would see at this state.
     last_fail: list[tuple[int, int] | None] = [None]
+    route_seq: list[int] = []    # route index of every draw, in order (for trajectory plots)
     attempts: list[dict[str, Any]] = []
     route_attempt_counts = {slot: 0 for slot in slots}
     decision_trace: list[dict[str, Any]] = []
@@ -479,6 +480,7 @@ def replay_adaptive(
             "realized_spend": realized_spend,
             "attempts": int(sum(route_attempt_counts.values())),
             "route_attempt_counts": route_attempt_counts.copy(),
+            "route_sequence": list(route_seq),
         }
         if capture_trace:
             result["decision_trace"] = decision_trace
@@ -497,6 +499,7 @@ def replay_adaptive(
         if draw is None or _running + cost_est[mi] > budget:
             return None, draw
         ptr[mi] += 1
+        route_seq.append(mi)
         spent_budget += float(cost_est[mi])
         realized_spend += float(realized_costs[mi, draw])
         if cost_update_weight > 0.0:
@@ -1080,6 +1083,7 @@ def replay_agreement(
     n_routes = outcomes.shape[0]
     ptr = np.zeros(n_routes, dtype=int)
     spend, attempts = 0.0, 0
+    seq: list[int] = []          # route index of every draw, in order (for trajectory plots)
     seen: list[list[int]] = [[] for _ in range(n_routes)]
     mi = 0
     while mi < n_routes:
@@ -1090,10 +1094,11 @@ def replay_agreement(
             continue
         ptr[mi] += 1
         attempts += 1
+        seq.append(mi)
         spend += float(realized_costs[mi, draw])
         if outcomes[mi, draw]:
             return {"correct": True, "realized_spend": spend, "attempts": attempts,
-                    "entered_router": True, "abstained": False}
+                    "entered_router": True, "abstained": False, "route_sequence": seq}
         seen[mi].append(int(code_ids[mi, draw]))
         counts_ = {}
         for cid in seen[mi]:
@@ -1101,7 +1106,7 @@ def replay_agreement(
         if max(counts_.values()) >= threshold:
             mi += 1          # it keeps writing the same program: escalate
     return {"correct": False, "realized_spend": spend, "attempts": attempts,
-            "entered_router": True, "abstained": False}
+            "entered_router": True, "abstained": False, "route_sequence": seq}
 
 
 def replay_fixed(
@@ -1114,6 +1119,7 @@ def replay_fixed(
     ptr = np.zeros(outcomes.shape[0], dtype=int)
     spend = 0.0
     attempts = 0
+    seq: list[int] = []
     for mi in plan:
         draw, new_ptr = _next_valid_draw(orderings[mi], int(ptr[mi]), valid[mi])
         ptr[mi] = new_ptr
@@ -1121,13 +1127,52 @@ def replay_fixed(
             continue
         ptr[mi] += 1
         attempts += 1
+        seq.append(mi)
         spend += float(realized_costs[mi, draw])
         if outcomes[mi, draw]:
-            return {"correct": True, "realized_spend": spend, "attempts": attempts}
-    return {"correct": False, "realized_spend": spend, "attempts": attempts}
+            return {"correct": True, "realized_spend": spend, "attempts": attempts,
+                    "route_sequence": seq}
+    return {"correct": False, "realized_spend": spend, "attempts": attempts,
+            "route_sequence": seq}
+
+
+_LAST_OUTPUTS: list[dict[str, Any]] | None = None
+
+
+class _TrajectoryRows(list):
+    """`rows` that also dumps the episodes behind each appended row, for trajectory plots.
+
+    Every arm builds its row as {..., **_aggregate(outputs)}, so the episodes aggregated last are
+    exactly the row being appended. Only policies matching `pattern` are written, one compact
+    record per episode (outcome, abstention, realised spend, the route of every draw in order).
+    """
+
+    def __init__(self, path: str, pattern: str) -> None:
+        super().__init__()
+        import re as _re
+        self._fh = open(path, "w") if path else None
+        self._pat = _re.compile(pattern) if pattern else None
+
+    def append(self, row: dict[str, Any]) -> None:  # type: ignore[override]
+        global _LAST_OUTPUTS
+        super().append(row)
+        if self._fh is not None and _LAST_OUTPUTS is not None and (
+                self._pat is None or self._pat.search(str(row.get("policy", "")))):
+            for ep in _LAST_OUTPUTS:
+                self._fh.write(json.dumps({
+                    "policy": row.get("policy"), "budget": row.get("budget"),
+                    "value_of_correct": row.get("value_of_correct"),
+                    "correct": bool(ep.get("correct")), "abstained": bool(ep.get("abstained")),
+                    "realized_spend": float(ep.get("realized_spend", 0.0)),
+                    "route_sequence": ep.get("route_sequence"),
+                    "problem_id": ep.get("problem_id"),
+                }) + "\n")
+        _LAST_OUTPUTS = None
 
 
 def _aggregate(outputs: list[dict[str, Any]]) -> dict[str, Any]:
+    global _LAST_OUTPUTS
+    _LAST_OUTPUTS = outputs
     entered = [row for row in outputs if row.get("entered_router")]
     return {
         "correctness": float(np.mean([row["correct"] for row in outputs])),
@@ -1485,6 +1530,10 @@ def main() -> None:
     parser.add_argument("--history-recal", default="", help=(
         "json {C|D: {slot: {a, b, w, d}}}: count-aware recalibration of the prompt belief (C) and "
         "the same plus the history reading (D). Adds `content_histC` and `content_histD`."))
+    parser.add_argument("--dump-trajectories", default="", help=(
+        "jsonl path: one record per episode (outcome, abstention, realised spend, route of every "
+        "draw in order) for every row whose policy matches --dump-trajectories-policies."))
+    parser.add_argument("--dump-trajectories-policies", default="", help="regex on policy name")
     parser.add_argument("--whether-which-arms", action="store_true", help=(
         "Add the two crossed arms: route choice on one belief source, stop decision on the "
         "other (`content_decay_stopcounts_value`, `counts_stopcontent_value`)."))
@@ -1863,7 +1912,8 @@ def main() -> None:
             f"Oracle family {args.oracle_stopping_family!r} is unavailable; "
             "provide its required predictions/model"
         )
-    rows: list[dict[str, Any]] = []
+    rows: list[dict[str, Any]] = _TrajectoryRows(args.dump_trajectories,
+                                                  args.dump_trajectories_policies)
     episode_rows: list[dict[str, Any]] = []
     action_summaries: list[dict[str, Any]] = []
     adaptive_outputs: dict[tuple[float, str], list[dict[str, Any]]] = {}

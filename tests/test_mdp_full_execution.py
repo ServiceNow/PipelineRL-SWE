@@ -439,7 +439,7 @@ def test_invalid_draws_are_skipped_without_cost() -> None:
     valid = np.array([[False, True]])
     costs = np.array([[100.0, 2.0]])
     result = replay_fixed(outcomes, valid, costs, np.array([[0, 1]]), [0])
-    assert result == {"correct": False, "realized_spend": 2.0, "attempts": 1}
+    assert result == {"correct": False, "realized_spend": 2.0, "attempts": 1, "route_sequence": [0]}
 
 
 def test_reachable_dataset_contains_only_failed_histories(tmp_path, monkeypatch) -> None:
