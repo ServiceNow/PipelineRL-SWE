@@ -1613,12 +1613,13 @@ def main() -> None:
     # the other way, because greedy allocation under a cap is not concave in B and a denser grid
     # can surface points ABOVE the chord. `geometric` is the matched sweep; `linear` is kept as
     # the default so previously recorded numbers stay reproducible.
+    # Under realised accounting the ceiling must cover the dearest REALISED episode, or the top
+    # cap binds and every cap-swept arm -- baselines AND our two-constraint family -- is truncated
+    # below the pool's real ceiling. Computed once so both grids share it.
+    _top = exhaustion_cost
+    if args.cap_on_realised:
+        _top = max(_top, float((realized_costs * valid).sum(axis=(1, 2)).max()) * 1.05)
     if args.budget_grid == "geometric":
-        _top = exhaustion_cost
-        if args.cap_on_realised:
-            # Under realised accounting the ceiling must cover the dearest REALISED episode, or the
-            # top cap binds and budget-swept arms are truncated below the pool's real ceiling.
-            _top = max(_top, float((realized_costs * valid).sum(axis=(1, 2)).max()) * 1.05)
         budgets = sorted(set(
             float(x) for x in np.geomspace(
                 expected_costs[0], _top, args.budget_grid_points)
@@ -2055,7 +2056,7 @@ def main() -> None:
     if args.capped_value_family:
         _fam = args.capped_value_family
         _caps = sorted(set(float(x) for x in np.geomspace(
-            expected_costs[0], exhaustion_cost, args.capped_value_budgets)))
+            expected_costs[0], _top, args.capped_value_budgets)))
         _pol = f"{_fam}_cappedvalue"
         print(f"joint (cap, R) sweep for {_fam}: "
               f"{len(_caps)} caps x {len(value_grid)} prices = {len(_caps)*len(value_grid)} runs")

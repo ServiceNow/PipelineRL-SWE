@@ -1,12 +1,21 @@
 #!/usr/bin/env python3
-"""Headline figures for the paper, as SVG. Oracle-verifier regime only.
+"""Figures for overleaf/tmlr.tex, written to overleaf/figures/ as PDF (for LaTeX) and SVG.
 
-Every number is read from the replay outputs on disk, not typed in, except the two single-split
-pools (RouterBench, SWE-bench Verified) whose frontiers come from a separate harness -- those are
-marked in the source below with the section they were recorded in.
+Oracle-verifier regime only. Every number is read from replay outputs on disk except the
+SWE-bench Verified row of the isolation figure and the belief-source ladder, which come from
+single-split / single-seed runs recorded in PAPER_OUTLINE.md (sections marked at each use).
+
+Baselines are arms that never abstain (agreement-gated escalation, the count-belief greedy rule
+of RoR v1, random allocation, budget-aware best-of-K, and the fixed-plan hull). "Ours" is the
+two-constraint family: the per-episode cap B and the price R swept jointly, where B = infinity
+is the pure price arm -- so it is one family, and its hull is the frontier we report.
+
+The frontier plot is deliberately absent. Two policies over one pool trace nearly the same curve
+by construction and a 20-40% saving is a small horizontal shift at any scale, so every figure
+here plots the saving itself.
 """
 from __future__ import annotations
-import json
+import json, os
 from pathlib import Path
 import numpy as np
 import matplotlib
@@ -14,26 +23,49 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 G = Path("/mnt/llmd/results/exps/aristides/reason/gridmatch")
-OUT = Path("analysis/paper_figures"); OUT.mkdir(parents=True, exist_ok=True)
+# The clean-grid rerun is authoritative. The truncated-grid run is identical below ~79% on LCB
+# (only the grid ceiling differs) and is used only while the rerun is in flight.
+RUN = G / "fixedacct"
+if not all((RUN / f"{p}_s{s}" / "replay_results.json").exists()
+           for p, n in (("lcb", 5), ("taco", 3)) for s in range(n)):
+    RUN = G / "fixedacct_truncgrid"
+    print("NOTE: clean-grid rerun incomplete; drawing from", RUN)
+OUT = Path(os.environ.get("FIG_OUT", "overleaf/figures")); OUT.mkdir(parents=True, exist_ok=True)
 
+INK, INK2, RULE = "#1d2129", "#5b616e", "#c9ccd2"
 BLUE, ORANGE, GREEN, AMBER, GREY = "#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#8a9099"
 plt.rcParams.update({
-    "figure.dpi": 110, "savefig.bbox": "tight", "svg.fonttype": "none",
-    "font.size": 9, "axes.labelsize": 9.5, "axes.titlesize": 10.5,
+    "figure.dpi": 150, "savefig.bbox": "tight", "savefig.pad_inches": 0.02,
+    "svg.fonttype": "none", "pdf.fonttype": 42,
+    "font.family": "sans-serif", "font.sans-serif": ["DejaVu Sans"],
+    "font.size": 8, "axes.labelsize": 8, "axes.titlesize": 8.5,
+    "axes.edgecolor": INK2, "axes.labelcolor": INK, "axes.linewidth": 0.6,
+    "xtick.color": INK2, "ytick.color": INK2, "xtick.labelsize": 7.5, "ytick.labelsize": 7.5,
     "axes.spines.top": False, "axes.spines.right": False,
-    "axes.grid": True, "grid.alpha": 0.18, "grid.linewidth": 0.6,
-    "legend.frameon": False, "legend.fontsize": 8.5,
-    "xtick.labelsize": 8.5, "ytick.labelsize": 8.5,
+    "axes.grid": True, "axes.grid.axis": "y", "grid.color": RULE, "grid.linewidth": 0.5,
+    "legend.frameon": False, "legend.fontsize": 7.5,
 })
+POOLS = {"lcb": ("LiveCodeBench", 5), "taco": ("TACO", 3)}
+OURS = ("content_decay_qcost_value", "content_decay_qcost_cappedvalue")
+FIXED = ("single_scout", "single_oss20", "single_oss120", "scout_then_oss20",
+         "scout_then_oss120", "single_pass_cascade", "best_of_6_scout", "best_of_6_oss120")
+BASELINES = [  # (label, policies, colour, linestyle)
+    ("agreement-gated escalation",      ("agreement_gated",),        ORANGE, "-"),
+    ("count-belief greedy (RoR v1)",    ("counts",),                 AMBER,  "-"),
+    ("random allocation",               ("random_allocation",),      GREY,   "--"),
+    ("fixed-plan hull (Zero Router)",   FIXED,                       GREEN,  "-"),
+]
 
 
 def load(d): return json.loads(Path(d, "replay_results.json").read_text())["results"]
 
 
-def hull(rows, pol):
+def hull(rows, pols):
+    """Upper-left convex hull of a family's (realised cost, accuracy) points: the set a
+    randomised mixture of the family's deterministic policies can achieve."""
     keep, best = [], -1.0
     for c, a in sorted({(r["mean_realized_cost"], r["correctness"])
-                        for r in rows if r["policy"] == pol}):
+                        for r in rows if r["policy"] in pols}):
         if a > best: keep.append((c, a)); best = a
     v = []
     for q in keep:
@@ -46,210 +78,160 @@ def hull(rows, pol):
 
 
 def cost_at(v, t):
-    if not v or v[-1][1] < t: return None
+    if not v or v[-1][1] < t: return np.nan
     if v[0][1] >= t: return v[0][0]
     for (c1, a1), (c2, a2) in zip(v, v[1:]):
         if a1 < t <= a2: return c1 + (c2 - c1) * (t - a1) / (a2 - a1)
+    return np.nan
 
 
-# ---------------------------------------------------------------- Fig 1: the 19/19 claim
-def fig1():
-    # LCB and TACO are seed-aggregated from runs/ ; RouterBench and SWE-V are single split
-    # (PAPER_OUTLINE 3b-xlvi) and carry no error bar, which the figure shows by omitting one.
-    pools = [
-        ("LiveCodeBench\n5 seeds",  ["50%","60%","70%","80%","84%"],
-         [40.5,19.6,16.5,4.6,5.4], [1.0,2.4,2.6,1.6,2.1], BLUE),
-        ("TACO\n3 seeds",           ["35%","40%","45%","50%","55%"],
-         [33.6,29.3,2.2,7.3,1.1],  [1.1,0.2,2.0,1.9,0.8], ORANGE),
-        ("RouterBench\n1 split",    ["60%","70%","75%","80%","84%"],
-         [35.2,76.9,75.1,50.8,22.9], None, GREEN),
-        ("SWE-bench Verified\n1 split", ["30%","40%","50%","55%"],
-         [19.5,9.5,3.4,1.2], None, AMBER),
-    ]
-    fig, axes = plt.subplots(1, 4, figsize=(10.4, 2.9),
-                             gridspec_kw={"width_ratios": [1,1,1,0.82], "wspace": 0.34})
-    for ax, (name, ts, vs, sd, col) in zip(axes, pools):
+def seeds(pool): return [load(RUN / f"{pool}_s{s}") for s in range(POOLS[pool][1])]
+
+
+def saving_curve(runs, ours, base, grid):
+    """Per-seed % cost saved at each accuracy; NaN where either side cannot reach it."""
+    return np.array([[100 * (1 - cost_at(hull(r, ours), t) / cost_at(hull(r, base), t))
+                      for t in grid] for r in runs])
+
+
+def save(fig, name):
+    for ext in ("pdf", "svg"):
+        fig.savefig(OUT / f"{name}.{ext}")
+    if os.environ.get("PREVIEW_DIR"):
+        fig.savefig(Path(os.environ["PREVIEW_DIR"]) / f"{name}.png", dpi=160)
+    plt.close(fig); print("wrote", OUT / f"{name}.pdf")
+
+
+# ------------------------------------------------------------------ Fig 1: the anchor
+def fig_anchor():
+    """Cost per problem to reach gpt-oss-120b's own accuracy. The simplest statement of the
+    result: what does it cost each policy to be as good as always calling the large model?"""
+    fig, axes = plt.subplots(1, 2, figsize=(6.75, 2.35), gridspec_kw={"wspace": 1.05})
+    for ax, pool in zip(axes, POOLS):
+        runs = seeds(pool)
+        rows = {"always gpt-oss-120b": [], **{b[0]: [] for b in BASELINES}, "ours": []}
+        accs = []
+        for r in runs:
+            s = next(x for x in r if x["policy"] == "single_oss120")
+            a = s["correctness"]; accs.append(a)
+            rows["always gpt-oss-120b"].append(s["mean_realized_cost"])
+            for lab, pols, *_ in BASELINES: rows[lab].append(cost_at(hull(r, pols), a))
+            rows["ours"].append(cost_at(hull(r, OURS), a))
+        labs = list(rows)
+        m = np.array([np.mean(rows[k]) for k in labs]); sd = np.array([np.std(rows[k]) for k in labs])
+        order = np.argsort(-m); y = np.arange(len(labs))
+        cols = {"always gpt-oss-120b": "#b4b8bf", "ours": BLUE,
+                **{b[0]: b[2] for b in BASELINES}}
+        ref = m[labs.index("always gpt-oss-120b")]
+        for yi, i in zip(y, order):
+            ax.barh(yi, 100 * m[i], height=0.62, color=cols[labs[i]],
+                    xerr=100 * sd[i], error_kw=dict(ecolor=INK2, elinewidth=0.7, capsize=1.8))
+            txt = "reference" if labs[i] == "always gpt-oss-120b" else f"{100*(1-m[i]/ref):.0f}% cheaper"
+            ax.text(100 * (m[i] + sd[i]) + 0.12, yi, txt, va="center", fontsize=7,
+                    color=INK if labs[i] == "ours" else INK2,
+                    weight="bold" if labs[i] == "ours" else "normal")
+        ax.set_yticks(y); ax.set_yticklabels([labs[i] for i in order])
+        for t, i in zip(ax.get_yticklabels(), order):
+            if labs[i] == "ours": t.set_weight("bold"); t.set_color(INK)
+        ax.set_xlim(0, 100 * max(m + sd) * 1.55)
+        ax.grid(axis="y", visible=False); ax.grid(axis="x", visible=True)
+        ax.set_xlabel("cost per problem (US cents)")
+        ax.set_title(f"{POOLS[pool][0]}  (target {100*np.mean(accs):.1f}%)", loc="left", color=INK)
+    save(fig, "fig_anchor")
+
+
+# ------------------------------------------------------------------ Fig 2: savings curves
+def fig_savings():
+    fig, axes = plt.subplots(1, 2, figsize=(6.75, 2.75), gridspec_kw={"wspace": 0.18})
+    lo = {"lcb": 0.40, "taco": 0.30}
+    for ax, pool in zip(axes, POOLS):
+        runs = seeds(pool)
+        grid = np.linspace(lo[pool], 0.90, 221)
+        for lab, pols, col, ls in BASELINES:
+            S = saving_curve(runs, OURS, pols, grid)
+            ok = np.all(np.isfinite(S), axis=0)          # every seed reaches it on both sides
+            mu, sd = S.mean(0), S.std(0)
+            x = 100 * grid
+            ax.fill_between(x[ok], (mu - sd)[ok], (mu + sd)[ok], color=col, alpha=0.14, lw=0)
+            ax.plot(np.where(ok, x, np.nan), np.where(ok, mu, np.nan), ls, color=col, lw=1.5,
+                    label=lab)
+        ax.axhline(0, color=INK, lw=0.8)
+        ax.set_xlabel("accuracy target, all problems (%)")
+        ax.set_title(f"{POOLS[pool][0]} ({POOLS[pool][1]} seeds)", loc="left", color=INK)
+        ax.set_ylim(-25, 75)
+    axes[0].set_ylabel("cost saved by ours (%)")
+    axes[1].tick_params(labelleft=True)
+    h, l = axes[0].get_legend_handles_labels()
+    fig.legend(h, [f"vs {x}" for x in l], loc="upper center", ncol=2, handlelength=2.2,
+               bbox_to_anchor=(0.5, 0.0), columnspacing=2.0)
+    save(fig, "fig_savings")
+
+
+# ------------------------------------------------------------------ Fig 3: belief isolation
+def fig_isolation():
+    """Activation beliefs vs count beliefs, everything else identical: the same rule, the same
+    give-up action, the same constant per-route costs on both sides."""
+    targets = {"lcb": [0.50, 0.60, 0.70, 0.80, 0.84], "taco": [0.35, 0.40, 0.45, 0.50, 0.55]}
+    panels = []
+    for pool in POOLS:
+        runs = seeds(pool)
+        S = np.array([[100 * (1 - cost_at(hull(r, ("content_decay_value",)), t)
+                              / cost_at(hull(r, ("counts_value",)), t))
+                       for t in targets[pool]] for r in runs])
+        panels.append((f"{POOLS[pool][0]}\n{POOLS[pool][1]} seeds", targets[pool],
+                       S.mean(0), S.std(0), (S > 0).sum(0), len(runs)))
+    # SWE-bench Verified: single split, separate harness (PAPER_OUTLINE 3b-xlvi). No error bar.
+    panels.append(("SWE-bench Verified\n1 split", [0.30, 0.40, 0.50, 0.55],
+                   np.array([19.5, 9.5, 3.4, 1.2]), None, None, None))
+    fig, axes = plt.subplots(1, 3, figsize=(6.75, 2.2), sharey=True,
+                             gridspec_kw={"wspace": 0.08, "width_ratios": [5, 5, 4]})
+    for ax, (name, ts, mu, sd, pos, n) in zip(axes, panels):
         x = np.arange(len(ts))
-        ax.bar(x, vs, color=col, width=0.62,
-               yerr=sd, error_kw=dict(ecolor="#3c4048", elinewidth=1.0, capsize=2.5))
-        ax.axhline(0, color="#3c4048", lw=0.9)
-        ax.set_xticks(x); ax.set_xticklabels(ts)
-        ax.set_title(name, pad=7)
-        ax.set_ylim(0, 84)
-        for xi, v in zip(x, vs):
-            ax.text(xi, v + 2.0, f"{v:.1f}", ha="center", va="bottom", fontsize=7.6)
-    axes[0].set_ylabel("cost saved at matched accuracy (%)")
-    for ax in axes[1:]: ax.set_yticklabels([])
-    fig.supxlabel("accuracy target", y=-0.04, fontsize=9.5)
-    fig.suptitle("Activation beliefs vs count beliefs — formulation and costs held fixed",
-                 y=1.045, fontsize=11)
-    fig.savefig(OUT / "fig1_belief_head_all_pools.svg"); plt.close(fig)
-    print("fig1 ->", OUT / "fig1_belief_head_all_pools.svg")
+        ax.bar(x, mu, width=0.6, color=BLUE,
+               yerr=sd, error_kw=dict(ecolor=INK2, elinewidth=0.7, capsize=1.8))
+        for i, v in enumerate(mu):
+            top = v + (sd[i] if sd is not None else 0)
+            ax.text(i, top + 1.2, f"{v:+.1f}", ha="center", va="bottom", fontsize=6.8, color=INK)
+            if pos is not None:
+                ax.text(i, -4.2, f"{pos[i]}/{n}", ha="center", va="top", fontsize=6.3, color=INK2)
+        ax.axhline(0, color=INK, lw=0.8)
+        ax.set_xticks(x); ax.set_xticklabels([f"{int(round(100*t))}%" for t in ts])
+        ax.set_title(name, loc="left", color=INK, fontsize=8)
+        ax.set_ylim(-9, 50)
+    axes[0].set_ylabel("cost saved vs count beliefs (%)")
+    fig.supxlabel("accuracy target  (small figures: seeds with a positive saving)",
+                  fontsize=7.5, color=INK2, y=-0.06)
+    save(fig, "fig_isolation")
 
 
-# ---------------------------------------------------------------- Fig 2: the frontiers
-def fig2():
-    """Two panels. The frontier alone is a bad headline figure: the claim is a HORIZONTAL
-    distance (cost at matched accuracy) but the eye reads vertical gaps, and over a 250x cost
-    range every policy collapses onto a near-parallel diagonal. So the left panel shows the
-    frontier with the read-off drawn explicitly, and the right panel plots the claim itself as a
-    continuous curve over every reachable accuracy rather than at five hand-picked targets.
-
-    The x axis is LINEAR, not log. Log-x linearises the concavity of a cost-accuracy frontier, so
-    two genuinely different curves render as near-parallel straight lines and the saving reads as a
-    uniform offset. On a linear axis the diminishing returns are visible and the saving reads as a
-    lens between the curves. The tight-budget end is compressed as a result, which is why the
-    right panel exists -- it is where the tight-budget gains are legible."""
-    rows = load(G / "nulls/n")
-    H = {p_: hull(rows, p_) for p_ in
-         ("content_decay_qcost_value", "counts_value", "counts", "random_allocation")}
-    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(10.2, 3.9),
-                                  gridspec_kw={"wspace": 0.26, "width_ratios": [1, 1]})
-
-    # -- left: frontier, zoomed to where the arms actually differ, with the read-off drawn
-    ours, base = H["content_decay_qcost_value"], H["counts"]
-    for pol, lab, col, lw, z in (("counts", "count beliefs (RoR v1 policy)", ORANGE, 1.7, 3),
-                                 ("content_decay_qcost_value", "ours (activation beliefs)", BLUE, 2.2, 4)):
-        h = H[pol]
-        ax.plot([c for c, _ in h], [100*a for _, a in h], "-", color=col, lw=lw,
-                marker="o", ms=3.2, mfc="white", mew=1.0, label=lab, zorder=z)
-    # shade the saving between the two frontiers
-    accs = np.linspace(31, 84.5, 300)
-    co = np.array([cost_at(ours, a/100) for a in accs], dtype=float)
-    cb = np.array([cost_at(base, a/100) for a in accs], dtype=float)
-    ok = np.isfinite(co) & np.isfinite(cb)
-    ax.fill_betweenx(accs[ok], co[ok], cb[ok], color=BLUE, alpha=0.11, lw=0, zorder=1)
-    for tgt in (0.60, 0.80):
-        a_, b_ = cost_at(ours, tgt), cost_at(base, tgt)
-        ax.annotate("", xy=(a_, 100*tgt), xytext=(b_, 100*tgt),
-                    arrowprops=dict(arrowstyle="<|-", color="#12151b", lw=1.1,
-                                    shrinkA=0, shrinkB=0), zorder=6)
-        ax.text((a_ + b_)/2, 100*tgt + 1.2, f"{100*(1-a_/b_):.0f}% cheaper",
-                ha="center", va="bottom", fontsize=8, zorder=6)
-    ax.set_xlabel("mean cost per problem (USD)")
-    ax.set_ylabel("accuracy over all problems (%)")
-    ax.set_title("The read-off is horizontal", pad=8)
-    ax.set_ylim(28, 87); ax.legend(loc="lower right")
-
-    # -- right: the claim itself, continuously
-    grid = np.linspace(0.32, 0.845, 240)
-    for pol, lab, col, ls in (("counts", "vs count beliefs, per-query cap (RoR v1)", ORANGE, "-"),
-                              ("counts_value", "vs count beliefs, same formulation", GREEN, "-"),
-                              ("random_allocation", "vs random allocation", GREY, "--")):
-        b_ = H[pol]
-        y = [100*(1 - cost_at(ours, t)/cost_at(b_, t))
-             if (cost_at(ours, t) and cost_at(b_, t)) else np.nan for t in grid]
-        ax2.plot(100*grid, y, ls, color=col, lw=1.9, label=lab)
-    # Mark the five targets the tables quote. The continuous curve is NOT monotone -- there is a
-    # trough near 80% where the advantage nearly vanishes -- and a five-point table samples either
-    # side of it. Showing the sample points on the curve is the honest way to present that.
-    for t in (0.50, 0.60, 0.70, 0.80, 0.84):
-        y_ = 100*(1 - cost_at(ours, t)/cost_at(H["counts"], t))
-        ax2.plot(100*t, y_, "o", color=ORANGE, ms=6, mfc="white", mew=1.6, zorder=5)
-    ax2.plot([], [], "o", color=ORANGE, ms=6, mfc="white", mew=1.6,
-             label="targets quoted in the tables")
-    ax2.axhline(0, color="#3c4048", lw=0.9)
-    ax2.set_xlabel("accuracy target (%)")
-    ax2.set_ylabel("cost saved by activation beliefs (%)")
-    ax2.set_title("Cost saved at matched accuracy, every reachable target", pad=8)
-    ax2.set_ylim(-12, 72)
-    ax2.legend(loc="lower left", fontsize=7.8)
-    fig.savefig(OUT / "fig2_frontiers_lcb.svg"); plt.close(fig)
-    print("fig2 ->", OUT / "fig2_frontiers_lcb.svg")
+# ------------------------------------------------------------------ Fig 4: belief sources
+def fig_ladder():
+    """Belief-source ladder, one replay (LiveCodeBench, seed 0), constant costs, identical rule;
+    PAPER_OUTLINE 3b-xlix and 3b-liii. Plotted as the share of the ORACLE-belief saving each
+    source recovers, which is the quantity the paper argues about (headroom)."""
+    ts = ["50%", "60%", "70%"]
+    rows = [("prompt length",                  [2.7, -2.8, -2.2]),
+            ("TF-IDF of the statement",        [12.2, -0.3, 11.8]),
+            ("learned per-problem decay",      [12.8, 4.2, 4.8]),
+            ("kNN on activations",             [26.8, 8.8, 7.6]),
+            ("linear probe on activations",    [40.8, 19.2, 12.0])]
+    oracle = np.array([75.4, 71.8, 68.7])
+    fig, ax = plt.subplots(figsize=(6.75, 2.0))
+    y = np.arange(len(rows)); h = 0.25
+    shades = ["#9cc3ee", "#5c9be2", BLUE]
+    for j, t in enumerate(ts):
+        vals = np.array([r[1][j] for r in rows]) / oracle[j] * 100
+        ax.barh(y + (1 - j) * h, vals, height=h * 0.92, color=shades[j], label=f"{t} target")
+    ax.axvline(0, color=INK, lw=0.8)
+    ax.set_yticks(y); ax.set_yticklabels([r[0] for r in rows])
+    ax.grid(axis="y", visible=False); ax.grid(axis="x", visible=True)
+    ax.set_xlabel("share of the oracle-belief saving recovered (%)")
+    ax.set_xlim(-8, 60)
+    ax.legend(loc="lower right")
+    save(fig, "fig_ladder")
 
 
-# ---------------------------------------------------------------- Fig 3: what is ours
-def fig3():
-    T = [0.50, 0.60, 0.70, 0.80, 0.84]
-    rows = load(G / "nulls/n")
-    base = hull(rows, "counts_value")
-    def rel(pol):
-        h = hull(rows, pol)
-        return [100*(1 - cost_at(h,t)/cost_at(base,t))
-                if (cost_at(h,t) and cost_at(base,t)) else np.nan for t in T]
-    series = [("belief head only",            rel("content_decay_value"),       BLUE),
-              ("cost head only",              rel("counts_qcost_value"),        GREEN),
-              ("both (ours)",                 rel("content_decay_qcost_value"), "#12151b")]
-    x = np.arange(len(T)); w = 0.26
-    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(9.6, 3.4),
-                                  gridspec_kw={"wspace": 0.28, "width_ratios": [1.15, 1]})
-    for i, (lab, vals, col) in enumerate(series):
-        ax.bar(x + (i-1)*w, vals, w, label=lab, color=col)
-    ax.axhline(0, color="#3c4048", lw=0.9)
-    ax.set_xticks(x); ax.set_xticklabels([f"{int(100*t)}%" for t in T])
-    ax.set_xlabel("accuracy target"); ax.set_ylabel("cost saved vs count beliefs (%)")
-    ax.set_title("Our two heads are substitutes, not complements", pad=7)
-    ax.legend(loc="upper right")
-
-    # Null ladder. Plotted WITHOUT `ours` on purpose: at +48.6% it compresses the +3.5-6.6%
-    # effect this panel exists to show, and the zero-height `counts` bar is invisible anyway.
-    # counts is the baseline line, not a bar.
-    b2 = hull(rows, "counts")
-    def rel2(pol):
-        h = hull(rows, pol)
-        return [100*(1 - cost_at(h,t)/cost_at(b2,t))
-                if (cost_at(h,t) and cost_at(b2,t)) else np.nan for t in T]
-    rnd = rel2("random_allocation")
-    ax2.bar(x, rnd, 0.55, color=GREY, label="random allocation (no information)")
-    ax2.axhline(0, color=ORANGE, lw=1.6,
-                label="count beliefs, pool-level (RoR v1 policy)")
-    for xi, v in zip(x, rnd):
-        ax2.text(xi, v + 0.18, f"+{v:.1f}", ha="center", va="bottom", fontsize=7.8)
-    ax2.set_ylim(0, max(rnd)*1.45)
-    ax2.set_xticks(x); ax2.set_xticklabels([f"{int(100*t)}%" for t in T])
-    ax2.set_xlabel("accuracy target"); ax2.set_ylabel("cost saved vs count beliefs (%)")
-    ax2.set_title("Choosing routes at random beats the pool-level rule", pad=7)
-    ax2.legend(loc="upper left")
-    fig.savefig(OUT / "fig3_decomposition_and_nulls.svg"); plt.close(fig)
-    print("fig3 ->", OUT / "fig3_decomposition_and_nulls.svg")
-
-
-# ---------------------------------------------------------------- Fig 4: why the machinery
-def fig4():
-    T = [0.50, 0.60, 0.70, 0.80]
-    sc = load("/mnt/llmd/results/exps/aristides/reason/sc_lcb_s0_1905612733/replay")
-    b = hull(sc, "counts_value")
-    def rel(rows, pol, base):
-        h = hull(rows, pol)
-        return [100*(1 - cost_at(h,t)/cost_at(base,t))
-                if (cost_at(h,t) and cost_at(base,t)) else np.nan for t in T]
-    single = rel(sc, "content_commit_value", b)
-    seq    = rel(sc, "content_decay_value", b)
-    hz = load(G / "horizon2/h"); bm = hull(hz, "content_decay_value")
-    hs = {h: rel(hz, f"content_decay_bellman_h{h}_value", bm) for h in (2, 4, 6, 18)}
-
-    x = np.arange(len(T)); w = 0.36
-    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(9.6, 3.4), gridspec_kw={"wspace": 0.3})
-    ax.bar(x-w/2, single, w, label="single-commit routing", color=ORANGE)
-    ax.bar(x+w/2, seq,    w, label="sequential (resample + reroute + give up)", color=BLUE)
-    for xi, v in zip(x, single):
-        if np.isnan(v):
-            ax.text(xi-w/2, 1.2, "cannot\nreach", ha="center", va="bottom", fontsize=7.0,
-                    color=ORANGE, style="italic")
-    ax.axhline(0, color="#3c4048", lw=0.9)
-    ax.set_ylim(min(-13, np.nanmin(single)-3), 56)   # headroom so the legend clears the bars
-    ax.set_xticks(x); ax.set_xticklabels([f"{int(100*t)}%" for t in T])
-    ax.set_xlabel("accuracy target"); ax.set_ylabel("cost saved vs count beliefs (%)")
-    ax.set_title("The sequential structure is what pays", pad=7)
-    ax.legend(loc="upper right")
-
-    # h=4, 6 and 18 are numerically identical here -- the solve has converged, so plotting four
-    # labelled lines would imply four visible curves. Draw h=2 against the converged rest.
-    ax2.plot(x, hs[2], "-o", ms=4, color=BLUE, label="h=2")
-    ax2.plot(x, hs[18], "-o", ms=4, color=ORANGE,
-             label="h=4, 6, 18 (converged;\nh=18 is the exact solve)")
-    ax2.axhline(0, color="#3c4048", lw=0.9)
-    ax2.set_xticks(x); ax2.set_xticklabels([f"{int(100*t)}%" for t in T])
-    ax2.set_xlabel("accuracy target"); ax2.set_ylabel("cost saved vs myopic rule (%)")
-    ax2.set_title("Deeper lookahead does not help", pad=7)
-    ax2.legend(loc="upper left", ncol=2)
-    fig.savefig(OUT / "fig4_machinery.svg"); plt.close(fig)
-    print("fig4 ->", OUT / "fig4_machinery.svg")
-
-
-import os
-if os.environ.get("PNG_TOO"):
-    plt.rcParams["savefig.format"]="png"
-for f in (fig1, fig2, fig3, fig4):
+for f in (fig_anchor, fig_savings, fig_isolation, fig_ladder):
     try: f()
-    except Exception as e: print(f"{f.__name__} FAILED: {type(e).__name__}: {e}")
+    except Exception as e:
+        import traceback; traceback.print_exc(); print(f"{f.__name__} FAILED: {e}")
