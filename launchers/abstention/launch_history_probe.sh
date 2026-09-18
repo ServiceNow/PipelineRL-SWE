@@ -28,6 +28,6 @@ for i in ${SHARD_IDS}; do
     JOB_NAME="histprobe_${TAG}${i}_${TIMESTAMP}" ENV=pipeline-rl CONDA_EXE=/opt/conda/bin/conda \
     SNAPSHOT="${SNAPSHOT}" NPROC=1 GPU=1 GPU_MEM=80 CPU=8 CPU_MEM=64 \
     COMMAND="export HF_HUB_DISABLE_IMPLICIT_TOKEN=1 && export PYTHONPATH=/mnt/llmd/results/exps/aristides/envs/accel:\${PYTHONPATH:-} && ${c}" \
-    >/dev/null 2>&1 && echo "  submitted histprobe_${TAG}${i}_${TIMESTAMP}" || echo "  FAILED to submit shard ${i}"
+    > /tmp/claude-13011/-home-toolkit-PipelineRL-SWE/29f3ed3b-1f85-424a-8576-97a9148bdc53/scratchpad/histprobe_submit_${TAG}${i}.log 2>&1 && echo "  submitted histprobe_${TAG}${i}_${TIMESTAMP}" || echo "  FAILED to submit shard ${i}"
   sleep 30
 done
