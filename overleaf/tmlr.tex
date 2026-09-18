@@ -13,7 +13,7 @@
 \usepackage{xspace}
 \usepackage{multirow}
 
-\title{Whether, Not Which: Cross-Model Selective Prediction\\from One Cheap Prefill}
+\title{Which Tier, Not Which Peer: Cross-Model Selective Prediction\\from One Cheap Prefill}
 
 % Authors must not appear in the submitted version.
 \author{Anonymous Authors}
@@ -57,9 +57,10 @@ less than either agreement-gated escalation or the count-based greedy allocation
 across accuracy targets from 50\% to 75\% it is 11--36\% cheaper than both on every one of five
 seeds.  Changing only where the beliefs come from --- same rule, same give-up action, same costs
 --- cuts cost at 14 of 14 accuracy targets across LiveCodeBench, TACO and out-of-domain
-SWE-bench Verified.  The value lies in knowing which problems to attempt: on LiveCodeBench a give-up action pays only
-with per-query beliefs, and the same probe does not predict which model suits a problem, capturing
-none of 13.5 points of routing headroom on a five-lab pool.  The signal transfers to API-only models
+SWE-bench Verified.  The prefill reads a difficulty shared across models: it tells the policy
+whether a problem is worth attempting and which tier of model to try, but not which of several
+comparable models suits it, capturing none of 13.5 points of routing headroom on a five-lab pool
+of peers.  On LiveCodeBench a give-up action pays only with these per-query beliefs.  The signal transfers to API-only models
 at about 25 labels each.  The remaining headroom is belief quality: the probe recovers about half
 of the saving perfect beliefs would give at the tightest budgets, and under a tenth near the
 pool's ceiling.
@@ -105,10 +106,13 @@ beliefs, every problem looks the same before the first draw: on LiveCodeBench, a
 action then makes the policy \emph{more} expensive at every target, while with prefill beliefs
 it cuts cost by 19\% at the tightest one.  A price-swept policy cannot be run without its
 give-up action at all: every price then yields the same policy.
-\item \textbf{Whether, not which} (Section~\ref{sec:whethernotwhich}).  The probe reads a
-difficulty shared across the pool, not which model suits a problem.  On a five-lab pool with
-13.5 points between the best model and the pool's oracle, a router on the probe uses one model
-for 171 of 171 test problems.
+\item \textbf{Which tier, not which peer} (Section~\ref{sec:whethernotwhich}).  The probe reads
+a difficulty shared across the pool.  That supports decisions that are monotone in difficulty:
+whether to attempt a problem, and which tier of a price-ordered pool to try (with no give-up
+action, prefill beliefs still save 7--13\% on LiveCodeBench through the choice of draw alone).
+It does not support a choice among comparable models: on a five-lab pool with 13.5 points between
+the best model and the pool's oracle, a router on the probe uses one model for 171 of 171 test
+problems.
 \item \textbf{Transfer and headroom} (Sections~\ref{sec:transfer} and~\ref{sec:diagnostics}).
 The probe's ranking of problems transfers to API-only models with no labels, and calibrated
 probabilities cost about 25 labels per model.  Perfect beliefs would save 65--75\% at every
@@ -124,8 +128,9 @@ best-of-$K$ and the best fixed plan --- under realised-cost accounting on every 
 (Section~\ref{sec:headline}).  (iii) An attribution of the savings: the belief source isolated on
 three pools, its interaction with the give-up action, and the oracle headroom that remains
 (Sections~\ref{sec:isolation}--\ref{sec:mechanism}).  (iv) A scope result: the prefill supports
-the decision whether to attempt a problem and not the choice of model, and the difference is
-visible in measurable pool structure (Section~\ref{sec:whethernotwhich}).  We claim neither the
+decisions that are monotone in difficulty --- whether to attempt a problem and which tier to try
+--- and not a choice among comparable models, and which case applies is visible in measurable
+pool structure (Section~\ref{sec:whethernotwhich}).  We claim neither the
 MDP nor the Lagrangian relaxation, both classical, nor the observation that hidden states encode
 difficulty \citep{llmalreadyknows2025,encodefailures2026,prefillrouter2026}.
 
@@ -304,6 +309,22 @@ value iteration from $V_0\equiv0$ gives a depth-$h$ lookahead policy, and $h=H$ 
 exactly because no episode is longer than $H$.  On our pools $H=18$ and the exact solve visits
 342 lattice nodes per decision, so the choice of $h=1$ is empirical, not computational:
 deeper lookahead does not reduce cost (Section~\ref{sec:diagnostics}).
+
+\paragraph{The one-step rule stops exactly when the optimal policy does.}
+Under the belief model a failure lowers the failed route's belief and leaves the others unchanged,
+and a route's cost does not change within an episode, so $Q^{\pi_\abst}(\mathbf n',m)\le
+Q^{\pi_\abst}(\mathbf n,m)$ for every state $\mathbf n'$ reachable from $\mathbf n$.  Suppose
+$\max_m Q^{\pi_\abst}(\mathbf n,m)\le0$.  Then the same holds at every reachable state, and
+backward induction from the exhausted states gives $V^*=0$ at all of them; hence
+$Q^*(\mathbf n,m)=Q^{\pi_\abst}(\mathbf n,m)\le0$ for every $m$ and the optimal policy stops at
+$\mathbf n$.  Suppose instead that $Q^{\pi_\abst}(\mathbf n,m)>0$ for some $m$.  Since
+$V^*\ge0$, $Q^*(\mathbf n,m)\ge Q^{\pi_\abst}(\mathbf n,m)>0$ and the optimal policy continues.
+The one-step rule therefore stops in exactly the states where the optimal policy stops --- the
+monotone case of optimal stopping \citep{chow1971great} --- and lookahead can change only which
+route it tries.  A per-episode cap (Section~\ref{sec:cap}) only removes actions as spend
+accumulates and preserves the argument.  The guarantee of Section~\ref{sec:price}, optimality at
+the policy's own spend, holds exactly for the depth-$H$ policy; the one-step rule matches it on
+when to stop and can differ from it on the order of routes.
 
 \paragraph{Why the rule can stop.}
 The count-belief greedy rule of \citet{chen2026ror} ranks routes by the ratio $p_m/c_m$, which is
@@ -660,11 +681,16 @@ At 50\% coverage the share of attempts spent on unsolvable problems falls from 1
 LiveCodeBench, from 41.1\% to 19.0\% on TACO and from 28.7\% to 16.3\% on SWE-bench Verified.
 (On LiveCodeBench and TACO a problem counts as unsolvable if no draw of any route solves it.)
 
-\subsection{Whether, not which}
+\subsection{Which tier, not which peer}
 \label{sec:whethernotwhich}
 
-The probe predicts whether a problem is worth attempting.  It does not predict which model to
-use.
+The probe predicts how hard a problem is.  That supports every decision that is monotone in
+difficulty: whether a problem is worth attempting and, on a pool whose models are ordered by both
+price and ability, which tier to try --- cheap models for easy problems, large ones for hard
+problems.  On our three-tier pool, prefill beliefs save 7--13\% at LiveCodeBench's middle targets
+and 5--9\% on TACO through the choice of which draw to buy alone, with no give-up action
+(Table~\ref{tab:twobytwo}, second row of each block).  What a difficulty estimate cannot support
+is a choice among comparable models.
 
 \paragraph{A pool with routing headroom.}
 On the five-lab peer pool the best single model solves 71.9\% of test problems and the pool's
@@ -686,12 +712,12 @@ oracle (cheapest model that solves) & 85.4\% & \$0.0179 & 47.7 & --- \\
 \end{center}
 The five models' success curves are monotone in the same difficulty latent with similar slopes,
 so one model dominates across the whole latent range and the router picks it for 171 of 171
-problems --- the router collapse described by \citet{routingcollapse2026}.  On our own
-three-route pool, single-commit routing by the probe captures 22--31\% of the oracle's gain
-(Appendix~\ref{app:singleshot}), because one model dominates.  A one-dimensional
-latent can say how hard a problem is, which is a threshold and therefore an abstention decision;
-it cannot say which model suits the problem, which needs the models' ordering to change from
-problem to problem.  Adding dimensions lowers accuracy per dollar.
+problems --- the router collapse described by \citet{routingcollapse2026}.  A one-dimensional
+latent can say how hard a problem is, and thresholds on it select a tier; it cannot say which of
+several comparable models suits the problem, which needs the models' ordering to change from
+problem to problem.  Adding dimensions lowers accuracy per dollar.  (On our tiered pool,
+single-commit routing by the probe captures 22--31\% of the oracle's gain; one model dominates,
+so a cheaper route that also succeeds is rare; Appendix~\ref{app:singleshot}.)
 
 \paragraph{Shared factors are predictable; interactions are not.}
 Per-model cost on the peer pool is partly predictable from the \scout's activations (dollar $R^2$
@@ -803,8 +829,10 @@ of 96 swept prices); every number in this paper uses fitted constants on both si
 \paragraph{Deeper lookahead.}
 Relative to the one-step rule, two-step lookahead is more expensive at the tightest target and
 cheaper at the loosest ones (one seed); four-step, six-step and the exact 18-step solve are no
-better than two-step, and the exact solve is worse at the 84\% target.  The lattice treats a
-failure on one route as uninformative about the others, which over-values continuation; the
+better than two-step, and the exact solve is worse at the 84\% target.  Because the one-step rule
+already stops where the optimal policy stops (Section~\ref{sec:rule}), lookahead acts only on the
+order of routes.  The lattice treats a failure on one route as uninformative about the others,
+which over-values trying a cheap route first for the option it leaves open; the
 correlated version of the problem is Pandora's box with correlations
 \citep{gergatsouli2023weitzman}, and a more exact optimisation of the independent model does not
 help.  Appendix~\ref{app:variants} lists five further single-seed variants of the rule.
@@ -870,8 +898,9 @@ One prefill of the cheapest model in a pool, read by two linear heads per model,
 a budgeted policy that resamples, reroutes and gives up.  Against the baselines a practitioner
 would otherwise deploy, the policy reaches a given accuracy for substantially less money across
 most of the accuracy range, and the saving comes from the per-query beliefs: with count beliefs
-the same policy gains little or nothing from its give-up action.  The beliefs say how hard a problem is,
-not which model suits it, so their value is in deciding whether to attempt a problem.  They
+the same policy gains little or nothing from its give-up action.  The beliefs say how hard a
+problem is.  That is enough to decide whether to attempt a problem and which tier of model to
+try, but not which of several comparable models suits it.  They
 transfer to models whose weights are never seen at the cost of a few dozen labels, and they
 recover a small share of what perfect beliefs would save near the top of the accuracy range,
 which is where further work on the representation would pay.
