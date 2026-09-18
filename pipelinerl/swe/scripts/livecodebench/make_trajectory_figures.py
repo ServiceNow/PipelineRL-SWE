@@ -76,8 +76,8 @@ def load_episodes(path, wanted):
 
 def fig_giveup(eps, chosen, out):
     labels = [m for m, _ in METHODS if m in eps]
-    fig, axes = plt.subplots(1, len(labels), figsize=(6.75, 2.3), sharey=True,
-                             gridspec_kw={"wspace": 0.12})
+    fig, axes = plt.subplots(1, len(labels), figsize=(7.4, 2.5), sharey=True,
+                             gridspec_kw={"wspace": 0.18})
     maxd = 8
     for ax, lab in zip(np.atleast_1d(axes), labels):
         fail = [e for e in eps[lab] if not e["correct"]]
@@ -96,14 +96,15 @@ def fig_giveup(eps, chosen, out):
             bottom += 100 * H[:, m] / n
         spent = np.mean([e["realized_spend"] for e in fail]) if fail else 0.0
         share = sum(e["realized_spend"] for e in fail) / max(1e-12, sum(e["realized_spend"] for e in eps[lab]))
-        ax.set_title(f"{lab}\n{100*len(fail)/n:.0f}% unsolved; {100*share:.0f}% of spend on them",
-                     loc="left", color=INK, fontsize=7.5)
+        _name = {"count-belief greedy (RoR v1)": "RoR v1 (count beliefs)"}.get(lab, lab)
+        ax.set_title(f"{_name}\n{100*share:.0f}% of spend on unsolved", loc="left", color=INK,
+                     fontsize=7.2)
         ax.set_xticks(x); ax.set_xticklabels([str(i) for i in range(maxd)] + [f"{maxd}+"])
-        ax.set_xlabel("draws taken before stopping")
-    np.atleast_1d(axes)[0].set_ylabel("% of problems (unsolved only)")
+    fig.supxlabel("draws taken before the episode ended unsolved", fontsize=7.5, y=0.02)
+    np.atleast_1d(axes)[0].set_ylabel("% of all problems")
     h, l = np.atleast_1d(axes)[0].get_legend_handles_labels()
     fig.legend(h, [f"last draw: {x}" for x in l], loc="upper center", ncol=3,
-               bbox_to_anchor=(0.5, -0.02))
+               bbox_to_anchor=(0.5, -0.06))
     fig.savefig(out / "traj_giveup.pdf"); fig.savefig(out / "traj_giveup.svg"); fig.savefig(out / "traj_giveup.png", dpi=160)
     plt.close(fig)
 
