@@ -1906,6 +1906,10 @@ def main() -> None:
         + (scorer_families if scorer else [])
         + ((["content_histB"] + (["content_histC", "content_histD"] if hist_recal else []))
            if (content and hist_table) else [])
+        # Same history beliefs with the per-query cost head: the full method with failures read.
+        + ((["content_histB_qcost"] + (["content_histC_qcost", "content_histD_qcost"]
+                                       if hist_recal else []))
+           if (content and hist_table and cost_preds) else [])
     )
     if args.oracle_stopping_family and args.oracle_stopping_family not in families:
         raise ValueError(
