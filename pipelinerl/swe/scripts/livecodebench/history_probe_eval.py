@@ -53,6 +53,12 @@ def main():
     ap.add_argument("--kappa", type=float, default=0.95)
     ap.add_argument("--C", type=float, default=0.05)
     ap.add_argument("--out", default="")
+    ap.add_argument("--export-dir", default="", help=(
+        "write replay inputs: content_preds_A.jsonl (prompt-only probe, Platt), history_preds.jsonl "
+        "(B on prompt-only and single-failure examples, with the re-prefill's cost) and "
+        "history_recal.json (C and D coefficients)"))
+    ap.add_argument("--scout-usd-per-token", type=float, default=0.278e-6)
+    ap.add_argument("--chars-per-token", type=float, default=3.2)
     a = ap.parse_args()
     D = Path(a.dir)
 
@@ -96,7 +102,7 @@ def main():
     sc = StandardScaler().fit(X[(sp == "train")])
     Xs = sc.transform(X).astype(np.float32)
     C = a.C / max(1, X.shape[1] // 2560)
-    PA = np.zeros((N, M)); PB = np.zeros((N, M))
+    PA = np.zeros((N, M)); PB = np.zeros((N, M)); THETA = np.zeros((N, M))
     row_of_prompt = {pid[i]: i for i in range(N) if is0[i]}
     for m, s in enumerate(slots):
         # A: prompt-only probe, per problem, then the count update
@@ -107,6 +113,7 @@ def main():
         ca = np.where((sp == "cal") & is0 & np.isfinite(R[:, m]))[0]
         theta = platt(np.r_[theta_raw[ca], theta_raw[ca]], np.r_[np.ones(len(ca)), np.zeros(len(ca))],
                       np.r_[R[ca, m], 1 - R[ca, m]], theta_raw)
+        THETA[:, m] = theta
         PA[:, m] = theta * a.kappa / (a.kappa + nfail[:, m])
         # B: history probe on every example
         tr = np.where(sp == "train")[0]
@@ -121,14 +128,20 @@ def main():
     lg = lambda p: np.log(np.clip(p, 1e-6, 1 - 1e-6) / (1 - np.clip(p, 1e-6, 1 - 1e-6)))
     PC = np.zeros((N, M)); PD = np.zeros((N, M))
     cal_all = np.where(sp == "cal")[0]
+    COEF = {"C": {}, "D": {}}
     for m in range(M):
-        for P_, F in ((PC, np.c_[lg(PA[:, m]), nfail]), (PD, np.c_[lg(PA[:, m]), nfail, lg(PB[:, m])])):
+        for name, P_, F in (("C", PC, np.c_[lg(PA[:, m]), nfail]),
+                            ("D", PD, np.c_[lg(PA[:, m]), nfail, lg(PB[:, m])])):
             j = cal_all[np.isfinite(R[cal_all, m])]
             r = R[j, m]
             f = LogisticRegression(C=1e4, max_iter=5000).fit(
                 np.vstack([F[j], F[j]]), np.r_[np.ones(len(j)), np.zeros(len(j))],
                 sample_weight=np.r_[r, 1 - r])
             P_[:, m] = f.predict_proba(F)[:, 1]
+            _c = f.coef_[0]
+            COEF[name][slots[m]] = {"a": float(f.intercept_[0]), "b": float(_c[0]),
+                                    "w": [float(x) for x in _c[1:1 + M]],
+                                    "d": float(_c[1 + M]) if name == "D" else 0.0}
     ARMS = {"A": PA, "C": PC, "B": PB, "D": PD}
 
     def case(i):
@@ -158,6 +171,25 @@ def main():
             ln = (f"{c:26s} {s:7s} {len(j):5d} | Brier " + " ".join(f"{x:6.4f}" for x in br)
                   + " | AUC " + " ".join(f"{x:5.3f}" for x in au))
             print(ln); lines.append(ln)
+    if a.export_dir:
+        E = Path(a.export_dir); E.mkdir(parents=True, exist_ok=True)
+        plen = {}
+        for i in range(a.shards):
+            for l in open(D / f"{a.variant}_shard{i}.jsonl"):
+                if l.strip():
+                    r_ = json.loads(l); plen[r_["problem_id"]] = len(r_["prompt"])
+        with open(E / "content_preds_A.jsonl", "w") as f:
+            for i in np.where(is0)[0]:
+                f.write(json.dumps({"problem_id": pid[i],
+                                    "p_successes": [float(x) for x in THETA[i]]}) + "\n")
+        with open(E / "history_preds.jsonl", "w") as f:
+            for i in range(N):
+                if len(hist[i]) <= 1:
+                    usd = plen[ids[i]] / a.chars_per_token * a.scout_usd_per_token
+                    f.write(json.dumps({"example_id": ids[i], "p": [float(x) for x in PB[i]],
+                                        "prefill_usd": usd}) + "\n")
+        (E / "history_recal.json").write_text(json.dumps(COEF, indent=1))
+        print(f"exported replay inputs -> {E}")
     if a.out:
         Path(a.out).write_text("\n".join(lines) + "\n")
         np.savez(Path(a.out).with_suffix(".npz"), ids=np.array(ids), PA=PA, PB=PB, PC=PC, PD=PD,
