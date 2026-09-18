@@ -1383,6 +1383,13 @@ def main() -> None:
         "the 2-D frontier."))
     parser.add_argument("--capped-value-budgets", type=int, default=12, help=(
         "Number of geometric cap points in the joint sweep. Cost is this x the value grid."))
+    parser.add_argument("--linked-cap-k", default="", help=(
+        "Comma-separated k values. For each k, add `<capped-value-family>_linkedcap<k>`: the price "
+        "arm with a per-episode cap tied to the price, B = k*R -- 'never spend more on one query "
+        "than k times what its answer is worth'. One knob, so each k is a single sweep over the "
+        "value grid and matches the baselines' point count; the joint (B, R) product grid has "
+        "|caps| x |prices| points and its hull, taken on test, is optimistic. Choose k with "
+        "--eval-split calibration and report only that k on test."))
     parser.add_argument("--budget-grid", choices=("linear", "geometric"), default="linear",
                         help=(
         "Spacing law for the budget-swept (RoR) arm. `linear` reproduces the original 17-point "
@@ -2067,6 +2074,20 @@ def main() -> None:
                     "policy": _pol, "budget": _cap, "tau": None,
                     "min_success_per_cost": None, "value_of_correct": _r,
                     "bellman_horizon": None, **_aggregate(_out),
+                })
+
+    if args.linked_cap_k:
+        if not args.capped_value_family:
+            raise ValueError("--linked-cap-k needs --capped-value-family to name the family")
+        _fam = args.capped_value_family
+        for _k in [float(x) for x in args.linked_cap_k.split(",") if x.strip()]:
+            _pol = f"{_fam}_linkedcap{_k:g}"
+            for _r in value_grid:
+                _out = run(test_idx, _k * float(_r), _fam, None, None, _r)
+                rows.append({
+                    "policy": _pol, "budget": _k * float(_r), "tau": None,
+                    "min_success_per_cost": None, "value_of_correct": _r,
+                    "bellman_horizon": None, "linked_cap_k": _k, **_aggregate(_out),
                 })
 
     # Cross-route transition sweep. Only meaningful at horizon >= 2.
