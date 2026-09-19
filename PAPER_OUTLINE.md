@@ -1443,6 +1443,314 @@ sets the level (ratios now 0.47–0.85 at $q{=}0.25$ against 1.24–1.94 at $q{=
 this codebase: any downstream affine recalibration will annihilate an upstream level knob. Check
 that variants differ before reading their results.*
 
+### 3b-lxxxii ▶ RUNNING: can the probe learn the decay itself? (deep-history probe, 2026-09-19)
+
+**Why.** Every belief update we use is hand-written: prompt prior × count decay $\kappa/(\kappa+n)$,
+or the posterior over success counts. The history probe (§3b-lxxiv) reads only the *latest* failed
+attempt, was trained on at most two failures (never two on the same model), and still leans on the
+decay for every failure it did not read and for every repeat. The decay is the weakest part of the
+method (§3b-lxxvii), and a small LLM reading the episode should be able to learn it.
+
+**Design.** Prompt = problem + one-line trajectory summary ("So far the small 4B model has failed
+3 times, the medium 20B model once, and the large 120B model has not been tried") + the most recent
+failed attempt's code + the question suffix; last-token readout. 7,878 examples: ~12 sampled
+histories per problem, 1–6 failures deep, scout first, **including repeats on one model** (up to 6).
+Screen: the probe with **no decay at all** vs prompt probe + decay, broken down by how many times the
+target model has already failed (0, 1, 2, 3+). Files `history_probe/deep_*`, activations
+`act_deepjudge_shard*` (eai `histprobe_deepjudge*`).
+
+**Why it matters (novelty).** If it works, the method becomes "a cheap LLM reads the episode and
+outputs the belief": the scout's prefill is a *learned belief state* for the whole episode
+(amortized inference), with no posterior formula. Prefill routers read only the prompt; RoR uses
+counts; the abort probes read a model's *own* trajectory, not a pool's.
+
+**Success criteria, in order.** (1) Screen: no-decay deep probe ≥ probe + decay at every depth,
+especially same-model failures 2 and 3+. (2) Policy: beats D (§3b-lxxiv) at matched cost; needs a
+prefill for every reachable test state (failure counts in text capped at a few; ~15–20k prefills,
+sharded GPU job). (3) Holds on the new pool at recommended temperatures and on BigCodeBench.
+If (1) fails: the structural prior carries something ~550 training problems cannot teach, and the
+fallback is an LLM-read prior + a proper (with-replacement) posterior update.
+
+### 3b-lxxxi Datasets: replace TACO with BigCodeBench (and CodeContests); what the literature uses
+
+**What the closest work evaluates on.** RoR v3: MBPP+ (152 queries), LiveCodeBench, BigCodeBench.
+Prefill-router: LiveCodeBench among others. RouterBench: MMLU, HellaSwag, GSM8K, ARC-Challenge,
+Winogrande, MBPP, MT-Bench. Agent-as-a-Router: CodeRouterBench. SWE-Router / Scrouting: SWE-bench
+(Scrouting: SWE-bench Pro). **Nobody in our related work uses TACO.**
+
+**BigCodeBench** (HF card): 1,140 tasks, each in Complete (docstring) and Instruct (NL) prompt
+styles; 77 stdlib + 62 third-party libraries, 7 domains, ~5.6 unit tests/task; v0.1.0–v0.1.4;
+released June 2024 (no temporal split → random split; contamination risk). A 60/20/20 split gives
+~230 test tasks (LCB has 171). Grader needs its library environment; `bigcodebench` 0.2.5 is on
+PyPI and reachable from the dev box. First step: run every reference solution in our environment and
+drop tasks that do not pass (environment flakiness must not look like model failure). Use Instruct.
+
+**CodeContests**: stdin/stdout like TACO → rides the existing TACO conversion and grading path;
+recognisable (AlphaCode); 2022 (contamination risk); official test split only 165 → sample from
+train, own split.
+
+**CodeRouterBench** (HF `Lance1573/CodeRouterBench`, MIT): ~10K tasks repackaged from HumanEval,
+MBPP and BigCodeBench (+176 OOD), 8 frontier API models (claude-opus-4-6, claude-sonnet-4-6,
+gpt-5.4, glm-5, kimi-k2.5, MiniMax-M2.7, Qwen3-Max, qwen3.5-plus), **one result per (task, model)**,
+prices included. Not a main pool (single draw; mostly easy inputs). **Useful as a free, larger
+"which peer" test**: one scout-prefill extraction over its prompts re-tests "not which peer" on
+thousands of tasks vs our 171.
+
+**LiveCodeBench size.** release_v6 ≈ 1,050 problems (May 2023–Apr 2025; the card documents up to
+v5 = 880). We use 892 (from 2023-09): 551/170/**171 test**. Seeds reshuffle draws, not problems, so
+all LCB numbers rest on 171 problems → **rolling-origin evaluation** (train before a cutoff, test the
+next block, slide, pool; 535 pooled test problems when done for the capacity ablation) keeps the
+temporal guarantee and triples test size.
+
+**Plan.** Main pools: LiveCodeBench + BigCodeBench (+ CodeContests replacing TACO), all collected
+once with the pilot-chosen rungs at recommended temperatures, multi-draw, our own outcomes (inputs
+and tests only from the benchmarks).
+
+### 3b-lxxx Pool pilot: which rungs, and does a bigger pool leave more margin? (2026-09-18/19)
+
+100 LCB problems (50 per split), 2 draws per rung, recommended sampling (Qwen3 Instruct T=0.7/top-p
+0.8; Qwen3 Thinking T=0.6/0.95; gpt-oss T=1.0), one prompt/extraction/grading path for every rung
+(the 4B models served by vLLM inside their job). Launcher `launchers/abstention/launch_pool_pilot.sh`,
+data `pool_pilot_lcb/`. Cost per draw = (prompt + completion tokens) × our serving-cost estimates;
+the two Qwen MoE prices are **assumed** (scaled by total parameters from the gpt-oss estimates).
+
+| rung | pass@1 | ¢/draw | verdict |
+|---|---|---|---|
+| Qwen3-4B-Instruct (scout) | 47.5% | 0.064 | keep |
+| gpt-oss-20b low | 69.0% | 0.17 | keep |
+| **Qwen3-4B-Thinking** | **79.0%** | 0.37 | keep — nearly 20B-medium at 70% of its price |
+| gpt-oss-20b medium | 82.0% | 0.51 | keep |
+| gpt-oss-120b medium | 85.0% | 2.66 | keep |
+| gpt-oss-120b high | 87.5% | 12.6 | keep (top) |
+| gpt-oss-120b low | 81.0% | 1.47 | drop — dominated by 20B medium |
+| Qwen3-30B-A3B-Thinking | 80.5% | ~1.9* | drop — dominated |
+| gpt-oss-20b high | 78.5% | 2.86 | drop — 7% truncated at 65k, 4.5% empty |
+| Qwen3-235B-A22B-Thinking | 87.0% | ~31* | drop — 120B-high matches it cheaper |
+
+Price spread ~200× (target ≥50×). Top steps buy little (+3 for 5×, +2.5 for 5×): the "sometimes"
+regime. At recommended temperatures everything is much stronger: 94% of these problems are solved
+by some rung within 2 draws.
+
+**Headroom at matched accuracy** (perfect foresight vs the best fixed plan — every single rung,
+best-of-2, every cheapest-first cascade):
+
+| target | 3 rungs (scout, 20B-med, 120B-med) | 6 rungs |
+|---|---|---|
+| 70% | 81% | 77% |
+| 85% | 73% | 78% |
+| 88% | 68% | 77% |
+| 90% | 61% | 73% |
+| 92% | unreachable | 64% |
+
+The bigger pool keeps headroom high exactly at the top, where our margins were thinnest, and extends
+reach. Caveat: 100 problems × 2 draws is noisy; half the problems are from the easier training
+period. **Recommended pool: the 6 kept rungs** (+ Claude only for the "Claude for everything" framing,
+§3b-lxxix).
+
+### 3b-lxxix Framing idea: "$ saved vs Claude for everything" (parked)
+
+Deployment pitch: the default is a frontier model on every query; our machinery redirects instances
+to cheaper models. In the MDP: Claude is the top route and the give-up action becomes "send it to
+Claude"; the prefill's difficulty signal then answers "skip the cheap rungs on this one". Works only
+if Claude is **clearly** more accurate than our best cheap route — on the old 4k-cap LCB setup Opus 5
+got 43% vs gpt-oss-120b's 39%; on today's pool gpt-oss-120b is ~68–70% on test. If Claude is only
+marginally better, "Claude for everything" is a strawman; always also report vs the Zero Router
+*including* Claude and vs cascades ending in Claude. Keep an explicit give-up only for problems
+predicted hopeless even for Claude. Next step if pursued: add Opus 5 (`anthropic/claude-opus-5`) and
+Sonnet 5 to the pilot (100 × 2 draws) to measure accuracy and cost.
+
+### 3b-lxxviii Resampling is essential for accuracy but selective; why we rarely resample the 120B
+
+LCB test, % solved: scout 29.2 / 31.0 / 35.7 (1 draw / best of 2 / best of 6); 20B 56.1 / 64.3 /
+**74.9**; 120B 69.6 / 75.4 / **83.6**; pool 73.1 (one draw each) → **84.8** (all draws). Resampling
+buys ~12 points of what the pool can reach — the whole high-accuracy regime (single-commit routing
+cannot reach 70%). But per problem the 120B **always** solves 48.0%, **sometimes** 35.7%, **never**
+16.4%: resampling pays only on the "sometimes" third. The value of resampling hinges on telling a
+fluke from a never after a failure — the right framing is not "resample or reroute?" but "after
+*this* failure, is resampling a recovery or a waste?".
+
+**We rarely resample the 120B at the Figure-1 point, correctly.** After a first 120B failure, ours
+takes another 120B draw 13% of the time at 68.8% (R = \$0.21), 54% at 80% (R = \$0.45), 86% at 84%
+(R = \$0.79); RoR v1 7% / 32% / 83%. A 120B draw costs ~4.5¢ and succeeds ~31% after one failure, so
+at the price implied by a 69% target (R ≈ 8–21¢) a second draw is break-even at best.
+
+### 3b-lxxvii Why the decay does not work: bimodality and independence (measured)
+
+All 892 LCB problems; P(next draw succeeds | first n draws on the same model failed):
+
+| scout | real | count decay |
+|---|---|---|
+| n = 0 | 42.0% | 42.0% |
+| n = 1 | **6.6%** | 20.5% (3× too optimistic) |
+| n = 2 | 2.1% | 13.5% (6×) |
+| n = 5 | 2.0% | 6.7% |
+
+(120B: 80% → **32%** real vs 39% believed after one failure; the shape is a sharp drop then a
+plateau, which no single $\kappa$ fits.) After one scout failure 85% of the remaining problems are
+ones the scout **never** solves: problems are bimodal, and a single Beta prior (mean + concentration)
+cannot express "one failure ⇒ probably never". **Cross-model:** where the 120B's first draw failed the
+scout succeeds 6.7% vs 42% overall; independence keeps the scout's belief unchanged, so the policy
+buys cheap "lottery tickets" after the strongest model failed.
+
+**Consequence seen in the trajectories.** With draws at ~0.07¢ the give-up needs beliefs below
+~0.3–0.8% to fire; hyperbolic decay from ~30% takes dozens of failures. So at the Figure-1 point our
+cheapest configuration stops mainly via the **cap** (25% of problems end at the cap after ~4.5 draws,
+5.7% by choice); the price-only arm at the same accuracy gives up by choice on all 30.4% of its
+unsolved problems but only after **6.5 draws** on average and costs 3.72¢ vs 2.80¢. The stopping rule
+is optimal given its beliefs (§3b-lxxii monotone case); the beliefs after failures are wrong, and the
+cap patches that from outside. Failure-reading (§3b-lxxiv) and the success-count posterior
+(§3b-lxxvi) both attack exactly this.
+
+### 3b-lxxvi Posterior over success counts: helps, but the replay version had a finite-pool edge
+
+The head predicts P(k = j | x), j = 0…6 successes among a model's 6 stored draws; after n failures
+P(k=j | n) ∝ P(k=j)·C(6−j, n)/C(6, n) and p_next = Σ P(k=j|n)·j/(6−n). A full distribution can put
+mass on "never" and "always" separately; one failure rules out "always" instantly (example: prior
+never 40 / always 40 / coin-flip 20 → 50% → **12%** after one failure; decay 50% → 24%).
+
+**Matched (constant costs, one seed; `gridmatch/voi/v`)** vs the Beta decay: +16.8 / +0.8 / +8.9 /
++4.0 / −2.1% at 50–84% myopic; with 2-step lookahead +16.8 / +0.1 / +9.5 / +8.5 / +2.1% — and with a
+better belief model the lookahead starts to help at the loose end (it did not over the decay).
+
+**⚠ Finite-pool artifact.** That update is exact Bayes for sampling *without replacement* from the 6
+stored draws — replay-only knowledge. With k=1 of 6 and 5 failures seen it "knows" the last draw
+succeeds; its belief even **rises** with repeated failures (2.9% → 3.2% in the example, against 2.4% →
+1.2% with replacement). Not test leakage (prior from the prompt, trained on train), but an advantage
+this arm has in replay and not in deployment, largest deep in an episode — where its 70–80% gains came
+from. **Fixed:** `--posterior-with-replacement` (p = Σ π_j q_j(1−q_j)ⁿ / Σ π_j(1−q_j)ⁿ, q_j = j/6),
+one helper for the per-step belief and the lattice. Rerun running (`gridmatch/postwr`, 5 seeds). The
+count decay has no such artifact (never references the pool size).
+
+### 3b-lxxv Whether × which: the value is almost all in knowing when to stop
+
+Crossed arms (constant costs): the stop decision taken on one belief source, the route choice on the
+other (`--whether-which-arms`; LCB 5 seeds, TACO 3), saving vs count beliefs for both:
+
+| prefill used for… | LCB 50 | 60 | 70 | 75 | 80 | 84% |
+|---|---|---|---|---|---|---|
+| only **whether** (routes by counts) | +40.9 | +22.6 | +16.7 | +9.1 | +2.1 | +1.6 |
+| only **which** (stop by counts) | −10.5 | −6.3 | −8.9 | −12.9 | +0.4 | +0.3 |
+| both | +40.5 | +19.6 | +16.5 | +6.4 | +4.6 | +4.8 |
+
+Prefill route choice *added to* prefill give-up: LCB −0.6 / −3.9 / −0.2 / −3.1 / **+2.5 / +3.2** (5/5
+at 80–84%); TACO **+13.5 / +10.3** at 35/40% (3/3), −8 to −9 at 45–55% (0/3). So "which tier"
+pays only in narrow regimes. **Title consequence:** "Which Tier, Not Which Peer" (current tex title)
+overclaims; "Whether, Not Which" was accurate; rhyming alternative "Pick Your Fights, Not Your
+Knights". The earlier 7–13% of route-choice value without a give-up action was mostly route choice
+doing the give-up's job.
+
+### 3b-lxxiv Failure-reading is a clear win on LCB (history probe; §3b-lxxxii takes it further)
+
+**Mechanism.** After a failure the scout prefills the problem + the failed attempt + the question
+*"given the problem and any failed attempts above, will another attempt solve this problem? Answer
+yes or no."*; we read the **last token** and fit the same per-model linear heads (labels: each
+model's success rate on its remaining draws, excluding the draws in the history). Arms: A = prompt
+probe + count decay; B = history probe (reads the latest failure; decay for failures it did not
+read; re-prefill charged in full, median \$0.00029); C = A recalibrated on which models failed (no
+content); D = C + B.
+
+**What carries it (predictor level, 120B after a failure, AUC):** prompt + decay 0.741; + which models
+failed with the question 0.750; **+ the failed code with the question 0.800**; + code + "passed k of N
+tests" 0.798. Without the question, mean + last readout, the failed code *hurts* the policy (−12 /
+−18% at 50 / 60%). ⇒ **the failed program read as an answer to a yes/no question carries it; test
+counts add nothing** (no special verifier needed).
+
+**Policy, LCB, 5 seeds, constant costs (code only):** D vs A **+9.3 / +10.1 / +14.3 / +21.4 / +16.7 /
++8.4%** at 50–84%, 5/5 everywhere; D vs counts +54.3 / +28.7 / +27.2 / +25.7 / +17.5 / +14.5.
+Trajectory-only history (which models failed, no code): D vs A −10.6 … +5.4 — not the source.
+
+**Full method with failure-reading** (cost head, cap × price, 5 seeds) vs baselines:
+agreement +31.9 / +36.8 / +26.2 / +16.3 / **+0.2** / +9.5 (was −11.4 at 80%); RoR v1 +30.5 / +34.4 /
++27.1 / +19.1 / **+8.0** / +12.2; Zero Router +32 to +40%. At gpt-oss-120b's accuracy **55% cheaper
+than always calling it** (was 49%). vs the paper's current method, same seeds: −7.9 at 50% (0/5),
++7.4 to +11.1 at 60–84% (5/5). Caveats: LCB only; T = 0.2 makes a failed program unusually predictive
+of the same model's next draws (recollection at recommended temperatures will tell).
+
+**TACO failed first, from a bug in C/D, not in the reading.** C alone −48 to −72% at 35–45% while D
+vs C was +9 to +25%: the recalibration was fitted on examples with ≤1 failure per model, **linear in
+the failure count**, and the replay extrapolated it to 5–6; several TACO weights were positive, so
+beliefs *rose* with every failure and the policy never stopped (LCB's weights happened to be
+negative). **Fix:** fit and apply on 0/1 "this model has failed"; repeats stay with the decay
+(`history_probe_eval.py`, replay `indicator` flag). Rerun `gridmatch/hist3` (LCB + TACO, constant and
+full method, TACO full method for the first time) — running.
+
+### 3b-lxxiii Linked cap B = k·R: the fair one-knob version of the two-constraint family
+
+The (cap × price) family has 16 × 96 = 1,536 operating points and its hull is taken on test, vs ~96
+per baseline (violates matched comparisons). Linked cap: "never spend more on one problem than k
+times what its answer is worth" — one 96-point price sweep. k chosen on the **calibration** split
+(min mean log cost over the common accuracy range, averaged over seeds; `select_linked_k.py`):
+**k = 0.5 on LCB** (+15.7% vs no cap over the range), **k = 0.35 on TACO** (+4.5%).
+
+Test (5 / 3 seeds): the 16× grid bought only **2–6%**. LCB linked vs agreement +34.5 / +30.3 / +15.0 /
++3.9 / **−11.0** / −3.0; vs RoR v1 +33.1 / +27.6 / +16.1 / +7.1 / −2.3 / +0.1; vs Zero Router +28 to
++35%. TACO strong at 35–45% (+37 to +50 vs agreement), losing at 50–52%. The high-accuracy loss is a
+belief problem, fixed by failure-reading (§3b-lxxiv); **the fair headline needs the linked-cap
+version of the failure-reading method (not yet run).**
+
+### 3b-lxxii The one-step rule stops exactly where the optimal policy stops (monotone case)
+
+Under the belief model a failure lowers only the failed model's belief and costs are fixed, so
+$Q^{\pi_\bot}(\mathbf n',m)\le Q^{\pi_\bot}(\mathbf n,m)$ for every reachable $\mathbf n'$. If
+$\max_m Q^{\pi_\bot}(\mathbf n,m)\le0$ then $V^*=0$ at every reachable state (backward induction) and
+the optimal policy stops; if some $Q^{\pi_\bot}>0$ then $V^*\ge Q^*\ge Q^{\pi_\bot}>0$ and it continues.
+So the myopic rule's stop set equals the optimal stop set (Chow–Robbins–Siegmund monotone case);
+lookahead can only change route order. Explains why deeper lookahead never helped over the decay.
+Terminology now in the tex: our rule is greedy on $Q^{\pi_\bot}=p_mR-c_m$ (the action value of
+always-abstain), i.e. one step of policy improvement / value iteration from $V_0\equiv0$; $h=H=18$ is
+exact $Q^*$; "optimal at its own spend" holds exactly for the depth-$H$ policy only. **Note:**
+beliefs that can *rise* after a failure (history reading, finite-pool posterior) break monotonicity,
+so lookahead may matter again with them.
+
+### 3b-lxxi Cap-grid truncation in the two-constraint family (bug, fixed) and the corrected numbers
+
+The two-constraint family swept caps only up to the expected-cost exhaustion point, while the
+baselines' grid had been extended to the realised ceiling (§3b-lxvii) — our family stopped at 79.6% on
+LCB and the price arm alone represented us above it. One shared ceiling now (`_top`), 16 caps
+(`gridmatch/fixedacct2`). LCB vs agreement +36.9 / +31.5 / +16.8 / +9.3 / −11.4 / +2.3; the loss band
+78–83.5% narrows but remains (the price-only arm is weak there). **Same-model cost update** across
+seeds (`costupd2`): LCB ours +4.7 / +8.0 / +6.9 / +3.9 / +5.0 (5/5) → vs agreement at 80% −11.4 → −5.7;
+**TACO −5 to −6% at 45–52% (0/3)** — pool-dependent like the cost head. **Probe penalty chosen on
+calibration AUC** (deployed activations, 3 seeds, beliefs only vs counts): +51.0 / +26.4 / +19.1 /
++8.0 / +4.4 / +7.7 vs fixed-C +40.8 / +21.2 / +15.5 / +6.6 / +4.6 / +5.2 — a free +3–10 points, not yet
+in the method. Per-pool configuration chosen on calibration is the principled way to use these.
+
+### 3b-lxx TACO: the scout → 20B → 120B cascade touches our frontier at one point
+
+Frontier vs the Zero Router (`overleaf/figures/fig_frontier_zero_router.pdf`, seed 0): 31% cheaper at
+gpt-oss-120b's accuracy on LCB, 22% on TACO. Across 3 TACO seeds we never lose to the Zero Router:
++27 / +18 / +28 / +18 / **+6** / +22 / +41 / +61% at 40 / 45 / 48 / 50 / **52** / 53 / 54 / 55%
+(3/3 each). The dip is where the fixed cascade lands (52.1–53.8% at ~4.3¢): with a verifier, "try
+each tier once, cheapest first" is a crude adaptive policy and on a 3-rung pool it is near right at
+one budget. It cannot resample, so the Zero Router tops out at 55.4%. Belief-only arm dips to +5% too
+(not the cost head). Motivates the bigger pool (§3b-lxxx).
+
+### 3b-lxix Trajectory figures: when each method stops, and where it spends
+
+`--dump-trajectories` (per-episode route sequence, outcome, abstention, spend) on LCB seed 0; each
+method at its cheapest single operating point reaching gpt-oss-120b's accuracy (68.8%): ours 2.80¢,
+RoR v1 3.13¢, random 3.41¢ (agreement-gating dropped from these figures). Figures `traj_giveup`,
+`traj_flow` (weighted flow graph), `traj_draws` in `overleaf/figures/`.
+
+- Our unsolved problems mostly end after **2 draws** (scout + one bigger model); RoR v1 ends most after
+  **7+ draws**, mostly on the 20B, when the cap binds. Share of spend on unsolved problems: ours 64%,
+  RoR v1 70%, random 66%.
+- 120B usage: ours 28.4% of problems, first 120B draw at **draw 2** (median); RoR v1 **11.9%, draw 9**
+  (density rule: the 120B costs 40× the scout, so $p/c$ is tiny until cheap beliefs decay); random
+  39.4%, draw 2 but blind.
+- At this operating point ours stops mostly via the cap (5.7% by choice, 25% at the cap) — §3b-lxxvii.
+
+### 3b-lxviii Bibliography verified against arXiv; paper rewritten (2026-09-18)
+
+33 of 50 bib entries had `{TODO-verify}` authors (rendering "TODO-verify (2026)"); AutoMix's author
+list was wholly wrong; Gergatsouli had two invented co-authors; several titles belonged to other
+papers (e.g. `rasch2026` is a co-failure-ceiling paper, `perquerycost2026` an explainable-routing
+paper that does not predict per-query cost; `coderouterbench2026` is Agent-as-a-Router). Every arXiv
+entry now checked against the arXiv API; EET could not be found (dropped); EGTP was a duplicate. tex
+rewritten findings-first with baselines that never abstain, realised accounting, 14/14 isolation, the
+monotone-case result and precise value-function terminology; numbers still from `fixedacct` (pending
+list in a comment block at the top of `overleaf/tmlr.tex`).
+
 ### 3b-lxvii Matched accounting, all seeds: we beat agreement-gating 5/5 at every LCB target it can reach
 
 Every capped arm now checks its cap against **realised** spend, as agreement-gating always did (the

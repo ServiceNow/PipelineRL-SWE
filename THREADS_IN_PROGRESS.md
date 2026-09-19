@@ -1,179 +1,60 @@
 # Threads in progress
 
-**Living document — overwrite in place, do not append.** Snapshot: 2026-09-10.
-Companion to `PAPER_OUTLINE.md` (the paper as it stands), `PRIOR_ART.md` (what we position
-against), `RESEARCH_LOG.md` (append-only history). This file answers: *what is running, why, and
-what does it decide?*
+**Living document — overwrite in place, do not append.** Snapshot: 2026-09-19 00:35 UTC.
+Companion to `PAPER_OUTLINE.md` (findings, newest in §3b-lxviii – §3b-lxxxii), `PRIOR_ART.md`,
+`RESEARCH_LOG.md`. This file answers: *what is running, why, and what does it decide?*
+Replay outputs live under `/mnt/llmd/results/exps/aristides/reason/gridmatch/<run>/`; launchers are
+`run_*.sh` there; every replay deletes its `episode_traces.jsonl` on exit.
 
 ---
 
-## -1. RUNNING RIGHT NOW (2026-09-14 19:0x) — what each job decides
+## -1. RUNNING RIGHT NOW — what each job decides
 
-All local jobs are CPU-only replays on the LCB 64k pool with the matched geometric budget grid
-(§3b-xxxv), seed 0 unless stated. Output root `/mnt/llmd/results/exps/aristides/reason/gridmatch/`.
-Launchers are `run_*.sh` in that directory; every one deletes its `episode_traces.jsonl` on exit
-(they run 0.7–5 GB each).
-
-| job | dir | state | question it decides |
+| thread | where | state | decides |
 |---|---|---|---|
-| **learned sigma head-to-head** | eai `lcb_fact64k_h2h_seed17_1789410753` | **QUEUING** (dataset stage done, 138 MB) | Does a **learned per-problem $\sigma$** beat our probe? §3b-xxxi: this comparison has never existed — never on the 64k pool, never with a `content_decay` arm in the same replay. One replay, so seed / draw orderings / budget grid cannot confound the belief source. Launcher `launchers/abstention/launch_lcb_factorized_64k_headtohead.sh`. |
-| **winner's-curse shrink** | `shrink/shrink` | running ~9 min | Is the give-up firing **too late** because $\max_m(\hat p_mR-\hat c_m)$ is selection-biased upward? Sweeps $\lambda \in \{0.25,0.5,0.75,1.0\}$ in $\max - \lambda(\max-\text{mean}) \le 0$. Predicts the measured 63–86% waste. Routing untouched. |
-| **free_start refresh** | `shrink/freestart` | running ~9 min | How much does the **mandatory scout generation** cost us? `scout_first` pays a full scout draw (\$0.00084, 5.6x the probe) on 100% of episodes. Known good on the *old* pool (+50.8/+13.6/+10.8/+4.9%); never re-run here. It is the only way "we decline before spending" becomes literally true. |
-| **cross-route rho** | `rho/rho` | running ~3 min | The Bellman lattice reuses the root belief at every node — its own docstring says this "asserts that failing route m says nothing about route m'". False, so "try another route" is over-valued. Sweeps $\rho\in\{0.1,0.25,0.5,0.75\}$ discounting a route by $(1-\rho)^{\text{failures elsewhere}}$. h=2 only. |
+| **Failure-reading, TACO fix** | `gridmatch/hist3` (`run_hist3.sh`) | 8/16 done (LCB + TACO constant-cost done; full-method runs going) | Does failure-reading survive on TACO once the C/D recalibration uses 0/1 "model has failed" instead of the count (§3b-lxxiv)? Also TACO's full method vs baselines for the first time. |
+| **With-replacement posterior** | `gridmatch/postwr` (`run_postwr.sh`) | 0/5 (started ~00:05) | Does the success-count posterior still beat the Beta decay once its replay-only finite-pool edge is removed (§3b-lxxvi)? LCB, 5 seeds, constant costs, h = 1 and 2. |
+| **Deep-history probe** | `history_probe/act_deepjudge_shard*` | **extraction done**; screen not yet run | Can the probe learn the decay itself (§3b-lxxxii)? Next: `history_probe_eval.py --variant deep --act-tag deepjudge --readouts last`, then a per-depth breakdown (target model already failed 0/1/2/3+) of the no-decay probe vs prompt probe + decay. |
 
-**Finished, awaiting analysis:**
+## 0. Where things stand (2026-09-19)
 
-| job | dir | what it tests |
-|---|---|---|
-| two-constraint policy | `capped/{content_decay_qcost,counts}` | Cap **and** price swept jointly (12 caps x 96 prices). Motivated by the anomaly that the capped arm wins at 70–80% yet cannot reach 84%. Given to **both** arms so a win is not just a richer policy class for us. |
-| quantile cost head | `quantile/q{mean,0.25,0.50,0.75,0.90}` | Is $\mathbb{E}[c]$ the wrong functional? Duan's smearing rescales $\exp(\text{log-fit})$ from the conditional median to the mean; this swaps in the $q$-th quantile of the same residual law. Includes a **matched mean arm** so the comparison is not against a differently-fitted stored file. |
-| posterior-over-$k$ head | `post/s{0,1,2}` | Exact Bayes on the success count instead of Beta-Bernoulli. $k$ is strongly bimodal (49%/34% at 0/6 for scout), which $\theta\sigma/(\sigma+n)$ cannot represent. **No $\sigma$ at all.** 3 seeds. |
-| matched-grid 2x2 | `runs/lcb_s{0..4}`, `runs/taco_s{0..2}` | LCB analysed (§3b-xxxvii). **TACO not yet analysed** — free, no compute. |
+**Method in its best current form (LCB):** prompt probe + **failure-reading** (the scout re-prefills
+problem + failed code + a yes/no question, last-token readout) + 0/1 "model has failed"
+recalibration, with the per-query cost head and cap × price. vs agreement +32 / +37 / +26 / +16 /
++0.2 / +10 and vs RoR v1 +31 / +34 / +27 / +19 / +8 / +12 at 50–84% (5/5); 55% cheaper than always
+calling gpt-oss-120b at its accuracy. TACO pending the fix. **Fair headline** needs the linked-cap
+(one-sweep) version of this method — not yet run.
 
-**Ideas considered and dropped, with the reason:**
+**Findings that shape the paper (details in PAPER_OUTLINE):** the value is almost all *whether*, not
+*which* (§3b-lxxv; the current tex title "Which Tier, Not Which Peer" overclaims); the count decay is
+wrong in shape and ignores cross-model evidence (§3b-lxxvii); resampling is selective — the question
+is fluke vs never (§3b-lxxviii); the one-step rule's stopping is optimal under its beliefs (§3b-lxxii);
+a 3-rung pool lets "try each tier once" compete (§3b-lxx).
 
-- **Monotone beliefs across routes** ($p_\text{scout}\le p_\text{oss20}\le p_\text{oss120}$). Measured
-  first: the binary complementarity is tiny (scout-solves-and-oss120-does-not 0.3%, oss20 0.7%), but
-  **per-problem pass-rate monotonicity is violated on 16.5% of problems**. Baking it in would be
-  wrong one problem in six.
-- **Joint (p, c) head.** Substantially done: §3b-xiii measures corr −0.60/−0.52/−0.71 on LCB with
-  **PC1 carrying 71.4%**, and the rank-1 collapse is already built and is an *improvement*. What is
-  left is the joint *uncertainty* (variance of the surplus), which folds into the shrink and rho
-  arms rather than being a fourth head.
+## 0b. Next, in order (nothing launched)
 
-**Two bugs found while checking what the probe is charged (fixed, `ae9bbbe`):**
-`content_post` and `content_commit` were never charged `--probe-cost-usd` (my new arm would have run
-with a free probe); and the **fixed-model reference points** were charged the probe off a *stale*
-`family` variable from an earlier loop, so the single-model diamonds could be inflated by \$probe
-depending on loop order.
+1. **Deep-history screen** (extraction done) → if the no-decay probe matches/beats decay at depth, build
+   the replay lattice for test problems (~15–20k prefills, sharded eai job) and run it against D.
+2. **Linked-cap version of failure-reading** (fair one-sweep headline), LCB + TACO, all seeds.
+3. **Recollection**: 6-rung pool from the pilot (scout-Instruct, gpt-oss-20b low, Qwen3-4B-Thinking,
+   gpt-oss-20b medium, gpt-oss-120b medium, gpt-oss-120b high) at recommended temperatures, multi-draw,
+   on **LiveCodeBench + BigCodeBench (+ CodeContests replacing TACO)**. Needs: BigCodeBench grader
+   (`bigcodebench` 0.2.5 on PyPI; validate every reference solution first), CodeContests conversion.
+   Then re-extract prompt + history activations on the new pool.
+4. **Rolling-origin LCB evaluation** to lift the 171-problem test set (~3×).
+5. **Paper**: refresh numbers (fixedacct2 / linked / failure-reading), decide title (recommend back to
+   "Whether, Not Which" or "Pick Your Fights, Not Your Knights"), add trajectory + Zero Router figures,
+   the decay diagnosis, whether × which. Not compiled locally (no TeX on the box).
 
----
+## 0c. Parked
 
-## 0. Headline as it now stands (2026-09-14, evening)
-
-### Read this first: two things found on 2026-09-14 evening
-
-**1. `content_preds_RANK1.jsonl` is CONTAMINATED — do not use it.** Test-split AUC **0.9980** and
-correlation **0.9061** with the true per-problem rate, against 0.7685 / 0.5315 for our honest probe.
-A rank-1 projection can only lose information, so the file was built with test labels in scope. It
-surfaced because the belief ladder's RANK1 arm beat our own at every target and came within a few
-points of the oracle. **§3b-xiii's "collapsing to one scalar is an improvement" may rest on this
-artefact and is unsupported until re-fitted train-only.** Unlike the `*_ORACLE*` files it is not
-labelled diagnostic, so it was being read as a method arm.
-
-**2. The 19/19 claim is about the ACTIVATIONS, not merely about having a per-problem prior**
-(§3b-xlix). Belief-source ladder, only the belief source varying, constant costs both sides, no cost
-head anywhere, TF-IDF and length fitted by the **same** protocol as the activation head:
-
-| belief source | forward pass? | 50% | 60% | 70% | 80% | 84% |
-|---|---|---|---|---|---|---|
-| problem LENGTH | no | +2.7% | −2.8% | −2.2% | +5.3% | +4.7% |
-| TF-IDF of statement | no | +12.2% | −0.3% | +11.8% | +1.2% | +0.3% |
-| kNN on activations | yes | +26.8% | +8.8% | +7.6% | +0.8% | +3.3% |
-| **activations (ours)** | yes | **+40.8%** | **+19.2%** | **+12.0%** | **+2.3%** | **+6.6%** |
-| *ORACLE beliefs* | — | *+75.4%* | *+71.8%* | *+68.7%* | *+65.5%* | *+73.4%* |
-
-Length buys nothing and is negative at two targets; a properly-fitted TF-IDF head recovers at most a
-third and is negative at 60%. **But we capture only 54/27/17/4/9% of the oracle belief channel.**
-
-**3. The direction this sets, which reverses an earlier hypothesis.** §3b-xliv argued the stopping
-channel was nearly closed. Oracle arms on the current setup say otherwise at the *other* end:
-**perfect stopping is worth +44.0%/+65.0% at the 80/84% targets** and every variant we ran moves
-that regime by ~0. Combined with perfect beliefs being worth +65.5%/+73.4% there while perfect
-*routing* is worth only +8.3% at 84%: **the loose end is a BELIEF-QUALITY problem, and it is where
-all the headroom is.** Stop tuning the give-up rule at the tight end where four knobs already
-overlap. *(Tight-target oracle cells are unreadable — the oracle arms attach to the frozen-$R$
-policy with 4–5 points, so its hull cannot span the tight end; reported as n/a, not as numbers.)*
-
-**4. Entry-vs-continue was confounded and is being redone.** Under `scout_first` the scout draw is
-mandatory, so `failures.sum()==0` never occurs in the decision loop and the "entry only" arm never
-fires — it returned ≈0%, exactly as that diagnosis predicts. Re-running under `free_start`.
-
-**5. Quantile cost head (§3b-li):** only $q=0.90$ is positive at every target (+3.8/+1.2/+1.5/+5.5/
-+0.8); the optimistic tail is negative at the tight targets. Right sign for the asymmetry argument,
-small magnitude, single seed. Report as directional; do not build on it.
-
----
-
-### The clean claim — lead with this
-
-**Replacing count-based beliefs with beliefs read from one cheap prefill, changing nothing else,
-cuts cost at matched accuracy at every accuracy target on every pool we have.**
-
-Belief head isolated: formulation held at the global dual, **costs constant and identical on both
-sides**, so only the belief source differs.
-
-| pool | | | | | |
-|---|---|---|---|---|---|
-| **LiveCodeBench** (5 seeds) | 50% **+40.5±1.0** | 60% **+19.6±2.4** | 70% **+16.5±2.6** | 80% **+4.6±1.6** | 84% **+5.4±2.1** |
-| *sign test* | 5/5 | 5/5 | 5/5 | 5/5 | 5/5 |
-| **TACO** (3 seeds) | 35% **+33.6±1.1** | 40% **+29.3±0.2** | 45% **+2.2±2.0** | 50% **+7.3±1.9** | 55% **+1.1±0.8** |
-| *sign test* | 3/3 | 3/3 | 2/3 | 3/3 | 2/3 |
-| **RouterBench** (14,599 test) | 60% **+35.2** | 70% **+76.9** | 75% **+75.1** | 80% **+50.8** | 84% **+22.9** |
-| **SWE-bench Verified** | 30% **+19.5** | 40% **+9.5** | 50% **+3.4** | 55% **+1.2** | |
-
-**19/19 targets positive**, four pools, two task families, unanimous across seeds at 17/19.
-(§3b-xlvi. SWE-V row uses a deliberately weak probe reconstruction; the recorded probe is stronger.)
-
-### The paper shape
-
-1. **Representation claim** — the table above. Unconditional. The headline.
-2. **Formulation contribution** — the **two-constraint policy** (per-episode cap *and* global price
-   swept jointly): **+4.1/+7.1/+11.4/+2.4%** over the price alone at all four reachable targets,
-   while the cap *alone* is **−61.7%** at 50%. Neither RoR's cap nor the pure Lagrangian. Open:
-   it inherits the cap's ceiling and cannot reach 84%.
-3. **Cost head** — a second representation contribution **with a documented failure mode**: a large
-   win on LCB (+39.4±2.9 tight) and **actively harmful on TACO above 40%** (−21.6% at 45%). Report
-   separately from the belief head and select on **calibration**, never post hoc on test.
-
-### Why this looked like a pile of conditionals until now
-
-Every reported arm **bundled** the belief head with the cost head. The belief head is universal; the
-cost head is pool-dependent, exactly as §3b-xiii predicted (on TACO the two heads are near-orthogonal
-— PC1 43.7% against LCB's 71.4% — and TACO's cost $R^2$ is the weakest we measure).
-
-### Two retractions from today
-
-- **TACO's bundled cost claim above 40%** (§3b-xlv). §3b-xxxiv recorded +45.7/+42.5/+21.4/+13.1/+9.1
-  vs RoR; on the matched grid it is **+35.5/+20.2/−5.7/−12.5/−31.8**, losing at three of five
-  targets with 0/3 seeds. The old numbers used the **linear** budget grid.
-- **"TACO fails because `oss20` ≈ `oss120`"** (§3b-xlvii) — **false**. All three routes sit on the
-  hull and the gap is a real 7.3pp. The difference is **price**: TACO's top rung costs **\$0.49 per
-  unit accuracy against LCB's \$0.18**, 2.7x dearer, so the expensive rung must be bought at loose
-  budgets and mis-pricing it is directly costly. **Do not rebuild the TACO pool** — it passes any
-  pre-registered structural criterion, so dropping it would be selection on the outcome, and the
-  belief claim survives it anyway.
-
-### Method variants, all six run (§3b-xliv)
-
-| variant | 50% | 60% | 70% | 80% | 84% | verdict |
-|---|---|---|---|---|---|---|
-| two-constraint (cap x price) | +4.1 | +7.1 | **+11.4** | +2.4 | — | **works** |
-| posterior over $k$ (exact Bayes, no $\sigma$) | +11.0 | +5.7 | +5.9 | +0.9 | −6.5 | **works, tight/mid** |
-| `free_start` (ours) | +9.2 | +2.2 | −1.4 | −2.2 | −1.4 | marginal |
-| winner's-curse shrink | +12.1 | +1.2 | +0.8 | +2.1 | +0.3 | marginal |
-| cross-route $\rho$ (vs its h2 control) | +8.0 | +2.0 | −0.7 | −3.6 | −2.9 | mixed |
-| quantile cost head | — | — | — | — | — | void, re-running |
-
-**The pattern that matters:** four of five peak at the 50% target around +8 to +12% and fade or
-reverse by 80%. That is where abstention is active (50.9% abstain at 50%, 6.8% at 84%), so they are
-all the *same* intervention — improving the give-up decision — and will stack **sub-additively**, as
-the belief and cost heads did. **Stop adding stopping tweaks.** The two-constraint policy is the
-exception: it peaks in the middle and is about the feasible set, not stopping. *An oracle-stopping
-run is in flight to bound what is left in that channel.*
-
-`free_start` is a **mechanism confirmation**: +9.2/+2.2 for our arm and **exactly +0.0% at every
-target for RoR**, because count beliefs are identical at entry so RoR cannot skip the scout
-*selectively*. Third independent instance of the selective-vs-indiscriminate mechanism.
-
-### Where a clean win could still live
-
-- **Not more stopping tweaks** — four knobs, one channel, redundant.
-- **The loose end is untouched.** Our margin at 80–84% is +3.2 to +7.2% and nothing has moved it. At
-  high $R$ nothing is declined, so it is pure routing and depth; oracle cost is the largest lever
-  there (+9.8pt at 1.0x).
-- **Richer policy classes** — the two-constraint result says the class was leaving money on the
-  table independent of predictions. Fixing its 84% ceiling would be a real contribution.
+- "$ saved vs Claude for everything" framing (§3b-lxxix): add Opus 5 / Sonnet 5 to the pilot first.
+- CodeRouterBench as a free, larger "which peer" test (one scout-prefill extraction).
+- Weak-verifier thread: per-problem verifier trust lifts the reachable ceiling 68.4% → 72.6% (one
+  seed, `gridmatch/optaccept/oa_perproblem`).
+- Calibration-selected probe penalty (+3–10 pts) and the same-model cost update (LCB +, TACO −): fold
+  in via per-pool configuration chosen on calibration.
+- Agreement-gating dropped from the trajectory figures; still in the paper's tables.
 
 ---
 
