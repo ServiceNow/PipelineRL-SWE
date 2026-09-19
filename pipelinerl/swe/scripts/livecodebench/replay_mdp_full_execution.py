@@ -247,6 +247,33 @@ def _has_remaining_success(
     return False
 
 
+# With-replacement (deployable) posterior over the success count. The finite form below is exact
+# Bayes for the replay's pool of K stored draws sampled WITHOUT replacement, which a deployed
+# model does not have: with k=1 of 6 and 5 failures seen it "knows" the last draw succeeds. Set
+# from --posterior-with-replacement; treats j/K as a per-draw success rate and updates on
+# independent draws, p = sum_j pi_j q_j (1-q_j)^n / sum_j pi_j (1-q_j)^n.
+_POSTERIOR_WITH_REPLACEMENT = False
+
+
+def _posterior_next(prior: np.ndarray, n_obs: int) -> float:
+    _K = prior.shape[0] - 1
+    _j = np.arange(_K + 1)
+    post = prior.astype(float)
+    if _POSTERIOR_WITH_REPLACEMENT:
+        q = _j / _K
+        w = post * (1.0 - q) ** n_obs
+        tot = float(w.sum())
+        return float((w * q).sum()) / tot if tot > 1e-300 else 0.0
+    if n_obs > 0:
+        lik = np.ones(_K + 1)
+        for _i in range(n_obs):
+            lik = lik * np.clip(_K - _j - _i, 0, None) / max(_K - _i, 1)
+        post = post * lik
+    tot = float(post.sum())
+    post = post / tot if tot > 1e-300 else np.full(_K + 1, 1.0 / (_K + 1))
+    return float((post * _j).sum()) / max(_K - n_obs, 1)
+
+
 def _solve_bellman_action_values(
     pbar: np.ndarray,
     failures: np.ndarray,
@@ -314,21 +341,11 @@ def _solve_bellman_action_values(
                 # information a draw buys. This is the term Gittins includes and Weitzman's
                 # reservation value encodes, and it is the one channel through which a
                 # distributional belief can affect a risk-neutral rule at all.
-                _K = posterior.shape[1] - 1
-                _j = np.arange(_K + 1)
                 out = np.empty(n_routes, dtype=float)
                 for m_ in range(n_routes):
                     n_obs = int((base_failures[m_] if base_failures is not None else 0)
                                 + offsets[m_])
-                    post = posterior[m_].astype(float)
-                    if n_obs > 0:
-                        lik = np.ones(_K + 1)
-                        for i_ in range(n_obs):
-                            lik = lik * np.clip(_K - _j - i_, 0, None) / max(_K - i_, 1)
-                        post = post * lik
-                    tot = float(post.sum())
-                    post = post / tot if tot > 1e-300 else np.full(_K + 1, 1.0 / (_K + 1))
-                    out[m_] = float((post * _j).sum()) / max(_K - n_obs, 1)
+                    out[m_] = _posterior_next(posterior[m_], n_obs)
                 return np.clip(out, 1e-9, 1.0)
             if cross_route_rho <= 0.0:
                 return pbar
@@ -642,26 +659,10 @@ def replay_adaptive(
             # succeeds with probability k/(K-n) exactly. No sigma: the decay rate is implied by
             # how bimodal the predicted posterior is, which is the quantity a single constant --
             # or a single learned s_m -- was standing in for.
-            _K = posterior_prior.shape[1] - 1
-            _j = np.arange(_K + 1)
-            p_each = np.empty(len(slots), dtype=float)
-            for mi in range(len(slots)):
-                n_obs = int(failures[mi])
-                post = posterior_prior[mi].astype(float)
-                if n_obs > 0:
-                    # C(K-j, n)/C(K, n): probability the n observed draws all failed given j
-                    # successes. Zero once j > K-n, which is the hard information a point
-                    # estimate cannot represent -- k=6 is ruled OUT by one failure.
-                    lik = np.ones(_K + 1)
-                    for _i in range(n_obs):
-                        lik = lik * np.clip(_K - _j - _i, 0, None) / max(_K - _i, 1)
-                    post = post * lik
-                tot = float(post.sum())
-                post = post / tot if tot > 1e-300 else np.full(_K + 1, 1.0 / (_K + 1))
-                # NOT `remaining`: that name holds the per-route draws-left dict the Bellman solve
-                # reads below, and shadowing it with an int crashed every h>=2 posterior arm.
-                _rem = max(_K - n_obs, 1)
-                p_each[mi] = float((post * _j).sum()) / _rem
+            # C(K-j, n)/C(K, n) in the finite form: k=6 is ruled OUT by one failure, which is the
+            # hard information a point estimate cannot represent. See _posterior_next.
+            p_each = np.array([_posterior_next(posterior_prior[mi], int(failures[mi]))
+                               for mi in range(len(slots))], dtype=float)
             p_each = np.clip(p_each, 1e-9, 1.0)
             bellman_pbar, bellman_decay_s = p_each, None
             belief_source = "content_post"
@@ -1473,6 +1474,9 @@ def main() -> None:
         "Add `<family>_entry_value` and `<family>_continue_value`: the per-problem prior used ONLY "
         "at depth 0, or ONLY after a failure has been observed, with count beliefs supplying the "
         "other half. Localises where the representation pays."))
+    parser.add_argument("--posterior-with-replacement", action="store_true", help=(
+        "Update the success-count posterior as if draws were independent (deployable), not "
+        "without replacement from the K stored draws (replay-only knowledge of a finite pool)."))
     parser.add_argument("--posterior-preds", default=None, help=(
         "jsonl of per-problem posteriors over the SUCCESS COUNT k (field `p_k`, one list of K+1 "
         "probabilities per route). Enables the `content_post` family, whose belief update is exact "
@@ -1727,6 +1731,8 @@ def main() -> None:
     if args.content_preds:
         for row in _read_jsonl(Path(args.content_preds)):
             content[str(row["problem_id"])] = np.asarray(row["p_successes"][: len(slots)], dtype=float)
+    global _POSTERIOR_WITH_REPLACEMENT
+    _POSTERIOR_WITH_REPLACEMENT = bool(args.posterior_with_replacement)
     posterior: dict[str, np.ndarray] = {}
     if args.posterior_preds:
         for row in _read_jsonl(Path(args.posterior_preds)):
