@@ -24,6 +24,12 @@ Variants, which separate three different signals a history can carry:
   public -- code + public-test verdict only (kept; not used for now).
 Test contents never enter a prompt.
 
+--deep: histories 1..--max-depth failures deep, scout first, INCLUDING repeated failures on the
+same route, rendered as a one-line trajectory summary plus the most recent failed attempt's code.
+Everything the count decay uses is in the text, so a probe trained on these can learn the decay
+itself; the test is whether it can then run with no decay at all. --samples-per-problem histories
+per problem.
+
 Outputs --out-dir/<variant>_shard<i>.jsonl ({problem_id: example id, prompt}) for
 pool_activation_probe.py --phase extract, and --out-dir/<variant>_manifest.jsonl with
 {example_id, problem_id, history: [[slot, draw_index], ...]} for building labels.
@@ -32,6 +38,19 @@ from __future__ import annotations
 import argparse, json, random
 from collections import defaultdict
 from pathlib import Path
+
+COUNT_WORD = {1: "once", 2: "twice"}
+
+
+def summary_line(hist: list) -> str:
+    parts = []
+    for slot in ("scout", "oss20", "oss120"):
+        n = sum(1 for s, _ in hist if s == slot)
+        who = ROUTE_NAME[slot].replace("a ", "the ", 1)
+        parts.append(f"{who} has not been tried" if n == 0 else
+                     f"{who} has failed {COUNT_WORD.get(n, f'{n} times')}")
+    return "So far " + ", ".join(parts[:-1]) + ", and " + parts[-1] + "."
+
 
 ROUTE_NAME = {"scout": "a small 4B model", "oss20": "a medium 20B model",
               "oss120": "a large 120B model"}
@@ -63,11 +82,14 @@ def main() -> None:
     ap.add_argument("--tensors-dir", required=True)
     ap.add_argument("--base-prompts", required=True)
     ap.add_argument("--out-dir", required=True)
-    ap.add_argument("--variant", choices=["traj", "code", "count", "public"], default="count")
+    ap.add_argument("--variant", choices=["traj", "code", "count", "public", "deep"], default="count")
     ap.add_argument("--shards", type=int, default=4)
     ap.add_argument("--pairs-per-problem", type=int, default=4)
     ap.add_argument("--max-code-chars", type=int, default=6000)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--deep", action="store_true")
+    ap.add_argument("--max-depth", type=int, default=6)
+    ap.add_argument("--samples-per-problem", type=int, default=12)
     a = ap.parse_args()
 
     base = {json.loads(l)["problem_id"]: json.loads(l)["prompt"]
@@ -85,6 +107,34 @@ def main() -> None:
             missing += 1
             continue
         fails = sorted(k for k, r in recs[pid].items() if not r.get("final_outcome"))
+        if a.deep:
+            by = {s_: [k for k in fails if k[0] == s_] for s_ in ("scout", "oss20", "oss120")}
+            hists, seen = [[]], set()
+            for _ in range(a.samples_per_problem * 3):
+                if len(hists) > a.samples_per_problem:
+                    break
+                pools = {s_: rng.sample(v, len(v)) for s_, v in by.items()}
+                depth = rng.randint(1, a.max_depth)
+                h = []
+                if pools["scout"]:
+                    h.append(pools["scout"].pop())
+                while len(h) < depth and any(pools.values()):
+                    s_ = rng.choice([x for x in pools if pools[x]])
+                    h.append(pools[s_].pop())
+                key = tuple(h)
+                if h and key not in seen:
+                    seen.add(key); hists.append(h)
+            for h in hists:
+                eid = pid + "||" + "+".join(f"{s}{d}" for s, d in h)
+                text = base[pid]
+                if h:
+                    last = recs[pid][h[-1]]
+                    text += ("\n\n" + summary_line(h) + " The most recent failed attempt:\n"
+                             + f"```python\n{(last.get('code') or '')[:a.max_code_chars]}\n```")
+                rows.append({"problem_id": eid, "prompt": text})
+                manifest.append({"example_id": eid, "problem_id": pid,
+                                 "history": [list(k) for k in h]})
+            continue
         hists = [[]] + [[k] for k in fails]
         scout_f = [k for k in fails if k[0] == "scout"]
         other_f = [k for k in fails if k[0] != "scout"]
