@@ -1443,6 +1443,52 @@ sets the level (ratios now 0.47–0.85 at $q{=}0.25$ against 1.24–1.94 at $q{=
 this codebase: any downstream affine recalibration will annihilate an upstream level knob. Check
 that variants differ before reading their results.*
 
+### 3b-lxxxiv ⭐ THE FRONTIER RUNG IS NOT NEEDED: gpt-oss-120b-high beats Claude as the rescue rung
+
+**Question.** The recollection plan (THREADS §0) budgeted ~$75/pool for claude-sonnet-5 and
+claude-opus-5 on the argument that the method needs a wide price spread, so the pool should straddle
+open-weights → frontier. Does the result rest on them?
+
+**Measured** (pool pilot, 100 LCB problems, recommended sampling, market prices 2026-09):
+
+| rung | pass@1 | c/draw | coverage over its draws |
+|---|---|---|---|
+| gpt-oss-20b low | 67.9% (6 draws) | 0.011 | 84 → 90% over 6 |
+| gpt-oss-20b medium | 83.6% (8 draws) | 0.034 | 85 → 94% over 8 |
+| deepseek-v4-flash | 83.0% | 0.048 | 82 → 92% over 2 |
+| gpt-oss-120b medium | 86.8% (5 draws) | 0.103 | 86 → 91% over 5 |
+| gpt-oss-120b high | 87.5% | 0.652 | 88 → 91% over 2 |
+| **claude-sonnet-5** | **88.3%** | **2.406** | single draw |
+| **claude-opus-5** | **94.0%** | **6.033** | 94 → 94% over 2 |
+
+1. **Neither Claude model adds any coverage.** Union over the open ladder at one draw each is
+   **95.7%**; adding sonnet-5, opus-5, qwen3-235b-thinking, glm-5, kimi-k2.5 or gemini-3-flash moves
+   it by **+0.0pt each**. Opus solves **0** problems no open rung solves and *misses* 2 that an open
+   rung gets; Sonnet solves 0 and misses 7. This is the nested-pool result (§3b-lxxx) extending all
+   the way to the frontier: ten models from seven labs, one difficulty ladder, no specialists.
+2. **The open top rung is the better escalation target.** Of the 12 problems both 20b rungs fail at
+   draw 0, **gpt-oss-120b high rescues 8**, opus-5 7, qwen3-235b 6, deepseek 5, sonnet-5 5. On the 6
+   problems 20b-medium fails on all 8 of its draws: 120b-high 2, opus-5 2, sonnet-5 1, everyone else
+   0. So the rung the policy escalates to is the open one, at **1/9 of opus's price**.
+3. **Opus is dominated by cheap depth.** One opus draw is 6.03c for 94%; the open ladder reaches
+   95.7% for well under 1c of blind draws. A policy with Claude in the pool would almost never call
+   it, so the money would buy a rung that never fires.
+4. **The spread is already there without it.** 0.011c → 0.652c is **59x**, against **7x** for the
+   old scout/20b/120b pool at market prices — which is what made that pool's give-up decision cheap
+   and the fixed cascade hard to beat (§3b-lxxiii). The price-spread requirement is met by the open
+   ladder alone; it was the *old* pool, not the absence of Claude, that compressed it.
+
+**Sonnet vs Opus, for the record:** 88.3% vs 94.0% pass@1, 2.41c vs 6.03c per draw — 5.7 points for
+2.5x the price, and Sonnet is a worse rescue rung than gpt-oss-120b high on both hard sets.
+
+**Decision.** The default pool is **open rungs only** (~$32 for 892 LCB problems, launcher
+`launch_pool_recollect.sh`), and the frontier is a later top-up. *Caveats, so the top-up is a
+decision and not an afterthought:* the hard sets are n=12 and n=6, so ±1–2 problems is noise; and
+LCB is competitive programming, where gpt-oss is strongly tuned. **Trigger for buying Claude:** the
+open ladder tops out — the fixed cascade sits on our frontier at the expensive end, or the policy
+spends its whole cap on 120b-high and still cannot reach the accuracy target — or a library-heavy
+pool (BigCodeBench) shows frontier models rescuing problems the ladder cannot.
+
 ### 3b-lxxxiii ⭐ THE DESIGN THIS POINTS TO: predict a DISTRIBUTION over a route's success rate
 
 **The diagnosis (LCB seed 0, deep-state replay).** A probe that reads the whole trajectory and runs
