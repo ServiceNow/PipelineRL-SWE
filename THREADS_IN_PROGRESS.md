@@ -8,16 +8,25 @@ Replay outputs live under `/mnt/llmd/results/exps/aristides/reason/gridmatch/<ru
 
 ---
 
-## -1. RUNNING RIGHT NOW (2026-09-21 21:20 UTC)
+## -1. RUNNING RIGHT NOW (2026-09-21 21:55 UTC)
+
+**The full recollection is ON HOLD** (user's call) until the top of the ladder is settled. Nothing
+is lost by waiting: the launcher is written and the collection is resumable and incremental.
 
 | thread | where | state | decides |
 |---|---|---|---|
-| **pool pilot: depth** | `pool_pilot_lcb/` (`launch_pool_pilot.sh`, START_DRAW=2) | gpt-oss-20b to 8 draws, 120b-medium to 5; DeepSeek + 120b-high top-ups still to submit (~$2) | How fast does each rung's coverage saturate, how wide is the "sometimes" band at recommended temperatures, and what is per-problem depth worth against the best fixed best-of-K? |
-| **pool pilot: Claude Sonnet 5** | same dir, `sonnet5_*` | 1 job queued (first submit failed transiently) | The Sonnet-vs-Opus gap: is a 2.4c/draw frontier rung enough, or do we need the 6c one? |
+| **pilot top-ups under the fixes** | `pool_pilot_lcb/`, draws d10+ | 16 jobs: oss20hi x2, oss120hi x2, oss20md x6, dsv4f x6 (~$1.30) | **The open question: does gpt-oss-20b high recover from 78.5% toward its 90.3% clean-draw rate once Parasail/AkashML are excluded?** If it lands near 88% at 0.28c it beats gpt-oss-120b high (87.5% at 0.652c) and the top rung changes. Also: DeepSeek's depth curve (only 2 draws so far, still climbing +10pt) and a 3rd 120b-high draw. |
+| **depth pilot tail** | same dir | `oss20lo_d4` stalled on one straggler request since 21:16 (dies at the 3600s gen-timeout ~22:13); `oss20md_d6` finishing its eval split | Nothing downstream; both are top-up draws. |
 
-Everything else has finished; results are in PAPER_OUTLINE (newest sections 3b-lxviii .. 3b-lxxxiii).
-Deliberately NOT continuing on the old pool: further belief tuning there fits artifacts of T=0.2
-(three attempts in a row hit a different calibration problem, 3b-lxxxiii).
+### What the top-ups settle, and what happens either way
+* **20b-high >= ~88%:** it joins or replaces gpt-oss-120b high as the top rung, and the $17.45
+  line item (55% of the recollection budget) gets much cheaper -- 0.28c vs 0.652c per draw. Re-run
+  the rescue analysis on the hard set first: 20b-high was 4/15 there, but 7 of its 11 misses were
+  tool_calls or truncation, so that number is uninformative as collected.
+* **20b-high still ~80%:** launch the recollection as configured, 120b-high at 3 draws.
+* Either way the **per-provider finish_reason check (PAPER_OUTLINE 3b-lxxxv) runs on the top-ups
+  before any rung is compared to another.** This is the third serving artifact mistaken for a
+  capability difference in this project, all on gpt-oss.
 
 ## 0. THE PLAN (2026-09-21, supersedes everything below): recollect, then compare belief models
 
