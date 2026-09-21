@@ -8,28 +8,16 @@ Replay outputs live under `/mnt/llmd/results/exps/aristides/reason/gridmatch/<ru
 
 ---
 
-## -1. RUNNING RIGHT NOW — what each job decides
+## -1. RUNNING RIGHT NOW (2026-09-21 21:20 UTC)
 
 | thread | where | state | decides |
 |---|---|---|---|
-| **Failure-reading, TACO fix** | `gridmatch/hist3` (`run_hist3.sh`) | 8/16 done (LCB + TACO constant-cost done; full-method runs going) | Does failure-reading survive on TACO once the C/D recalibration uses 0/1 "model has failed" instead of the count (§3b-lxxiv)? Also TACO's full method vs baselines for the first time. |
-| **With-replacement posterior** | `gridmatch/postwr` (`run_postwr.sh`) | 0/5 (started ~00:05) | Does the success-count posterior still beat the Beta decay once its replay-only finite-pool edge is removed (§3b-lxxvi)? LCB, 5 seeds, constant costs, h = 1 and 2. |
-| **Deep-history probe** | `history_probe/act_deepjudge_shard*` | **extraction done**; screen not yet run | Can the probe learn the decay itself (§3b-lxxxii)? Next: `history_probe_eval.py --variant deep --act-tag deepjudge --readouts last`, then a per-depth breakdown (target model already failed 0/1/2/3+) of the no-decay probe vs prompt probe + decay. |
+| **pool pilot: depth** | `pool_pilot_lcb/` (`launch_pool_pilot.sh`, START_DRAW=2) | gpt-oss-20b to 8 draws, 120b-medium to 5; DeepSeek + 120b-high top-ups still to submit (~$2) | How fast does each rung's coverage saturate, how wide is the "sometimes" band at recommended temperatures, and what is per-problem depth worth against the best fixed best-of-K? |
+| **pool pilot: Claude Sonnet 5** | same dir, `sonnet5_*` | 1 job queued (first submit failed transiently) | The Sonnet-vs-Opus gap: is a 2.4c/draw frontier rung enough, or do we need the 6c one? |
 
-## 0. Where things stand (2026-09-19)
-
-**Method in its best current form (LCB):** prompt probe + **failure-reading** (the scout re-prefills
-problem + failed code + a yes/no question, last-token readout) + 0/1 "model has failed"
-recalibration, with the per-query cost head and cap × price. vs agreement +32 / +37 / +26 / +16 /
-+0.2 / +10 and vs RoR v1 +31 / +34 / +27 / +19 / +8 / +12 at 50–84% (5/5); 55% cheaper than always
-calling gpt-oss-120b at its accuracy. TACO pending the fix. **Fair headline** needs the linked-cap
-(one-sweep) version of this method — not yet run.
-
-**Findings that shape the paper (details in PAPER_OUTLINE):** the value is almost all *whether*, not
-*which* (§3b-lxxv; the current tex title "Which Tier, Not Which Peer" overclaims); the count decay is
-wrong in shape and ignores cross-model evidence (§3b-lxxvii); resampling is selective — the question
-is fluke vs never (§3b-lxxviii); the one-step rule's stopping is optimal under its beliefs (§3b-lxxii);
-a 3-rung pool lets "try each tier once" compete (§3b-lxx).
+Everything else has finished; results are in PAPER_OUTLINE (newest sections 3b-lxviii .. 3b-lxxxiii).
+Deliberately NOT continuing on the old pool: further belief tuning there fits artifacts of T=0.2
+(three attempts in a row hit a different calibration problem, 3b-lxxxiii).
 
 ## 0. THE PLAN (2026-09-21, supersedes everything below): recollect, then compare belief models
 
