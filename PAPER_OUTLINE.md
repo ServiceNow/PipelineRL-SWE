@@ -1457,12 +1457,33 @@ other half, so the oracle cannot exploit noise in its own q estimates.
 | 3c | {oss20lo: 4, dsv4f: 1} | 0.864 | 0.891 | +3.1% |
 | 10c | {dsv4f: 1, oss120md: 1} | 0.913 | 0.904 | **-1.0%** |
 
-**The prize lives at tight budgets and nowhere else.** At R=1c only 2-3 draws are affordable, so
-which ones is decisive; by R=10c a fixed plan can afford to draw everything and per-problem
-allocation is not merely worthless but slightly harmful, because q estimated from 2-3 draws is
-noisy enough that choosing on it loses to a good fixed plan. The naive version (plan and evaluate
-on the same draws) reports +14% at R=1c against the honest +9.9% -- **a third of the apparent gain
-is the oracle reading its own noise, which is the trap the real policy evaluation must avoid.**
+**CORRECTION -- compare at equal SPEND, not at equal R.** The table above is mis-specified: the
+two policies settle at different points on the frontier, so their utilities at a common R conflate
+"is this policy better" with "where did it land". Decomposed at R=10c, the fixed plan draws 5 times
+for 0.237c and solves 91.2%, while the per-problem policy draws 1.77 times for **0.091c** and
+solves 89.3% -- 2.6x less spend for 1.9pt less accuracy, which the Lagrangian at that R scores as a
+narrow loss. Matched on spend instead:
+
+| R | adaptive spend | adaptive solves | best fixed plan at <= that spend | gap |
+|---|---|---|---|---|
+| 1c | 0.045c | 87.6% | 79.3% | **+8.3pt** |
+| 3c | 0.068c | 88.9% | 85.2% | **+3.7pt** |
+| 10c | 0.091c | 89.3% | 86.0% | **+3.3pt** |
+| 30c | 0.111c | 90.0% | 87.9% | **+2.1pt** |
+
+**At equal spend per-problem allocation wins everywhere**, shrinking toward the expensive end but
+never vanishing. The apparent -1.0% at R=10c was the comparison, not the method.
+
+**Why the adaptive policy under-draws.** Planning on q from 2-3 draws cannot tell 0.95 from 1.0, so
+a half-sample reading q=1 buys one draw. That biases it toward a cheaper operating point than R
+warrants, and at high R under-drawing is the expensive error (you forfeit R; over-drawing forfeits
+c). It is the same no-tail failure as the belief head (3b-lxxxiii): a policy that cannot resolve
+the top of the q range stops too early, exactly as one that cannot resolve the bottom gives up too
+late. Both are fixed by more draws per problem, not by a different objective.
+
+*Practice: report the frontier, never utility at a fixed R, whenever two policies choose their own
+spend. The naive version (plan and evaluate on the same draws) also reports +14% at R=1c against
+the honest +9.9% -- a third of the apparent gain is the oracle reading its own noise.*
 
 **The decision does NOT need a wide price spread.** Every best fixed plan uses oss20lo (0.011c) and
 dsv4f (0.098c) -- a **9x** spread -- and gpt-oss-120b-high (0.607c) appears in none of them. So the
