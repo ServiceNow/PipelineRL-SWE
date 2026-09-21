@@ -1443,6 +1443,36 @@ sets the level (ratios now 0.47–0.85 at $q{=}0.25$ against 1.24–1.94 at $q{=
 this codebase: any downstream affine recalibration will annihilate an upstream level knob. Check
 that variants differ before reading their results.*
 
+### 3b-lxxxv ⚠ METHODS: a serving artifact, not a model, cost gpt-oss-20b twelve points (2026-09-21)
+
+**Symptom.** In the pool pilot gpt-oss-20b at high reasoning effort measured **78.5%** pass@1
+against 80.5% at medium, which reads as "high effort on a small model is a trap". It is not. 17.5%
+of its draws never closed an answer turn: 7.0% hit the 65k token cap and **10.5% returned
+`finish_reason == "tool_calls"`** -- the model opened a harmony tool call although no tools were
+offered. `extract_code` then scraped a fragment of in-progress reasoning and graded *that*: those
+draws pass 32% against 90% for draws that stop normally. On draws that stop normally the rung is
+**90.3%** (an upper bound -- dropping truncated draws selects failures out of the sample).
+
+**Cause: two OpenRouter endpoints, not the model and not the prompt.** Pinned to Parasail the leak
+reproduces 3/3; unpinned it was 4/6 live on 2026-09-21. It is fixed by **neither** `tool_choice:
+"none"` **nor** a system line telling the model it has no tools (3/3 still tool_calls with both).
+In the pilot's 2,300 gpt-oss draws every one of the 31 tool_calls came from Parasail (4.3% of its
+draws) or AkashML (3.5%); **every other provider was at exactly 0.0%**. With
+`provider.ignore = [Parasail, AkashML]` the live rate is 0/6.
+
+**Fix** (dc96a74, 7d3f0da): `--ignore-providers` defaults to those two endpoints, and a `tool_calls`
+finish now triggers the provider-excluding retry even when `content` is non-empty -- the existing
+retry only fired on *empty* content, which is why these rows sailed through.
+
+**Why this is in the outline and not just the commit log.** This is the *third* time a serving
+artifact has been mistaken for a capability difference in this project, always on gpt-oss: empty
+content at the 4096 cap (43.1% of oss20 eval draws), the provider-concentrated empties on the 64k
+re-collection, and now tool_calls with non-empty content. **A per-provider breakdown of
+`finish_reason` is a required check on any new collection**, before any rung is compared to another
+-- it takes one pass over the rows and it has moved a rung by 12 points. gpt-oss-120b is clean
+(0/200 tool_calls, 0/200 truncated, p90 23,868 tokens against the 65,536 budget), so its 87.5% and
+its position as the rescue rung (§3b-lxxxiv) stand.
+
 ### 3b-lxxxiv ⭐ THE FRONTIER RUNG IS NOT NEEDED: gpt-oss-120b-high beats Claude as the rescue rung
 
 **Question.** The recollection plan (THREADS §0) budgeted ~$75/pool for claude-sonnet-5 and
