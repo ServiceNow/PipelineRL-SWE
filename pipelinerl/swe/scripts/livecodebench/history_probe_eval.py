@@ -57,6 +57,10 @@ def main():
         "write replay inputs: content_preds_A.jsonl (prompt-only probe, Platt), history_preds.jsonl "
         "(B on prompt-only and single-failure examples, with the re-prefill's cost) and "
         "history_recal.json (C and D coefficients)"))
+    ap.add_argument("--depth-buckets", default="0,1,2,3", help=(
+        "calibrate the history head separately by TOTAL failures so far (bucket edges; the last "
+        "is 'or more'). Pooled calibration is dominated by deep states, while tight budgets act at "
+        "depth 0-1 -- the states where the deep probe was worse than the decay."))
     ap.add_argument("--apply-dir", default="", help=(
         "apply the fitted B heads to a second activation set (e.g. every reachable replay state "
         "from build_deep_state_prompts.py) and write its history_preds.jsonl into --export-dir"))
@@ -109,7 +113,7 @@ def main():
     Xs = sc.transform(X).astype(np.float32)
     C = a.C / max(1, X.shape[1] // 2560)
     PA = np.zeros((N, M)); PB = np.zeros((N, M)); THETA = np.zeros((N, M))
-    HEAD: dict[int, object] = {}; PLATT: dict[int, object] = {}
+    HEAD: dict[int, object] = {}; PLATT: dict[int, object] = {}; BUCKET: dict[int, object] = {}
     row_of_prompt = {pid[i]: i for i in range(N) if is0[i]}
     for m, s in enumerate(slots):
         # A: prompt-only probe, per problem, then the count update
@@ -131,6 +135,29 @@ def main():
         PB[:, m] = platt(np.r_[raw[cb], raw[cb]], np.r_[np.ones(len(cb)), np.zeros(len(cb))],
                          np.r_[R[cb, m], 1 - R[cb, m]], raw)
         HEAD[m] = B
+        # Depth-bucketed calibration: one Platt map per bucket of total failures so far. A pooled
+        # map is dominated by deep states, while tight budgets act at depth 0-1 -- exactly where
+        # the deep probe was worse than the count decay.
+        _edges = [int(x) for x in a.depth_buckets.split(",") if x.strip()]
+        _bucket = lambda d: max(i for i, e in enumerate(_edges) if d >= e)
+        _dep = np.array([_bucket(len(h)) for h in hist])
+        _lo = lambda q: np.log(np.clip(q, 1e-6, 1 - 1e-6) / (1 - np.clip(q, 1e-6, 1 - 1e-6)))
+        _maps = {}
+        for _b in sorted(set(_dep)):
+            _j = np.where((sp == "cal") & (_dep == _b) & np.isfinite(R[:, m]))[0]
+            if len(_j) < 40:
+                _j = cb                       # too few calibration examples: pooled fit
+            _r = R[_j, m]
+            _maps[_b] = LogisticRegression(C=1e6, max_iter=2000).fit(
+                _lo(np.r_[raw[_j], raw[_j]])[:, None],
+                np.r_[np.ones(len(_j)), np.zeros(len(_j))],
+                sample_weight=np.r_[_r, 1 - _r])
+        for _b in sorted(set(_dep)):
+            _sel = _dep == _b
+            PB[_sel, m] = _maps[_b].predict_proba(_lo(raw[_sel])[:, None])[:, 1]
+        PLATT[m] = (lambda mp: (lambda q, d: mp[min(d, max(mp))].predict_proba(
+            _lo(q)[:, None])[:, 1]))(_maps)
+        BUCKET[m] = _bucket
         _lo = lambda q: np.log(np.clip(q, 1e-6, 1 - 1e-6) / (1 - np.clip(q, 1e-6, 1 - 1e-6)))
         _pl = LogisticRegression(C=1e6, max_iter=2000).fit(
             _lo(np.r_[raw[cb], raw[cb]])[:, None], np.r_[np.ones(len(cb)), np.zeros(len(cb))],
@@ -148,7 +175,15 @@ def main():
             afe.append(np.concatenate([z[k].reshape(len(z[k]), -1)
                                        for k in a.readouts.split(",")], axis=1))
         AX = sc.transform(np.concatenate(afe).astype(np.float32)).astype(np.float32); del afe
-        APB = np.column_stack([PLATT[m](HEAD[m].predict_proba(AX)[:, 1]) for m in range(M)])
+        aman = {json.loads(l)["example_id"]: json.loads(l)
+                for l in open(AD / f"{a.apply_variant}_manifest.jsonl") if l.strip()}
+        adep = np.array([BUCKET[0](sum(aman[e].get("counts") or [0])) for e in aids])
+        APB = np.zeros((len(aids), M))
+        for m in range(M):
+            raw_a = HEAD[m].predict_proba(AX)[:, 1]
+            for _b in sorted(set(adep)):
+                _sel = adep == _b
+                APB[_sel, m] = PLATT[m](raw_a[_sel], int(_b))
         plen = {}
         for i in range(a.apply_shards):
             for l in open(AD / f"{a.apply_variant}_shard{i}.jsonl"):
@@ -225,7 +260,8 @@ def main():
             for i in np.where(is0)[0]:
                 f.write(json.dumps({"problem_id": pid[i],
                                     "p_successes": [float(x) for x in THETA[i]]}) + "\n")
-        with open(E / "history_preds.jsonl", "w") as f:
+        # --apply-dir writes the deep-state table into this same file; do not clobber it.
+        with open(E / ("history_preds_fit.jsonl" if a.apply_dir else "history_preds.jsonl"), "w") as f:
             for i in range(N):
                 if len(hist[i]) <= 1:
                     usd = plen[ids[i]] / a.chars_per_token * a.scout_usd_per_token
