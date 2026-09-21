@@ -92,6 +92,8 @@ async def collect_split(
     dataset_revision: str,
     gen_timeout: int = 120,
     top_p: float | None = None,
+    top_k: int | None = None,
+    min_p: float | None = None,
     reasoning_effort: str | None = None,
     provider_order: list[str] | None = None,
 ) -> None:
@@ -127,6 +129,8 @@ async def collect_split(
                     semaphore=request_sem,
                     gen_timeout=gen_timeout,
                     top_p=top_p,
+                    top_k=top_k,
+                    min_p=min_p,
                     reasoning_effort=reasoning_effort,
                     provider_order=provider_order,
                 )
@@ -190,6 +194,8 @@ async def collect_split(
                 "_lcb_dataset_revision": dataset_revision,
                 "_generation_temperature": generation_temperature,
                 "_top_p": top_p,
+                "_top_k": top_k,
+                "_min_p": min_p,
                 "_reasoning_effort": reasoning_effort,
             }
 
@@ -248,6 +254,10 @@ def main() -> None:
     parser.add_argument("--temporal-cutoff", default="2024-10-01")
     parser.add_argument("--max-tokens", type=int, default=4096)
     parser.add_argument("--top-p", type=float, default=None)
+    parser.add_argument("--top-k", type=int, default=None,
+                        help="Qwen cards specify 20; omitted entirely when not passed")
+    parser.add_argument("--min-p", type=float, default=None,
+                        help="Qwen cards specify 0.0; omitted entirely when not passed")
     parser.add_argument("--reasoning-effort", default="", choices=["", "low", "medium", "high"],
                         help="OpenRouter unified reasoning effort (gpt-oss: low/medium/high)")
     parser.add_argument("--provider-order", default="",
@@ -377,6 +387,8 @@ def main() -> None:
                 args.dataset_revision,
                 gen_timeout=args.gen_timeout,
                 top_p=args.top_p,
+                top_k=args.top_k,
+                min_p=args.min_p,
                 reasoning_effort=args.reasoning_effort or None,
                 provider_order=[x for x in args.provider_order.split(",") if x.strip()] or None,
             )

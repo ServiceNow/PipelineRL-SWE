@@ -339,6 +339,8 @@ async def openrouter_call(
     empty_retries: int = 2,
     avoid_empty_provider: bool = True,
     top_p: float | None = None,
+    top_k: int | None = None,
+    min_p: float | None = None,
     reasoning_effort: str | None = None,
     provider_order: list[str] | None = None,
 ) -> dict:
@@ -359,6 +361,12 @@ async def openrouter_call(
         }
         if top_p is not None:
             p["top_p"] = top_p
+        # Qwen's cards specify top_k 20 and min_p 0 alongside the temperature; OpenRouter
+        # forwards both to providers that support them and drops them elsewhere.
+        if top_k is not None:
+            p["top_k"] = top_k
+        if min_p is not None:
+            p["min_p"] = min_p
         if reasoning_effort:
             # OpenRouter's unified reasoning control; gpt-oss maps it to low/medium/high.
             p["reasoning"] = {"effort": reasoning_effort}
