@@ -22,7 +22,13 @@ REPO_ROOT=$(cd "${SCRIPT_DIR}/../.." && pwd)
 R=/mnt/llmd/results/exps/aristides/reason
 SUBMIT=${SUBMIT:-0}
 SNAPSHOT=${SNAPSHOT:-1}
-MAX_TOKENS=${MAX_TOKENS:-65536}
+# MAX_TOKENS: 110,000, not the 65,536 the pilot used. The cap was binding unequally across rungs
+# -- 12.2% of gpt-oss-20b-high eval draws were truncated against 4.1% for gpt-oss-120b-high and 0%
+# for 20b-medium -- and a truncated draw is scored as a failure, so the cap was biasing the very
+# rung comparison the pool is being chosen on. Raising it loses exactly one endpoint per model
+# (120b 19->18 of 24, 20b 9->8 of 13, DeepSeek 14->13 of 15), so it does not re-introduce the
+# provider lottery. Worst case cost is +6% on the pool, and only the truncating draws pay it.
+MAX_TOKENS=${MAX_TOKENS:-110000}
 KEYFILE=${KEYFILE:-/home/toolkit/.secrets/openrouter_api_key}
 SRC=${SRC:-$R/lcb_corrected_temporal_qwen_qwen3_4b_instruct_2507_1787205448}
 BASE=${BASE:-$R/pool_v2_lcb}
@@ -36,14 +42,17 @@ DRAW_SCALE=${DRAW_SCALE:-1}    # 1 = the counts below; use a smaller pool for a 
 # (~300 tokens, 63-74%) and with reasoning on StreamLake/GMICloud (2-6k tokens, 95-97%).
 ROUTES=(
   "oss20lo|openai/gpt-oss-20b|1.0|1.0|low|16|0.011|"
-  "oss20md|openai/gpt-oss-20b|1.0|1.0|medium|12|0.034|"
-  "dsv4f|deepseek/deepseek-v4-flash|0.7|0.95|on|8|0.048|"
-  "oss120md|openai/gpt-oss-120b|1.0|1.0|medium|6|0.103|"
-  "oss120hi|openai/gpt-oss-120b|1.0|1.0|high|3|0.652|"
+  "oss20md|openai/gpt-oss-20b|1.0|1.0|medium|12|0.042|"
+  "dsv4f|deepseek/deepseek-v4-flash|0.7|0.95|on|8|0.098|"
+  "oss120md|openai/gpt-oss-120b|1.0|1.0|medium|6|0.106|"
+  "oss120hi|openai/gpt-oss-120b|1.0|1.0|high|3|0.607|"
   # Optional, not in the default pool: a second lab at the top tier. Adds no unique coverage in
   # the pilot (87.0% alone, +0.0pt to the union), so it buys a peer choice we showed does not pay.
   # "q235t|qwen/qwen3-235b-a22b-thinking-2507|0.6|0.95||2|0.802|--top-k 20 --min-p 0"
 )
+# c/draw above are SPLIT-WEIGHTED (551 train / 341 eval), from post-fix draws where they exist.
+# They are not the first pilot's numbers: DeepSeek doubled once it was actually made to think
+# (0.048 -> 0.098) and gpt-oss-20b medium rose 0.034 -> 0.042. Eval draws cost 1.5-2.5x train.
 NPROB=$(( $(wc -l < "${SRC}/scout_train.jsonl") + $(wc -l < "${SRC}/scout_eval.jsonl") ))
 mkdir -p "${BASE}"
 

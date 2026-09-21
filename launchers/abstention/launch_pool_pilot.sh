@@ -22,7 +22,13 @@ SUBMIT=${SUBMIT:-0}
 SNAPSHOT=${SNAPSHOT:-1}
 DRAWS=${DRAWS:-2}
 PER_SPLIT=${PER_SPLIT:-50}
-MAX_TOKENS=${MAX_TOKENS:-65536}
+# MAX_TOKENS: 110,000, not the 65,536 the pilot used. The cap was binding unequally across rungs
+# -- 12.2% of gpt-oss-20b-high eval draws were truncated against 4.1% for gpt-oss-120b-high and 0%
+# for 20b-medium -- and a truncated draw is scored as a failure, so the cap was biasing the very
+# rung comparison the pool is being chosen on. Raising it loses exactly one endpoint per model
+# (120b 19->18 of 24, 20b 9->8 of 13, DeepSeek 14->13 of 15), so it does not re-introduce the
+# provider lottery. Worst case cost is +6% on the pool, and only the truncating draws pay it.
+MAX_TOKENS=${MAX_TOKENS:-110000}
 KEYFILE=${KEYFILE:-/home/toolkit/.secrets/openrouter_api_key}
 SRC=${SRC:-$R/lcb_corrected_temporal_qwen_qwen3_4b_instruct_2507_1787205448}
 BASE=${BASE:-$R/pool_pilot_lcb_$(date +%s)}
