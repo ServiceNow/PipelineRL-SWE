@@ -1443,6 +1443,51 @@ sets the level (ratios now 0.47–0.85 at $q{=}0.25$ against 1.24–1.94 at $q{=
 this codebase: any downstream affine recalibration will annihilate an upstream level knob. Check
 that variants differ before reading their results.*
 
+### 3b-lxxxiii ⭐ THE DESIGN THIS POINTS TO: predict a DISTRIBUTION over a route's success rate
+
+**The diagnosis (LCB seed 0, deep-state replay).** A probe that reads the whole trajectory and runs
+with NO decay is **+16.4 / +16.7% at the 80 / 84% targets and -59.8 / -18.1% at 50 / 60%** against
+today's beliefs. Depth-bucketed calibration does not fix the tight end (tried: -59.8 unchanged), and
+depth-0 predictor quality is fine (Brier 0.104 vs 0.097 scout; the deep head is BETTER for the 120B,
+0.101 vs 0.105). The cause is the output shape:
+
+> **the learned head has no tail.** Among states with history, 5.2% of decay beliefs fall below 2%
+> but only **0.2%** of the deep head's do; its depth-0 5th percentile is 0.058 (scout) against the
+> decay's 0.042, and its spread is narrower everywhere.
+
+With a scout draw at ~0.07c and a small R, the give-up test fires only below ~0.3-2%. A logistic
+head + Platt cannot reach there, so at tight budgets it can never decline cheaply and keeps buying;
+at loose budgets the threshold is high and its better ranking wins. The same lens explains why the
+**success-count posterior** is our best tight-budget belief (+23.5% at 50%, 5/5 seeds): mass on
+"never solves" drives its probability to ~0 by construction.
+
+**So the head should emit a distribution over the per-draw success rate q_m, conditioned on the
+state, not a scalar probability.** One object then supplies: tail resolution (mass at q~0 => belief
+~0), fluke-vs-never (is the mass bimodal?), optimal DEPTH (P(no success in n draws) = sum_g w_g
+(1-q_g)^n in closed form, no lattice), and no hand-written decay (the history conditions the
+distribution). It merges the two things that have worked: reading failures and the count posterior.
+
+**Parameterisations, cheapest first.**
+1. *Spike-and-slab Beta* (recommended start): 3 outputs per route -- logit pi_0 (P(never)), log a,
+   log b -- so p = (1-pi_0) a/(a+b). Exact conjugate update for draws the text did not include,
+   closed-form depth values, tiny parameter count (3 x d per route).
+2. *Histogram over a q grid* (generalises today's posterior-over-k): G bins, softmax; G=11-21.
+   Most flexible, but G x d parameters per route -- with 551 training problems, needs low-rank or
+   PCA features.
+3. *Posterior over k in K draws* (today's head) is the special case with grid j/K; its replay form
+   must be the with-replacement one (3b-lxxvi).
+
+**Training loss = marginal likelihood of the observed draws**, not Brier on a point estimate: for a
+route with s successes and f failures among the draws NOT in the state's history,
+L = log sum_g w_g q_g^s (1-q_g)^f. This rewards tail mass when everything fails, handles unequal
+draw counts (needed for the asymmetric-depth pool), and is the quantity the policy consumes.
+**Calibration**: shrink the predicted histogram toward the pool-level one, coefficient on calibration.
+**Metrics**: report tail quality (log-loss on all-fail episodes, calibration of P(k=0)) alongside
+AUC/Brier -- AUC cannot see the tail, and the policy lives there at tight budgets.
+
+**Build it on the recollected pool** (asymmetric draw depth makes the distribution identifiable and
+depth decisions meaningful), with beliefs trained on the policy's own visited states (THREADS 0a).
+
 ### 3b-lxxxii ▶ RUNNING: can the probe learn the decay itself? (deep-history probe, 2026-09-19)
 
 **Why.** Every belief update we use is hand-written: prompt prior × count decay $\kappa/(\kappa+n)$,

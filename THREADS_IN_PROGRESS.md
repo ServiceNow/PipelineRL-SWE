@@ -31,6 +31,16 @@ wrong in shape and ignores cross-model evidence (§3b-lxxvii); resampling is sel
 is fluke vs never (§3b-lxxviii); the one-step rule's stopping is optimal under its beliefs (§3b-lxxii);
 a 3-rung pool lets "try each tier once" compete (§3b-lxx).
 
+## 0a-bis. THE BELIEF MODEL SHOULD EMIT A DISTRIBUTION (2026-09-21) -- see PAPER_OUTLINE 3b-lxxxiii
+
+Measured: a no-decay deep-history probe is +16.4/+16.7% at 80/84% and -59.8/-18.1% at 50/60%.
+Depth-bucketed calibration does not fix it; depth-0 accuracy is fine. Cause: **no tail** -- 5.2% of
+decay beliefs are below 2%, only 0.2% of the learned head's are, while the give-up test at tight
+budgets fires below ~0.3-2%. Fix: predict a distribution over the per-draw success rate (start:
+spike-and-slab Beta, 3 outputs per route), trained by marginal likelihood of the observed draws,
+shrunk toward the pool prior on calibration. Gives tail resolution, fluke-vs-never, closed-form
+depth values, and removes the decay. Build on the recollected pool with visitation-trained fitting.
+
 ## 0a. THE PLAN: belief models trained on the policy's own visited states (2026-09-21)
 
 **The problem it fixes.** Our belief heads are trained on a distribution of states we chose, not the
