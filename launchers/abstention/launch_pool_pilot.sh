@@ -48,7 +48,7 @@ ROUTES=(
   # (Jaccard 0.90-0.98, zero unique problems), so the pool is a pure difficulty ladder. These test
   # whether different labs contribute problems the ladder misses. Sampling: provider defaults are
   # not published per model, so 0.7/0.95 for all of them, recorded in the rows.
-  "dsv4f|deepseek/deepseek-v4-flash|or|0.7|0.95||6"
+  "dsv4f|deepseek/deepseek-v4-flash|or|0.7|0.95|on|6"
   "glm5|z-ai/glm-5|or|0.7|0.95|"
   "kimi|moonshotai/kimi-k2.5|or|0.7|0.95|"
   "gem3f|google/gemini-3-flash-preview|or|0.7|0.95|"
@@ -63,11 +63,16 @@ for spec in "${ROUTES[@]}"; do
   if [[ -n "${ONLY}" && " ${ONLY} " != *" ${LABEL} "* ]]; then continue; fi
   NDRAW=${NDRAW:-${DRAWS}}
   for DRAW in $(seq ${START_DRAW} $((START_DRAW + NDRAW - 1))); do
+    case "${EFFORT}" in
+      "")  REASON_ARG="" ;;
+      on)  REASON_ARG=" --reasoning-enabled --require-parameters" ;;
+      *)   REASON_ARG=" --reasoning-effort ${EFFORT}" ;;
+    esac
     RUNNER="${BASE}/run_${LABEL}_d${DRAW}.sh"
     COMMON="--source-collection-dir ${SRC} --output-dir ${BASE} --route-label ${LABEL} \
  --model '${MODEL}' --splits train,eval --max-problems ${PER_SPLIT} \
  --temperature ${TEMP} --top-p ${TOPP} --max-tokens ${MAX_TOKENS} --gen-timeout 3600 \
- --max-invalid-frac 0.10 --output-suffix _d${DRAW}${EFFORT:+ --reasoning-effort ${EFFORT}}"
+ --max-invalid-frac 0.10 --output-suffix _d${DRAW}${REASON_ARG}"
     {
       echo '#!/usr/bin/env bash'; echo 'set -euo pipefail'
       echo "cd ${REPO_ROOT}"

@@ -342,6 +342,8 @@ async def openrouter_call(
     top_k: int | None = None,
     min_p: float | None = None,
     reasoning_effort: str | None = None,
+    reasoning_enabled: bool = False,
+    require_parameters: bool = False,
     provider_order: list[str] | None = None,
     ignore_providers: list[str] | None = None,
 ) -> dict:
@@ -371,7 +373,16 @@ async def openrouter_call(
         if reasoning_effort:
             # OpenRouter's unified reasoning control; gpt-oss maps it to low/medium/high.
             p["reasoning"] = {"effort": reasoning_effort}
+        elif reasoning_enabled:
+            # A hybrid model's DEFAULT differs by endpoint, so asking is not optional. Measured
+            # on deepseek-v4-flash: OpenInference and DigitalOcean return no reasoning at all
+            # (~300 output tokens, 63-74% pass@1) while StreamLake and GMICloud think (2-6k
+            # tokens, 95-97%). Same model string, same prompt, 23 points apart on the provider
+            # lottery. With reasoning.enabled the no-think endpoints think: 5/5 live.
+            p["reasoning"] = {"enabled": True}
         prov: dict = {}
+        if require_parameters:
+            prov["require_parameters"] = True
         if provider_order:
             prov["order"] = list(provider_order)
         if ignore:

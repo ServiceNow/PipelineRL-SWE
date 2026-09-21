@@ -95,6 +95,8 @@ async def collect_split(
     top_k: int | None = None,
     min_p: float | None = None,
     reasoning_effort: str | None = None,
+    reasoning_enabled: bool = False,
+    require_parameters: bool = False,
     provider_order: list[str] | None = None,
     ignore_providers: list[str] | None = None,
 ) -> None:
@@ -133,6 +135,8 @@ async def collect_split(
                     top_k=top_k,
                     min_p=min_p,
                     reasoning_effort=reasoning_effort,
+                    reasoning_enabled=reasoning_enabled,
+                    require_parameters=require_parameters,
                     provider_order=provider_order,
                     ignore_providers=ignore_providers,
                 )
@@ -199,6 +203,7 @@ async def collect_split(
                 "_top_k": top_k,
                 "_min_p": min_p,
                 "_reasoning_effort": reasoning_effort,
+                "_reasoning_enabled": reasoning_enabled,
             }
 
         for index, task in enumerate(asyncio.as_completed([process(row) for row in todo]), 1):
@@ -262,6 +267,12 @@ def main() -> None:
                         help="Qwen cards specify 0.0; omitted entirely when not passed")
     parser.add_argument("--reasoning-effort", default="", choices=["", "low", "medium", "high"],
                         help="OpenRouter unified reasoning effort (gpt-oss: low/medium/high)")
+    parser.add_argument("--reasoning-enabled", action="store_true",
+                        help="ask for reasoning without naming an effort -- REQUIRED for hybrid "
+                             "models, whose per-endpoint default is otherwise a coin flip")
+    parser.add_argument("--require-parameters", action="store_true",
+                        help="provider.require_parameters: skip endpoints that cannot honour "
+                             "the sampling/reasoning parameters instead of silently dropping them")
     parser.add_argument("--ignore-providers", default="Parasail,AkashML",
                         help="OpenRouter provider.ignore; defaults to the two endpoints that "
                              "return harmony tool calls instead of an answer")
@@ -395,6 +406,8 @@ def main() -> None:
                 top_k=args.top_k,
                 min_p=args.min_p,
                 reasoning_effort=args.reasoning_effort or None,
+                reasoning_enabled=args.reasoning_enabled,
+                require_parameters=args.require_parameters,
                 provider_order=[x for x in args.provider_order.split(",") if x.strip()] or None,
                 ignore_providers=[x for x in args.ignore_providers.split(",") if x.strip()] or None,
             )

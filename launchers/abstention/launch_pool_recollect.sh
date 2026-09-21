@@ -31,10 +31,13 @@ START_DRAW=${START_DRAW:-0}
 DRAW_SCALE=${DRAW_SCALE:-1}    # 1 = the counts below; use a smaller pool for a smoke test
 
 # label | model | temp | top_p | effort | draws | measured c/draw (pilot) | extra sampling args
+# effort: low/medium/high for gpt-oss; "on" for a HYBRID model, whose reasoning default differs by
+# endpoint -- deepseek-v4-flash answers with no reasoning at all on OpenInference/DigitalOcean
+# (~300 tokens, 63-74%) and with reasoning on StreamLake/GMICloud (2-6k tokens, 95-97%).
 ROUTES=(
   "oss20lo|openai/gpt-oss-20b|1.0|1.0|low|16|0.011|"
   "oss20md|openai/gpt-oss-20b|1.0|1.0|medium|12|0.034|"
-  "dsv4f|deepseek/deepseek-v4-flash|0.7|0.95||8|0.048|"
+  "dsv4f|deepseek/deepseek-v4-flash|0.7|0.95|on|8|0.048|"
   "oss120md|openai/gpt-oss-120b|1.0|1.0|medium|6|0.103|"
   "oss120hi|openai/gpt-oss-120b|1.0|1.0|high|3|0.652|"
   # Optional, not in the default pool: a second lab at the top tier. Adds no unique coverage in
@@ -53,6 +56,11 @@ for spec in "${ROUTES[@]}"; do
   TOTAL=$(/home/toolkit/.conda/envs/pipeline-rl/bin/python3 -c "print(f'{${TOTAL}+${COST}:.2f}')")
   printf '%-10s %-34s %2d draws x %d problems  ~$%s\n' "${LABEL}" "${MODEL}" "${NDRAW}" "${NPROB}" "${COST}"
   for DRAW in $(seq ${START_DRAW} $((START_DRAW + NDRAW - 1))); do
+    case "${EFFORT}" in
+      "")  REASON_ARG="" ;;
+      on)  REASON_ARG=" --reasoning-enabled --require-parameters" ;;
+      *)   REASON_ARG=" --reasoning-effort ${EFFORT}" ;;
+    esac
     RUNNER="${BASE}/run_${LABEL}_d${DRAW}.sh"
     {
       echo '#!/usr/bin/env bash'; echo 'set -euo pipefail'
@@ -65,7 +73,7 @@ for spec in "${ROUTES[@]}"; do
       echo "  --model '${MODEL}' --splits train,eval \\"
       echo "  --temperature ${TEMP} --top-p ${TOPP} ${EXTRA} --max-tokens ${MAX_TOKENS} \\"
       echo "  --gen-timeout 3600 --max-invalid-frac 0.10 --output-suffix _d${DRAW} \\"
-      echo "  --api-key-file ${KEYFILE} --concurrency 8${EFFORT:+ --reasoning-effort ${EFFORT}}"
+      echo "  --api-key-file ${KEYFILE} --concurrency 8${REASON_ARG}"
     } > "${RUNNER}"
     chmod +x "${RUNNER}"
     if [[ "${SUBMIT}" == "1" ]]; then
