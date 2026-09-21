@@ -158,11 +158,6 @@ def main():
         PLATT[m] = (lambda mp: (lambda q, d: mp[min(d, max(mp))].predict_proba(
             _lo(q)[:, None])[:, 1]))(_maps)
         BUCKET[m] = _bucket
-        _lo = lambda q: np.log(np.clip(q, 1e-6, 1 - 1e-6) / (1 - np.clip(q, 1e-6, 1 - 1e-6)))
-        _pl = LogisticRegression(C=1e6, max_iter=2000).fit(
-            _lo(np.r_[raw[cb], raw[cb]])[:, None], np.r_[np.ones(len(cb)), np.zeros(len(cb))],
-            sample_weight=np.r_[R[cb, m], 1 - R[cb, m]])
-        PLATT[m] = (lambda pl: (lambda q: pl.predict_proba(_lo(q)[:, None])[:, 1]))(_pl)
         print(f"  fitted route {s}")
 
     if a.apply_dir:
