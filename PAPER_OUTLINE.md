@@ -1443,6 +1443,45 @@ sets the level (ratios now 0.47–0.85 at $q{=}0.25$ against 1.24–1.94 at $q{=
 this codebase: any downstream affine recalibration will annihilate an upstream level knob. Check
 that variants differ before reading their results.*
 
+### 3b-lxxxvi ⭐⚠ A ROUTE WAS NOT A WELL-DEFINED ARM: the provider lottery (2026-09-21)
+
+**The finding.** On OpenRouter, one model string is many endpoints, and for a *hybrid* model they
+do not agree on whether to think. deepseek-v4-flash, same prompt, same temperature/top_p, same
+model string, split by serving endpoint:
+
+| endpoint | draws | returns reasoning | mean output | pass@1 |
+|---|---|---|---|---|
+| StreamLake | 37 | 100% | 3,272 | 97.3% |
+| GMICloud | 21 | 100% | 2,855 | 95.2% |
+| Alibaba | 12 | 100% | 2,180 | 100.0% |
+| **OpenInference** | **160** | **0%** | **317** | **73.8%** |
+| **DigitalOcean** | **16** | **0%** | **265** | **62.5%** |
+
+**A 23-35 point spread decided by OpenRouter's load balancer.** The "route" whose success
+probability the belief head predicts was, in part, a lottery over endpoints -- so a fraction of what
+looked like problem difficulty was which endpoint answered. No belief model can learn that, and it
+inflates the irreducible noise floor every calibration number in this project is measured against.
+
+**How it surfaced, which is the cautionary part.** It did not show up as an error. Excluding
+Parasail/AkashML for the tool_calls artifact (§3b-lxxxv) shifted load onto OpenInference (20% ->
+54% of draws) and the rung "dropped" 6.7pt -- a plausible-looking regression that would have been
+read as noise, or worse as evidence against the fix, had the per-provider breakdown not been run.
+**The same check caught both bugs in one pass.**
+
+**Fix** (f222444): `reasoning: {"enabled": true}` for hybrid models -- not optional, since the
+default is per-endpoint -- plus `provider.require_parameters` so endpoints that cannot honour our
+parameters are skipped rather than silently dropping them. Live: 5/5 no-think endpoints think with
+it. A launcher route now carries effort `on` for this. gpt-oss rungs were never affected because
+they always pass an explicit effort.
+
+**Standing rule, promoted from §3b-lxxxv.** Before any rung is compared to any other, run the
+per-provider breakdown of `finish_reason`, mean output tokens, reasoning presence and pass@1. Three
+artifacts in this project have now been mistaken for model behaviour, and a fourth was within one
+plausible-looking regression of being mistaken for noise. **And every pooled pass@1 must be
+split-matched:** the unmatched "78.5% -> 92.8%" for gpt-oss-20b-high was mostly LCB's eval split
+being 13 points harder than train; matched, it is 85.0% -> 92.1% (+-9.0 at n~90, i.e. not yet
+resolvable).
+
 ### 3b-lxxxv ⚠ METHODS: a serving artifact, not a model, cost gpt-oss-20b twelve points (2026-09-21)
 
 **Symptom.** In the pool pilot gpt-oss-20b at high reasoning effort measured **78.5%** pass@1
