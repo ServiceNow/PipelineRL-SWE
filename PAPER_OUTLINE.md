@@ -1443,6 +1443,41 @@ sets the level (ratios now 0.47–0.85 at $q{=}0.25$ against 1.24–1.94 at $q{=
 this codebase: any downstream affine recalibration will annihilate an upstream level knob. Check
 that variants differ before reading their results.*
 
+### 3b-lxxxix ⭐⭐ THE CAP WAS THE ARTIFACT: the open ladder's top rungs were never dominated
+
+**Measured** (pilot eval split, 100 problems, after raising max_tokens from 65,536 to 110,000):
+
+| rung | cap | eval pass@1 | truncated | c/draw |
+|---|---|---|---|---|
+| gpt-oss-20b high | 65,536 | 76.0% | 12.0% | 0.331 |
+| gpt-oss-20b high | **110,000** | **86.5%** | 3.8% | 0.375 |
+| gpt-oss-120b high | 65,536 | 83.0% | 5.0% | 0.959 |
+| gpt-oss-120b high | **110,000** | **91.7%** | 0.0% | **0.761** |
+
+gpt-oss-120b-high gains **8.7 points and gets cheaper** -- cheaper because a truncated draw burned
+the whole 65k budget and still scored zero. Our own cap, not the model, was what put both rungs
+below the frontier.
+
+**Updated eval frontier** (post-fix draws throughout):
+`oss20lo (55%, 0.014c) -> oss120lo (74%, 0.062c) -> dsv4f (85%, 0.129c) -> oss20hi (87%, 0.375c)
+-> oss120hi (92%, 0.761c) -> opus5 (92%, 9.724c)`.
+
+**Six rungs; the open ladder alone spans 54x; and claude-opus-5 is redundant** -- 92.0% against
+gpt-oss-120b-high's 91.7% at **13x the price**, a difference well inside the noise at n=96/100. So
+3b-lxxxiv's conclusion stands after all, and 3b-lxxxvi's reversal of it is **withdrawn**: DeepSeek
+did not knock the top rung off the frontier, the token cap did.
+
+**DeepSeek's real post-fix eval number is 85.3% at 0.129c (n=204)**, not the 88.1% the thinking
+subset previewed -- the third time tonight a small-n preview read high.
+
+**The pattern worth keeping.** Three artifacts in one evening -- harmony tool calls (3b-lxxxv), the
+provider reasoning lottery (3b-lxxxvi), and this cap -- and **all three pushed the same way**: they
+made the rungs that think longest look worse than they are. A pool comparison is biased toward
+short-thinking rungs by default, because every collection-side failure mode (format leaks, disabled
+reasoning, token ceilings) lands on the long-generation tail. Any future pool must report
+truncation rate, tool-call rate and reasoning presence per rung ALONGSIDE pass@1, or its ladder is
+an artifact of its own plumbing.
+
 ### 3b-lxxxviii ⭐ SWITCHING BEATS RESAMPLING: draws within a model share failure modes (2026-09-21)
 
 **Measured** on the pilot, 100 problems with >=2 draws in every rung. Success on the NEXT draw,
@@ -1553,6 +1588,10 @@ settle it** -- the recollection's 16/12/8/6/3 draws is what would, and that is n
 argument for doing it.
 
 ### 3b-lxxxvi ⭐⚠ A ROUTE WAS NOT A WELL-DEFINED ARM: the provider lottery (2026-09-21)
+
+*(Its pool-composition conclusion -- that DeepSeek dominates gpt-oss-120b-high and a frontier rung
+is therefore needed -- is WITHDRAWN by 3b-lxxxix: the token cap was doing that. The provider
+lottery finding itself stands.)*
 
 **The finding.** On OpenRouter, one model string is many endpoints, and for a *hybrid* model they
 do not agree on whether to think. deepseek-v4-flash, same prompt, same temperature/top_p, same
