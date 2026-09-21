@@ -1443,6 +1443,56 @@ sets the level (ratios now 0.47–0.85 at $q{=}0.25$ against 1.24–1.94 at $q{=
 this codebase: any downstream affine recalibration will annihilate an upstream level knob. Check
 that variants differ before reading their results.*
 
+### 3b-lxxxviii ⭐ SWITCHING BEATS RESAMPLING: draws within a model share failure modes (2026-09-21)
+
+**Measured** on the pilot, 100 problems with >=2 draws in every rung. Success on the NEXT draw,
+given one failure (diagonal = redraw the same rung; off-diagonal = switch):
+
+| after a failure of | redraw oss20lo | oss20md | oss120md | oss120hi | dsv4f |
+|---|---|---|---|---|---|
+| oss20lo | **19.4%** | 51.6% | 61.3% | 71.0% | 48.4% |
+| oss20md | 21.1% | **47.4%** | 36.8% | 63.2% | 47.4% |
+| oss120md | 25.0% | 25.0% | **31.2%** | 56.2% | 37.5% |
+| dsv4f | 11.1% | 44.4% | 44.4% | 61.1% | **55.6%** |
+| *(unconditional)* | 69.0% | 81.0% | 84.0% | 88.0% | 82.0% |
+
+A failure is bad news from every rung -- they all fall -- but **redrawing the rung that just failed
+falls much further than switching**. gpt-oss-120b medium drops 53pt when redrawn after its own
+failure (84% -> 31.2%) and 32pt when the next draw goes to 120b-high instead (88% -> 56.2%).
+Within-model draws share failure modes; across-model draws share only the problem's difficulty.
+*n per cell is 19-35 (it conditions on a first-draw failure), so the pattern is strong and the
+individual cells are not.*
+
+**Three consequences.**
+
+1. **This partially reopens "whether vs which" (3b-lvii).** That result -- the value is in deciding
+   whether to continue, not which model to call -- was measured on the old three-rung pool at a 7x
+   price spread and T=0.2, where switching was barely an option and redraws were near-copies.
+   Conditional on a failure, which is the only state in which the policy decides anything, the next
+   model swings success by 20-50 points. The crossing experiment must be rerun on the new pool
+   before the claim is repeated in the paper.
+2. **A rung can earn its place by DECORRELATING rather than by sitting on the frontier.**
+   gpt-oss-120b-high and gpt-oss-20b-high are both dominated on single-draw cost/accuracy
+   (3b-lxxxvi) yet are the best thing to call after another rung has failed. Pool membership should
+   therefore be argued on the conditional table, not on the Pareto frontier -- which also means the
+   nested-pool result (3b-lxxx: zero unique problems across seven labs) does **not** imply extra
+   models are useless. The union is nested; the ORDER is not.
+3. **Breadth may beat depth**, against the current plan's 16 draws of the cheapest rung.
+
+**And more draws do sharpen q, with diminishing returns** (gpt-oss-20b medium, 14 draws; "looks
+certain" = every planning draw succeeded):
+
+| planning draws | % looking certain | their true held-out rate | over-estimate |
+|---|---|---|---|
+| 1 | 80.4% | 91.1% | 8.9pt |
+| 2 | 73.3% | 93.3% | 6.7pt |
+| 4 | 64.2% | 95.0% | 5.0pt |
+| 8 | 53.4% | 96.4% | 3.6pt |
+| 10 | 49.9% | 96.7% | 3.3pt |
+
+2 -> 8 draws roughly halves the over-estimate that makes the policy under-draw (3b-lxxxvii). It
+never reaches zero, because part of that spread is aleatoric.
+
 ### 3b-lxxxvii ⭐ HOW MUCH IS "MANY CHEAP DRAWS vs ONE EXPENSIVE DRAW" ACTUALLY WORTH? (2026-09-21)
 
 **The measurement** (`measure_allocation_gain.py`). A plan is a vector k of draws per rung; value =

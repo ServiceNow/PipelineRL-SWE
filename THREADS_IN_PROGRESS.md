@@ -8,25 +8,32 @@ Replay outputs live under `/mnt/llmd/results/exps/aristides/reason/gridmatch/<ru
 
 ---
 
-## -1. RUNNING RIGHT NOW (2026-09-21 21:55 UTC)
+## -1. RUNNING RIGHT NOW (2026-09-21 19:35 ET)
 
-**The full recollection is ON HOLD** (user's call) until the top of the ladder is settled. Nothing
-is lost by waiting: the launcher is written and the collection is resumable and incremental.
+Full recollection still ON HOLD. Two things land tonight, and both change the rung table.
 
-| thread | where | state | decides |
+| thread | state | ETA (ET) | decides |
 |---|---|---|---|
-| **pilot top-ups under the fixes** | `pool_pilot_lcb/`, draws d10+ | 16 jobs: oss20hi x2, oss120hi x2, oss20md x6, dsv4f x6 (~$1.30) | **The open question: does gpt-oss-20b high recover from 78.5% toward its 90.3% clean-draw rate once Parasail/AkashML are excluded?** If it lands near 88% at 0.28c it beats gpt-oss-120b high (87.5% at 0.652c) and the top rung changes. Also: DeepSeek's depth curve (only 2 draws so far, still climbing +10pt) and a 3rd 120b-high draw. |
-| **depth pilot tail** | same dir | `oss20lo_d4` stalled on one straggler request since 21:16 (dies at the 3600s gen-timeout ~22:13); `oss20md_d6` finishing its eval split | Nothing downstream; both are top-up draws. |
+| `oss20hi` / `oss120hi` @ the 110k cap | 4 jobs | ~19:45 | Whether either rung was only dominated because the 65,536 cap truncated 12.2% / 4.1% of its eval draws |
+| `dsv4f` d10-d15 eval, reasoning ON | 6 jobs, train done | ~20:15-20:45 | **The decisive one.** If DeepSeek holds ~88% on eval at ~0.1c it dominates gpt-oss-120b-high (83.8% at 0.929c) and the $16 line item goes |
 
-### What the top-ups settle, and what happens either way
-* **20b-high >= ~88%:** it joins or replaces gpt-oss-120b high as the top rung, and the $17.45
-  line item (55% of the recollection budget) gets much cheaper -- 0.28c vs 0.652c per draw. Re-run
-  the rescue analysis on the hard set first: 20b-high was 4/15 there, but 7 of its 11 misses were
-  tool_calls or truncation, so that number is uninformative as collected.
-* **20b-high still ~80%:** launch the recollection as configured, 120b-high at 3 draws.
-* Either way the **per-provider finish_reason check (PAPER_OUTLINE 3b-lxxxv) runs on the top-ups
-  before any rung is compared to another.** This is the third serving artifact mistaken for a
-  capability difference in this project, all on gpt-oss.
+### The pool table is likely to change shape, not just entries
+Tonight's measurements (PAPER_OUTLINE 3b-lxxxvi/lxxxvii/lxxxviii) point away from the current
+"16 draws of the cheapest rung" plan:
+* **Switching beats resampling** by 20-50pt conditional on a failure, so a rung can earn its place
+  by decorrelating even when it is dominated on the single-draw frontier. Breadth over depth.
+* **Per-problem allocation wins at every budget when compared at equal SPEND** (+8.3pt at R=1c to
+  +2.1pt at 30c) -- and needs only a **9x** price spread, not the 698x a frontier rung would buy.
+* **More draws sharpen q** but with diminishing returns: 2 -> 8 halves the over-estimate, 8 -> 10
+  barely moves it. So depth past ~8 on any one rung is hard to justify.
+* LCB ships difficulty labels (892/892 matched; 265 easy / 312 medium / 315 hard) and 30% of the
+  pool is easy problems where 93.8% of draws succeed and nothing is decided. Collecting fewer draws
+  on the easy third is the cheapest way to buy information per dollar -- but note the hard subset
+  did NOT show more headroom, and that measurement is noise-limited at 2-3 draws.
+
+**Do not rewrite the rung table until the DeepSeek eval lands.** Then: recompute the conditional
+switching table on post-fix draws, rerun the whether-vs-which crossing, and only then set draws
+per rung.
 
 ## 0. THE PLAN (2026-09-21, supersedes everything below): recollect, then compare belief models
 
