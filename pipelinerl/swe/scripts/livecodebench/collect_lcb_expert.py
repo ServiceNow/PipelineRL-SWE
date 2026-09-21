@@ -96,6 +96,7 @@ async def collect_split(
     min_p: float | None = None,
     reasoning_effort: str | None = None,
     provider_order: list[str] | None = None,
+    ignore_providers: list[str] | None = None,
 ) -> None:
     latest = _read_latest(output_path)
     done = {pid: row for pid, row in latest.items() if _is_complete(row, dataset_revision)}
@@ -133,6 +134,7 @@ async def collect_split(
                     min_p=min_p,
                     reasoning_effort=reasoning_effort,
                     provider_order=provider_order,
+                    ignore_providers=ignore_providers,
                 )
                 code = extract_code(out["full_output"])
                 async with eval_sem:
@@ -260,6 +262,9 @@ def main() -> None:
                         help="Qwen cards specify 0.0; omitted entirely when not passed")
     parser.add_argument("--reasoning-effort", default="", choices=["", "low", "medium", "high"],
                         help="OpenRouter unified reasoning effort (gpt-oss: low/medium/high)")
+    parser.add_argument("--ignore-providers", default="Parasail,AkashML",
+                        help="OpenRouter provider.ignore; defaults to the two endpoints that "
+                             "return harmony tool calls instead of an answer")
     parser.add_argument("--provider-order", default="",
                         help="comma-separated OpenRouter providers to try first (pins serving)")
     parser.add_argument("--temperature", type=float, default=0.0)
@@ -391,6 +396,7 @@ def main() -> None:
                 min_p=args.min_p,
                 reasoning_effort=args.reasoning_effort or None,
                 provider_order=[x for x in args.provider_order.split(",") if x.strip()] or None,
+                ignore_providers=[x for x in args.ignore_providers.split(",") if x.strip()] or None,
             )
         )
         validate_split(

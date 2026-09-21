@@ -343,6 +343,7 @@ async def openrouter_call(
     min_p: float | None = None,
     reasoning_effort: str | None = None,
     provider_order: list[str] | None = None,
+    ignore_providers: list[str] | None = None,
 ) -> dict:
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -447,7 +448,12 @@ async def openrouter_call(
         the provider that produced it from the next one.
         """
         out = None
-        ignore: list[str] = []
+        # Seeded, not empty: the harmony tool-call leak is a SERVING bug, reproducible 3/3 when
+        # pinned to Parasail and not fixed by tool_choice="none" nor by telling the model it has
+        # no tools. In the pool pilot every one of the 31 tool_calls draws came from Parasail
+        # (4.3%) or AkashML (3.5%), and every other provider was at exactly 0.0%. So the cure is
+        # to not ask those endpoints; the retry below stays as the backstop for anything new.
+        ignore: list[str] = list(ignore_providers or [])
         for attempt in range(1 + max(0, empty_retries)):
             out = await _call(ignore)
             # A tool_calls finish is the same artifact even when `content` is NOT empty: the
