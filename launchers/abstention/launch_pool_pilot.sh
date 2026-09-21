@@ -27,36 +27,42 @@ KEYFILE=${KEYFILE:-/home/toolkit/.secrets/openrouter_api_key}
 SRC=${SRC:-$R/lcb_corrected_temporal_qwen_qwen3_4b_instruct_2507_1787205448}
 BASE=${BASE:-$R/pool_pilot_lcb_$(date +%s)}
 ONLY=${ONLY:-}          # optional space-separated route labels to (re)submit
+START_DRAW=${START_DRAW:-0}   # resume numbering: draws START_DRAW .. START_DRAW+draws-1
 
-# label | model | where | temperature | top_p | reasoning effort
+# label | model | where | temperature | top_p | reasoning effort | draws (default ${DRAWS})
+# Depth is only expensive on the top rung, so it is asymmetric: deep where draws are cheap.
+# Market prices per draw over these 100 problems: oss20 ~0.01-0.05c, DeepSeek 0.05c,
+# gpt-oss-120b 0.12-0.65c, Sonnet ~1c, Opus 6c.
 ROUTES=(
   "scout4i|Qwen/Qwen3-4B-Instruct-2507|local|0.7|0.8|"
   "scout4t|Qwen/Qwen3-4B-Thinking-2507|local|0.6|0.95|"
-  "oss20lo|openai/gpt-oss-20b|or|1.0|1.0|low"
-  "oss20md|openai/gpt-oss-20b|or|1.0|1.0|medium"
+  "oss20lo|openai/gpt-oss-20b|or|1.0|1.0|low|6"
+  "oss20md|openai/gpt-oss-20b|or|1.0|1.0|medium|6"
   "oss20hi|openai/gpt-oss-20b|or|1.0|1.0|high"
   "q30t|qwen/qwen3-30b-a3b-thinking-2507|or|0.6|0.95|"
   "oss120lo|openai/gpt-oss-120b|or|1.0|1.0|low"
-  "oss120md|openai/gpt-oss-120b|or|1.0|1.0|medium"
-  "oss120hi|openai/gpt-oss-120b|or|1.0|1.0|high"
+  "oss120md|openai/gpt-oss-120b|or|1.0|1.0|medium|4"
+  "oss120hi|openai/gpt-oss-120b|or|1.0|1.0|high|2"
   "q235t|qwen/qwen3-235b-a22b-thinking-2507|or|0.6|0.95|"
   # Cross-lab candidates: the first pilot showed the Qwen/gpt-oss rungs are nearly NESTED
   # (Jaccard 0.90-0.98, zero unique problems), so the pool is a pure difficulty ladder. These test
   # whether different labs contribute problems the ladder misses. Sampling: provider defaults are
   # not published per model, so 0.7/0.95 for all of them, recorded in the rows.
-  "dsv4f|deepseek/deepseek-v4-flash|or|0.7|0.95|"
+  "dsv4f|deepseek/deepseek-v4-flash|or|0.7|0.95||6"
   "glm5|z-ai/glm-5|or|0.7|0.95|"
   "kimi|moonshotai/kimi-k2.5|or|0.7|0.95|"
   "gem3f|google/gemini-3-flash-preview|or|0.7|0.95|"
-  "opus5|anthropic/claude-opus-5|or|0.7|0.95|"
+  "opus5|anthropic/claude-opus-5|or|0.7|0.95||4"
+  "sonnet5|anthropic/claude-sonnet-5|or|0.7|0.95||4"
 )
 mkdir -p "${BASE}"
 echo "EMPTY" > "${BASE}/local_key"          # vLLM ignores it; never send the real key to localhost
 
 for spec in "${ROUTES[@]}"; do
-  IFS='|' read -r LABEL MODEL WHERE TEMP TOPP EFFORT <<< "${spec}"
+  IFS='|' read -r LABEL MODEL WHERE TEMP TOPP EFFORT NDRAW <<< "${spec}"
   if [[ -n "${ONLY}" && " ${ONLY} " != *" ${LABEL} "* ]]; then continue; fi
-  for DRAW in $(seq 0 $((DRAWS-1))); do
+  NDRAW=${NDRAW:-${DRAWS}}
+  for DRAW in $(seq ${START_DRAW} $((START_DRAW + NDRAW - 1))); do
     RUNNER="${BASE}/run_${LABEL}_d${DRAW}.sh"
     COMMON="--source-collection-dir ${SRC} --output-dir ${BASE} --route-label ${LABEL} \
  --model '${MODEL}' --splits train,eval --max-problems ${PER_SPLIT} \
