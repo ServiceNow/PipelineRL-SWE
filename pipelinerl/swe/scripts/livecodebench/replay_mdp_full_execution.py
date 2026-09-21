@@ -548,10 +548,13 @@ def replay_adaptive(
             return "banked", draw
         failures[mi] += 1
         last_fail[0] = (mi, int(draw))
-        if hist_mode in ("B", "D") and hist_entry is not None:
+        if hist_mode in ("B", "D", "N") and hist_entry is not None:
             # Reading the failure is a second scout prefill (problem + attempt). Charged in full,
             # with no credit for prefix caching, so the history arms never get information free.
-            _e = hist_entry.get(f"{slots[mi]}:{int(draw)}")
+            _e = hist_entry.get(
+                f"{'-'.join(str(int(x)) for x in failures)}|{slots[mi]}:{int(draw)}")
+            if _e is None:
+                _e = hist_entry.get(f"{slots[mi]}:{int(draw)}")
             if _e is not None:
                 realized_spend += float(_e[1])
         attempts.append(records[(problem_id, slots[mi], draw)])
@@ -729,13 +732,26 @@ def replay_adaptive(
                 # count-decayed prompt belief recalibrated on the failure COUNT of every route
                 # (knows which routes failed, never what they produced). D: C plus B's reading.
                 _lf = last_fail[0]
-                _pb = None
+                _pb, _deep = None, False
                 if _lf is not None:
-                    _e = hist_entry.get(f"{slots[_lf[0]]}:{_lf[1]}")
+                    # DEEP state first: the belief was read from a prefill of this exact state
+                    # (counts + the attempt that failed last), so no decay is needed on top.
+                    _key = (f"{'-'.join(str(int(x)) for x in failures)}"
+                            f"|{slots[_lf[0]]}:{_lf[1]}")
+                    _e = hist_entry.get(_key)
+                    _deep = _e is not None
+                    if _e is None:
+                        _e = hist_entry.get(f"{slots[_lf[0]]}:{_lf[1]}")
                     _pb = None if _e is None else np.asarray(_e[0], dtype=float)
                 if _pb is None:
                     _pb = np.asarray(hist_entry[""][0], dtype=float)
-                if hist_mode == "B":
+                if hist_mode == "N":
+                    # The whole trajectory is in the text the probe read: no decay at all.
+                    p_each = _pb.copy()
+                    if not _deep and _lf is not None:
+                        _extra = failures.astype(float).copy(); _extra[_lf[0]] -= 1.0
+                        p_each = p_each * decay_s / (decay_s + _extra)
+                elif hist_mode == "B":
                     _extra = failures.astype(float).copy()
                     if _lf is not None:
                         _extra[_lf[0]] -= 1.0
@@ -1719,6 +1735,15 @@ def main() -> None:
             _pid, _, _h = str(_row["example_id"]).partition("||")
             if "+" in _h:
                 continue
+            if _h.startswith("S") and "|" in _h:
+                # deep state: counts vector + the draw that failed last
+                _cnt, _, _last = _h[1:].partition("|")
+                _m = _slot_re.match(_last)
+                if _m is None:
+                    continue
+                hist_table.setdefault(_pid, {})[f"{_cnt}|{_m.group(1)}:{int(_m.group(2))}"] = (
+                    np.asarray(_row["p"], dtype=float), float(_row.get("prefill_usd", 0.0)))
+                continue
             if _h:
                 _m = _slot_re.match(_h)
                 if _m is None:
@@ -1912,11 +1937,12 @@ def main() -> None:
         + (["counts_qcost"] if cost_preds else [])
         + (["content_qcost", "content_decay_qcost"] if (content and cost_preds) else [])
         + (scorer_families if scorer else [])
-        + ((["content_histB"] + (["content_histC", "content_histD"] if hist_recal else []))
+        + ((["content_histB", "content_histN"]
+            + (["content_histC", "content_histD"] if hist_recal else []))
            if (content and hist_table) else [])
         # Same history beliefs with the per-query cost head: the full method with failures read.
-        + ((["content_histB_qcost"] + (["content_histC_qcost", "content_histD_qcost"]
-                                       if hist_recal else []))
+        + ((["content_histB_qcost", "content_histN_qcost"]
+            + (["content_histC_qcost", "content_histD_qcost"] if hist_recal else []))
            if (content and hist_table and cost_preds) else [])
     )
     if args.oracle_stopping_family and args.oracle_stopping_family not in families:

@@ -57,6 +57,12 @@ def main():
         "write replay inputs: content_preds_A.jsonl (prompt-only probe, Platt), history_preds.jsonl "
         "(B on prompt-only and single-failure examples, with the re-prefill's cost) and "
         "history_recal.json (C and D coefficients)"))
+    ap.add_argument("--apply-dir", default="", help=(
+        "apply the fitted B heads to a second activation set (e.g. every reachable replay state "
+        "from build_deep_state_prompts.py) and write its history_preds.jsonl into --export-dir"))
+    ap.add_argument("--apply-variant", default="state")
+    ap.add_argument("--apply-act-tag", default="statejudge")
+    ap.add_argument("--apply-shards", type=int, default=12)
     ap.add_argument("--scout-usd-per-token", type=float, default=0.278e-6)
     ap.add_argument("--chars-per-token", type=float, default=3.2)
     a = ap.parse_args()
@@ -103,6 +109,7 @@ def main():
     Xs = sc.transform(X).astype(np.float32)
     C = a.C / max(1, X.shape[1] // 2560)
     PA = np.zeros((N, M)); PB = np.zeros((N, M)); THETA = np.zeros((N, M))
+    HEAD: dict[int, object] = {}; PLATT: dict[int, object] = {}
     row_of_prompt = {pid[i]: i for i in range(N) if is0[i]}
     for m, s in enumerate(slots):
         # A: prompt-only probe, per problem, then the count update
@@ -123,7 +130,37 @@ def main():
         cb = np.where((sp == "cal") & np.isfinite(R[:, m]))[0]
         PB[:, m] = platt(np.r_[raw[cb], raw[cb]], np.r_[np.ones(len(cb)), np.zeros(len(cb))],
                          np.r_[R[cb, m], 1 - R[cb, m]], raw)
+        HEAD[m] = B
+        _lo = lambda q: np.log(np.clip(q, 1e-6, 1 - 1e-6) / (1 - np.clip(q, 1e-6, 1 - 1e-6)))
+        _pl = LogisticRegression(C=1e6, max_iter=2000).fit(
+            _lo(np.r_[raw[cb], raw[cb]])[:, None], np.r_[np.ones(len(cb)), np.zeros(len(cb))],
+            sample_weight=np.r_[R[cb, m], 1 - R[cb, m]])
+        PLATT[m] = (lambda pl: (lambda q: pl.predict_proba(_lo(q)[:, None])[:, 1]))(_pl)
         print(f"  fitted route {s}")
+
+    if a.apply_dir:
+        # Same scaler, same fitted B heads, same Platt maps: only the inputs change.
+        AD = Path(a.apply_dir)
+        aids, afe = [], []
+        for i in range(a.apply_shards):
+            z = np.load(AD / f"act_{a.apply_act_tag}_shard{i}.npz", allow_pickle=True)
+            aids += [str(x) for x in z["problem_ids"]]
+            afe.append(np.concatenate([z[k].reshape(len(z[k]), -1)
+                                       for k in a.readouts.split(",")], axis=1))
+        AX = sc.transform(np.concatenate(afe).astype(np.float32)).astype(np.float32); del afe
+        APB = np.column_stack([PLATT[m](HEAD[m].predict_proba(AX)[:, 1]) for m in range(M)])
+        plen = {}
+        for i in range(a.apply_shards):
+            for l in open(AD / f"{a.apply_variant}_shard{i}.jsonl"):
+                if l.strip():
+                    r_ = json.loads(l); plen[r_["problem_id"]] = len(r_["prompt"])
+        E = Path(a.export_dir or a.apply_dir); E.mkdir(parents=True, exist_ok=True)
+        with open(E / "history_preds.jsonl", "w") as f:
+            for i, eid in enumerate(aids):
+                f.write(json.dumps({"example_id": eid, "p": [float(x) for x in APB[i]],
+                                    "prefill_usd": plen[eid] / a.chars_per_token
+                                    * a.scout_usd_per_token}) + "\n")
+        print(f"applied to {len(aids)} states -> {E / 'history_preds.jsonl'}")
 
     lg = lambda p: np.log(np.clip(p, 1e-6, 1 - 1e-6) / (1 - np.clip(p, 1e-6, 1 - 1e-6)))
     PC = np.zeros((N, M)); PD = np.zeros((N, M))
