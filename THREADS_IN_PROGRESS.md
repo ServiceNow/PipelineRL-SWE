@@ -31,17 +31,54 @@ wrong in shape and ignores cross-model evidence (§3b-lxxvii); resampling is sel
 is fluke vs never (§3b-lxxviii); the one-step rule's stopping is optimal under its beliefs (§3b-lxxii);
 a 3-rung pool lets "try each tier once" compete (§3b-lxx).
 
+## 0a. THE PLAN: belief models trained on the policy's own visited states (2026-09-21)
+
+**The problem it fixes.** Our belief heads are trained on a distribution of states we chose, not the
+one the policy visits. The deep-history probe was fitted on ~12 histories per problem sampled
+uniformly over depths 1-6; a tight-budget policy almost never passes depth 1, a loose-budget one
+lives deep. One pooled calibration therefore splits the difference: measured on LCB seed 0, the
+no-decay deep reader is **+18.8 / +12.8% at the 80 / 84% targets and -56.5 / -18.1% at 50 / 60%**
+against today's beliefs. Per-depth calibration is a patch for this; training on the policy's own
+visitation is the principled version (standard covariate-shift / DAgger-style correction), and it
+subsumes the patch.
+
+**The key timing fact: R does NOT enter at extraction time.** A state's prefill depends only on its
+text (problem + trajectory summary + the attempt that failed last), so one extraction of the
+reachable lattice serves every price R. Only the linear heads depend on R, and only through WHICH
+states get visited -- and they fit in seconds. So per-R (or per-budget-regime) beliefs are cheap,
+and an operator can refit for their own budget in seconds.
+
+**Loop, per pool:**
+1. Extract the reachable state lattice once (build_deep_state_prompts.py; 30.7k states for LCB test,
+   seed 0 x 1 ordering; train/cal states as well for fitting).
+2. Start from today's belief (prompt probe + decay).
+3. For each R on a coarse grid spanning the frontier: replay on TRAIN problems, record visited
+   states, refit the head and its calibration on that visitation (CAL visitation for calibration),
+   iterate 1-2 times.
+4. Evaluate on test ONCE per R; the frontier is the hull over R.
+
+**Rules.** Visitation for fitting comes from train/cal problems only -- never test. Report the
+matched one-sweep (linked-cap) version. Keep a structural prior as a fallback: at tight budgets the
+rule needs probabilities in the 0.3-2% range, where a learned head is weakest and the decay (or the
+success-count posterior) behaves sensibly; prior + learned correction may beat either alone.
+
+**Do this on the RECOLLECTED pool, not this one** (see 0b): at T=0.2 draws are near-copies, so depth
+and resampling decisions are being tuned in a regime that will not exist at recommended temperatures.
+
+**Also queued for the new pool:** a proper sentence-embedding baseline (the IRT / ZeroRouter line
+uses embeddings; our only text baseline today is TF-IDF).
+
 ## 0b. Next, in order (nothing launched)
 
-1. **Deep-history screen** (extraction done) → if the no-decay probe matches/beats decay at depth, build
-   the replay lattice for test problems (~15–20k prefills, sharded eai job) and run it against D.
-2. **Linked-cap version of failure-reading** (fair one-sweep headline), LCB + TACO, all seeds.
-3. **Recollection**: 6-rung pool from the pilot (scout-Instruct, gpt-oss-20b low, Qwen3-4B-Thinking,
+1. **RECOLLECTION FIRST** (was 3): everything below is better measured on the new pool.: 6-rung pool from the pilot (scout-Instruct, gpt-oss-20b low, Qwen3-4B-Thinking,
    gpt-oss-20b medium, gpt-oss-120b medium, gpt-oss-120b high) at recommended temperatures, multi-draw,
    on **LiveCodeBench + BigCodeBench (+ CodeContests replacing TACO)**. Needs: BigCodeBench grader
    (`bigcodebench` 0.2.5 on PyPI; validate every reference solution first), CodeContests conversion.
-   Then re-extract prompt + history activations on the new pool.
-4. **Rolling-origin LCB evaluation** to lift the 171-problem test set (~3×).
+   Then re-extract prompt + history activations on the new pool, and run the visitation-trained
+   belief loop of §0a there. Collect ASYMMETRIC draw depth (~16 on the cheap rungs, ~8 middle, 4 on
+   the 120B) so per-problem depth can matter -- the one thing a fixed plan cannot do.
+2. **Linked-cap (one-sweep) headline** for whichever belief model wins on the new pool.
+3. **Rolling-origin LCB evaluation** to lift the 171-problem test set (~3×).
 5. **Paper**: refresh numbers (fixedacct2 / linked / failure-reading), decide title (recommend back to
    "Whether, Not Which" or "Pick Your Fights, Not Your Knights"), add trajectory + Zero Router figures,
    the decay diagnosis, whether × which. Not compiled locally (no TeX on the box).
