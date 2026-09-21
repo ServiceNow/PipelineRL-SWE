@@ -1443,6 +1443,44 @@ sets the level (ratios now 0.47–0.85 at $q{=}0.25$ against 1.24–1.94 at $q{=
 this codebase: any downstream affine recalibration will annihilate an upstream level knob. Check
 that variants differ before reading their results.*
 
+### 3b-lxxxvii ⭐ HOW MUCH IS "MANY CHEAP DRAWS vs ONE EXPENSIVE DRAW" ACTUALLY WORTH? (2026-09-21)
+
+**The measurement** (`measure_allocation_gain.py`). A plan is a vector k of draws per rung; value =
+P(solve) - sum k_m c_m / R. Three policies over the SAME action space: the best FIXED k for
+everyone (a stronger Zero Router than a cascade), per-problem DEPTH (scale the fixed mix), and FULL
+per-problem choice of rung and depth. Planning uses half of each rung's draws and evaluation the
+other half, so the oracle cannot exploit noise in its own q estimates.
+
+| R (value of a correct answer) | best fixed plan | fixed | per-problem | gain |
+|---|---|---|---|---|
+| 1c | {oss20lo: 2, dsv4f: 1} | 0.781 | 0.859 | **+9.9%** |
+| 3c | {oss20lo: 4, dsv4f: 1} | 0.864 | 0.891 | +3.1% |
+| 10c | {dsv4f: 1, oss120md: 1} | 0.913 | 0.904 | **-1.0%** |
+
+**The prize lives at tight budgets and nowhere else.** At R=1c only 2-3 draws are affordable, so
+which ones is decisive; by R=10c a fixed plan can afford to draw everything and per-problem
+allocation is not merely worthless but slightly harmful, because q estimated from 2-3 draws is
+noisy enough that choosing on it loses to a good fixed plan. The naive version (plan and evaluate
+on the same draws) reports +14% at R=1c against the honest +9.9% -- **a third of the apparent gain
+is the oracle reading its own noise, which is the trap the real policy evaluation must avoid.**
+
+**The decision does NOT need a wide price spread.** Every best fixed plan uses oss20lo (0.011c) and
+dsv4f (0.098c) -- a **9x** spread -- and gpt-oss-120b-high (0.607c) appears in none of them. So the
+698x frontier is not what makes the decision valuable; a 9x spread already supports a +10% gain.
+This weakens the case for buying a frontier rung to manufacture a ratio (cf. 3b-lxxxiv, 3b-lxxxvi).
+
+**Difficulty labels** (LCB ships easy/medium/hard; 892/892 of the pool matched; 265 easy / 312
+medium / 315 hard). On gpt-oss-20b medium at 8 draws: easy q=0.965 with **3.1% of problems in the
+"sometimes" band**, medium q=0.831 / 45.2%, hard q=0.645 / 64.9%. So 30% of the pool is easy
+problems on which 93.8% of the time every draw succeeds and there is nothing to decide.
+
+**But filtering to hard problems did not raise the gain** (+5.1% at R=1c against +9.9% for all
+difficulties), which contradicts the "the pool is too easy" hypothesis I proposed before measuring.
+The likely reason is that the measurement is noise-limited: q from 2-3 draws is noisiest exactly
+where q is low, so the hard subset is penalised most by the held-out design. **This pilot cannot
+settle it** -- the recollection's 16/12/8/6/3 draws is what would, and that is now the main
+argument for doing it.
+
 ### 3b-lxxxvi ⭐⚠ A ROUTE WAS NOT A WELL-DEFINED ARM: the provider lottery (2026-09-21)
 
 **The finding.** On OpenRouter, one model string is many endpoints, and for a *hybrid* model they
