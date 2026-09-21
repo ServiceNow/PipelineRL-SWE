@@ -1485,6 +1485,25 @@ draw counts (needed for the asymmetric-depth pool), and is the quantity the poli
 **Metrics**: report tail quality (log-loss on all-fail episodes, calibration of P(k=0)) alongside
 AUC/Brier -- AUC cannot see the tail, and the policy lives there at tight budgets.
 
+**First attempt, measured (LCB seed 0, one ordering; `gridmatch/deepstate/lcb_s0_dist`).** A
+spike-and-slab Beta head on PCA-256 features, fitted by marginal likelihood and shrunk toward the
+pool prior (lambda = 0.40 on calibration marginal LL), with NO decay, vs today's beliefs:
+**-111.0 / -40.2 / +7.0 / +13.8 / +21.7 / +6.0%** at 50-84%. Against the logistic reader in the same
+setup (-59.8 / -18.1 / -10.5 / -4.8 / +16.4 / +16.7) it is clearly better where reading pays (70-80%)
+and clearly worse at the tight end. It does have more tail (1.8% of beliefs below 2% vs 0.4% for the
+logistic head, still under the decay's 5.2%).
+
+*Why the tight end got worse, measured:* at depth 0 on test problems its RANKING matches today's
+probe (AUC 0.765/0.774/0.825 vs 0.787/0.768/0.823) but its LEVELS are worse (Brier 0.120/0.122/0.113
+vs 0.097/0.100/0.105). The stop test compares p*R with c, so it is level-sensitive, and both the
+marginal-likelihood objective and the shrinkage optimise the whole distribution rather than its mean.
+
+**Three requirements the policy places on a belief head, which we kept trading off:** level
+calibration at ENTRY (tight budgets), tail resolution DEEP in an episode (give-up after failures),
+and ranking everywhere. The design that satisfies all three: distributional output at FULL feature
+dimension (no PCA), its mean affinely recalibrated per route on calibration, and any shrinkage chosen
+on the POLICY objective rather than marginal likelihood -- trained on the policy's visited states.
+
 **Build it on the recollected pool** (asymmetric draw depth makes the distribution identifiable and
 depth decisions meaningful), with beliefs trained on the policy's own visited states (THREADS 0a).
 
