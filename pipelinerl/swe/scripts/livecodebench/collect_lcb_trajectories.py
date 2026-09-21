@@ -450,6 +450,19 @@ async def openrouter_call(
         ignore: list[str] = []
         for attempt in range(1 + max(0, empty_retries)):
             out = await _call(ignore)
+            # A tool_calls finish is the same artifact even when `content` is NOT empty: the
+            # assistant never closed an answer turn, so whatever extract_code scrapes is a
+            # fragment of in-progress reasoning rather than a submitted solution. Measured on
+            # the pool pilot, gpt-oss-20b at high effort returns tool_calls on 10.5% of draws,
+            # and those score 32% against 90% for draws that stop normally -- enough to make
+            # the rung look 12 points worse than it is. Retry them like the empty ones.
+            if out.get("finish_reason") == "tool_calls":
+                if avoid_empty_provider and out.get("provider"):
+                    ignore = ignore + [out["provider"]]
+                if attempt < empty_retries:
+                    await asyncio.sleep(1.0 * (attempt + 1))
+                    continue
+                return out
             if (out["full_output"] or "").strip() or out.get("finish_reason") == "length":
                 return out
             if avoid_empty_provider and out.get("provider"):
