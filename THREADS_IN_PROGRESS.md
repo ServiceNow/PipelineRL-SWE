@@ -31,6 +31,70 @@ wrong in shape and ignores cross-model evidence (§3b-lxxvii); resampling is sel
 is fluke vs never (§3b-lxxviii); the one-step rule's stopping is optimal under its beliefs (§3b-lxxii);
 a 3-rung pool lets "try each tier once" compete (§3b-lxx).
 
+## 0. THE PLAN (2026-09-21, supersedes everything below): recollect, then compare belief models
+
+**Why.** Every belief improvement we have is LiveCodeBench-only, and this pool cannot arbitrate:
+T=0.2 makes a model's draws near-copies (so depth and resampling decisions are tuned in a regime
+that will not exist at recommended temperatures), 6 draws caps how much depth can vary, 3 rungs let
+"try each tier once" be near-optimal, and TACO is too quirky to referee (PAPER_OUTLINE 3b-lxxxi).
+The pilot also showed the old pool is NESTED (Jaccard 0.90-0.98, zero unique problems across seven
+labs), so there is no specialisation to route on -- only difficulty and depth.
+
+### 1. Collect one proper pool (the decisive experiment)
+
+| rung | market price ($/M in, out) | pilot pass@1 | c/draw | draws to collect |
+|---|---|---|---|---|
+| Qwen3-4B-Instruct (PROBE ONLY, local, prefill, no decode) | -- | 47.5% | ~0.006c or free | n/a |
+| gpt-oss-20b low | 0.03 / 0.13 | 69.0% | 0.011 | 16 |
+| gpt-oss-20b medium | 0.03 / 0.13 | 82.0% | 0.045 | 16 |
+| deepseek-v4-flash | 0.055 / 0.111 | 83.0% | 0.048 | 8 |
+| gpt-oss-120b medium | 0.15 / 0.60 | 85.0% | 0.116 | 6 |
+| gpt-oss-120b high | 0.15 / 0.60 | 87.5% | 0.652 | 2 |
+| **claude-sonnet-5** | 2 / 10 | tbd (pilot running) | ~2.4 | **1** |
+| **claude-opus-5** | 5 / 25 | 94.0% | 6.03 | **1** |
+
+* Sampling: each card's recommended settings (Qwen 0.7/0.8/top-k 20, min-p 0; Qwen Thinking
+  0.6/0.95; gpt-oss T=1.0 with effort in the system prompt; Claude 0.7/0.95). **--top-k / --min-p
+  still need adding to collect_lcb_expert.py.**
+* Depth is asymmetric on purpose: deep where a draw costs ~0.01-0.05c, single-draw at the frontier.
+  The `valid` mask already supports ragged depth, so a route may have different draw counts.
+* Pools: **LiveCodeBench first** (temporal split), then **BigCodeBench** (1,140 tasks, random split,
+  needs its own grader: validate every reference solution and drop flaky tasks). CodeContests only
+  if that grader work comes free.
+* Budget: ~$25 of open rungs per pool; Claude on LCB ~$75 (Opus $54 + Sonnet $21 at one draw each).
+  Decide BigCodeBench's Claude draws after seeing LCB.
+
+### 2. Re-extract probe features on the new pool
+Prompt-only, plus the reachable-state lattice (build_deep_state_prompts.py) for history-conditioned
+beliefs. Extraction is R-independent; only the heads depend on the price (0a).
+
+### 3. Belief bake-off, matched on the new data -- "how do these compare when multi-sampling is real"
+count decay (today) | analytic posterior over success counts (with-replacement, 3b-lxxvi) |
+latest-failure reading (3b-lxxiv) | deep-history reading with no decay (3b-lxxxii) | distributional
+spike-and-slab head at FULL dimension with its mean recalibrated (3b-lxxxiii). Each fitted on the
+policy's own visited states (0a), any shrinkage chosen on the POLICY objective. Judge on: entry-level
+calibration, tail quality (log-loss on all-fail episodes), ranking, and the policy frontier.
+
+### 4. Policy evaluation
+Against agreement-gating, RoR v1, random allocation, budget-aware best-of-K and the Zero Router
+**including Claude**, with the linked-cap single sweep so grids match (3b-lxxiii), realised
+accounting, 5 seeds. New diagnostics this pool finally makes meaningful: per-problem depth vs the
+best fixed best-of-K (the thing a fixed plan cannot do), and share of spend on unsolvable problems
+(ours 32.3% vs RoR v1 35.1% today).
+
+### 5. Paper
+Rewrite on **market-price accounting** with the local-probe framing ("one small local prefill cuts
+your API bill"): the old node estimates priced gpt-oss-120b at $11.13/M against a market $0.60/M.
+Keep the pool-independent findings: whether-not-which, the nested-pool result, the decay diagnosis,
+the three requirements on a belief head, and the evaluation practice.
+
+### Accounting rules for the new numbers
+* Pool: market API prices. Probe: state BOTH ~0.3 GPU-seconds of a small local card AND ~0.006c at a
+  rented 4B endpoint. No more self-hosting estimates for models nobody self-hosts: an 80GB card is
+  $25k+, so gpt-oss-120b is an API model for our readers, not a local one.
+* The method needs a wide price spread, so the pool must straddle open-weights -> frontier: within
+  the open rungs alone the spread is too compressed at market prices.
+
 ## 0a-bis. THE BELIEF MODEL SHOULD EMIT A DISTRIBUTION (2026-09-21) -- see PAPER_OUTLINE 3b-lxxxiii
 
 Measured: a no-decay deep-history probe is +16.4/+16.7% at 80/84% and -59.8/-18.1% at 50/60%.
