@@ -22,7 +22,12 @@ REPO_ROOT=$(cd "${SCRIPT_DIR}/../.." && pwd)
 R=/mnt/llmd/results/exps/aristides/reason
 SUBMIT=${SUBMIT:-0}
 SNAPSHOT=${SNAPSHOT:-1}
-# MAX_TOKENS: 110,000, not the 65,536 the pilot used. The cap was binding unequally across rungs
+# MAX_TOKENS is PER RUNG (last field): 128k where the endpoints allow it, the ceiling where they
+# do not. gpt-oss's ceiling is 117,964 and NOTHING is above it (0 of 24 endpoints for 120b, 0 of 12
+# for 20b at >=119,000), so a flat 128k there would fail every draw. 20b gets the full 117,964
+# (7/12 endpoints, same as at 110k). 120b gets 115,264, which keeps 18/24 instead of 16/24: its
+# truncation at 110k was already 0.0%, so 2.7k more headroom buys nothing and narrowing the
+# endpoint pool is how the provider lottery bit us. DeepSeek: 128,000, 13/15 endpoints. The cap was binding unequally across rungs
 # -- 12.2% of gpt-oss-20b-high eval draws were truncated against 4.1% for gpt-oss-120b-high and 0%
 # for 20b-medium -- and a truncated draw is scored as a failure, so the cap was biasing the very
 # rung comparison the pool is being chosen on. Raising it loses exactly one endpoint per model
@@ -41,11 +46,11 @@ DRAW_SCALE=${DRAW_SCALE:-1}    # 1 = the counts below; use a smaller pool for a 
 # endpoint -- deepseek-v4-flash answers with no reasoning at all on OpenInference/DigitalOcean
 # (~300 tokens, 63-74%) and with reasoning on StreamLake/GMICloud (2-6k tokens, 95-97%).
 ROUTES=(
-  "oss20lo|openai/gpt-oss-20b|1.0|1.0|low|16|0.011|"
-  "oss20md|openai/gpt-oss-20b|1.0|1.0|medium|12|0.042|"
-  "dsv4f|deepseek/deepseek-v4-flash|0.7|0.95|on|8|0.098|"
-  "oss120md|openai/gpt-oss-120b|1.0|1.0|medium|6|0.106|"
-  "oss120hi|openai/gpt-oss-120b|1.0|1.0|high|3|0.607|"
+  "oss20lo|openai/gpt-oss-20b|1.0|1.0|low|16|0.011||117964"
+  "oss20md|openai/gpt-oss-20b|1.0|1.0|medium|12|0.042||117964"
+  "dsv4f|deepseek/deepseek-v4-flash|0.7|0.95|on|8|0.158||128000"
+  "oss120md|openai/gpt-oss-120b|1.0|1.0|medium|6|0.106||115264"
+  "oss120hi|openai/gpt-oss-120b|1.0|1.0|high|3|0.569||115264"
   # Optional, not in the default pool: a second lab at the top tier. Adds no unique coverage in
   # the pilot (87.0% alone, +0.0pt to the union), so it buys a peer choice we showed does not pay.
   # "q235t|qwen/qwen3-235b-a22b-thinking-2507|0.6|0.95||2|0.802|--top-k 20 --min-p 0"
@@ -58,7 +63,8 @@ mkdir -p "${BASE}"
 
 TOTAL=0
 for spec in "${ROUTES[@]}"; do
-  IFS='|' read -r LABEL MODEL TEMP TOPP EFFORT NDRAW CPD EXTRA <<< "${spec}"
+  IFS='|' read -r LABEL MODEL TEMP TOPP EFFORT NDRAW CPD EXTRA MAXTOK <<< "${spec}"
+  MAXTOK=${MAXTOK:-${MAX_TOKENS}}
   if [[ -n "${ONLY}" && " ${ONLY} " != *" ${LABEL} "* ]]; then continue; fi
   NDRAW=$(( NDRAW / DRAW_SCALE )); (( NDRAW > 0 )) || NDRAW=1
   COST=$(/home/toolkit/.conda/envs/pipeline-rl/bin/python3 -c "print(f'{${CPD}*${NDRAW}*${NPROB}/100:.2f}')")
@@ -80,7 +86,7 @@ for spec in "${ROUTES[@]}"; do
       echo "python pipelinerl/swe/scripts/livecodebench/collect_lcb_expert.py \\"
       echo "  --source-collection-dir ${SRC} --output-dir ${BASE} --route-label ${LABEL} \\"
       echo "  --model '${MODEL}' --splits train,eval \\"
-      echo "  --temperature ${TEMP} --top-p ${TOPP} ${EXTRA} --max-tokens ${MAX_TOKENS} \\"
+      echo "  --temperature ${TEMP} --top-p ${TOPP} ${EXTRA} --max-tokens ${MAXTOK} \\"
       echo "  --gen-timeout 3600 --max-invalid-frac 0.10 --output-suffix _d${DRAW} \\"
       echo "  --api-key-file ${KEYFILE} --concurrency 8${REASON_ARG}"
     } > "${RUNNER}"
