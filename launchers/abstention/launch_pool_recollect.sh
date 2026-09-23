@@ -35,6 +35,10 @@ SNAPSHOT=${SNAPSHOT:-1}
 # provider lottery. Worst case cost is +6% on the pool, and only the truncating draws pay it.
 MAX_TOKENS=${MAX_TOKENS:-110000}
 KEYFILE=${KEYFILE:-/home/toolkit/.secrets/openrouter_api_key}
+# Per-job request concurrency. The thinking-heavy rungs are GENERATION-latency bound, not grading
+# bound -- gpt-oss-120b-high emits ~10k reasoning tokens per draw, so at 8 concurrent each job
+# cleared only ~1.6 problems/min and would have needed until 04:14. Throughput scales with this.
+CONCURRENCY=${CONCURRENCY:-8}
 SRC=${SRC:-$R/lcb_corrected_temporal_qwen_qwen3_4b_instruct_2507_1787205448}
 BASE=${BASE:-$R/pool_v2_lcb}
 ONLY=${ONLY:-}                 # space-separated route labels
@@ -88,7 +92,7 @@ for spec in "${ROUTES[@]}"; do
       echo "  --model '${MODEL}' --splits train,eval \\"
       echo "  --temperature ${TEMP} --top-p ${TOPP} ${EXTRA} --max-tokens ${MAXTOK} \\"
       echo "  --gen-timeout 3600 --max-invalid-frac 0.10 --output-suffix _d${DRAW} \\"
-      echo "  --api-key-file ${KEYFILE} --concurrency 8${REASON_ARG}"
+      echo "  --api-key-file ${KEYFILE} --concurrency ${CONCURRENCY}${REASON_ARG}"
     } > "${RUNNER}"
     chmod +x "${RUNNER}"
     if [[ "${SUBMIT}" == "1" ]]; then
