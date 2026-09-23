@@ -1734,13 +1734,22 @@ def main() -> None:
 
     if args.cost_mode == "usd":
         total_tokens = data["prompt_tokens"].astype(float) + data["completion_tokens"].astype(float)
+        # The default table names the OLD three-route pool. pool_v2 rungs are effort/price tiers
+        # with their own labels, so any slot the tensors declare may be priced here; a slot with
+        # neither a default nor an override is an error, since silently pricing it at zero would
+        # make a rung look free.
         price_table = dict(USD_PER_M_TOKENS)
         if args.prices:
             for kv in args.prices.split(","):
                 k, _, v = kv.partition("=")
-                if k.strip() not in price_table:
-                    raise SystemExit(f"unknown route in --prices: {k}")
-                price_table[k.strip()] = float(v)
+                k = k.strip()
+                if k not in price_table and k not in slots:
+                    raise SystemExit(f"--prices names {k!r}, which is neither a default route "
+                                     f"nor one of this bundle's rungs {list(slots)}")
+                price_table[k] = float(v)
+        missing = [s_ for s_ in slots if s_ not in price_table]
+        if missing:
+            raise SystemExit(f"no price for {missing}; pass them via --prices")
             print(f"price basis overridden: {price_table}")
         realized_costs = np.stack([
             total_tokens[:, mi, :] * price_table[slot] / 1_000_000.0

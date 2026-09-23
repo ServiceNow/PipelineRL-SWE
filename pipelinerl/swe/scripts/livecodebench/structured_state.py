@@ -11,7 +11,7 @@ from typing import Any
 
 
 STATE_FEATURE_VERSION = "structured_v1"
-STATE_FEATURE_NAMES = (
+STATE_FEATURE_NAMES = (           # for the legacy three-route pool; see state_feature_names()
     "scout_failed_fraction",
     "oss20_failed_fraction",
     "oss120_failed_fraction",
@@ -24,6 +24,18 @@ STATE_FEATURE_NAMES = (
     "latest_route_oss20",
     "latest_route_oss120",
 )
+
+
+def state_feature_names(slots) -> tuple[str, ...]:
+    """Feature names for ANY rung set. The recollected pool names its rungs by effort/price tier
+    (oss20lo, oss120hi, dsv4f, ...), so the old hard-coded triple would reject it outright."""
+    return (
+        *[f"{s}_failed_fraction" for s in slots],
+        *[f"{s}_remaining_fraction" for s in slots],
+        "total_failure_fraction",
+        "latest_route_none",
+        *[f"latest_route_{s}" for s in slots],
+    )
 
 
 def build_structured_state_features(
@@ -39,8 +51,7 @@ def build_structured_state_features(
     episode. All router states are failure-only, so ``failed + remaining`` is
     never affected by a hidden success.
     """
-    if tuple(slots) != ("scout", "oss20", "oss120"):
-        raise ValueError(f"Unexpected routing slots: {slots}")
+    names = state_feature_names(slots)
     failed = {
         slot: sum(str(attempt["model_slot"]) == slot for attempt in attempts)
         for slot in slots
@@ -51,6 +62,6 @@ def build_structured_state_features(
     values.append(float(sum(failed.values())) / max(1, sum(capacities.values())))
     latest = str(attempts[-1]["model_slot"]) if attempts else "none"
     values.extend(float(latest == route) for route in ("none", *slots))
-    if len(values) != len(STATE_FEATURE_NAMES):
-        raise AssertionError("Structured feature dimension drifted")
+    if len(values) != len(names):
+        raise AssertionError(f"Structured feature dimension drifted: {len(values)} vs {len(names)}")
     return values

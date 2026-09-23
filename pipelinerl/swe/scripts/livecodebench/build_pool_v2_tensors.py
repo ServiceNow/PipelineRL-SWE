@@ -89,9 +89,21 @@ def main() -> None:
                 final[pi, mi, k] = bool(r.get("resolved"))
                 ptok[pi, mi, k] = float(r.get("prompt_tokens", 0))
                 ctok[pi, mi, k] = float(r.get("completion_tokens", 0))
+                # Field names match the v2 bundle: the state renderer and the reachable-dataset
+                # builder read `full_execution_feedback` and `final_outcome` by those names.
+                rc = r.get("result_codes") or []
+                npass = sum(1 for c in rc if c is True)
                 records.append({"problem_id": pid, "model_slot": label, "draw_index": k,
-                                "code": r.get("code", ""), "resolved": bool(r.get("resolved")),
+                                "code": r.get("code", ""),
+                                "final_outcome": bool(r.get("resolved")),
+                                "weak_verifier_outcome": bool(r.get("public_resolved")),
+                                "full_result_codes": rc,
+                                "full_execution_feedback": (
+                                    f"Full execution: {'PASSED' if r.get('resolved') else 'FAILED'}; "
+                                    f"passed={npass}/{len(rc)}" if rc else
+                                    f"Full execution: {'PASSED' if r.get('resolved') else 'FAILED'}"),
                                 "provider": r.get("provider"),
+                                "prompt_tokens": r.get("prompt_tokens", 0),
                                 "completion_tokens": r.get("completion_tokens", 0)})
     out.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(out / "tensors.npz", final_outcome=final, execution_outcome=final,
@@ -104,6 +116,23 @@ def main() -> None:
     (out / "split_manifest.json").write_text(json.dumps(
         {"train_problem_ids": sorted(tr[ncal:]), "calibration_problem_ids": sorted(tr[:ncal]),
          "test_problem_ids": sorted(split_ids["test"]), "split_mode": "source_temporal"}, indent=1))
+    # problems.jsonl: downstream probes read difficulty/statement from here, so the bundle has to
+    # be self-contained rather than sending them back to the source collection.
+    src_prob = {}
+    for sp in ("train", "eval"):
+        for line in open(src / f"scout_{sp}.jsonl"):
+            if line.strip():
+                r = json.loads(line)
+                src_prob[str(r["problem_id"])] = r
+    with open(out / "problems.jsonl", "w") as f:
+        for pid in pids:
+            r = src_prob.get(pid, {})
+            f.write(json.dumps({"problem_id": pid,
+                                "platform": r.get("platform", pid.split("_")[0]),
+                                "contest_date": r.get("contest_date", ""),
+                                "difficulty": r.get("difficulty", ""),
+                                "problem_statement": r.get("question_content",
+                                                           r.get("problem_statement", ""))}) + "\n")
     with open(out / "draw_records.jsonl", "w") as f:
         for r in records:
             f.write(json.dumps(r) + "\n")
