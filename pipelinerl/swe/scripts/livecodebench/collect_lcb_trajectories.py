@@ -466,7 +466,22 @@ async def openrouter_call(
         # to not ask those endpoints; the retry below stays as the backstop for anything new.
         ignore: list[str] = list(ignore_providers or [])
         for attempt in range(1 + max(0, empty_retries)):
-            out = await _call(ignore)
+            try:
+                out = await _call(ignore)
+            except (aiohttp.ClientPayloadError, aiohttp.ClientConnectionError,
+                    asyncio.IncompleteReadError) as exc:
+                # TRANSPORT, not the model. A dropped/partial response is not evidence that the
+                # model failed, and on the pool_v2 collection 120 rows (0.37%) came back this way
+                # -- concentrated in the rungs with the LONGEST generations (DeepSeek 58,
+                # gpt-oss-120b-high 22), so it biases exactly like the three artifacts before it.
+                # Retry on a different provider; if it never succeeds the row stays incomplete and
+                # a rerun picks it up, rather than entering the tensors as a failure.
+                if attempt >= empty_retries:
+                    raise
+                if avoid_empty_provider and out is not None and out.get("provider"):
+                    ignore = ignore + [out["provider"]]
+                await asyncio.sleep(1.0 * (attempt + 1))
+                continue
             # A tool_calls finish is the same artifact even when `content` is NOT empty: the
             # assistant never closed an answer turn, so whatever extract_code scrapes is a
             # fragment of in-progress reasoning rather than a submitted solution. Measured on
