@@ -52,8 +52,23 @@ def summary_line(hist: list) -> str:
     return "So far " + ", ".join(parts[:-1]) + ", and " + parts[-1] + "."
 
 
+# The probe is told WHICH route produced the failed attempt, because the router knows that at
+# decision time. Effort tier is part of a route's identity here: the same weights thinking briefly
+# and thinking hard are different arms with different prices, and the pilot measured them 8.7
+# points apart.
 ROUTE_NAME = {"scout": "a small 4B model", "oss20": "a medium 20B model",
-              "oss120": "a large 120B model"}
+              "oss120": "a large 120B model",
+              "oss20lo": "a 20B model given a small thinking budget",
+              "oss20md": "a 20B model given a moderate thinking budget",
+              "oss20hi": "a 20B model given a large thinking budget",
+              "oss120lo": "a 120B model given a small thinking budget",
+              "oss120md": "a 120B model given a moderate thinking budget",
+              "oss120hi": "a 120B model given a large thinking budget",
+              "dsv4f": "a large mixture-of-experts model"}
+
+
+def route_name(slot: str) -> str:
+    return ROUTE_NAME.get(slot, f"the {slot} model")
 
 
 def attempt_text(rec: dict, variant: str, max_code_chars: int) -> str:
@@ -62,9 +77,9 @@ def attempt_text(rec: dict, variant: str, max_code_chars: int) -> str:
         half = max_code_chars // 2
         code = code[:half] + "\n# ... (truncated) ...\n" + code[-half:]
     if variant == "traj":
-        return f"A previous attempt by {ROUTE_NAME[rec['model_slot']]} was judged incorrect."
+        return f"A previous attempt by {route_name(rec['model_slot'])} was judged incorrect."
     if variant == "code":
-        return (f"A previous attempt by {ROUTE_NAME[rec['model_slot']]} was judged incorrect.\n"
+        return (f"A previous attempt by {route_name(rec['model_slot'])} was judged incorrect.\n"
                 f"```python\n{code}\n```")
     if variant == "public":
         fb = "It passed the public example tests." if rec.get("weak_verifier_outcome") \
@@ -72,7 +87,7 @@ def attempt_text(rec: dict, variant: str, max_code_chars: int) -> str:
     else:
         res = rec.get("full_result_codes") or []
         fb = f"It passed {sum(bool(x) for x in res)} of {len(res)} tests."
-    return (f"A previous attempt by {ROUTE_NAME[rec['model_slot']]} was judged incorrect. "
+    return (f"A previous attempt by {route_name(rec['model_slot'])} was judged incorrect. "
             f"{fb}\n```python\n{code}\n```")
 
 
