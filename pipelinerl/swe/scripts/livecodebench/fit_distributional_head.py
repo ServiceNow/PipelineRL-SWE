@@ -75,6 +75,10 @@ def main() -> None:
     ap.add_argument("--apply-act-tag", default="statejudge")
     ap.add_argument("--apply-shards", type=int, default=12)
     ap.add_argument("--out-dir", required=True)
+    ap.add_argument("--select-on-tail", action="store_true", default=True,
+                    help="choose the shrinkage on all-fail states (the tail the stop rule reads) "
+                         "rather than on average marginal likelihood")
+    ap.add_argument("--select-on-bulk", dest="select_on_tail", action="store_false")
     ap.add_argument("--scout-usd-per-token", type=float, default=0.278e-6)
     ap.add_argument("--chars-per-token", type=float, default=3.2)
     a = ap.parse_args()
@@ -159,8 +163,34 @@ def main() -> None:
                               np.log(np.clip(1 - pi0, 1e-9, 1)) + lb)
             tot += ll.mean()
         return tot
-    lam = max(np.linspace(0, 0.9, 19), key=cal_ll)
-    print(f"shrinkage toward the pool prior: lambda = {lam:.2f} (calibration marginal LL)")
+    def cal_tail_ll(lam: float) -> float:
+        """Marginal LL restricted to ALL-FAIL route-states -- the tail the give-up test reads.
+
+        Average marginal likelihood is the wrong selector here: shrinking toward the pool prior
+        raises it by improving the bulk while capping pi0 at (1-lam) of its fitted value, which is
+        precisely the mass the stop rule needs (3b-lxxxiii). Scoring only the states where every
+        remaining draw failed makes the criterion care about the thing the policy uses.
+        """
+        tot = 0.0
+        for m in range(M):
+            s_, f_ = SF[ca, m, 0], SF[ca, m, 1]
+            sel = (s_ == 0) & (f_ > 0)
+            if sel.sum() < 10:
+                continue
+            pi0 = (1 - lam) * P[ca, m, 0][sel]
+            al = (1 - lam) * P[ca, m, 1][sel] + lam * prior[m] * 4
+            be = (1 - lam) * P[ca, m, 2][sel] + lam * (1 - prior[m]) * 4
+            lb = betaln(al, be + f_[sel]) - betaln(al, be)
+            tot += np.logaddexp(np.log(np.clip(pi0, 1e-9, 1)),
+                                np.log(np.clip(1 - pi0, 1e-9, 1)) + lb).mean()
+        return tot
+
+    grid = np.linspace(0, 0.9, 19)
+    lam_bulk = max(grid, key=cal_ll)
+    lam = max(grid, key=cal_tail_ll) if a.select_on_tail else lam_bulk
+    print(f"shrinkage toward the pool prior: lambda = {lam:.2f} "
+          f"({'all-fail tail LL' if a.select_on_tail else 'calibration marginal LL'}; "
+          f"bulk criterion would pick {lam_bulk:.2f})")
 
     def shrink(Pm):
         Q = Pm.copy()

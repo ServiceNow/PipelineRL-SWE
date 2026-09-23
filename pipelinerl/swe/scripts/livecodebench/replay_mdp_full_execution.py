@@ -232,6 +232,33 @@ def _next_valid_draw(order: np.ndarray, ptr: int, valid: np.ndarray) -> tuple[in
     return (int(order[ptr]), ptr) if ptr < len(order) else (None, ptr)
 
 
+
+def _spike_slab_posterior_mean(pi0, a, b, failures):
+    """E[q | f failures] for a spike-and-slab Beta belief, updated by CONJUGACY not by a decay.
+
+    The distributional head (fit_distributional_head.py) emits, per route,
+        P(q) = pi0 * delta(q=0) + (1 - pi0) * Beta(q; a, b).
+    Observing f failures and no success has likelihood (1-q)^f, so the posterior is exact:
+        spike weight pi0' = pi0 / [pi0 + (1-pi0) * B(a, b+f)/B(a, b)],   slab Beta(a, b+f)
+        E[q | f] = (1 - pi0') * a / (a + b + f)
+    Two things follow, and they are the whole point of predicting a distribution:
+      * The belief needs ONE prefill, at entry. Failures are absorbed analytically, so there is no
+        re-prefill per decision and no hand-tuned decay constant -- the decay IS the posterior.
+      * It has a real tail. Repeated failure drives pi0' toward 1, so the belief falls faster than
+        the Beta-Bernoulli decay kappa/(kappa+n), which is what the give-up test needs (3b-lxxxiii:
+        the learned mean head put 0.2% of its mass below 2% while the test fires below 0.3-2%).
+    """
+    from scipy.special import betaln
+    pi0 = np.clip(np.asarray(pi0, dtype=float), 1e-9, 1 - 1e-9)
+    a = np.maximum(np.asarray(a, dtype=float), 1e-6)
+    b = np.maximum(np.asarray(b, dtype=float), 1e-6)
+    f = np.asarray(failures, dtype=float)
+    log_ev = betaln(a, b + f) - betaln(a, b)              # log P(f failures | slab)
+    w = (1.0 - pi0) * np.exp(log_ev)
+    pi0_post = pi0 / np.maximum(pi0 + w, 1e-12)
+    return (1.0 - pi0_post) * a / (a + b + f)
+
+
 def _has_remaining_success(
     outcomes: np.ndarray,
     valid: np.ndarray,
@@ -444,6 +471,7 @@ def replay_adaptive(
     mandatory_scout: bool = True,
     oracle_stopping: bool = False,
     hist_mode: str | None = None,
+    dist_entry: tuple | None = None,
     hist_entry: dict[str, tuple[np.ndarray, float]] | None = None,
     hist_recal: dict[str, Any] | None = None,
     stop_override: str | None = None,
@@ -726,7 +754,13 @@ def replay_adaptive(
                 bellman_decay_s = None
                 p_each = theta
                 belief_source = "content"
-            if hist_mode is not None and hist_entry is not None:
+            if dist_entry is not None:
+                # DISTRIBUTIONAL BELIEF, updated by conjugacy on the failures seen so far.
+                p_each = _spike_slab_posterior_mean(dist_entry[0], dist_entry[1],
+                                                    dist_entry[2], failures)
+                bellman_pbar, bellman_decay_s = p_each.copy(), None
+                belief_source = "content_dist"
+            elif hist_mode is not None and hist_entry is not None:
                 # HISTORY BELIEFS. B: the history probe's prediction for problem + latest failed
                 # attempt, with the count decay applied only to failures it did not read. C: the
                 # count-decayed prompt belief recalibrated on the failure COUNT of every route
@@ -1490,6 +1524,10 @@ def main() -> None:
         "Add `<family>_entry_value` and `<family>_continue_value`: the per-problem prior used ONLY "
         "at depth 0, or ONLY after a failure has been observed, with count beliefs supplying the "
         "other half. Localises where the representation pays."))
+    parser.add_argument("--dist-preds", default="", help=(
+        "history_preds.jsonl from fit_distributional_head.py, carrying per-route spike-and-slab "
+        "params. Adds the `content_dist` family: ONE prefill at entry, failures absorbed by "
+        "conjugacy instead of a decay constant."))
     parser.add_argument("--posterior-with-replacement", action="store_true", help=(
         "Update the success-count posterior as if draws were independent (deployable), not "
         "without replacement from the K stored draws (replay-only knowledge of a finite pool)."))
@@ -1752,6 +1790,16 @@ def main() -> None:
             hist_table.setdefault(_pid, {})[_h] = (
                 np.asarray(_row["p"], dtype=float), float(_row.get("prefill_usd", 0.0)))
         print(f"history beliefs for {len(hist_table)} problems")
+    dist_table: dict[str, tuple] = {}
+    if getattr(args, "dist_preds", ""):
+        for _row in _read_jsonl(Path(args.dist_preds)):
+            _pid, _, _h = str(_row["example_id"]).partition("||")
+            if _h or "params" not in _row:
+                continue                      # entry state only: failures are absorbed analytically
+            _pr = np.asarray(_row["params"], dtype=float)      # (M, 3) = pi0, a, b
+            dist_table[_pid] = (_pr[:, 0], _pr[:, 1], _pr[:, 2],
+                                float(_row.get("prefill_usd", 0.0)))
+        print(f"distributional beliefs for {len(dist_table)} problems")
     hist_recal = json.loads(Path(args.history_recal).read_text()) if args.history_recal else None
     if args.content_preds:
         for row in _read_jsonl(Path(args.content_preds)):
@@ -1872,6 +1920,8 @@ def main() -> None:
                                        or base.startswith("content_hist")) else None),
                     hist_mode=(base[-1] if base.startswith("content_hist") else None),
                     hist_entry=(hist_table.get(pid) if base.startswith("content_hist") else None),
+                    dist_entry=(dist_table.get(pid)[:3]
+                                if (base.startswith("content_dist") and pid in dist_table) else None),
                     hist_recal=hist_recal,
                     stop_override=stop_override,
                     stop_theta=(content.get(pid) if stop_override == "content" else None),
@@ -1937,6 +1987,7 @@ def main() -> None:
         + (["counts_qcost"] if cost_preds else [])
         + (["content_qcost", "content_decay_qcost"] if (content and cost_preds) else [])
         + (scorer_families if scorer else [])
+        + (["content_dist"] if getattr(args, "dist_preds", "") else [])
         + ((["content_histB", "content_histN"]
             + (["content_histC", "content_histD"] if hist_recal else []))
            if (content and hist_table) else [])
