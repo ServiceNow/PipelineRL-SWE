@@ -33,10 +33,27 @@ Four more rules, each of which was learned by getting it wrong in this project:
 | A4 | probe re-read on the whole trajectory, NO decay | reads the history | exists (3b-lxxxii) |
 | A5 | spike-and-slab Beta head (distribution over q) | tail resolution | exists (3b-lxxxiii) |
 | A6 | oracle: empirical q from held-out draws | upper reference, not a method | new, cheap |
-| A7 | BERT/embedding head on the prompt | "is the LLM prefill doing anything?" | **to build** |
+| A7a | frozen sentence embedding (MiniLM / e5) + the SAME head | "is the 4B prefill doing anything?" | **to build** |
+| A7b | TF-IDF + the same head | the floor: is any of this semantic? | **to build** |
+| A7c | *optional* fine-tuned small encoder | a stronger baseline that COSTS training | only if A7a is close |
 
-A7 is the ablation a reviewer will demand and we have never run: if a sentence embedding plus
-logistic regression matches the 4B prefill, the prefill is not earning its cost.
+**A7 has to be protocol-matched or it answers nothing.** Same frozen-encoder-plus-linear-head
+recipe, same training data, same calibration, same grid -- vary ONLY the encoder. Then the
+comparison is clean and has two axes, which must both be reported:
+
+* **Accuracy.** If a 22M sentence encoder matches the 4B prefill under the identical frozen
+  protocol, the prefill does not earn its keep, because it is also ~100x more expensive per query
+  (~0.006c or ~0.3 GPU-seconds against ~0.0001c). The paper's framing would have to become "one
+  very cheap embedding cuts your API bill", which is a *better* result, just not the one we assumed.
+* **Training cost, which is where the asymmetry lives.** Ours is a linear head on frozen features:
+  minutes on CPU, and it is refit per R and per pool (0a/E1), so that cost RECURS. A baseline that
+  only matches us after fine-tuning its encoder (A7c) pays a much larger recurring cost for the same
+  deployment, and that has to be stated rather than hidden in a pass@1 column. A7a and A7b, being
+  frozen, are as cheap to train as we are -- so if either ties us on accuracy, we lose outright.
+
+The hypothesis worth testing, and the reason to expect the 4B to win: predicting whether a
+*reasoning model will solve* a problem may need more than surface semantics. A7 is what turns that
+from an assumption into a measurement.
 
 ### B. Decision machinery -- how beliefs become actions
 | # | arm | note |
