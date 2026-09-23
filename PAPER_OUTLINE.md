@@ -1443,6 +1443,45 @@ sets the level (ratios now 0.47–0.85 at $q{=}0.25$ against 1.24–1.94 at $q{=
 this codebase: any downstream affine recalibration will annihilate an upstream level knob. Check
 that variants differ before reading their results.*
 
+### 3b-xc ⚠⚠ THE ZERO ROUTER WAS TOO WEAK, AND IT WAS CARRYING THE HEADLINE (2026-09-23)
+
+**What happened.** On the recollected pool the probe beat the replay's Zero Router family by
+**+12.9pt** at 0.05c. That family has 8 arms: three single-model, two two-tier cascades, one
+single-pass cascade, two best-of-16. It omits multi-draw-per-tier plans -- and those are the ones
+that win. Enumerating all 1,071 plans (k draws per rung, cheapest-first, sequential with
+stop-on-success, plan CHOSEN ON TRAIN+CAL and scored on test):
+
+| budget | best fixed plan | fixed | ours (probe + cost head) | delta |
+|---|---|---|---|---|
+| 0.05c | 5 x oss20lo | 73.3% | 76.3% | **+3.0** |
+| 0.10c | 13 x oss20lo | 80.4% | 80.8% | +0.4 |
+| 0.20c | 15 x oss20lo | 80.6% | 84.0% | **+3.3** |
+| 0.40c | 15 x oss20lo + 1 x oss120md | 85.9% | 87.6% | +1.7 |
+| 0.80c | 10 x oss20lo + 5 x oss120md | 91.5% | 90.3% | **-1.2** |
+| 1.60c | 5 x oss20lo + 9 x oss20md + 6 x oss120md | 92.7% | 92.4% | -0.3 |
+
+**So the honest margin over a fixed plan is +0.4 to +3.3pt at tight budgets and NEGATIVE above
+0.8c** -- not +12.9pt. The replay family reached only 62.4% at 0.05c where a plan anyone would try
+reaches 73.3%.
+
+**Three methodology rules this forces, all of which we were breaking.**
+1. **Enumerate the fixed family.** A cascade baseline must sweep draws-per-rung, not just
+   one-draw-per-tier. The missing plans were worth up to 11.6pt of baseline strength.
+2. **Select the plan on held-out data.** Picking the best plan on TEST is worth up to 2.8pt of
+   phantom baseline strength -- which flatters us when we then beat it. Both versions are reported
+   by `measure_best_fixed_cascade.py`.
+3. **Give the baseline stop-on-success.** A pre-committed allocation loses ~4pt to the sequential
+   version, so comparing against it is a strawman.
+
+**The substantive finding underneath.** The winning fixed plans are mostly *hammer the cheapest
+rung*: 16 draws of gpt-oss-20b-low costs 0.110c and reaches 80.9%, and gpt-oss-20b-medium appears
+in almost no good plan because drawing the low tier more times dominates it. **On a pool where the
+cheap rung is this strong and draws are this cheap, there is very little for per-problem routing to
+add.** That is a property of LCB at q~0.80, and it is the strongest argument yet for BigCodeBench
+(q~0.28) as the decisive pool: "draw the cheap model 16 times" stops working there.
+
+*Related: 3b-lxxxvii (compare at equal spend), 3b-lxxxiv (the frontier-rung question).*
+
 ### 3b-lxxxix ⭐⭐ THE CAP WAS THE ARTIFACT: the open ladder's top rungs were never dominated
 
 **Measured** (pilot eval split, 100 problems, after raising max_tokens from 65,536 to 110,000):

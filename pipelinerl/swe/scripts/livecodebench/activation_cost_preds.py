@@ -75,7 +75,15 @@ ap.add_argument("--no-shrink", action="store_true", help=(
     "than the constant it replaces -- the failure mode measured on TACO, where cost R2 falls to "
     "0.09 and conditioning actively hurt."))
 ap.add_argument("--out", required=True)
+ap.add_argument("--prices", default="", help="label=USD_per_M overrides, e.g. 'oss20lo=0.12'. "
+                "The built-in table names the legacy three-route pool; pool_v2 rungs are effort "
+                "tiers with their own labels.")
 a = ap.parse_args()
+_PRICE = dict(USD_PER_M_TOKENS)
+for _kv in (a.prices or "").split(","):
+    if _kv.strip():
+        _k, _, _v = _kv.partition("=")
+        _PRICE[_k.strip()] = float(_v)
 
 z = np.load(a.activations, allow_pickle=True)
 if a.rich:
@@ -273,8 +281,8 @@ for j, s in enumerate(slots):
                 print(f"  {s:8s} dollar-space shrinkage slope b={cd[1]:.3f}"
                       + ("  (no dollar-space signal; collapses to the constant)"
                          if cd[1] < 0.25 else ""))
-    C[:, j] = tokens * USD_PER_M_TOKENS[s] / 1e6
-    const = true_mean_tr * USD_PER_M_TOKENS[s] / 1e6
+    C[:, j] = tokens * _PRICE[s] / 1e6
+    const = true_mean_tr * _PRICE[s] / 1e6
     print(f"  {s:8s} constant ${const:.6f}  predicted mean ${C[:, j].mean():.6f}  "
           f"p10 ${np.percentile(C[:, j],10):.6f}  p90 ${np.percentile(C[:, j],90):.6f}  "
           f"smearing {smear:.3f}  level {level:.3f}")

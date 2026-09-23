@@ -58,7 +58,7 @@ from an assumption into a measurement.
 ### B. Decision machinery -- how beliefs become actions
 | # | arm | note |
 |---|---|---|
-| B0 | best FIXED plan (Zero Router), convex hull | the baseline to beat |
+| B0 | best FIXED plan (Zero Router), convex hull | **the baseline to beat -- and it must be the FULL sweep from `measure_best_fixed_cascade.py`, plan chosen on train+cal, sequential with stop-on-success. The 8-arm replay family was 11.6pt too weak and was carrying our headline (3b-xc).** |
 | B1 | myopic Lagrangian greedy: draw argmax p*R - c, abstain when all < 0 | deployed rule |
 | B2 | knapsack by marginal p/c, parameterised by BUDGET not price | measured: +3pt at tight budgets, -3pt at loose ones with 2-3-draw beliefs (`measure_knapsack_policy.py`) |
 | B3 | h-step lookahead (h=2 and h=H) | monotone-case result says it only reorders routes; verify it |
