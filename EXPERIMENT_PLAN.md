@@ -108,9 +108,38 @@ artifact of thin data", and it needs the full-depth pool (3b-lxxxvii).
 4. Run 1, then 5 and 6 (they answer the framing questions), then 2, 3, 4.
 5. Paper rewrite on market-price accounting.
 
-## 4. Open decisions
-* Which A-arm is pre-registered as "our method" for the headline. Current best guess A5, but A4 is
-  simpler and the choice must be made on CALIBRATION on the train/cal split, not on the frontier.
+## 4. "Our method", pre-registered (decided 2026-09-23)
+
+**The headline arm is the 4B prefill RE-READ ON THE FAILURE HISTORY** -- A3/A4/A5, not the one-shot
+A1 -- because that is where the novelty is: a cheap model that has never solved the problem reads
+what an expensive model produced and failed with, and predicts whether *another* model will succeed.
+Cross-model selective prediction conditioned on observed failures is the claim; one-shot difficulty
+prediction is not new.
+
+**Which history variant, and how it gets chosen.** A4 (whole trajectory, no decay) is the cleanest
+statement but is measured to have **no tail**: 0.2% of its beliefs fall below 2% against 5.2% for
+the count decay, so it is +16% at the 80-84% targets and **-60% at 50%**, because the give-up test
+fires below ~0.3-2% and it never gets there (3b-lxxxiii). A5 is the same history-conditioned prefill
+emitting a *distribution* over q instead of a mean, which has tail resolution by construction. So
+the pre-registered headline is **A5 = history-conditioned prefill + distributional head**, with A4
+as the ablation that shows why the distribution is needed and A3 as the cheaper single-failure
+variant. If A5's calibration on the train/cal split fails to beat A4's, the headline falls back to
+A4 -- **that choice is made on calibration, never on the frontier**.
+
+### The cost consequence, which changes the framing
+A history-conditioned belief **re-prefills at every decision point**, so the method is not "one
+cheap prefill" -- it is one cheap prefill per decision, and a deep episode pays several. The replay
+already charges this (`hist_entry`, re-prefill charging), and the frontier must keep charging it, but
+two things follow:
+* **The title is now wrong.** "From One Cheap Prefill" cannot survive a method that re-prefills per
+  decision. It needs to become something like "from a cheap prefill at every decision" -- still the
+  selling point, since a 4B prefill is ~0.006c against ~0.57c for a gpt-oss-120b-high draw, i.e.
+  ~1% of the thing it is deciding about.
+* **The probe's share of total spend becomes a required figure**, not a footnote: at tight budgets,
+  where the win lives, episodes are short and the prefill share is highest. If the probe ever costs
+  more than the draws it saves, the method is dead in exactly the regime it targets.
+
+## 5. Open decisions
 * Whether BCB gets the same draw counts as LCB (its per-draw cost is ~0.3x, so depth is cheap).
 * Whether to add gpt-oss-20b-high as a 6th rung (dominated on single-draw cost/accuracy, but the
   decorrelation table says a dominated rung can still be the best thing to call after a failure).
