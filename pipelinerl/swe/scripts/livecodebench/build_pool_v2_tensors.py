@@ -53,9 +53,22 @@ def main() -> None:
     ap.add_argument("--output-dir", required=True)
     ap.add_argument("--rungs", required=True,
                     help="comma-separated label:draws, e.g. oss20lo:16,oss20md:12,oss120md:6")
-    ap.add_argument("--calibration-fraction", type=float, default=0.5,
-                    help="fraction of the TRAIN split held out for calibration")
+    ap.add_argument("--calibration-fraction", type=float, default=0.2, help=(
+        "fraction of the non-test problems held out for calibration. 0.2, not 0.5: Platt needs "
+        "only ~100 points, while the belief head is DATA-STARVED for the tail. Measured on "
+        "oss20lo, the spike-and-slab's low-belief calls went from 40% precision at 275 train "
+        "problems to 69% at 441 -- identifying hopeless problems from the prompt is limited by "
+        "how many hopeless examples it has seen, not by the model class."))
     ap.add_argument("--split-seed", type=int, default=0)
+    ap.add_argument("--split-mode", choices=["temporal", "random"], default="random", help=(
+        "temporal keeps the source collection's era split (train = earlier contests). random "
+        "shuffles all problems. RANDOM IS THE DEFAULT and is the right primary evaluation: the "
+        "object of study is the ROUTER, whose task is to predict whether model m solves problem "
+        "x. If m memorised x then q really is high and the router should say so -- contamination "
+        "moves the base rates, not the prediction task. The temporal split instead imposes an era "
+        "shift that is NOT the phenomenon under study, and it is what made the prompt-only head "
+        "read +7 to +12pt optimistic on test: it was calibrated on an easier era. Keep temporal "
+        "as a robustness check against the reviewer question 'did it just learn memorisation'."))
     a = ap.parse_args()
 
     pool, src, out = Path(a.pool_dir), Path(a.source_collection_dir), Path(a.output_dir)
@@ -111,11 +124,18 @@ def main() -> None:
                         completion_tokens=ctok, problem_ids=np.array(pids),
                         model_slots=np.array(slots), schema_version=np.array(3))
     rng = np.random.default_rng(a.split_seed)
-    tr = list(split_ids["train"]); rng.shuffle(tr)
-    ncal = int(round(len(tr) * a.calibration_fraction))
+    if a.split_mode == "random":
+        allp = list(pids); rng.shuffle(allp)
+        ntest = len(split_ids["test"])
+        test_ids, rest = allp[:ntest], allp[ntest:]
+    else:
+        test_ids, rest = list(split_ids["test"]), list(split_ids["train"])
+        rng.shuffle(rest)
+    ncal = int(round(len(rest) * a.calibration_fraction))
     (out / "split_manifest.json").write_text(json.dumps(
-        {"train_problem_ids": sorted(tr[ncal:]), "calibration_problem_ids": sorted(tr[:ncal]),
-         "test_problem_ids": sorted(split_ids["test"]), "split_mode": "source_temporal"}, indent=1))
+        {"train_problem_ids": sorted(rest[ncal:]), "calibration_problem_ids": sorted(rest[:ncal]),
+         "test_problem_ids": sorted(test_ids),
+         "split_mode": "random" if a.split_mode == "random" else "source_temporal"}, indent=1))
     # problems.jsonl: downstream probes read difficulty/statement from here, so the bundle has to
     # be self-contained rather than sending them back to the source collection.
     src_prob = {}
@@ -142,7 +162,7 @@ def main() -> None:
         print(f"  {label:<10} {v.sum():>6}/{P*ndraw:<6} valid ({v.sum()/(P*ndraw)*100:>5.1f}%)  "
               f"pass@1 {final[:, mi, :ndraw][v].mean()*100:>5.1f}%")
     print(f"dropped {infra} infrastructure failures (marked invalid), {missing} not yet collected")
-    print(f"split: {len(tr)-ncal} train / {ncal} calibration / {len(split_ids['test'])} test")
+    print(f"split ({a.split_mode}): {len(rest)-ncal} train / {ncal} calibration / {len(test_ids)} test")
     print("wrote", out)
 
 
