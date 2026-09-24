@@ -18,6 +18,10 @@ SUBMIT=${SUBMIT:-0}
 SNAPSHOT=${SNAPSHOT:-0}
 KEYFILE=${KEYFILE:-/home/toolkit/.secrets/openrouter_api_key}
 KEEP=${KEEP:-$R/bcb_validation/bcb_keep.json}
+# Tasks are staged on /mnt/llmd, not loaded from the Hub: compute nodes cannot reach it, so
+# load_dataset dies there with DatasetNotFoundError while working fine on the login node. That
+# failure mode cost 28 jobs.
+TASKS=${TASKS:-$R/bcb_tasks_v014.jsonl}
 BASE=${BASE:-$R/pool_v2_bcb}
 CONCURRENCY=${CONCURRENCY:-8}
 ONLY=${ONLY:-}
@@ -47,7 +51,7 @@ for spec in "${ROUTES[@]}"; do
       echo "cd ${REPO_ROOT}"
       echo "export OPENROUTER_API_KEY=\$(cat ${KEYFILE})"
       echo "python pipelinerl/swe/scripts/bigcodebench/collect_bcb_expert.py \\"
-      echo "  --keep-file ${KEEP} --output-dir ${BASE} --route-label ${LABEL} \\"
+      echo "  --keep-file ${KEEP} --tasks-file ${TASKS} --output-dir ${BASE} --route-label ${LABEL} \\"
       echo "  --model '${MODEL}' --splits train,eval --output-suffix _d${DRAW} \\"
       echo "  --temperature ${TEMP} --top-p ${TOPP} --max-tokens ${MAXTOK} \\"
       echo "  --api-key-file ${KEYFILE} --concurrency ${CONCURRENCY}${REASON_ARG}"
