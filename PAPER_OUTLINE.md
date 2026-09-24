@@ -1462,7 +1462,20 @@ single-shot calculation. The replay's "single" arm averaged 1.97 attempts (force
 chosen draw) and ceilinged at 73.1% against 89.4% offline -- a single draw of gpt-oss-120b-high
 alone gets ~89%, so it could not be single-shot.
 
-**What it voids, pending the free_start reruns:** the pool_v2 verifier-regime comparisons
+**⚠ CORRECTION (same day, measured): scout_first cost almost nothing.** Matched pair, 5 rungs,
+identical except protocol, with a verifier: ours under free vs scout start differs by +2.0pt at
+0.02c and within +-0.7pt everywhere else; our margin over RoR v1 is +0.1 to +3.1pt either way. So
+the verifier-regime comparisons STAND and the paragraph below overclaimed. The protocol was a real
+misconfiguration worth fixing (default now free_start, 2f60a35) but not a hidden handicap.
+
+It also did not explain the no-verifier cross-check discrepancy (replay single-commit 12-51% vs
+offline 61-89%; free_start changed it by ~2pt). The real cause is judge COVERAGE again, in a new
+form: the replay samples each route's draws from a random permutation of ALL valid indices (16 for
+oss20lo, 8 for deepseek), while the judge scored only indices 0-3. An unjudged draw has held_q = 0
+and finish() scores it as an abstention. --max-draws-per-route limits HOW MANY draws, not WHICH
+indices. Fix: full-depth judge coverage (extraction in progress).
+
+~~What it voids, pending the free_start reruns:~~ (superseded above) the pool_v2 verifier-regime comparisons
 (3b-xc "+0.4 to +3.3pt over a tuned cascade", the history null 3b-xci, the calibration null) and
 every no-verifier adaptive replay. The offline analyses (best-fixed cascade, single-shot, judged
 best-of-k, cascade+judge) do not use the replay and are unaffected.
