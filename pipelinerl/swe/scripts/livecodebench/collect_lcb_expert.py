@@ -99,6 +99,7 @@ async def collect_split(
     require_parameters: bool = False,
     provider_order: list[str] | None = None,
     ignore_providers: list[str] | None = None,
+    logprobs: bool = False,
 ) -> None:
     latest = _read_latest(output_path)
     done = {pid: row for pid, row in latest.items() if _is_complete(row, dataset_revision)}
@@ -139,6 +140,7 @@ async def collect_split(
                     require_parameters=require_parameters,
                     provider_order=provider_order,
                     ignore_providers=ignore_providers,
+                    logprobs=logprobs,
                 )
                 code = extract_code(out["full_output"])
                 async with eval_sem:
@@ -204,6 +206,7 @@ async def collect_split(
                 "_min_p": min_p,
                 "_reasoning_effort": reasoning_effort,
                 "_reasoning_enabled": reasoning_enabled,
+                "logprobs": out.get("logprobs"),
             }
 
         for index, task in enumerate(asyncio.as_completed([process(row) for row in todo]), 1):
@@ -289,6 +292,10 @@ def main() -> None:
                         help="Suffix appended to output filenames (e.g. '_d3' for multi-draw collection)")
     parser.add_argument("--splits", default="train,eval",
                         help="Comma-separated splits to collect (default: train,eval)")
+    parser.add_argument("--logprobs", action="store_true",
+                        help="Record answer-token logprobs (top-5) for confidence-based selection. "
+                             "Restricts routing to endpoints that return them, so these draws "
+                             "form a separate pool, not a top-up of an existing one.")
     parser.add_argument("--max-invalid-frac", type=float, default=0.0,
                         help="Tolerate this fraction of invalid rows at validation (0.0 = strict)")
     parser.add_argument("--problems-file", default="",
@@ -410,6 +417,7 @@ def main() -> None:
                 require_parameters=args.require_parameters,
                 provider_order=[x for x in args.provider_order.split(",") if x.strip()] or None,
                 ignore_providers=[x for x in args.ignore_providers.split(",") if x.strip()] or None,
+                logprobs=args.logprobs,
             )
         )
         validate_split(

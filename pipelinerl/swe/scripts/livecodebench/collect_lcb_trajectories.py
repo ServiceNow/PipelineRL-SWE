@@ -346,6 +346,7 @@ async def openrouter_call(
     require_parameters: bool = False,
     provider_order: list[str] | None = None,
     ignore_providers: list[str] | None = None,
+    logprobs: bool = False,
 ) -> dict:
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -380,8 +381,16 @@ async def openrouter_call(
             # tokens, 95-97%). Same model string, same prompt, 23 points apart on the provider
             # lottery. With reasoning.enabled the no-think endpoints think: 5/5 live.
             p["reasoning"] = {"enabled": True}
+        if logprobs:
+            # The generator's own confidence, for verifier-free selection. Providers return
+            # logprobs for the ANSWER channel only (measured: gpt-oss-20b/120b and
+            # deepseek-v4-flash all omit the reasoning), and only some endpoints return them at
+            # all, so this also forces require_parameters -- otherwise a draw can silently come
+            # back without them.
+            p["logprobs"] = True
+            p["top_logprobs"] = 5
         prov: dict = {}
-        if require_parameters:
+        if require_parameters or logprobs:
             prov["require_parameters"] = True
         if provider_order:
             prov["order"] = list(provider_order)
@@ -434,6 +443,11 @@ async def openrouter_call(
             "finish_reason": choice.get("finish_reason") or "",
             "provider": data.get("provider") or "",
             "answer_from_reasoning": answer_from_reasoning,
+            # [token, logprob, [top-5 logprobs]] per answer token; None when not requested.
+            "logprobs": ([[t.get("token", ""), t.get("logprob"),
+                           [x.get("logprob") for x in t.get("top_logprobs") or []]]
+                          for t in ((choice.get("logprobs") or {}).get("content") or [])]
+                         if logprobs else None),
         }
 
     async def _call_with_retry():

@@ -73,6 +73,7 @@ async def collect(tasks: list[dict], out_path: Path, a) -> None:
                     top_p=a.top_p, reasoning_effort=a.reasoning_effort or None,
                     reasoning_enabled=a.reasoning_enabled, require_parameters=a.require_parameters,
                     ignore_providers=[x for x in a.ignore_providers.split(",") if x.strip()] or None,
+                    logprobs=a.logprobs,
                 )
             except Exception as e:                      # network/provider error, not a model failure
                 return {"problem_id": t["task_id"], "route_label": a.route_label, "model": a.model,
@@ -93,7 +94,8 @@ async def collect(tasks: list[dict], out_path: Path, a) -> None:
                     "tests_ran": g.ran, "grade_status": g.status, "grade_detail": g.detail,
                     "_generation_temperature": a.temperature, "_top_p": a.top_p,
                     "_reasoning_effort": a.reasoning_effort, "_reasoning_enabled": a.reasoning_enabled,
-                    "_max_tokens": a.max_tokens, "_bcb_version": "v0.1.4"}
+                    "_max_tokens": a.max_tokens, "_bcb_version": "v0.1.4",
+                    "logprobs": out.get("logprobs")}
 
         chunk = 50
         for i in range(0, len(todo), chunk):
@@ -130,6 +132,11 @@ def main() -> None:
     p.add_argument("--reasoning-enabled", action="store_true")
     p.add_argument("--require-parameters", action="store_true")
     p.add_argument("--ignore-providers", default="Parasail,AkashML")
+    p.add_argument("--logprobs", action="store_true", help=(
+        "Record answer-token logprobs (top-5) for confidence-based selection. Restricts routing "
+        "to endpoints that return them, so these draws are a separate pool, not a top-up."))
+    p.add_argument("--problem-ids-file", default="", help=(
+        "JSON list of task_ids; collect only these (applied after the train/eval split)."))
     p.add_argument("--concurrency", type=int, default=8)
     p.add_argument("--grade-concurrency", type=int, default=4)
     p.add_argument("--grade-timeout", type=int, default=60)
@@ -155,6 +162,9 @@ def main() -> None:
         {k: [t["task_id"] for t in v] for k, v in split_of.items()}, indent=1))
     for split in [s for s in a.splits.split(",") if s.strip()]:
         rows = split_of[split]
+        if a.problem_ids_file:
+            wanted = set(json.loads(Path(a.problem_ids_file).read_text()))
+            rows = [t for t in rows if t["task_id"] in wanted]
         if a.max_problems:
             rows = rows[: a.max_problems]
         logger.info("%s split: %d tasks", split, len(rows))
