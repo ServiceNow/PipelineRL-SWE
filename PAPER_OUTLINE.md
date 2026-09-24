@@ -1443,6 +1443,35 @@ sets the level (ratios now 0.47–0.85 at $q{=}0.25$ against 1.24–1.94 at $q{=
 this codebase: any downstream affine recalibration will annihilate an upstream level knob. Check
 that variants differ before reading their results.*
 
+### 3b-xciv ⚠⚠ EVERY pool_v2 REPLAY FORCED A FIRST DRAW FROM oss20lo (2026-09-24)
+
+**What.** `replay_mdp_full_execution.py` defaults to `--start-protocol scout_first`, which forces a
+mandatory first draw from rung 0 on every episode BEFORE the policy decides anything. On the old
+pool rung 0 was the 4B scout, so the protocol was a design choice. On pool_v2 **rung 0 is
+gpt-oss-20b-low**, and nobody changed the default -- so every replay on the new pool, in both
+verifier regimes, forced an oss20lo draw on every problem.
+
+**Why it matters more than a uniform constraint would.** It removes the FIRST routing decision,
+which is where routing is worth the most: the whole point of a per-problem belief is to say "this
+one is hard, skip the cheap rung, go straight to deepseek". A fixed cascade is barely touched --
+its best plans start with oss20lo anyway -- so the protocol handicaps adaptive routing
+specifically, and in the direction that shrinks our margin.
+
+**How it surfaced.** A cross-check of single-commit through the replay against the offline
+single-shot calculation. The replay's "single" arm averaged 1.97 attempts (forced scout + one
+chosen draw) and ceilinged at 73.1% against 89.4% offline -- a single draw of gpt-oss-120b-high
+alone gets ~89%, so it could not be single-shot.
+
+**What it voids, pending the free_start reruns:** the pool_v2 verifier-regime comparisons
+(3b-xc "+0.4 to +3.3pt over a tuned cascade", the history null 3b-xci, the calibration null) and
+every no-verifier adaptive replay. The offline analyses (best-fixed cascade, single-shot, judged
+best-of-k, cascade+judge) do not use the replay and are unaffected.
+
+**Also in the same session: four `accept_values is not None` gates** each independently decided
+whether a held candidate existed, and each excluded the new `--no-verifier` path. They were found
+one at a time over four runs (0.0% -> banked-then-discarded -> single-commit 0.0% -> loop-exit
+zeros) when one grep for the condition would have found all of them.
+
 ### 3b-xciii ⚠ THE ACTION SPACE MUST MATCH THE BELIEF'S COVERAGE (2026-09-24)
 
 **What happened.** The verifier-free judged policy scored 47.3% at 29.8 attempts per problem where
