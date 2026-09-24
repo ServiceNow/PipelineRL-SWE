@@ -50,6 +50,30 @@ def main() -> None:
                 ptok[pi, mi, k] = float(r.get("prompt_tokens", 0))
                 ctok[pi, mi, k] = float(r.get("completion_tokens", 0))
     out.mkdir(parents=True, exist_ok=True)
+    # draw_records: downstream prompt builders (judge, history) read the produced code from here,
+    # so the bundle has to be self-contained rather than sending them back to the raw jsonl.
+    with open(out / "draw_records.jsonl", "w") as fh:
+        for mi, (label, nd) in enumerate(spec):
+            for f in pool.glob(f"{label}_*_d*.jsonl"):
+                m = re.match(rf"{re.escape(label)}_(train|eval)_d(\d+)\.jsonl$", f.name)
+                if not m:
+                    continue
+                for line in open(f):
+                    if line.strip():
+                        r = json.loads(line)
+                        if int(m.group(2)) >= nd:
+                            continue
+                        rc = r.get("result_codes") or []
+                        fh.write(json.dumps({
+                            "problem_id": str(r["problem_id"]), "model_slot": label,
+                            "draw_index": int(m.group(2)), "code": r.get("code", ""),
+                            "final_outcome": bool(r.get("resolved")),
+                            "full_result_codes": rc,
+                            "full_execution_feedback":
+                                f"Tests: {'PASSED' if r.get('resolved') else 'FAILED'}"
+                                + (f"; {r.get('tests_ran',0)} run" if r.get("tests_ran") else ""),
+                            "prompt_tokens": r.get("prompt_tokens", 0),
+                            "completion_tokens": r.get("completion_tokens", 0)}) + "\n")
     np.savez_compressed(out / "tensors.npz", final_outcome=final, execution_outcome=final,
                         weak_verifier_outcome=final, valid=valid, prompt_tokens=ptok,
                         completion_tokens=ctok, problem_ids=np.array(pids),
