@@ -1473,6 +1473,26 @@ intermediate budgets, so it is the interpolated hull, not the step envelope.)
 medium. With a verifier that barely matters -- just redraw the cheap rung. Without one, choosing it
 per problem is worth real money.
 
+**⚠ CORRECTION -- the single-draw number is NOT our contribution.** The no-verifier experiment
+above is SINGLE-DRAW, which is exactly the setting of arXiv 2603.20895 (single-shot prefill
+routing, stateless). In that regime we have no novelty, and the +12.8pt is mostly the BASELINE
+losing its tool rather than us gaining one: removing the verifier deletes the cascade's `check`
+step and then we report beating the cascade. Presenting it as the session's strongest result was
+wrong.
+
+The three regimes, and where the contribution actually lives:
+
+| regime | multi-sampling | who selects the winner | our novelty |
+|---|---|---|---|
+| perfect verifier | yes | the verifier, free | **none** -- cascade near-optimal, we gain +0.4 to +3.3pt |
+| no verifier, no judge | worthless (k blind draws = 1 draw) | nobody | **none** -- this is 2603.20895 |
+| **no verifier + JUDGE** | **yes, learned selection** | **the probe reads each attempt** | **all of it** |
+
+Only the third is sequential, stateful, multi-sample AND verifier-free, and 2603.20895 is
+explicitly stateless and single-shot with per-query cost prediction deferred to future work. So
+both of tonight's headline results are really evidence about where the contribution ISN'T: the
+verifier makes selection free, and dropping multi-sampling makes us a published paper.
+
 **Scoping consequence for the paper.** LCB is close to the worst case for this method on three
 independent counts: cheap draws (0.012c), perfect free verification, and a nested pool. We picked
 the benchmark that most favours the baseline. The claim to make is conditional and testable --
