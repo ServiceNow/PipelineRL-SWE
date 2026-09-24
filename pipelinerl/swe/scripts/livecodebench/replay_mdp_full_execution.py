@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 import numpy as np
+from collections import defaultdict
 
 from pipelinerl.swe.scripts.livecodebench.build_mdp_reachable_dataset import (
     _remaining_draw_counts,
@@ -445,6 +446,7 @@ def replay_adaptive(
     judge_values: dict | None = None,
     judge_dist: dict | None = None,
     no_verifier: bool = False,
+    max_draws_per_route: int = 0,
     cap_on_realised: bool = False,
     random_route: bool = False,
     belief_split: str | None = None,
@@ -502,6 +504,7 @@ def replay_adaptive(
     # of observed costs on the same route, exactly as the belief decays toward observed failures.
     # Same-route only: cross-route cost transfer is catastrophic (R2 -3.7 scout->oss120).
     held_q, held_true = 0.0, False
+    _banked_count = defaultdict(int)
     rng_route = np.random.default_rng(abs(hash(problem_id)) % (2**32))
     cost_est = np.asarray(expected_costs, dtype=float).copy()
     _cost_obs_sum = np.zeros(len(slots), dtype=float)
@@ -571,6 +574,7 @@ def replay_adaptive(
             nonlocal held_q, held_true
             _jv = 0.0 if judge_values is None else float(
                 judge_values.get((slots[mi], int(draw)), 0.0))
+            _banked_count[mi] += 1
             if _jv > held_q:
                 held_q = _jv; held_true = bool(outcomes[mi, draw])
             return "banked", draw
@@ -845,6 +849,10 @@ def replay_adaptive(
             bellman_pbar, bellman_decay_s = np.asarray(prior, dtype=float), pseudo_count
             p_any = 1.0 - float(np.prod(1.0 - p_each))
 
+        if max_draws_per_route:
+            available = [mi for mi in available if failures[mi] + _banked_count[mi] < max_draws_per_route]
+            action_values = ({mi: v for mi, v in action_values.items() if mi in available}
+                             if action_values is not None else None)
         ratios = {mi: float(p_each[mi] / cost_est[mi]) for mi in available}
         if exploration_bonus:
             t = int(failures.sum())
@@ -1571,6 +1579,11 @@ def main() -> None:
         "history_preds.jsonl from fit_distributional_head.py, carrying per-route spike-and-slab "
         "params. Adds the `content_dist` family: ONE prefill at entry, failures absorbed by "
         "conjugacy instead of a decay constant."))
+    parser.add_argument("--max-draws-per-route", type=int, default=0, help=(
+        "cap draws per route per episode. REQUIRED with --no-verifier when the judge covers only "
+        "the first k draws of each rung: beyond its coverage an attempt has no judged value, so it "
+        "can never be banked, and the policy pays for draws that are structurally unsubmittable. "
+        "That alone took the adaptive policy from 88.6% at 12.6 attempts to 47.3% at 29.8."))
     parser.add_argument("--no-verifier", action="store_true", help=(
         "Remove the success signal entirely: the policy never learns whether a draw was right, so "
         "it must decide which held attempt to submit. Multi-sampling is then worthless without a "
@@ -2006,6 +2019,7 @@ def main() -> None:
                     judge_values=judge_table.get(pid),
                     judge_dist=judge_dist,
                     no_verifier=bool(getattr(args, "no_verifier", False)),
+                    max_draws_per_route=int(getattr(args, "max_draws_per_route", 0) or 0),
                     dist_entry=(dist_table.get(pid)[:3]
                                 if (base.startswith("content_dist") and pid in dist_table) else None),
                     hist_recal=hist_recal,
