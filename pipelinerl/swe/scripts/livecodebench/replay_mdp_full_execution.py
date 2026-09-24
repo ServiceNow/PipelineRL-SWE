@@ -584,7 +584,6 @@ def replay_adaptive(
             # banking it and buying more. q is strongly route-dependent (0.72 scout / 0.94 oss20 /
             # 0.95 oss120), so 'do I trust this acceptance?' has real structure. This is the
             # decision RoR v3 calls unidentified.
-            nonlocal held_q, held_true
             if float(accept_values[mi]) > held_q:
                 held_q = float(accept_values[mi]); held_true = _truth
             return "banked", draw
@@ -1030,8 +1029,12 @@ def replay_adaptive(
                     _mx = _mx - argmax_shrink * (_mx - _mean)
                 # Stopping is worth R*held_q now, not 0: with nothing banked this is the original
                 # zero-crossing; with a candidate in hand the bar to keep buying rises.
+                # Under --no-verifier the banked candidate comes from the JUDGE, not from a weak
+                # verifier pass, so the floor must apply there too -- otherwise the policy ignores
+                # what it is holding and can never choose to submit it.
                 _floor = (held_q * float(value_of_correct)
-                          if (accept_values is not None and value_of_correct is not None) else 0.0)
+                          if ((accept_values is not None or no_verifier)
+                              and value_of_correct is not None) else 0.0)
                 value_stop = _mx <= _floor
         # Diagnostic upper bound: replace only the stopping decision with perfect
         # knowledge of the stored future outcomes. Route scores, rankings, costs,
@@ -1076,7 +1079,7 @@ def replay_adaptive(
                     "oracle_has_remaining_success": oracle_has_remaining_success,
                 })
                 decision_trace.append(decision)
-            if accept_values is not None and held_q > 0.0:
+            if (accept_values is not None or no_verifier) and held_q > 0.0:
                 return finish(held_true, False)   # banked the candidate it was holding
             return finish(False, True)
 
