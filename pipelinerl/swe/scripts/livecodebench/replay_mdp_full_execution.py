@@ -1686,8 +1686,13 @@ def main() -> None:
     )
     parser.add_argument("--retain-calibration-correctness", type=float, default=0.95)
     parser.add_argument(
-        "--start-protocol", choices=["scout_first", "free_start"], default="scout_first"
-    )
+        "--start-protocol", choices=["scout_first", "free_start"], default="free_start", help=(
+            "free_start (DEFAULT): the policy chooses its first route. scout_first forces a draw "
+            "from rung 0 before any decision -- correct only for the legacy pool, where rung 0 WAS "
+            "the 4B scout. On pool_v2 rung 0 is gpt-oss-20b-low, so scout_first silently removes "
+            "the first routing decision (the one routing is worth most on) while leaving a fixed "
+            "cascade untouched. That default biased every pool_v2 replay against adaptive routing "
+            "(PAPER_OUTLINE 3b-xciv). Pass scout_first explicitly to reproduce legacy results."))
     parser.add_argument(
         "--include-marginal-value-stop",
         action="store_true",
@@ -1878,6 +1883,12 @@ def main() -> None:
             dist_table[_pid] = (_pr[:, 0], _pr[:, 1], _pr[:, 2],
                                 float(_row.get("prefill_usd", 0.0)))
         print(f"distributional beliefs for {len(dist_table)} problems")
+    if args.start_protocol == "scout_first":
+        _r0 = str(np.load(Path(args.tensors_dir) / "tensors.npz", allow_pickle=True)["model_slots"][0])
+        if _r0 != "scout":
+            print(f"WARNING: --start-protocol scout_first forces a first draw from rung 0 = "
+                  f"'{_r0}', which is not the 4B scout. This removes the policy's first routing "
+                  f"decision. Use free_start unless you are reproducing a legacy result.")
     judge_table: dict[str, dict] = {}
     judge_dist = None
     if getattr(args, "judge_preds", ""):
