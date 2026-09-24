@@ -75,7 +75,7 @@ t = np.load(Path(a.tensors_dir) / "tensors.npz", allow_pickle=True)
 tp = [str(p) for p in t["problem_ids"]]; ti = {p: i for i, p in enumerate(tp)}
 probs = {str(json.loads(l)["problem_id"]): json.loads(l)
          for l in open(Path(a.tensors_dir) / "problems.jsonl") if l.strip()}
-ok = t["final_outcome"] & t["valid"]; slots = [str(s) for s in t["model_slots"]]
+ok = t["final_outcome"] & t["valid"]; valid = t["valid"]; slots = [str(s) for s in t["model_slots"]]
 
 keep = [i for i, p in enumerate(pids) if p in ti]
 pk = [pids[i] for i in keep]
@@ -100,7 +100,15 @@ print(f"{len(pk)} problems, fitting on {tr.sum()} train, layer {a.layer}")
 P = np.zeros((len(pk), len(slots)))
 for j, s in enumerate(slots):
     # pass@1 is the next-draw prior the replay decays; it is the theta the policy acts on.
-    y = ok[[ti[p] for p in pk], j, 0]
+    # BINOMIAL over every valid draw, not just draw 0. The quantity was always right -- a
+    # single draw IS an unbiased sample of the per-draw rate -- but it throws away 15/16 of the
+    # label information we paid to collect: the target is 0 or 1 where the truth may be 0.31.
+    # Fitting all draws with sample weights keeps the same estimand and cuts the label noise.
+    _rows = [ti[p] for p in pk]
+    _succ = np.array([int(ok[i, j, valid[i, j]].sum()) for i in _rows], float)
+    _tot = np.array([int(valid[i, j].sum()) for i in _rows], float)
+    y = ok[_rows, j, 0]                      # kept for AUC/C-selection, which needs binary
+    y_rate = np.divide(_succ, np.maximum(_tot, 1))
     if s in per_route:
         rp, rX, rl = per_route[s]
         ridx = {q: i for i, q in enumerate(rp)}
@@ -127,7 +135,11 @@ for j, s in enumerate(slots):
         print(f"  {s:8s} selected C={C_used:g} (cal AUC {best[1]:.3f}) vs shipped default {a.C:g}")
     else:
         C_used = a.C
-    clf = LogisticRegression(max_iter=2000, C=C_used / scale).fit(Xs[tr], y[tr])
+    _Xb = np.vstack([Xs[tr], Xs[tr]])
+    _yb = np.concatenate([np.ones(tr.sum()), np.zeros(tr.sum())])
+    _wb = np.concatenate([y_rate[tr] * _tot[tr], (1 - y_rate[tr]) * _tot[tr]])
+    _kw = _wb > 1e-9
+    clf = LogisticRegression(max_iter=2000, C=C_used / scale).fit(_Xb[_kw], _yb[_kw], sample_weight=_wb[_kw])
     raw = clf.predict_proba(Xs)[:, 1]
     # Platt scaling on the CALIBRATION split. The raw logistic head is badly over-confident in
     # its left tail: on TACO it assigned a median 1.05% next-draw probability to gpt-oss-20b on

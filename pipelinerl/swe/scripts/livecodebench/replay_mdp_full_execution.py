@@ -629,6 +629,10 @@ def replay_adaptive(
             ptr[mi] = new_ptr
             if draw is not None and ((realized_spend if cap_on_realised else spent_budget)
                                      + cost_est[mi] <= budget):
+                # Never offer a draw the judge cannot score: past its coverage an attempt has no
+                # value and can never be banked, so buying it is pure waste (88.6% -> 47.3%).
+                if max_draws_per_route and (failures[mi] + _banked_count[mi]) >= max_draws_per_route:
+                    continue
                 available.append(mi)
         if not available:
             break
@@ -849,10 +853,6 @@ def replay_adaptive(
             bellman_pbar, bellman_decay_s = np.asarray(prior, dtype=float), pseudo_count
             p_any = 1.0 - float(np.prod(1.0 - p_each))
 
-        if max_draws_per_route:
-            available = [mi for mi in available if failures[mi] + _banked_count[mi] < max_draws_per_route]
-            action_values = ({mi: v for mi, v in action_values.items() if mi in available}
-                             if action_values is not None else None)
         ratios = {mi: float(p_each[mi] / cost_est[mi]) for mi in available}
         if exploration_bonus:
             t = int(failures.sum())
