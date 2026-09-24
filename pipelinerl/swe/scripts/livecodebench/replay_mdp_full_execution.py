@@ -443,6 +443,7 @@ def replay_adaptive(
     observed: np.ndarray | None = None,
     accept_values: np.ndarray | None = None,
     judge_values: dict | None = None,
+    judge_dist: dict | None = None,
     no_verifier: bool = False,
     cap_on_realised: bool = False,
     random_route: bool = False,
@@ -1021,6 +1022,21 @@ def replay_adaptive(
                         _ds = pseudo_count if decay_pseudo_count is None else decay_pseudo_count
                         _ps = np.asarray(stop_theta, dtype=float) * _ds / (_ds + failures)
                     _vals = [float(_ps[mi] * value_of_correct - cost_est[mi]) for mi in action_values]
+                elif no_verifier and judge_dist is not None:
+                    # MARGINAL VALUE OF ANOTHER DRAW WITHOUT A VERIFIER. With a verifier, drawing
+                    # and succeeding converts into a banked win with probability p_m, so p_m*R-c_m
+                    # is the right action value. Without one, a new attempt only helps if the JUDGE
+                    # scores it above what we already hold: the gain is E[max(held_q, J)] - held_q,
+                    # where J is the judge's score for the undrawn attempt. That is far smaller
+                    # than p_m -- using p_m made the policy draw 19.3 times per problem and never
+                    # stop, because p(dsv4f)=0.88 always exceeded a mean judged value of 0.75.
+                    _vals = []
+                    for mi in action_values:
+                        _js = judge_dist.get(slots[mi])
+                        if _js is None or len(_js) == 0:
+                            _vals.append(-1.0); continue
+                        _gain = float(np.mean(np.maximum(_js, held_q))) - held_q
+                        _vals.append(_gain * float(value_of_correct) - cost_est[mi])
                 else:
                     _vals = list(action_values.values())
                 _mx = max(_vals)
@@ -1035,7 +1051,7 @@ def replay_adaptive(
                 _floor = (held_q * float(value_of_correct)
                           if ((accept_values is not None or no_verifier)
                               and value_of_correct is not None) else 0.0)
-                value_stop = _mx <= _floor
+                value_stop = _mx <= (0.0 if (no_verifier and judge_dist is not None) else _floor)
         # Diagnostic upper bound: replace only the stopping decision with perfect
         # knowledge of the stored future outcomes. Route scores, rankings, costs,
         # capacities, R, and Bellman horizon remain untouched. This deliberately
@@ -1835,6 +1851,7 @@ def main() -> None:
                                 float(_row.get("prefill_usd", 0.0)))
         print(f"distributional beliefs for {len(dist_table)} problems")
     judge_table: dict[str, dict] = {}
+    judge_dist = None
     if getattr(args, "judge_preds", ""):
         import re as _jre
         _sl = [str(x) for x in np.load(Path(args.tensors_dir) / "tensors.npz",
@@ -1848,7 +1865,14 @@ def main() -> None:
                 continue
             judge_table.setdefault(_pid, {})[(_m.group(1), int(_m.group(2)))] = float(
                 _row.get("p_correct", _row.get("p", 0.0)))
-        print(f"judge values for {len(judge_table)} problems")
+        judge_dist = {}
+        for _pid, _d in judge_table.items():
+            for (_sl, _k), _v in _d.items():
+                judge_dist.setdefault(_sl, []).append(_v)
+        judge_dist = {k: np.asarray(v, dtype=float) for k, v in judge_dist.items()}
+        print(f"judge values for {len(judge_table)} problems; "
+              f"score distribution per route: "
+              + ", ".join(f"{k} mean {v.mean():.2f}" for k, v in judge_dist.items()))
     hist_recal = json.loads(Path(args.history_recal).read_text()) if args.history_recal else None
     if args.content_preds:
         for row in _read_jsonl(Path(args.content_preds)):
@@ -1970,6 +1994,7 @@ def main() -> None:
                     hist_mode=(base[-1] if base.startswith("content_hist") else None),
                     hist_entry=(hist_table.get(pid) if base.startswith("content_hist") else None),
                     judge_values=judge_table.get(pid),
+                    judge_dist=judge_dist,
                     no_verifier=bool(getattr(args, "no_verifier", False)),
                     dist_entry=(dist_table.get(pid)[:3]
                                 if (base.startswith("content_dist") and pid in dist_table) else None),
