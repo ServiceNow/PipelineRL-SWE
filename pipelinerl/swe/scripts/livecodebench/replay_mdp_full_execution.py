@@ -1157,7 +1157,12 @@ def replay_adaptive(
         if result == "false_accept":
             return finish(False, False)   # verifier accepted a wrong answer; episode ends
 
-    if accept_values is not None:
+    # Loop exits by BREAK (budget exhausted, no route available, single-commit's one draw) land
+    # here. Under --no-verifier the policy may be holding a judged candidate, so it must submit
+    # it -- this line previously returned a wrong answer for every such episode, which silently
+    # zeroed the single-commit arm (0.0% everywhere) and every adaptive episode that hit the
+    # per-route cap or the budget.
+    if accept_values is not None or no_verifier:
         return finish(held_true, held_q == 0.0)   # abstained iff nothing was accepted
     return finish(False, False)
 
