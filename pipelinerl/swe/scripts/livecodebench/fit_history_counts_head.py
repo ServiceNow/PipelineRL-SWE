@@ -102,12 +102,19 @@ def main() -> None:
             if eid not in row_of:
                 continue
             used = {(mi, k) for mi in range(M) for k in fails[mi][:counts[mi]]}
-            lab, msk = np.zeros(M), np.zeros(M, bool)
+            lab, msk, nrem = np.zeros(M), np.zeros(M, bool), np.zeros(M)
             for mi in range(M):
                 rem = [k for k in range(ok.shape[2]) if valid[pi, mi, k] and (mi, k) not in used]
                 if rem:
-                    msk[mi] = True; lab[mi] = float(any(ok[pi, mi, k] for k in rem))
-            rows.append((eid, np.array(counts, float), split.get(pid, "none"), lab, msk))
+                    # PER-DRAW rate, not any(). The replay consumes p as P(the NEXT single draw
+                    # succeeds); a union over up to 16 remaining draws is a different quantity,
+                    # inflated by exactly the amount that made this head 24-38pt overconfident
+                    # while leaving AUC intact -- a union preserves ranking, so the metric being
+                    # selected on was blind to the error (PAPER_OUTLINE 3b-xci).
+                    msk[mi] = True
+                    lab[mi] = float(np.mean([ok[pi, mi, k] for k in rem]))
+                    nrem[mi] = float(len(rem))
+            rows.append((eid, np.array(counts, float), split.get(pid, "none"), lab, msk, nrem))
     print(f"{len(rows)} training states ({len(rows)/max(1,len(pidx)):.0f} per problem)")
 
     def feats(sel):
@@ -126,12 +133,21 @@ def main() -> None:
         ca = [r for r in rows if r[2] == "cal" and r[4][mi]]
         if len(tr) < 50:
             continue
-        ytr = np.array([r[3][mi] for r in tr])
-        clf = LogisticRegression(C=a.C, max_iter=3000).fit(feats(tr), ytr)
+        # BINOMIAL, not Bernoulli-on-a-union: a state with rate q over n remaining draws
+        # contributes q*n positives and (1-q)*n negatives, so the fit targets the per-draw
+        # probability the policy actually consumes, and states with more evidence weigh more.
+        Ftr = feats(tr)
+        rate = np.array([r[3][mi] for r in tr]); n_r = np.array([r[5][mi] for r in tr])
+        Xb = np.vstack([Ftr, Ftr])
+        yb = np.concatenate([np.ones(len(tr)), np.zeros(len(tr))])
+        wb = np.concatenate([rate * n_r, (1.0 - rate) * n_r])
+        keep_w = wb > 1e-9
+        clf = LogisticRegression(C=a.C, max_iter=3000).fit(Xb[keep_w], yb[keep_w],
+                                                           sample_weight=wb[keep_w])
         heads[s] = clf
         if ca:
             p = clf.predict_proba(feats(ca))[:, 1]
-            y = np.array([r[3][mi] for r in ca])
+            y = (np.array([r[3][mi] for r in ca]) > 0.5).astype(float)
             o = np.argsort(p); rk = np.empty(len(p)); rk[o] = np.arange(1, len(p) + 1)
             n1, n0 = y.sum(), (1 - y).sum()
             auc = (rk[y > 0].sum() - n1 * (n1 + 1) / 2) / max(n1 * n0, 1)
@@ -158,7 +174,7 @@ def main() -> None:
     for pid in pidx:
         e = f"{pid}||"
         if e in row_of:
-            by_eid.setdefault(e, (e, zero, split.get(pid, "none"), zero, np.zeros(M, bool), -1))
+            by_eid.setdefault(e, (e, zero, split.get(pid, "none"), zero, np.zeros(M, bool), zero, -1))
     sel = list(by_eid.values())
     F = feats(sel)
     P = np.full((len(sel), M), np.nan)
