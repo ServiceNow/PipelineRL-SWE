@@ -1023,6 +1023,13 @@ def replay_adaptive(
                         _ps = np.asarray(stop_theta, dtype=float) * _ds / (_ds + failures)
                     _vals = [float(_ps[mi] * value_of_correct - cost_est[mi]) for mi in action_values]
                 elif no_verifier and judge_dist is not None:
+                    # Problem-CONDITIONAL. The pooled judged-score distribution per route is the
+                    # wrong reference: on a hard problem it predicts the next dsv4f draw will score
+                    # ~0.87 (the pool mean) when it will score ~0.3, so the policy buys draws that
+                    # never improve what it holds -- 24.5 attempts per problem and 70% accuracy
+                    # where one dsv4f draw gets 88%. Shift each route's judged-score distribution
+                    # to this problem's predicted success rate p_m(x), keeping its shape, then the
+                    # gain E[max(J, held_q)] - held_q reflects THIS problem's prospects.
                     # MARGINAL VALUE OF ANOTHER DRAW WITHOUT A VERIFIER. With a verifier, drawing
                     # and succeeding converts into a banked win with probability p_m, so p_m*R-c_m
                     # is the right action value. Without one, a new attempt only helps if the JUDGE
@@ -1035,7 +1042,10 @@ def replay_adaptive(
                         _js = judge_dist.get(slots[mi])
                         if _js is None or len(_js) == 0:
                             _vals.append(-1.0); continue
-                        _gain = float(np.mean(np.maximum(_js, held_q))) - held_q
+                        # recentre the route's judged-score distribution on p_m for THIS problem
+                        _shift = float(p_each[mi]) - float(_js.mean())
+                        _jp = np.clip(_js + _shift, 0.0, 1.0)
+                        _gain = float(np.mean(np.maximum(_jp, held_q))) - held_q
                         _vals.append(_gain * float(value_of_correct) - cost_est[mi])
                 else:
                     _vals = list(action_values.values())
