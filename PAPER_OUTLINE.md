@@ -1443,6 +1443,44 @@ sets the level (ratios now 0.47–0.85 at $q{=}0.25$ against 1.24–1.94 at $q{=
 this codebase: any downstream affine recalibration will annihilate an upstream level knob. Check
 that variants differ before reading their results.*
 
+### 3b-xciii ⚠ THE ACTION SPACE MUST MATCH THE BELIEF'S COVERAGE (2026-09-24)
+
+**What happened.** The verifier-free judged policy scored 47.3% at 29.8 attempts per problem where
+one deepseek draw gets ~88%. Four successive diagnoses were wrong -- a banking gate, the marginal
+value formula, the pooled judged distribution, a supposed winner's curse -- and each was
+implemented before being tested. The fifth, from reading `episode_traces.jsonl` directly, was
+immediate and unambiguous:
+
+| R | attempts | accuracy |
+|---|---|---|
+| 0.032 | 12.6 | **88.6%** |
+| 4.40 | 29.8 | **47.3%** |
+
+The judge covers draws 0-3 of each rung (`--max-draws-per-rung 4`, 20 attempts per problem), but
+the replay allowed the full depth -- 16 from gpt-oss-20b-low alone. Past the judge's coverage an
+attempt has NO judged value, so it can never outrank what is held: the policy paid for ~10 draws
+per problem that were structurally unsubmittable. Inside the coverage it was already competitive
+(88.6% against single-shot's 89.4% ceiling).
+
+**The general rule.** A policy's action space must not exceed the belief's support. This is not
+specific to judges: any learned value that is defined on a subset of actions silently prices the
+remainder at zero, and the policy then buys them precisely because they look free. Nothing in the
+frontier numbers reveals it -- only the traces do.
+
+**Two process lessons, both expensive here.**
+1. **Read the traces before theorising.** Four wrong diagnoses cost more than the single trace read
+   that settled it. Aggregate frontier numbers cannot distinguish "wrong belief" from "wrong action
+   space" from "wrong value function".
+2. **Never diagnose on training problems.** The winner's-curse hypothesis (adding cheap attempts
+   costs 3.5pt) was measured on all 892 problems including the judge's own training set. On the
+   test split the effect is exactly zero, and selection peaks at k=8 with 93.0% -- above single-shot
+   (89.4%) and fixed-plan judged best-of-k (92.1%).
+
+**Caveat on the fix.** Capping at 4 draws per rung matches the judge's coverage but that coverage
+was a convenience when building prompts, not a principled choice. If the method looks good at that
+cap, coverage must be extended to full depth and the result re-checked -- otherwise the action
+space has been tuned to flatter the result.
+
 ### 3b-xcii ⭐⭐⭐ THE VERIFIER WAS DOING THE BASELINE'S WORK (2026-09-24)
 
 **The finding.** Every null result in 3b-xc/3b-xci was measured with a PERFECT, FREE verifier --
