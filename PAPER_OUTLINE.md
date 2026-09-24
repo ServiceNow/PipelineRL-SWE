@@ -1443,6 +1443,48 @@ sets the level (ratios now 0.47–0.85 at $q{=}0.25$ against 1.24–1.94 at $q{=
 this codebase: any downstream affine recalibration will annihilate an upstream level knob. Check
 that variants differ before reading their results.*
 
+### 3b-xcii ⭐⭐⭐ THE VERIFIER WAS DOING THE BASELINE'S WORK (2026-09-24)
+
+**The finding.** Every null result in 3b-xc/3b-xci was measured with a PERFECT, FREE verifier --
+LiveCodeBench hidden tests tell the policy instantly which draw succeeded. That single assumption
+is what makes a fixed cascade near-optimal, because "draw the cheapest rung, check, escalate" only
+works if `check` is free. Remove it and the picture inverts.
+
+| regime | our gain over the best fixed policy | headroom captured |
+|---|---|---|
+| perfect verifier, 3 rungs | +0.4 to +3.3pt | ~20% |
+| **no verifier, 5 rungs, single draw** | **+8.7 to +12.8pt** | **66-74%** |
+
+(No-verifier = one draw, submitted unseen; the fixed baseline may randomise between models to hit
+intermediate budgets, so it is the interpolated hull, not the step envelope.)
+
+**Why the baselines collapse, structurally rather than by degree.**
+* **RoR v1 becomes UNDEFINED.** Its belief is a pool prior decayed by OBSERVED failures. Without a
+  verifier no failure is ever observed, so `failures[m] += 1` never fires and there is no belief to
+  form. It is not a weakened baseline; it is an inapplicable one.
+* **The cascade loses its only move.** Draw-check-escalate has no check, so deciding when to stop
+  requires a learned quality estimate -- which is our method wearing a baseline's hat.
+* **Multi-sampling becomes worthless without a selection rule**: k blind draws have the same
+  expected accuracy as one, at k times the cost. So the action space collapses to which-model-or-
+  abstain, which is precisely what a router does.
+
+**The price spread starts to matter, too.** 5 rungs (42x spread) beat 3 rungs (12x) at +12.8 vs
++10.8pt. deepseek-v4-flash is the reason: 88% at 0.183c, cheaper AND better than gpt-oss-120b
+medium. With a verifier that barely matters -- just redraw the cheap rung. Without one, choosing it
+per problem is worth real money.
+
+**Scoping consequence for the paper.** LCB is close to the worst case for this method on three
+independent counts: cheap draws (0.012c), perfect free verification, and a nested pool. We picked
+the benchmark that most favours the baseline. The claim to make is conditional and testable --
+*the value of learned routing scales with the cost of verification* -- with the perfect-verifier
+null as evidence FOR the theory rather than against the method.
+
+**Next (3b-xciii): judged multi-sampling.** Without a verifier the policy should still choose
+WHICH held attempt to submit and whether to keep drawing. That needs a judge over produced
+attempts -- 16,937 prefills queued, 75.2% of them correct, a distribution the failure-only history
+head never saw. Baselines that remain valid there: always-submit-last, self-consistency/majority
+vote, best fixed single model.
+
 ### 3b-xci ⚠⚠ DISCRIMINATION IS NOT POLICY IMPROVEMENT: the history arm measured (2026-09-24)
 
 **The setup.** History-conditioned belief: re-prefill the 4B on problem + the most recent failed
