@@ -442,6 +442,8 @@ def replay_adaptive(
     content_prior: np.ndarray | None = None,
     observed: np.ndarray | None = None,
     accept_values: np.ndarray | None = None,
+    judge_values: dict | None = None,
+    no_verifier: bool = False,
     cap_on_realised: bool = False,
     random_route: bool = False,
     belief_split: str | None = None,
@@ -559,6 +561,18 @@ def replay_adaptive(
         # imperfect verifier" and reports gains "verifier-gated, shrinking as verifier quality
         # degrades". Our weak signal false-accepts 11.01% of draws, so a policy trusting it stops
         # believing it won when it did not.
+        if no_verifier:
+            # NO VERIFIER. Nothing tells the policy whether this draw is right, so it cannot stop
+            # on success and cannot count failures -- `failures[mi] += 1` below never fires, which
+            # is why RoR v1 has no belief to form in this regime. Instead every draw BANKS a
+            # candidate worth R * judged P(correct | problem, this attempt), and the policy chooses
+            # between submitting the best it holds, drawing again, and abstaining.
+            nonlocal held_q, held_true
+            _jv = 0.0 if judge_values is None else float(
+                judge_values.get((slots[mi], int(draw)), 0.0))
+            if _jv > held_q:
+                held_q = _jv; held_true = bool(outcomes[mi, draw])
+            return "banked", draw
         _seen = outcomes[mi, draw] if observed is None else observed[mi, draw]
         if _seen:
             _truth = bool(outcomes[mi, draw])
@@ -1528,6 +1542,14 @@ def main() -> None:
         "history_preds.jsonl from fit_distributional_head.py, carrying per-route spike-and-slab "
         "params. Adds the `content_dist` family: ONE prefill at entry, failures absorbed by "
         "conjugacy instead of a decay constant."))
+    parser.add_argument("--no-verifier", action="store_true", help=(
+        "Remove the success signal entirely: the policy never learns whether a draw was right, so "
+        "it must decide which held attempt to submit. Multi-sampling is then worthless without a "
+        "judge (k blind draws = 1 draw in accuracy, k x the cost), the cascade loses its check "
+        "step, and RoR v1 is undefined. See PAPER_OUTLINE 3b-xcii."))
+    parser.add_argument("--judge-preds", default="", help=(
+        "jsonl {example_id: '<pid>||<slot><draw>', p_correct}: P(this specific attempt is "
+        "correct), from a probe that read the attempt. Required by --no-verifier."))
     parser.add_argument("--posterior-with-replacement", action="store_true", help=(
         "Update the success-count posterior as if draws were independent (deployable), not "
         "without replacement from the K stored draws (replay-only knowledge of a finite pool)."))
@@ -1809,6 +1831,21 @@ def main() -> None:
             dist_table[_pid] = (_pr[:, 0], _pr[:, 1], _pr[:, 2],
                                 float(_row.get("prefill_usd", 0.0)))
         print(f"distributional beliefs for {len(dist_table)} problems")
+    judge_table: dict[str, dict] = {}
+    if getattr(args, "judge_preds", ""):
+        import re as _jre
+        _sl = [str(x) for x in np.load(Path(args.tensors_dir) / "tensors.npz",
+                                       allow_pickle=True)["model_slots"]]
+        _jrx = _jre.compile("^(" + "|".join(sorted(map(_jre.escape, _sl), key=len, reverse=True))
+                            + r")(\d+)$")
+        for _row in _read_jsonl(Path(args.judge_preds)):
+            _pid, _, _h = str(_row["example_id"]).partition("||")
+            _m = _jrx.match(_h)
+            if _m is None:
+                continue
+            judge_table.setdefault(_pid, {})[(_m.group(1), int(_m.group(2)))] = float(
+                _row.get("p_correct", _row.get("p", 0.0)))
+        print(f"judge values for {len(judge_table)} problems")
     hist_recal = json.loads(Path(args.history_recal).read_text()) if args.history_recal else None
     if args.content_preds:
         for row in _read_jsonl(Path(args.content_preds)):
@@ -1929,6 +1966,8 @@ def main() -> None:
                                        or base.startswith("content_hist")) else None),
                     hist_mode=(base[-1] if base.startswith("content_hist") else None),
                     hist_entry=(hist_table.get(pid) if base.startswith("content_hist") else None),
+                    judge_values=judge_table.get(pid),
+                    no_verifier=bool(getattr(args, "no_verifier", False)),
                     dist_entry=(dist_table.get(pid)[:3]
                                 if (base.startswith("content_dist") and pid in dist_table) else None),
                     hist_recal=hist_recal,
