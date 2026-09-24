@@ -18,6 +18,7 @@ def main() -> None:
     ap.add_argument("--rungs", required=True, help="label:draws,...")
     ap.add_argument("--calibration-fraction", type=float, default=0.2)
     ap.add_argument("--split-seed", type=int, default=0)
+    ap.add_argument("--tasks-file", default="", help="bcb_tasks_v014.jsonl, for problems.jsonl")
     a = ap.parse_args()
     pool, out = Path(a.pool_dir), Path(a.output_dir)
     spec = [(s.split(":")[0], int(s.split(":")[1])) for s in a.rungs.split(",") if s.strip()]
@@ -84,6 +85,15 @@ def main() -> None:
     (out / "split_manifest.json").write_text(json.dumps(
         {"train_problem_ids": sorted(rest[ncal:]), "calibration_problem_ids": sorted(rest[:ncal]),
          "test_problem_ids": sorted(man["eval"]), "split_mode": "bcb_random"}, indent=1))
+    # problems.jsonl: the probe scripts read it from the bundle, as they do for LCB.
+    tasks = {}
+    if a.tasks_file:
+        tasks = {json.loads(l)["task_id"]: json.loads(l) for l in open(a.tasks_file) if l.strip()}
+    with open(out / "problems.jsonl", "w") as fh:
+        for pid in pids:
+            fh.write(json.dumps({"problem_id": pid, "platform": "bigcodebench", "contest_date": "",
+                                 "difficulty": "", "problem_statement":
+                                     tasks.get(pid, {}).get("instruct_prompt", "")}) + "\n")
     print(f"{P} tasks x {M} rungs x up to {K} draws; {infra} infra failures masked")
     for mi, (label, nd) in enumerate(spec):
         v = valid[:, mi, :nd]
