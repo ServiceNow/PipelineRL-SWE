@@ -114,8 +114,10 @@ def main() -> None:
         Zi = Z[[row_of[e] for e, *_ in sel]]
         C = np.array([c for _, c, *_ in sel])
         last = np.zeros((len(sel), M))
-        for i, (e, *_ ) in enumerate(sel):
-            last[i, slots.index(e.split("||")[1].rstrip("0123456789"))] = 1
+        for i, (e, *_) in enumerate(sel):
+            tail = e.split("||")[1].rstrip("0123456789")
+            if tail:                       # entry states have no last route: all-zero one-hot
+                last[i, slots.index(tail)] = 1
         return np.hstack([Zi, C, np.log1p(C), C.sum(1, keepdims=True), last])
 
     heads, cal = {}, {}
@@ -150,6 +152,13 @@ def main() -> None:
     by_eid = {}
     for r in rows:
         by_eid.setdefault(r[0], r)
+    # ENTRY states too: the replay falls back to hist_entry[""] before any failure is observed,
+    # so a table without them raises at the first decision of every episode.
+    zero = np.zeros(M)
+    for pid in pidx:
+        e = f"{pid}||"
+        if e in row_of:
+            by_eid.setdefault(e, (e, zero, split.get(pid, "none"), zero, np.zeros(M, bool), -1))
     sel = list(by_eid.values())
     F = feats(sel)
     P = np.full((len(sel), M), np.nan)

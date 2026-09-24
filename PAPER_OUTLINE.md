@@ -1443,6 +1443,55 @@ sets the level (ratios now 0.47–0.85 at $q{=}0.25$ against 1.24–1.94 at $q{=
 this codebase: any downstream affine recalibration will annihilate an upstream level knob. Check
 that variants differ before reading their results.*
 
+### 3b-xci ⚠⚠ DISCRIMINATION IS NOT POLICY IMPROVEMENT: the history arm measured (2026-09-24)
+
+**The setup.** History-conditioned belief: re-prefill the 4B on problem + the most recent failed
+attempt (one prefill per problem x failed draw, ~34/problem), with the failure COUNTS handed to the
+head as features rather than to the model as text. That split is what makes it affordable -- full
+trajectory conditioning needs one prefill per reachable trajectory, 791,606 states here, ~66
+GPU-hours, against ~1 for this.
+
+**The discrimination is real and durable.** Stratified by exact failure count -- the state the
+policy actually faces, where any count-based belief is **0.5 by construction** because it assigns
+every problem the same number:
+
+| rung | @1 failure | @2 | @3 |
+|---|---|---|---|
+| oss20lo | 0.798 | 0.803 | 0.808 |
+| oss20md | 0.778 | 0.768 | 0.800 |
+| oss120md | 0.921 | 0.752 | 0.794 |
+
+It does not decay with depth, unlike the prompt-only probe's edge.
+
+**It does not translate.** Frontier against RoR v1, prefill priced AND free (LCB test, 3 rungs):
+
+| spend | best fixed | RoR v1 | prompt-only | history (free) | history - RoR |
+|---|---|---|---|---|---|
+| 0.05c | 73.3% | 75.6% | 75.7% | 75.5% | **-0.1** |
+| 0.10c | 80.4% | 80.6% | 80.5% | 79.0% | **-1.6** |
+| 0.20c | 80.6% | 82.8% | 83.6% | 81.9% | -0.8 |
+| 0.40c | 85.9% | 85.7% | 87.2% | 87.0% | +1.3 |
+| 0.80c | 91.5% | 90.1% | 89.9% | 90.3% | +0.2 |
+| 1.60c | 92.7% | 92.2% | 92.3% | 92.5% | +0.3 |
+
+**AUC 0.75-0.92 against a 0.5 baseline bought approximately nothing.** Free vs priced prefill
+differs only at 0.05c (-0.1 vs -1.5), so the probe-cost accounting was a real bug but not the
+thing hiding a win.
+
+**Why this is the central negative result.** A belief head is selected on ranking and consumed as
+LEVELS. The policy compares p*R against c; it never sees a ranking. So a head can separate hopeless
+from unlucky beautifully and still place both on the wrong side of the same threshold. This is the
+same failure as 3b-lxxxiii (no tail) in a different disguise, and it means **AUC must stop being
+reported as evidence for the method** -- only the frontier counts.
+
+**What is untested rather than refuted.**
+1. History states cover only 3 rungs; dsv4f and gpt-oss-120b-high failures have no prefills, and
+   those are the rungs escalation decisions are about.
+2. Calibration of the history head was never fitted for the policy objective, only for AUC.
+3. **LCB is close to the worst case for the whole method**: at mean q~0.80, 16 draws of a 0.012c
+   rung reach 80.9% alone, so "hammer the cheapest rung" is near-optimal and needs no beliefs.
+   BigCodeBench at q~0.28 is the real test.
+
 ### 3b-xc ⚠⚠ THE ZERO ROUTER WAS TOO WEAK, AND IT WAS CARRYING THE HEADLINE (2026-09-23)
 
 **What happened.** On the recollected pool the probe beat the replay's Zero Router family by
