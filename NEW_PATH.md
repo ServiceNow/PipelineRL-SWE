@@ -306,3 +306,23 @@ answers a named open problem). If the smoke test passes its bars: fit α/β head
 `replay_priced_verification.py` with `VERIFY WITH j` (writer choice) as an action, sweep v as before,
 baselines = best fixed writer, always-cheapest-writer, oracle writer, never-verify. If it fails its
 bars: IDEA A carries the program and IDEA B survives only as the SWE-priced variant.
+### 2.8 CORRECTION (2026-09-25, Claude re-check of the smoke test) — read before building on §2.7
+
+`pipelinerl/swe/scripts/livecodebench/check_test_writer_smoke.py`, same verdicts, 262 problems with
+suites from all 5 writers and 12 common candidates. Selection = submit the candidate passing most
+suite cases, ties broken uniformly (computed exactly).
+1. **Every writer's suite is WORSE than no suite.** Random pick 83.5%; qwen4b 80.5% (-3.0, CI
+   [-5.4,-0.7]); oss20lo/oss20md/dsv4f/oss120md 71-74% (-10 to -12). "qwen4b is the best fixed
+   writer" = it is the least harmful: its suites fail everything, so ties fall back to random.
+2. **The +9.5pt crossover was selection on noise.** Choosing the writer per problem on half the
+   candidates and scoring on the other half: honest oracle 79.4% vs best fixed 81.5% (-2.1,
+   [-3.4,-0.6]) vs random 83.6%.
+3. **User's framing (X writes solution, Y writes tests vs X writes both), X's own candidates:**
+   any-writer suites ≈ random for every X (differences within ±2pt; self vs best-other: oss20lo
+   +0.0, oss20md +2.1 [+0.4,+3.8], dsv4f -0.1, oss120md -0.2).
+Mechanism: a 4-case spec-only suite with the writer's own expected outputs rewards candidates that
+share the writer's mistakes; on LCB (83.5% of candidates correct) any biased signal hurts.
+Caveats: LCB only (high base rate — BCB ~50% is the fairer test); 4 cases per suite; this scores
+against the writer's EXPECTED outputs — CodeT-style dual agreement (inputs from the writer, outputs
+from candidate consensus) was not tested and needs raw candidate outputs, which the verdict files
+do not store. As run, IDEA B's go/no-go is NO on LCB.
