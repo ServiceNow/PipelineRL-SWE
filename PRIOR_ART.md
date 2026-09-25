@@ -414,3 +414,26 @@ non-adaptive baseline, and what we now compare against. Metric is **AIQ**, mean 
 shared cost domain. Their own **KNN and MLP routers "generally do not significantly outperform the
 Zero Router"**, winning on MMLU/Winogrande and losing on ARC-Challenge/MBPP. Our +3.91% weighted
 lands in that regime; **do not claim to beat their routers** without their per-dataset AIQ values.
+
+## 7. Sweep 2026-09-25: cross-model COST/LENGTH prediction from a foreign model's prefill (our cell)
+
+Question: has anyone predicted per-query output length / cost for OTHER models from one cheap model's
+prefill activations, and used it in routing? Searched arXiv API (length prediction x routing; hidden
+states/prefill x length; routing x probes x cost; cross-model length prediction) plus web search.
+Verdict: **not found. Each neighbour misses one of {cross-model target, prefill activations, cost
+inside the routing decision, value measured vs a constant-length proxy}.**
+- Own-model length from own hidden states: 2607.05316 (remaining length linearly decodable; transfer
+  is across DATASETS, not models), 2602.11812 EGTP/PLP (ICLR'26, entropy-guided pooling, serving),
+  2608.15592 (prefill attention + entropy, single model), 2602.01237 (reasoning length for budgets).
+- Cross-model cost for routing from TEXT features: MixLLM 2502.18482 (BERT emb -> per-LLM length,
+  no ablation vs constant), CARGO 2509.09782, 2607.18253 (LightGBM on prompt features), Models Under
+  SCOPE 2601.22323 (retrieval of past behaviour + generative estimate; MAE ablation only), R2-Router
+  2602.02823 (routes over (model, length budget) pairs; length is CONTROLLED, not predicted).
+- SCX Router 2609.02292: Qwen3 decoder KV-cache scorer predicts task type, difficulty and "expected
+  output length" as TASK attributes (not per candidate model); cost handled by separate per-task
+  policies. Closest in representation; cite.
+- Prefill router 2603.20895: foreign prefill -> other models' SUCCESS; cost via median length by
+  design ("output length is unavailable before generation"). Our delta = the same finding for cost.
+- ReLope 2603.24787: LoRA probes on a (multimodal) model's own hidden states for correctness routing.
+Claim we can make: foreign-prefill prediction of every candidate model's per-query cost, inside the
+routing rule, with its value measured at matched spend against the median-length proxy.
