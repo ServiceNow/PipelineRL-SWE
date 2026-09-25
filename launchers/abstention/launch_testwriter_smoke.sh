@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Test-writer smoke test (NEW_PATH.md 2.7): spec-only unit-test suites, 5 writers, LCB test split.
-# CPU-only eai job (OpenRouter calls only); ~341 problems x 5 writers ~= 1.7k cheap calls.
-# After it lands, execution + analysis run locally:
+# Test-writer smoke test (NEW_PATH.md 2.7) — OpenRouter leg.
+# 4 API writers, LCB test split, CPU-only eai job (no GPU): ~1.4k cheap calls.
+# The qwen4b writer is NOT on OpenRouter (the pool serves it locally) — see
+# launch_testwriter_smoke_qwen4b.sh for the GPU leg. Both jobs run in parallel.
+# After both land, execution + analysis run locally:
 #   ~/.conda/envs/pipeline-rl/bin/python3 pipelinerl/swe/scripts/livecodebench/run_test_suites.py \
 #     --pool-dir $R/pool_v2_tensors_5rung --suites-dir $R/testwriter_smoke_lcb \
 #     --out-dir $R/testwriter_smoke_lcb/verdicts --workers 16
@@ -20,7 +22,7 @@ python pipelinerl/swe/scripts/livecodebench/generate_test_suites.py \
   --pool-dir ${R}/pool_v2_tensors_5rung \
   --out-dir ${R}/testwriter_smoke_lcb \
   --splits test \
-  --writers qwen4b,oss20lo,oss20md,dsv4f,oss120md \
+  --writers oss20lo,oss20md,dsv4f,oss120md \
   --concurrency 8 \
   --api-key-file /home/toolkit/.secrets/openrouter_api_key \
   2>&1 | tee ${DIR}/gen.log

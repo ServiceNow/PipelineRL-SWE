@@ -84,6 +84,7 @@ async def openrouter_call(
     reasoning_effort: str | None,
     reasoning_enabled: bool,
     gen_timeout: int,
+    base_url: str = "https://openrouter.ai/api",
     title: str = "PipelineRL-testwriter-smoke",
 ):
     payload = {
@@ -107,7 +108,7 @@ async def openrouter_call(
         "X-Title": title,
     }
     async with session.post(
-        "https://openrouter.ai/api/v1/chat/completions",
+        f"{base_url}/v1/chat/completions",
         headers=headers,
         json=payload,
         timeout=aiohttp.ClientTimeout(total=300),
@@ -132,6 +133,11 @@ WRITERS = {
 }
 
 
+# Local-vLLM leg: the pool's Qwen3-4B scout is not on OpenRouter; it is served locally
+# (see lcb_corrected_temporal_*/run_collect.sh). Model name as served by the local server.
+LOCAL_MODEL = {"qwen4b": "Qwen/Qwen3-4B-Instruct-2507"}
+
+
 async def gen_writer(
     writer: str,
     problems: list[dict],
@@ -139,9 +145,13 @@ async def gen_writer(
     out_path: Path,
     concurrency: int,
     max_tokens: int = 4096,
+    base_url: str = "https://openrouter.ai/api",
     max_retries: int = 2,
 ) -> None:
     model, temp, top_p, effort = WRITERS[writer]
+    is_openrouter = base_url.startswith("https://openrouter")
+    if not is_openrouter and writer in LOCAL_MODEL:
+        model = LOCAL_MODEL[writer]
     done = set()
     if out_path.exists():
         with open(out_path) as f:
@@ -165,6 +175,7 @@ async def gen_writer(
                         session, model, user, api_key,
                         max_tokens=max_tokens, temperature=temp, top_p=top_p,
                         reasoning_effort=effort, reasoning_enabled=False, gen_timeout=240,
+                        base_url=base_url,
                     )
                 cases = extract_json_array(content)
                 if cases is None:
@@ -202,6 +213,8 @@ def main():
     ap.add_argument("--splits", default="test", help="comma list from split_manifest")
     ap.add_argument("--writers", default="qwen4b,oss20lo,oss20md,dsv4f,oss120md")
     ap.add_argument("--api-key-file", default="/home/toolkit/.secrets/openrouter_api_key")
+    ap.add_argument("--base-url", default="https://openrouter.ai/api",
+                    help="local leg for qwen4b: http://localhost:8000 (vLLM server)")
     ap.add_argument("--concurrency", type=int, default=8)
     ap.add_argument("--max-cases", type=int, default=4)
     ap.add_argument("--max-tokens", type=int, default=4096)
@@ -233,6 +246,7 @@ def main():
                 out_path,
                 args.concurrency,
                 max_tokens=args.max_tokens,
+                base_url=args.base_url,
                 max_retries=2,
             )
         )

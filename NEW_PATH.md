@@ -254,11 +254,13 @@ the paper becomes test-economics-only.
 20b-md ~0.03$/M out, dsv4f cheap; cap oss-120b-md to a subsample). Suite execution: CPU minutes. No
 GPU, no Daytona, no concurrency cap.
 
-**Implementation (committed 2026-09-25):**
-- `pipelinerl/swe/scripts/livecodebench/generate_test_suites.py` — spec-only suites, one per
-  (problem, writer), resumable, tokens recorded; launched by
-  `launchers/abstention/launch_testwriter_smoke.sh` (CPU-only eai job, SUBMIT=1 to submit).
-  Suites land in `$R/testwriter_smoke_lcb/suites_{writer}.jsonl`.
+**Implementation (committed 2026-09-25, two jobs run in parallel):**
+- **OpenRouter leg (CPU-only):** `launchers/abstention/launch_testwriter_smoke.sh` runs
+  `pipelinerl/swe/scripts/livecodebench/generate_test_suites.py` for the 4 API writers
+  (oss20lo, oss20md, dsv4f, oss120md).
+- **qwen4b leg (GPU):** `launchers/abstention/launch_testwriter_smoke_qwen4b.sh` — qwen3-4b is not
+  on OpenRouter (the pool serves it locally); the job spins a local vLLM server (the
+  `lcb_corrected_temporal_*` pattern) and generates the qwen4b suites against it.
 - `pipelinerl/swe/scripts/livecodebench/run_test_suites.py` — local execution of every suite case
   against every stored candidate (round-robin sample, cap 12 candidates/problem, 4 cases/suite,
   10 s/case; crash/timeout counts as case-FAIL, not as suite failure). Verdicts per writer under
