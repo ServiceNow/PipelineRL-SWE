@@ -390,3 +390,17 @@ before use. (Runs 1788820478-0644 are the blown concurrent attempts: 0-2 resolve
    fixed writer on held-out patches.
 Reuse: SWT-bench harness (github.com/logic-star-ai/swt-bench) for prompts/eval logic; our Daytona
 eval path (`launch_opus_verified_daytona_eval.sh`) for sandboxes.
+
+### 1.y IDEA A — second gate: FAILS against the fixed cascade (2026-09-25, `replay_correlated_beliefs.py`)
+Verifier regime, greedy P*V-c policy, learned cost head, calibration-matched budgets, paired CIs.
+- Shared-coefficient beliefs: correlated beats independent on BCB (+3.4 [+1.4,+5.5] @0.05c, +3.6
+  [+2.0,+5.4] @0.10c) — but the independent arm was misspecified (one own-failure weight for all routes;
+  oss20lo's own failures are far less informative than a strong route's).
+- Per-route beliefs (`--per-route`): the gain mostly vanishes — BCB +2.9 [+1.5,+4.5] @0.05c, +0.9/+0.8
+  above; LCB correlated is WORSE at low budget (-3.0, -1.7, -2.2).
+- Both lose clearly to the saved best fixed cascade on BCB (oss20lo x4-16, then dsv4f):
+  59.9% @0.019 vs 41.5-42.1% @0.020; 66.5% @0.044 vs 58.9% @0.039; 69.6% @0.076 vs 65.9% @0.065.
+Reading: failures on other routes ARE informative (diagnostic §1.x; learned weight on "other failures"
+is as large as on "own failures"), but a greedy belief policy still loses to "hammer the cheap rung"
+because its successive draws are nearly independent and the policy is myopic. Same conclusion Codex's
+Bellman reached. Cross-route updating is a correct modelling fix, not a winning policy. PARKED.
