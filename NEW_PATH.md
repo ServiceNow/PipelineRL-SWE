@@ -326,3 +326,67 @@ Caveats: LCB only (high base rate — BCB ~50% is the fairer test); 4 cases per 
 against the writer's EXPECTED outputs — CodeT-style dual agreement (inputs from the writer, outputs
 from candidate consensus) was not tested and needs raw candidate outputs, which the verdict files
 do not store. As run, IDEA B's go/no-go is NO on LCB.
+
+### 1.x IDEA A — first gate PASSED on BCB, not on LCB (2026-09-25, `livecodebench/idea_a_dependence_check.py`)
+Held-out log-loss gain (nats×100 per draw) for predicting model m' from its probe prior PLUS one
+observed draw of model m on the same problem (train fit, test eval):
+- **BCB: large everywhere.** Off-diagonal (cross-model) 20-30, same-model 29-36; coefficient on the
+  observed draw +2 to +4 logits. The probe's prior on BCB is weak (AUC ~0.72), so one draw of ANY model
+  reveals much of the difficulty the probe missed, and a failure on m should lower beliefs on m'.
+  An independent Beta-per-route belief (counts, current Bellman) cannot make that cross-update.
+- **LCB: small (0.4-7.9).** The prior already knows the difficulty; little left to learn from a draw.
+- Most of the BCB signal is SHARED difficulty (cross-model gains are ~70-90% of same-model gains), i.e.
+  a one-factor latent-difficulty posterior should capture it; model-specific structure is secondary.
+- Only usable when outcomes are observed (verifier / priced-verification regime).
+Next gate (Codex's Bellman replay): one-factor correlated belief vs independent Bellman vs best fixed
+cascade on BCB, matched spend; kill if < +2pt over independent Bellman.
+
+## 3. SWE TEST-WRITER DIRECTION (2026-09-25) — plan and data inventory
+
+**Why SWE and not LCB:** on LCB, writing a correct expected output requires solving, so test-writers
+form the same difficulty ladder as solvers (§2.8). On SWE the verifier is a *reproduction test*
+(fails before, passes after), which needs understanding the bug, not fixing it. SWT-bench (2406.12952,
+NeurIPS'24) measured exactly this: instance-level success at test generation and at repair are
+statistically independent (p = 0.80 / 0.73), and four test-generation methods are strongly
+complementary (ideal ensemble 87 vs 51 best-single, +71%). A reproduction test also has a label-free
+validity check (must FAIL on the unpatched repo), and checks are expensive (env build + suite in a
+Daytona sandbox, org cap ~10 concurrent), so pricing is real.
+
+**Novelty check (2026-09-25):** no paper routes the test-WRITER per instance. Neighbours: SWT-bench
+(measures complementarity, doesn't exploit it); ExecCritic 2609.09133 (fixed writer; ablation: writer
+identity swings Verified 57.3 vs 65.3); e-Otter++ 2508.06365 (heterogeneous prompting, selects among
+tests); SCATE 2607.08983 (contextual bandit over testing actions for cost-effective coverage-driven
+test generation, within one agent); Agentless/Otter (repro tests for patch selection, one writer).
+Hard baseline to beat: ALL writers write tests (the 71%-complementarity ensemble) — our claim must be
+"matches the ensemble at a fraction of the cost", which is why pricing is central.
+
+**Candidate pool that already exists (real Daytona labels, same 369 SWE-bench Verified instances):**
+| route | dir (`$R/opus_verified_daytona_eval_*`) | resolved |
+|---|---|---|
+| Qwen3-4B scout | 1788821285 | 91 (24.7%) |
+| gpt-oss-20b | 1788821339 | 152 (41.2%) |
+| Qwen3-30B | 1788821375 | 153 (41.5%) |
+| gpt-oss-120b | 1788821418 | 193 (52.3%) |
+| Gemini (route 4) | 1788821453 | 230 (62.3%) |
+| Claude Opus | 1786735324 | 319 (86.4%) |
+Patches: `predictions/predictions_opus_verified.jsonl`; labels: `...results.jsonl`. Route→model
+mapping from `run_all_routes.sh` + the collect dir name (4b_scout_oss20_qwen30_oss120_gemini) — VERIFY
+before use. (Runs 1788820478-0644 are the blown concurrent attempts: 0-2 resolved, ignore.)
+
+**Pilot (go/no-go), in order:**
+1. Pick ~100 of the 369 instances with MIXED patch outcomes across the 6 routes (only those can
+   discriminate).
+2. 3-4 writers (e.g. gpt-oss-20b, gpt-oss-120b, dsv4f, one Qwen) each write ONE reproduction test per
+   instance (SWT-bench-style prompt: issue + retrieved files; output a test file). API cost small.
+3. Validity gate: run each test on the unpatched repo in Daytona; keep only tests that FAIL (record
+   the rate per writer — itself a finding). Daytona ≤10 concurrent TOTAL, one job at a time.
+4. Run surviving tests against the 6 existing patches (+ gold patch as a sanity check: a valid test
+   should pass on gold). Per (instance, writer): does the test separate resolved from unresolved patches?
+5. Go/no-go statistics (same honesty rules as §2.8): per-writer patch-selection accuracy vs random vs
+   perfect; writer crossover measured on HELD-OUT patches (choose writer on half the patches, score on
+   the other half); does writer quality track instance difficulty (AUC vs mean patch resolve rate) or
+   decouple (SWT-bench says decouple); self-family rubber-stamping (writer = patch author family).
+   Kill if no writer beats random selection, or if per-instance writer choice doesn't beat the best
+   fixed writer on held-out patches.
+Reuse: SWT-bench harness (github.com/logic-star-ai/swt-bench) for prompts/eval logic; our Daytona
+eval path (`launch_opus_verified_daytona_eval.sh`) for sandboxes.
