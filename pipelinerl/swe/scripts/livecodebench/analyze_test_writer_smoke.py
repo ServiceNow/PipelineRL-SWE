@@ -71,6 +71,7 @@ def main():
     ap.add_argument("--min-cands", type=int, default=3)
     ap.add_argument("--bootstrap", type=int, default=2000)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--pass-field", default="per_case", choices=["per_case", "per_case_loose"])
     args = ap.parse_args()
     writers = [w.strip() for w in args.writers.split(",")]
     out_dir = Path(args.out_dir or (Path(args.verdicts_dir) / "analysis"))

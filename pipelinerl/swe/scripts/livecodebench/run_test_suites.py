@@ -28,6 +28,11 @@ def norm(text: str) -> str:
     return "\n".join(lines)
 
 
+def norm_loose(text: str) -> str:
+    """Whitespace-insensitive: kills format-mismatch false-rejects."""
+    return "".join(text.split())
+
+
 def run_case(candidate_path: str, workdir: str, inp: str, expected: str, timeout: float):
     try:
         proc = subprocess.run(
@@ -45,7 +50,10 @@ def run_case(candidate_path: str, workdir: str, inp: str, expected: str, timeout
         return {"status": f"exec_error:{type(e).__name__}"}
     if proc.returncode != 0:
         return {"status": "crash", "stderr_tail": proc.stderr.decode(errors="replace")[-200:]}
-    return {"status": "ran", "pass": norm(proc.stdout.decode(errors="replace")) == norm(expected)}
+    out = proc.stdout.decode(errors="replace")
+    return {"status": "ran",
+            "pass": norm(out) == norm(expected),
+            "pass_loose": norm_loose(out) == norm_loose(expected)}
 
 
 def run_candidate(suite: dict, candidate: dict, tmp_root: str, timeout: float, max_cases: int):
@@ -55,17 +63,20 @@ def run_candidate(suite: dict, candidate: dict, tmp_root: str, timeout: float, m
     try:
         with open(sol_path, "w") as f:
             f.write(candidate["code"])
-        per_case, err = [], None
+        per_case, per_case_loose, err = [], [], None
         for case in cases:
             r = run_case(sol_path, workdir, case["input"], case["expected_output"], timeout)
             if r["status"] == "ran":
                 per_case.append(bool(r["pass"]))
+                per_case_loose.append(bool(r["pass_loose"]))
             elif r["status"].startswith("exec_error"):
+                per_case_loose.append(None)
                 per_case.append(None)
                 err = err or r["status"]
             else:
                 # crash/timeout: the candidate failed this case; the suite still ran it
                 per_case.append(False)
+                per_case_loose.append(False)
         n_pass = sum(1 for c in per_case if c is True)
         n_ran = sum(1 for c in per_case if c is not None)
         return {
@@ -80,6 +91,7 @@ def run_candidate(suite: dict, candidate: dict, tmp_root: str, timeout: float, m
             "n_ran": n_ran,
             "n_case_pass": n_pass,
             "per_case": per_case,
+            "per_case_loose": per_case_loose,
         }
     finally:
         shutil.rmtree(workdir, ignore_errors=True)

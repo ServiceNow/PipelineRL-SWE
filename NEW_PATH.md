@@ -245,6 +245,26 @@ from the existing pool; ground truth is the stored real grader label (never prox
    misreadings? If α(same-family) ≈ α(cross-family) everywhere, the anti-correlation story dies and
    only the price story survives.
 
+**RESULT 2026-09-25 (smoke test run; full note at
+`$R/testwriter_smoke_lcb/verdicts/analysis/SMOKE_RESULT.md`): there is meat, and the mechanism is
+sharper than the framing.**
+1. Executability 1.00 everywhere; loose-comparator sensitivity: 5/19,080 rows differ — numbers are
+   not comparison artifacts.
+2. GATING RESULT: a suite is only as good as the test-writer's own solve of the problem. Per-problem
+   AUC on problems the writer's suite validates vs doesn't: 0.62-0.65 (all writers, when trusted)
+   vs 0.31-0.53 (when not). Writer solve-rates span 30% (qwen4b) to 68% (dsv4f) — the writer
+   difference is entirely in how often the suite is trustworthy, which is a problem-dependent,
+   learnable quantity. This is the routing head.
+3. Anti-signal: on unsolved problems, suites actively prefer wrong candidates (AUC ~0.31) — a naive
+   CodeT pipeline is hurt by them; the trust gate is the product.
+4. Crossover: per-problem argmax writer beats the best fixed writer by +9.5pp selection accuracy
+   (bootstrap CI [6.1, 13.4]).
+5. Correlated false-accepts: dsv4f suites pass 47% of dsv4f's own wrong solutions vs 23-34% for
+   other writers' suites on the same candidates — self-family rubber-stamping is real for dsv4f;
+   gpt-oss writers show the reverse (composition not yet controlled).
+Kill criteria from below were NOT triggered. Next gates: top up missing suites (52 dsv4f +63
+others), BCB replication, then alpha/beta heads + VERIFY WITH j in the priced replay.
+
 **Kill criteria, stated in advance:** all writers' AUC ≈ 0.5 after executability repair → dimension
 dead on code benchmarks; flat crossover with a dominant writer → pricing collapses to CodeT and only
 the SWE-priced variant survives; α(same-family) ≈ α(cross-family) → the anti-correlation story dies,
