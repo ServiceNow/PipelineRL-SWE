@@ -283,3 +283,58 @@ dispatch bug that silently ran the arm as `counts`.
 **Consequence:** every headline number needs reproduction by someone else before submission. The
 common failure mode is *measuring in one regime and generalising*, so the check should specifically
 re-run each claim at a budget/seed/pool it was not measured at.
+
+## HANDOFF 2026-09-25 (Claude → Codex): two CPU experiments
+
+State of play (details in chat log / memory `project_cost_head_edge`): the one robust edge is the
+per-problem COST head (one-shot routing, LCB: +4.4/+9.6/+4.3pt vs the 2603.20895 median-cost rule at
+0.02/0.05/0.10c, CIs exclude 0; BCB ~0). Verifier-free selection is exhausted on strong-model code:
+4B probe judge, dsv4f asked as judge ($0.36, `bigcodebench/compare_readers.py`), and generator
+answer-token confidence (`bigcodebench/confidence_value_mvp.py`, BCB pilot at
+$R/bcb_logprob_pilot, LCB at $R/lcb_logprob_pilot) are all ~random on dsv4f/oss120md draws.
+R=/mnt/llmd/results/exps/aristides/reason. Python: /home/toolkit/.conda/envs/pipeline-rl/bin/python3.
+Always compare at MATCHED SPEND with problem-level paired bootstrap CIs; test split only for reporting.
+
+### Q1 — does the cost head's gain survive when a verifier exists (sampling with pass/fail)?
+No new code needed. `replay_mdp_full_execution.py --cost-preds <jsonl>` already runs every family twice:
+base (train-mean c_m) and `_qcost` (learned c_m(x)): `counts` vs `counts_qcost` (RoR-style counting),
+`content`/`content_decay` vs `_qcost`, plus `content_commit_papercost` (paper rule).
+1. Check existing $R/pool_v2_replay_* dirs for a run that had --cost-preds; if none, run the verifier
+   replay on LCB (tensors $R/pool_v2_tensors_5rung, cost $R/pool_v2_tensors_5rung/cost_preds.jsonl,
+   content_preds.jsonl, prices oss20lo=0.12,oss20md=0.57,dsv4f=0.111,oss120md=1.43,oss120hi=1.43,
+   --start-protocol free_start) and on BCB ($R/bcb_tensors_5r, cost_preds.jsonl exists there too).
+   Also a gpt-oss-only ladder if the script supports a rung subset (replay_prefix_value.py has --routes).
+2. Table: for each family, accuracy at matched spend base vs _qcost, and _qcost vs the best
+   non-qcost baseline (RoR/counts, best fixed cascade `measure_best_fixed_cascade.py`).
+3. Question answered: is the +4-10pt one-shot LCB gain preserved, shrunk, or absorbed by counting?
+   If counts_qcost ≈ counts, the cost thesis is a one-shot-only result; say so.
+
+### Q2 — priced verification: a test run is an ACTION with a cost (simulated, swept)
+Action space after each draw: {draw route m, VERIFY held attempt (pay v, observe its true pass/fail),
+submit best-believed attempt, abstain}. v = fixed per-check cost, swept as a fraction of the
+cheapest draw's mean cost: v ∈ {0, 0.01, 0.1, 0.3, 1, 3} × c(oss20lo). v=0 must reproduce the
+verifier regime; v=∞ the verifier-free regime (sanity checks for both ends).
+Minimum viable policy (keep it simple — no layers of tuning):
+- belief per held attempt = probe prior p_m(x) (no judge; judge is ~random on strong code);
+  after a verify, the attempt's belief is 0/1 and the route's failure count updates as in counts.
+- one-step value of information: verify iff P(held attempt wrong) × (value of switching given the
+  best alternative action) > v; draw iff expected gain (as in replay_prefix_value / counts rule)
+  > draw cost; else submit. Same calibrated budget-mix protocol as replay_prefix_value.py.
+Baselines at each v: always-verify (verifier regime, pays v per draw), never-verify (one-shot with
+cost head), verify-only-the-final-answer. Output: accuracy vs spend per v; the figure is WHERE the
+optimal policy switches from always-verify to selective to never, and whether per-problem p/c move
+that switch. Honest framing: on LCB/BCB real tests are ~free (~1-10 CPU-s ≈ $0.00001-0.0001), so v
+is simulated; the realistic high-v setting is SWE (Daytona env + suite, concurrency-limited) — note
+it, don't build it. Prior art to cite/check: "Heteroskedastic Signals in Budgeted LLM Verification"
+(2606.15841); do a quick search for "when to verify" / budgeted verification before claiming novelty.
+
+### Also pending
+- LCB logprob pilot finishing (~21:00 ET 09-24): rerun
+  `bigcodebench/analyze_confidence_selection.py --pilot-dir $R/lcb_logprob_pilot --routes oss20md,dsv4f`
+  and `confidence_value_mvp.py --tensors-dir $R/pool_v2_tensors_5rung --routes oss20md,dsv4f`.
+  Expected: weak (+~3pt pick@4 on oss20md), not enough to matter.
+- Optional ~$0.50 aggregation pilot (dsv4f reads 4 drafts, writes one solution; BCB test; bar ≥56%).
+- Main-thesis follow-ups: price-sweep "when does cost estimation pay" map over rung subsets ×
+  price vectors; CodeContests pilot as out-of-sample test.
+- Qwen-4B "ask" control job failed on missing `accelerate` (local_ask_judge.py uses device_map);
+  moot since dsv4f-ask didn't beat the probe.
