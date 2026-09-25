@@ -125,11 +125,11 @@ async def openrouter_call(
 
 # slot -> (openrouter model, temperature, top_p, reasoning effort or "on")
 WRITERS = {
-    "qwen4b": ("qwen/qwen3-4b-instruct-2507", 0.7, None, None),
-    "oss20lo": ("openai/gpt-oss-20b", 1.0, None, "low"),
-    "oss20md": ("openai/gpt-oss-20b", 1.0, None, "medium"),
-    "dsv4f": ("deepseek/deepseek-v4-flash", 0.7, 0.95, "on"),
-    "oss120md": ("openai/gpt-oss-120b", 1.0, None, "medium"),
+    "qwen4b": ("qwen/qwen3-4b-instruct-2507", 0.7, None, None, False),
+    "oss20lo": ("openai/gpt-oss-20b", 1.0, None, "low", False),
+    "oss20md": ("openai/gpt-oss-20b", 1.0, None, "medium", False),
+    "dsv4f": ("deepseek/deepseek-v4-flash", 0.7, 0.95, None, True),
+    "oss120md": ("openai/gpt-oss-120b", 1.0, None, "medium", False),
 }
 
 
@@ -148,7 +148,7 @@ async def gen_writer(
     base_url: str = "https://openrouter.ai/api",
     max_retries: int = 2,
 ) -> None:
-    model, temp, top_p, effort = WRITERS[writer]
+    model, temp, top_p, effort, reasoning_on = WRITERS[writer]
     is_openrouter = base_url.startswith("https://openrouter")
     if not is_openrouter and writer in LOCAL_MODEL:
         model = LOCAL_MODEL[writer]
@@ -174,7 +174,8 @@ async def gen_writer(
                     content, usage = await openrouter_call(
                         session, model, user, api_key,
                         max_tokens=max_tokens, temperature=temp, top_p=top_p,
-                        reasoning_effort=effort, reasoning_enabled=False, gen_timeout=240,
+                        reasoning_effort=effort, reasoning_enabled=reasoning_on,
+                        gen_timeout=240,
                         base_url=base_url,
                     )
                 cases = extract_json_array(content)
