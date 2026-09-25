@@ -36,6 +36,6 @@ if [ "${SUBMIT:-0}" != "1" ]; then
 fi
 
 make job JOB_NAME="${NAME}" ENV=pipeline-rl CONDA_EXE=/opt/conda/bin/conda \
-  GPU=0 CPU=4 CPU_MEM=16 SNAPSHOT=0 \
+  GPU=0 GPU_MEM=0 CPU=4 CPU_MEM=16 SNAPSHOT=0 \
   COMMAND="bash ${DIR}/run.sh"
 echo "submitted ${NAME} -> suites -> ${R}/testwriter_smoke_lcb"
