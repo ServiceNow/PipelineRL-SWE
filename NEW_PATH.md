@@ -572,3 +572,16 @@ To do: gpt-oss-only pool; horizon >8; priced checks (v>0); why BCB plateaus (giv
   * The 0.70-0.80x table above and this test-selected table bias in opposite directions (few vs ~540 cascade
     plans). Truth likely a modest gain at 85-93% on LCB. TO DO: one protocol for all arms (select on cal,
     same enumerated cascade plan space, fine V grid); fit the post-failure decay on train; CodeContests replay.
+- **DEFINITIVE (supersedes the 0.70-0.80x table and the test-selected table above).**
+  `analysis/dist_bellman/clean_comparison.py`: ONE protocol for all arms -- operating points chosen on
+  CALIBRATION (upper hull, two-point mix hitting the target), applied once to TEST; cascade chooses from all ~730
+  enumerated plans; Bellman from a 60-point value grid; paired bootstrap. Free perfect verifier.
+  LCB: planning without per-problem info ~= cascade (cost ratio 1.03 at 80-90%). Bellman + prefill (cost head +
+  success prior) lands HIGHER ACCURACY at ~equal cost at the mid targets: 80%: +4.4pt [+1.7,+7.1] at 1.03x cost;
+  85%: +2.8pt [+0.8,+4.9] at 0.99x; at >=90% it is equal or more expensive (93%: 1.29x, 95%: 1.44x).
+  Cost head alone: 0.86x [0.77,0.97] at 80% (acc +1.3 n.s.), ~1.0 elsewhere.
+  BCB: every Bellman arm costs as much or more than the cascade (1.03-1.58x), no accuracy gain.
+  Decay fitted on train (k=0.25-0.5, faster than 2) does NOT help; it makes things costlier.
+  => With a free verifier, the best fixed cascade is essentially as good as anything we built; the only real
+  gain is +3-4pt accuracy at equal cost around 80-85% on LCB, using the prefill. The earlier "25-30% cheaper"
+  came from comparing against a weak cascade candidate set (6 plans) -- RETRACTED.
