@@ -437,3 +437,12 @@ inside the routing decision, value measured vs a constant-length proxy}.**
 - ReLope 2603.24787: LoRA probes on a (multimodal) model's own hidden states for correctness routing.
 Claim we can make: foreign-prefill prediction of every candidate model's per-query cost, inside the
 routing rule, with its value measured at matched spend against the median-length proxy.
+
+### 7.1 To check for Track A (flagged 2026-09-26 by the background agent)
+- "Is Escalation Worth It? A Decision-Theoretic Characterization of LLM Cascades" (arXiv 2605.06350):
+  no-verifier cascades defer on cheap-model confidence; a lightweight PRE-GENERATION router beats the best
+  cascade on 4/5 datasets incl. LiveCodeBench ("cascades pay the cheap model before any escalation").
+  Same regime as Track A -> must check whether its router predicts per-query COST or uses a constant.
+- Dekoninck et al., "A Unified Approach to Routing and Cascading for LLMs" (arXiv 2410.10347, ICML'25):
+  optimal cascade routing; gains hinge on quality-estimate accuracy. Cite for the verifier-regime story.
+- "Routing, Cascades, and User Choice for LLMs" (arXiv 2602.09902).
