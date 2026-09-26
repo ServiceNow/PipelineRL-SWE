@@ -448,3 +448,14 @@ routing rule, with its value measured at matched spend against the median-length
 - Dekoninck et al., "A Unified Approach to Routing and Cascading for LLMs" (arXiv 2410.10347, ICML'25):
   optimal cascade routing; gains hinge on quality-estimate accuracy. Cite for the verifier-regime story.
 - "Routing, Cascades, and User Choice for LLMs" (arXiv 2602.09902).
+- Dekoninck et al. 2410.10347 (ICML'25), read in full by the background agent 2026-09-26. KEY POSITIONING:
+  * Theory: cascading pays only when POST-HOC quality estimates beat EX-ANTE ones; a free perfect verifier is
+    the extreme post-hoc case -> our "fixed cascade ~ optimal with a verifier" is their prediction (cite it; it
+    turns our negative verifier-regime result into an expected one).
+  * Their SWE-bench experiment (ground-truth tests as post-hoc quality): routing alone 40.47 vs single-model
+    mix 40.51; optimal cascade 53.20; cascade routing 54.12 (+0.9). Same shape as ours.
+  * They write: "While cost estimation also faces similar challenges, we found that it is less critical and
+    can be approximated more easily" (input length + other models' costs; non-reasoning pools).
+    -> Track A is a direct counterpoint for REASONING models without a verifier (30-45% cheaper on LCB).
+  * No resampling of the same model, no priced/imperfect verifier, no choice of test-writer, no abstention
+    -> Track B extends their framework to post-hoc quality that is priced, imperfect and chosen.
