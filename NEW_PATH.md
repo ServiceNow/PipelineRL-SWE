@@ -557,3 +557,18 @@ To do: gpt-oss-only pool; horizon >8; priced checks (v>0); why BCB plateaus (giv
   per-problem gain on top of planning; (3) prefill SUCCESS beliefs add little once cost is in. Track A's thesis
   holds WITH a verifier too -- but only under a planning policy (one-step greedy policies can't use cost).
   BCB: no-prefill Bellman is best at 55% (0.62); all Bellman arms give up before 68%.
+- **CORRECTION / mechanism (`analysis/dist_bellman/why_planning.py`, LCB test, matched by cheapest point
+  reaching each accuracy, everything selected on TEST, cascade over ~540 enumerated plans):**
+  * Greedy loses because it is myopic: at high targets it opens with the strong route (95%: dsv4f first on
+    100% of problems, 0.354c vs cascade 0.223c); at mid targets it abandons the cheap route after one failure
+    (switches after 72% of failures).
+  * Bellman with NO per-problem information is itself a fixed sequence (identical beliefs for every problem),
+    and the best enumerated fixed plan matches or beats it (93%: 0.199c cascade vs 0.221c). The earlier
+    "planning alone 13% cheaper" was a selection-protocol artifact (cascade: 6 plans chosen on train+cal;
+    Bellman: 14 V values on cal) -- RETRACTED.
+  * With per-problem info (cost head + prefill prior): 85% 0.121c vs 0.157c (-23%), 90% -2%, 93% -6%, but 95%
+    +59% (over-resamples the cheap route ~3.4 draws/problem, gives up late: 40% of spend on never-solved
+    problems; fixed decay pseudo=2.0 likely too optimistic).
+  * The 0.70-0.80x table above and this test-selected table bias in opposite directions (few vs ~540 cascade
+    plans). Truth likely a modest gain at 85-93% on LCB. TO DO: one protocol for all arms (select on cal,
+    same enumerated cascade plan space, fine V grid); fit the post-failure decay on train; CodeContests replay.
