@@ -95,9 +95,12 @@ async def main_async(a):
                 for l in open(R / f"opus_verified_daytona_eval_{r}/predictions/predictions_opus_verified.jsonl")}
             for k, r in runs.items()}
     scripts = {}
+    keep_w = set(a.writers.split(",")) if a.writers else None
     for f in Path(a.scripts_dir).glob("scripts_*.jsonl"):
         for l in open(f):
-            r = json.loads(l); scripts.setdefault(r["instance_id"], {})[r["writer"]] = r["script"]
+            r = json.loads(l)
+            if keep_w is None or r["writer"] in keep_w:
+                scripts.setdefault(r["instance_id"], {})[r["writer"]] = r["script"]
     out = Path(a.out); out.parent.mkdir(parents=True, exist_ok=True)
     done = {json.loads(l)["instance_id"] for l in open(out) if not json.loads(l).get("error")} if out.exists() else set()
     todo = [i for i in ids if i not in done and i in scripts]
@@ -122,6 +125,7 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--concurrency", type=int, default=8)
     ap.add_argument("--timeout", type=int, default=120)
+    ap.add_argument("--writers", default="", help="comma list: run only these writers' scripts")
     a = ap.parse_args()
     if not os.environ.get("DAYTONA_API_KEY"):
         for env in ("/home/toolkit/PipelineRL-SWE/.env", "/home/toolkit/.env"):

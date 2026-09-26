@@ -24,6 +24,9 @@ WRITERS = {  # label: (OpenRouter id, extra body) -- ids verified against /api/v
     "dsv4f": ("deepseek/deepseek-v4-flash", {"reasoning": {"enabled": True}}),
     "qcoder30": ("qwen/qwen3-coder-30b-a3b-instruct", {}),
     "devstral": ("mistralai/devstral-2512", {}),
+    # the remaining pool generators, so self-verification (generator writes its own tests) is a baseline
+    "gemini": ("google/gemini-3-flash-preview", {}),
+    "opus": ("anthropic/claude-opus-5", {}),
 }
 IGNORE = ["Parasail", "AkashML"]  # gpt-oss tool_calls serving artifact (PAPER_OUTLINE 3b-lxxxv)
 
