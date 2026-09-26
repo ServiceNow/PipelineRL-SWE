@@ -432,3 +432,22 @@ label-free (a script counts only if it FAILS on the unpatched repo).
 | 7 | novelty holds (targeted sweep: generated tests / budgeted checks inside SWE agent loops) | TODO |
 Structural risk: only ONE patch per model per instance -> condition 5 runs as cross-model sequencing
 (try A, check, try B...); within-model resampling needs new agent rollouts (cost TBD).
+
+### 3.3 Condition 3 — what a check costs vs a rollout (2026-09-26)
+Sandbox allocation (Daytona SDK + cgroup): 1 vCPU, 1 GiB RAM, 3 GiB disk (under the 5 GiB free tier).
+List price $0.0504/vCPU-h + $0.0162/GiB-h = $0.0666/h = $1.85e-5/s (per-second billing).
+Timing, 6 instances across 6 repos (`offline_router/time_swe_check.py`, `$R/swe_testwriter_pilot/timing.jsonl`):
+running a repro script 0.4-2.4 s (warm ~0.4-1.5 s), applying a patch ~0.04 s, sandbox create 0.6-1.0 s
+when the image is cached but 17-79 s cold (image pull), delete ~0.1 s.
+Per-instance costs (cents; token costs at OpenRouter list prices; `analyze_writer_cost.py` for writers):
+- running one check ~0.0015c (1 s); warm sandbox overhead ~0.002c; a cold start up to ~0.15c if billed.
+- WRITING a test: oss20 0.030c, dsv4f 0.064c (mean 0.113), qcoder30 0.064c, oss120 0.188c, devstral 0.392c (medians).
+- one single-shot patch (the pool's "rollout"): qwen4b 0.024c, oss20 0.036c, qwen30 0.16c, oss120 0.21c,
+  gemini-3-flash 0.59c, Opus 5 10.1c.
+Verdict: verification cost is dominated by WRITING the test, not running it (execution ~1-2% of the
+cheapest rollout once warm). (write dsv4f + 1 run) / rollout = 180% vs oss20, 31% vs oss120, 11% vs
+gemini, 0.65% vs Opus. PASS against cheap/mid generators, FAIL against Opus (checks are ~free there).
+Caveats: our rollouts are single-shot calls; agentic rollouts cost far more tokens and sandbox time, which
+would make checks relatively cheaper. A repro script (~1 s) is far cheaper than running a repo's full
+test suite. Consequence for the method: the cost lever is WHICH MODEL WRITES the test (cheap-first
+escalation matched the all-writer vote at 3.7x lower writing cost, 63.5% @0.21c vs 63.4% @0.78c).
