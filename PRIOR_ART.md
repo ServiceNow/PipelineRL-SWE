@@ -442,7 +442,9 @@ routing rule, with its value measured at matched spend against the median-length
 - "Is Escalation Worth It? A Decision-Theoretic Characterization of LLM Cascades" (arXiv 2605.06350):
   no-verifier cascades defer on cheap-model confidence; a lightweight PRE-GENERATION router beats the best
   cascade on 4/5 datasets incl. LiveCodeBench ("cascades pay the cheap model before any escalation").
-  Same regime as Track A -> must check whether its router predicts per-query COST or uses a constant.
+  Same regime as Track A. CHECKED (full text, App. B.10 / Sec. 6.1): the router is a frozen sentence-embedding
+  RouteLLM-style router with FIXED per-model average costs; 8-model pool mostly non-reasoning. No per-query cost.
+  -> Not a threat; supportive citation (pre-generation routing beats cascades without a verifier).
 - Dekoninck et al., "A Unified Approach to Routing and Cascading for LLMs" (arXiv 2410.10347, ICML'25):
   optimal cascade routing; gains hinge on quality-estimate accuracy. Cite for the verifier-regime story.
 - "Routing, Cascades, and User Choice for LLMs" (arXiv 2602.09902).
