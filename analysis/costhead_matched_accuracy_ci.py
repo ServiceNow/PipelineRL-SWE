@@ -5,7 +5,8 @@ that fixed mix once to test. Test outcome per problem = expected over that route
 bootstrap over test problems (mix held fixed)."""
 import json, numpy as np
 R="/mnt/llmd/results/exps/aristides/reason"; PR={"oss20lo":0.12,"oss20md":0.57,"dsv4f":0.111,"oss120md":1.43,"oss120hi":1.43}
-T="pool_v2_tensors_5rung"; t=np.load(f"{R}/{T}/tensors.npz",allow_pickle=True)
+import os
+T=os.environ.get("CI_TENSORS","pool_v2_tensors_5rung"); t=np.load(f"{R}/{T}/tensors.npz",allow_pickle=True)
 S=[str(s) for s in t["model_slots"]]; pids=[str(p) for p in t["problem_ids"]]; pi={p:i for i,p in enumerate(pids)}
 v=t["valid"].astype(bool); ok=(t["final_outcome"]&t["valid"]).astype(float)
 real=np.stack([(t["prompt_tokens"][:,m]+t["completion_tokens"][:,m])*PR[s]/1e6*100 for m,s in enumerate(S)],1)
@@ -55,4 +56,4 @@ for tgt in (0.60,0.65,0.70,0.75,0.80,0.85):
           f"{(A1.mean()-A0.mean())*100:+.1f} [{np.percentile(bs_a,2.5)*100:+.1f},{np.percentile(bs_a,97.5)*100:+.1f}]")
     out.append({"target_cal":tgt,"paper":[A0.mean(),C0.mean()],"ours":[A1.mean(),C1.mean()],"ratio":r,
                 "ratio_ci":[np.percentile(bs_r,2.5),np.percentile(bs_r,97.5)],"acc_diff_ci":[np.percentile(bs_a,2.5),np.percentile(bs_a,97.5)]})
-json.dump(out,open("analysis/costhead_matched_accuracy_ci.json","w"),indent=1,default=float)
+json.dump(out,open(os.environ.get("CI_OUT","analysis/costhead_matched_accuracy_ci.json"),"w"),indent=1,default=float)
