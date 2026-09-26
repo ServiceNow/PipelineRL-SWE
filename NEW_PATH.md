@@ -520,3 +520,12 @@ costs ~0.08c, not 0.16c. No conclusion changes.
   ladder (29/39/40/47%). Fits the "when" story: per-query cost matters when OUTPUT (reasoning) dominates the
   bill and varies with the query, and when the ladder is steep. State it as a boundary, not a failure.
 - CodeContests: collection running (`$R/cc_pool/full`), prefill done (cc_prefill SUCCEEDED).
+- **Mechanism (LCB, ~70% operating point; background agent, commit 32a34a6):** both arms use the same models
+  in the same mix (~70% oss20lo / 30% dsv4f); they route 31% of problems differently. 48 problems move
+  dsv4f -> oss20lo where dsv4f would reason long (0.405c -> 0.027c, accuracy 78% -> 20%); 56 move oss20lo ->
+  dsv4f where dsv4f stays short (0.011c -> 0.071c, 58% -> 96%). dsv4f's per-problem cost spans ~63x: a
+  per-model median misprices it in both directions. This is the paper's mechanism figure.
+- **With abstention in both arms** (`analysis/costhead_matched_accuracy_ci_abstain.py`): still ~36-39%
+  cheaper at 60-65% (n.s. accuracy gaps); at 70% ours lands 4.6pt lower on test (not like-for-like).
+  Abstention helps the median arm more (it skips hopeless problems it would misprice) but the advantage
+  survives at 60-75%.
