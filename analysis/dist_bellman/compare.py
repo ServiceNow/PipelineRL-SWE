@@ -29,7 +29,9 @@ for ds, targets in jobs:
     arms = {}
     d = json.load(open(f"analysis/dist_bellman/{ds}.json"))
     n = d["test_n"]
-    for r in d["results"]:
+    import os
+    extra = json.load(open(f"analysis/dist_bellman/{ds}_global.json"))["results"] if os.path.exists(f"analysis/dist_bellman/{ds}_global.json") else []
+    for r in d["results"] + extra:
         if r["v_multiplier"] != 0:
             continue
         arms.setdefault(f"bellman {r['belief']} / {r['cost']} cost", []).append(

@@ -549,3 +549,11 @@ Distributional head items 1-4 (NEW `fit_entry_distribution.py`): entry beliefs c
 vs 0.682 observed), beat a pooled Beta on held-out marginal LL on every route of both datasets; BCB ranking
 weak (corr 0.18-0.36) and means 3-6pt low after the level fix.
 To do: gpt-oss-only pool; horizon >8; priced checks (v>0); why BCB plateaus (give-up threshold).
+- **Ablation: WHICH prefill signal pays in the verifier regime** (`--beliefs global` = no prefill, route base
+  rates). LCB cost ratio vs fixed cascade at 80/85/90%: Bellman no-prefill 0.88 / 0.87 [0.80,0.95] / 0.87
+  [0.81,0.91]; + cost head only 0.73 [0.60,0.86] / 0.75 [0.65,0.87] / 0.83 [0.69,0.92]; + success prior only
+  0.86 / 0.80 / 0.77; both 0.74 / 0.71 / 0.80; both with dist prior 0.70 / 0.70 / 0.78.
+  => (1) exact planning alone ~13% cheaper than the cascade at 85-90%; (2) the prefill COST head is the largest
+  per-problem gain on top of planning; (3) prefill SUCCESS beliefs add little once cost is in. Track A's thesis
+  holds WITH a verifier too -- but only under a planning policy (one-step greedy policies can't use cost).
+  BCB: no-prefill Bellman is best at 55% (0.62); all Bellman arms give up before 68%.

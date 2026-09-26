@@ -174,6 +174,8 @@ def main() -> None:
     for name in args.beliefs.split(","):
         if name == "content":
             beliefs["content"] = None
+        elif name == "global":
+            beliefs["global"] = "global"    # no prefill: each route's TRAIN pass rate for every problem
         elif name == "dist":
             rows = {json.loads(l)["problem_id"]: json.loads(l)["params"] for l in open(args.dist_preds)}
             beliefs["dist"] = np.asarray([rows[i] for i in ids], dtype=float)[:, :len(slots)]
@@ -188,13 +190,15 @@ def main() -> None:
     for multiplier in multipliers:
         verify_cost = multiplier * global_cost[0]
         for (belief_name, dist), (cost_name, cost_matrix) in [(b, c) for b in beliefs.items() for c in costs.items()]:
+            prior_used = np.broadcast_to(global_prior, prior.shape) if isinstance(dist, str) else prior
+            dist = None if isinstance(dist, str) else dist
             print(f"v={multiplier:g}x cheapest draw; belief={belief_name}; cost={cost_name}", flush=True)
             cal_grid, test_grid = [], []
             for i, value in enumerate(values):
-                cal_grid.append(run_split(cal, orders, valid, truth, realized, prior,
+                cal_grid.append(run_split(cal, orders, valid, truth, realized, prior_used,
                                           cost_matrix, float(value), verify_cost,
                                           args.max_draws, 2.0, dist))
-                test_grid.append(run_split(test, orders, valid, truth, realized, prior,
+                test_grid.append(run_split(test, orders, valid, truth, realized, prior_used,
                                            cost_matrix, float(value), verify_cost,
                                            args.max_draws, 2.0, dist))
                 print(f"  R {i+1}/{len(values)} complete", flush=True)
