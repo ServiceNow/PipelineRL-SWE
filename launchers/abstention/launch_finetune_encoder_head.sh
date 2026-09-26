@@ -15,7 +15,7 @@ cd /home/toolkit/PipelineRL-SWE
 # /transformers_cache mount; the first run died on exactly that ("not a valid model identifier").
 export HF_HOME=/home/toolkit/.cache/huggingface HF_HUB_OFFLINE=1
 export TOKENIZERS_PARALLELISM=false
-python pipelinerl/swe/scripts/livecodebench/finetune_encoder_head.py --prompts-dir ${R}/pool_v2_hist_prompts_5r --variant code --tensors-dir ${R}/pool_v2_tensors_5rung --batch 4 --epochs 3 --seed 0 --out ${DIR}/encoder_head.pt 2>&1 | tee ${DIR}/train.log
+python pipelinerl/swe/scripts/livecodebench/finetune_encoder_head.py --prompts-dir ${R}/pool_v2_hist_prompts_5r --variant code --tensors-dir ${R}/pool_v2_tensors_5rung --batch 4 --epochs 3 --seed 0 --out ${DIR}/encoder_head.pt --label rate --entry-states --preds-out ${DIR}/history_preds.jsonl 2>&1 | tee ${DIR}/train.log
 EOF
 chmod +x "${DIR}/run.sh"
 

@@ -404,3 +404,31 @@ Reading: failures on other routes ARE informative (diagnostic §1.x; learned wei
 is as large as on "own failures"), but a greedy belief policy still loses to "hammer the cheap rung"
 because its successive draws are nearly independent and the policy is myopic. Same conclusion Codex's
 Bellman reached. Cross-route updating is a correct modelling fix, not a winning policy. PARKED.
+
+### 3.1 SWE test-writer pilot RESULTS (2026-09-26; 100 Verified instances, 5 writers, 6 pool patches + gold)
+`offline_router/analyze_swe_testwriter.py` on `$R/swe_testwriter_pilot/exec_clean.jsonl`. Selection is
+label-free (a script counts only if it FAILS on the unpatched repo).
+- Validity (fails on base): dsv4f 95%, oss120 88%, oss20 88%, devstral 85%, qcoder30 61%. Of valid
+  scripts, pass gold: dsv4f 63%, oss120 56%, oss20 44%, devstral 42%, qcoder30 36%.
+- Patch selection among applied pool patches: random 46.3%; dsv4f 61.0% (+14.7 [+10.2,+19.5]); oss120
+  +10.1; devstral +9.4; oss20 +8.2; qcoder30 +3.4; **vote of all valid writers 63.4% (+17.1
+  [+12.0,+22.6])**; perfect 100%. => Generated tests carry real signal on SWE (unlike LCB, §2.8).
+- Difficulty coupling: Spearman rho of good-script rate vs #pool models resolving = +0.18..+0.22
+  (qcoder30 +0.39). Weak, unlike LCB. Writer-writer correlation +0.34..+0.61 (partly complementary).
+- Per-instance writer choice, HONEST (choose on 3 patches, score the other 3): 56.5% vs always-dsv4f
+  57.1%, -0.6 [-2.4,+1.3]. **Choosing the writer does not pay; combining writers does.**
+- Self-family false accepts: gpt-oss writers on gpt-oss patches 23% vs 17-20% other families — small.
+- False-accept rates on wrong patches 12-25%: tests are imperfect in a way that matters.
+
+### 3.2 PRE-REGISTERED de-risking conditions for "priced, imperfect, generated verification" (2026-09-26)
+| # | condition | status |
+|---|---|---|
+| 1 | generated tests beat random selection by >= +10pt, false-accept < 30% | PASS (dsv4f +14.7, vote +17.1; FA 12-25%) |
+| 2 | test quality not tied to difficulty (|rho| < 0.3) | PASS for 4/5 writers (+0.18..+0.22; qcoder30 +0.39) |
+| 3 | a check (write + run) costs >= ~10% of an agent rollout | TODO: rollout tokens from collection parquet; Daytona seconds x price |
+| 4 | test reliability predictable label-free, AUC >= 0.7 | TODO |
+| 5 | offline SWE replay on real verdicts: selective policy >= 20% cheaper at matched accuracy than best of {fixed cascade + always check, never check, check final only, all-writer vote}; oracle-reliability first | TODO (decisive) |
+| 6 | per-instance writer choice beats best fixed writer | FAIL (-0.6) -> drop writer routing; keep a fixed writer or the vote |
+| 7 | novelty holds (targeted sweep: generated tests / budgeted checks inside SWE agent loops) | TODO |
+Structural risk: only ONE patch per model per instance -> condition 5 runs as cross-model sequencing
+(try A, check, try B...); within-model resampling needs new agent rollouts (cost TBD).
