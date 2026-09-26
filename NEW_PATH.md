@@ -451,3 +451,56 @@ Caveats: our rollouts are single-shot calls; agentic rollouts cost far more toke
 would make checks relatively cheaper. A repro script (~1 s) is far cheaper than running a repo's full
 test suite. Consequence for the method: the cost lever is WHICH MODEL WRITES the test (cheap-first
 escalation matched the all-writer vote at 3.7x lower writing cost, 63.5% @0.21c vs 63.4% @0.78c).
+
+---
+
+## 4. TWO PARALLEL TRACKS (decided 2026-09-26)
+
+We run a SAFER bet and a RISKIER bet at the same time.
+
+### Track A (safer): per-query cost prediction for one-shot routing among reasoning models
+**Claim.** The same cheap 4B prefill that prefill routers use to predict each candidate model's success
+also predicts each candidate's per-query COST (output length), with one linear head per model. Replacing
+the per-model median-length cost (arXiv 2603.20895's rule) with this estimate makes one-shot,
+verifier-free routing cheaper at matched accuracy. Novelty sweep (PRIOR_ART.md §7): no paper predicts
+OTHER models' per-query cost from a foreign model's prefill, and none measures its value vs the median.
+**Established (LCB, test 341):** +4.4 / +9.6 / +4.3pt at 0.02 / 0.05 / 0.10c matched spend (CIs exclude
+0); 1.3-1.6x cheaper at matched accuracy (hull, CI pending); within 1.1-1.2x of an oracle; replicates on
+the gpt-oss-only ladder (+3.4 / +5.2 / +2.6); null on BCB (flat accuracy ladder -- the "when" story).
+Chart: analysis/cost_head_gain.png. With a free verifier the gain is mostly absorbed (cost at matched
+accuracy: analysis/priced_verification/cost_at_matched_accuracy.py) -- the claim is verifier-free.
+**In flight:** CodeContests replication (700 reference-validated Codeforces problems, 5 routes x 2-4
+draws, `$R/cc_pool/full`, prefill job cc_prefill); SWE-Smith replication (1432 problems, 4 routes, real
+labels, in/out priced separately, `offline_router/swesmith_cost_head.py`, prefill job swesmith_prefill).
+**To do:** bootstrap CI on the matched-accuracy ratio; "when does it pay" map over rung subsets x prices.
+**Output:** 4-page workshop paper ("The Price Isn't Constant"); abstract drafted in chat 2026-09-26.
+Caveat to state: the prefill is free only if the router already runs it for correctness.
+
+### Track B (riskier): routing for verification -- who writes the tests, when to buy them, when to trust them
+**Setting.** Candidates x tests pass matrix. Actions: draw a candidate from generator g; buy a test from
+writer t (issue-only, or GUIDED by the current candidates' disagreement); running every test on every
+candidate is automatic (~free: 1 vCPU sandbox ~$1.85e-5/s, ~1 s per check); submit; abstain. Verification
+cost is dominated by WRITING the test (§3.3), so the lever is which (possibly cheap) model writes it.
+**Baselines:** B0 no test (route once, submit); **B1 self-verification: one routing action, the same model
+writes solution AND tests** (primary baseline); B2 fixed best writer; B3 all-writer vote; B4 label-free
+cheap-first escalation.
+**Settings:** S1 one-shot (route once for generator g, once for tester t, from the prefill; is the best
+pair ever != (g,g)?); S2 sequential pass-matrix growth with supervised per-writer reliability (fit on the
+train split) and a value-of-information per unit cost rule; S3 guided (candidate-conditioned) tests.
+**Metrics:** cost at matched accuracy (headline), accuracy at matched spend, selective accuracy vs coverage.
+**Evidence so far (SWE Verified pilot, 100 instances):** tests carry signal (dsv4f +14.7, vote +17.1 over a
+random patch pick); weakly tied to difficulty (rho ~ +0.2); per-instance writer choice by ACCURACY does not
+beat always-dsv4f (-0.6) but cheap-first escalation matches the vote at 3.7x lower writing cost; oracle
+cheapest-sufficient writer 66.6% @0.086c vs dsv4f 61.0% @0.113c (headroom). Condition 3 passes vs
+cheap/mid generators, fails vs Opus (checks ~free there).
+**Phases:** P0 unified pass-matrix format (LCB + SWE pilot) 1/2 day; P1 B0-B4 + S1 1/2-1 day; P2 S2
+1-1.5 days; P3 data in parallel (Verified to 369 + self-tests for all generators + 2-3 extra patches for
+cheap generators; then SWE-Smith 1432 as the scale set); P4 S3 guided tests ~1 day.
+**Kill points:** after P1, if no (g,t) pair beats B1 at matched cost, one-shot tester choice is dead and
+S2/S3 must carry it; after P2, if S2 is not >=20% cheaper at matched accuracy than the best of B1-B4, we
+publish the problem setting + testbed + baselines as the contribution.
+**Dev vs evidence:** LCB is the development benchmark only (writers must solve to write expected outputs,
+no label-free validity check, 84% base rate); SWE is the evidence.
+
+Correction to §3.3: Verified's "qwen30" route is Qwen3-Coder-30B-A3B ($0.07/$0.28 per M), so its patch
+costs ~0.08c, not 0.16c. No conclusion changes.
