@@ -529,3 +529,23 @@ costs ~0.08c, not 0.16c. No conclusion changes.
   cheaper at 60-65% (n.s. accuracy gaps); at 70% ours lands 4.6pt lower on test (not like-for-like).
   Abstention helps the median arm more (it skips hopeless problems it would misprice) but the advantage
   survives at 60-75%.
+
+### 4.A.2 Verifier regime REVISITED (2026-09-26): exact Bellman + learned cost beats the fixed cascade on LCB
+`analysis/dist_bellman/compare.py` (Bellman replay `replay_bellman_verification.py --beliefs content,dist`,
+horizon 8, free perfect verifier; fixed cascade + RoR-style counts from Codex's analysis; cost at matched
+accuracy on each arm's calibration-selected test points; paired bootstrap).
+LCB cost ratio vs fixed cascade at 70/75/80/85/90% accuracy:
+- Bellman, content prior, LEARNED cost: 0.87 / 0.86 / **0.74 [0.63,0.94] / 0.71 [0.61,0.84] / 0.80 [0.69,0.89]**
+- Bellman, distributional prior, learned cost: 0.82 / 0.80 / **0.70 [0.59,0.89] / 0.70 [0.58,0.82] / 0.78 [0.69,0.92]**
+- Bellman, content prior, global cost: 0.95 / 1.00 / 0.86 / **0.80 [0.74,0.89] / 0.77 [0.72,0.84]**
+- RoR-style counts: 1.19 / 1.05 / 0.94 / 0.95 / 0.99 (no gain over the cascade)
+=> ~25-30% cheaper than the fixed cascade at 80-90% on LCB, CIs exclude 1. The earlier "cascade ~ optimal
+with a verifier" came from ONE-STEP greedy policies; the exact finite-horizon DP plus the per-problem cost
+head does beat it. The cost head is worth ~0.10-0.12 of the ratio here; distributional beliefs add only
+~0.02-0.04 over the hyperbolic-decay prior.
+BCB: Bellman arms are cheaper only at 55% (0.76-0.93) and worse from 65% up; they plateau below 68% (they
+give up), and the distributional head (median pi0 8-18%) gives up even earlier (2.0x at 65%). Cascade wins there.
+Distributional head items 1-4 (NEW `fit_entry_distribution.py`): entry beliefs calibrated on LCB (e.g. 0.690
+vs 0.682 observed), beat a pooled Beta on held-out marginal LL on every route of both datasets; BCB ranking
+weak (corr 0.18-0.36) and means 3-6pt low after the level fix.
+To do: gpt-oss-only pool; horizon >8; priced checks (v>0); why BCB plateaus (give-up threshold).
