@@ -504,3 +504,19 @@ no label-free validity check, 84% base rate); SWE is the evidence.
 
 Correction to §3.3: Verified's "qwen30" route is Qwen3-Coder-30B-A3B ($0.07/$0.28 per M), so its patch
 costs ~0.08c, not 0.16c. No conclusion changes.
+
+### 4.A.1 Track A updates (2026-09-26)
+- **LCB, honest protocol** (`analysis/costhead_matched_accuracy_ci.py`, commit cecf8fd): operating points chosen
+  on calibration, applied once to test, paired bootstrap. Cost ratio ours/paper at calibration targets
+  60/65/70/75/80/85%: 0.51 [0.41,0.65] / 0.52 [0.41,0.64] / 0.51 [0.40,0.64] / 0.62 [0.52,0.73] /
+  0.86 [0.77,0.95] / 0.96 [0.89,1.04]. Test accuracy of ours lands 1.4-2.3pt lower at the low targets (n.s.);
+  reading the paper arm at our achieved accuracy gives ~0.57x / 0.66x / 0.83x. Headline: **~30-45% cheaper at
+  60-75% accuracy, ~15% at 80%, none at 85%.**
+- **SWE-Smith replication: NULL** (`offline_router/swesmith_cost_head.py`, 286 test problems, 4 routes, real
+  labels, input/output priced separately). Matched spend: deltas -0.9..+0.6pt, all CIs include 0; matched
+  accuracy ratio 0.92-1.08, CIs include 1. Why: (1) cost is dominated by KNOWN input tokens (~4.8k in vs ~1k
+  out; patches, not long reasoning), so the median rule already prices most of it; (2) output length is
+  weakly predictable (test R2 0.11-0.23 vs much higher on LCB reasoning outputs); (3) near-flat accuracy
+  ladder (29/39/40/47%). Fits the "when" story: per-query cost matters when OUTPUT (reasoning) dominates the
+  bill and varies with the query, and when the ladder is steep. State it as a boundary, not a failure.
+- CodeContests: collection running (`$R/cc_pool/full`), prefill done (cc_prefill SUCCEEDED).
