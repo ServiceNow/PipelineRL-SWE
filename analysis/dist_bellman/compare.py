@@ -21,7 +21,11 @@ def cost_at(pts, idx, target):
     return np.nan
 
 
-for ds, targets in [("lcb", [0.70, 0.75, 0.80, 0.85, 0.90]), ("bcb", [0.55, 0.60, 0.65, 0.68, 0.70])]:
+DEFAULT = {"lcb": [0.70, 0.75, 0.80, 0.85, 0.90], "bcb": [0.55, 0.60, 0.65, 0.68, 0.70]}
+# usage: compare.py [ds[:t1/t2/...] ...]   e.g.  compare.py cc:0.5/0.6/0.7/0.8
+jobs = [(x.split(":")[0], [float(v) for v in x.split(":")[1].split("/")] if ":" in x else DEFAULT[x]) for x in sys.argv[1:]] \
+    or list(DEFAULT.items())
+for ds, targets in jobs:
     arms = {}
     d = json.load(open(f"analysis/dist_bellman/{ds}.json"))
     n = d["test_n"]
