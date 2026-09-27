@@ -596,3 +596,12 @@ lambda 0.5/1/2 was optimistic (selection on the same 100 disagreement instances)
 only around lambda ~1. Self vs other tester (precision/coverage): gpt-oss-20b 65%/31% self vs 72%/18%
 qcoder30; gpt-oss-120b 72%/43% self vs 76%/23% devstral -- other testers more precise but accept less.
 Redraw verdicts (scripts x 4 redraw patches) queued after plan D labelling -> then the sequential setting.
+- **SWE-Smith REASONING pool (plan D; 500 instances x 5 open reasoning routes, real Daytona labels):**
+  pass rates oss20lo 23% / oss20md 26% / dsv4f 34% / oss120md 34% / oss120hi 36% (unconverted draws count as
+  unresolved). `offline_router/swesmith_reason_cost_head.py` (275/75/150 split; in/out priced separately):
+  matched spend ours - paper -1.1..-0.3pt (CIs mostly include 0); matched accuracy ratio 0.81-1.06, all CIs
+  include 1. Cost head works for gpt-oss (log-output test R2 0.49-0.72) but weak for dsv4f (0.20); the success
+  head is ~flat (C=1e-4 chosen) -> little to route on. NULL again on SWE, now with reasoning models; small test
+  set (150). Track A's positive evidence remains LCB only (+ gpt-oss-only LCB ladder); CodeContests decides.
+  Note: plan D's first labelling pass evaluated unconverted text (converter crashed on the training-stack import
+  on a CPU node) -- relabelled after converting with convert_swesmith_patches_light.py.
