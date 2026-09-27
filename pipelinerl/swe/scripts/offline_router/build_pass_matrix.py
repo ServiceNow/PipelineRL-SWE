@@ -29,6 +29,31 @@ def c(model, tin, tout):
     return (tin * P[model][0] + tout * P[model][1]) / 1e6 * 100
 
 
+def add_redraws(rows: dict, pilot_dir: Path, redraw_exec: str):
+    """Add open-model redraw candidates (predictions_<gen>_d<k>.jsonl + Daytona .results.jsonl labels) and merge
+    the writers' verdicts on them (exec over --patch-files) into the SAME test entries (same scripts)."""
+    RD = pilot_dir / "redraws"
+    for f in sorted(x for x in RD.glob("predictions_*_d*.jsonl") if not x.name.endswith(".results.jsonl")):
+        label = f.stem.replace("predictions_", "")          # e.g. oss20_d1
+        gen, k = label.rsplit("_d", 1)
+        lab = {json.loads(l)["instance_id"]: bool(json.loads(l)["resolved"]) for l in open(f.with_suffix(".results.jsonl"))}
+        for l in open(f):
+            r = json.loads(l); iid = r["instance_id"]
+            if iid not in rows or not r.get("model_patch"):
+                continue
+            rows[iid]["candidates"].append({"cid": label, "gen": gen, "draw": int(k), "correct": lab.get(iid, False),
+                                            "gen_cost_c": c(gen, r["prompt_tokens"], r["completion_tokens"])})
+    for l in open(redraw_exec):
+        r = json.loads(l)
+        if r.get("error") or r["instance_id"] not in rows:
+            continue
+        rec = rows[r["instance_id"]]; have = {x["cid"] for x in rec["candidates"]}
+        for t in rec["tests"]:
+            for cid, verdicts in r["patches"].items():
+                if cid in have:
+                    t["passes"][cid] = verdicts.get(t["writer"]) == 0
+
+
 def build_swe(pilot_dir: Path, exec_files: list[str]):
     runs = json.loads((pilot_dir / "patch_runs.json").read_text())
     truth = {k: {json.loads(l)["instance_id"]: bool(json.loads(l)["resolved"]) for l in
@@ -69,7 +94,12 @@ def build_swe(pilot_dir: Path, exec_files: list[str]):
                 rec["tests"].append({"writer": w, "mode": "issue", "write_cost_c": wcost.get((iid, w), np.nan),
                                      "valid": code not in (0, None),
                                      "passes": {cand["cid"]: r["patches"].get(cand["cid"], {}).get(w) == 0 for cand in rec["candidates"]}})
+    if REDRAW_EXEC:
+        add_redraws(rows, pilot_dir, REDRAW_EXEC)
     return list(rows.values())
+
+
+REDRAW_EXEC = ""
 
 
 def build_lcb(smoke_dir: Path, tensors_dir: Path):
@@ -108,7 +138,10 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out-dir", required=True)
     ap.add_argument("--swe-exec", default="", help="comma list of SWE exec jsonl files (latest writer rows win)")
+    ap.add_argument("--redraw-exec", default="", help="exec jsonl of the writers' scripts on the redraw patches")
     a = ap.parse_args()
+    global REDRAW_EXEC
+    REDRAW_EXEC = a.redraw_exec
     out = Path(a.out_dir); out.mkdir(parents=True, exist_ok=True)
     pilot = R / "swe_testwriter_pilot"
     swe = build_swe(pilot, [x for x in (a.swe_exec or str(pilot / "exec_clean.jsonl")).split(",") if x])

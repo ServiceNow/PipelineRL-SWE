@@ -605,3 +605,19 @@ Redraw verdicts (scripts x 4 redraw patches) queued after plan D labelling -> th
   set (150). Track A's positive evidence remains LCB only (+ gpt-oss-only LCB ladder); CodeContests decides.
   Note: plan D's first labelling pass evaluated unconverted text (converter crashed on the training-stack import
   on a CPU node) -- relabelled after converting with convert_swesmith_patches_light.py.
+
+### 4.B.2 Track B SEQUENTIAL result (2026-09-27; `offline_router/analyze_trackB_seq.py`, 368 Verified, open only)
+Ladder oss20 x3 -> qwen30 x3 -> oss120 x1 (redraws labelled + all 5 writers' scripts run on them); 5-fold,
+settings chosen on train folds as the cheapest reaching each target, scored held-out; paired bootstrap.
+Ceiling (some open candidate correct) 66.6%.
+- **Choosing a DIFFERENT tester beats self-verification on cost.** Cascade with dsv4f's tests vs the
+  self-verification cascade: target 50%: 53.0% @0.221c vs 48.9% @0.378c (acc +4.1 [+0.8,+7.3], cost 0.58x
+  [0.54,0.63]); target 55%: 54.3% @0.336c vs 54.6% @0.500c (acc -0.3 n.s., cost 0.67x [0.62,0.72]).
+  qcoder30 tests also better than self at 50% (+3.5 [+0.3,+6.8] at 1.02x).
+- **No-test routing is a strong baseline:** route once to gpt-oss-120b = 52.4% @0.180c. Tests only pay ABOVE
+  that ceiling: dsv4f-tested cascade 54.3% @0.336c; reliability-weighted posterior policy is the only one
+  reaching ~57% (57.3% @0.646c, +2.7 [+0.0,+5.7] vs self).
+- So: vs self-verification (the natural baseline) a cheap cross-model tester is ~33-42% cheaper at matched
+  accuracy; vs no tests, testing buys +2-5pt beyond the best single model at 1.9-3.6x its cost.
+Caveats: draws that produced no patch are skipped for free (mild optimism for cascades); single SWE dataset;
+writers' costs include only writing + ~1.5 s runs; posterior uses naive-Bayes independence across writers.
