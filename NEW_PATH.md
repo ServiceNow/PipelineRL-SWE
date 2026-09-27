@@ -621,3 +621,27 @@ Ceiling (some open candidate correct) 66.6%.
   accuracy; vs no tests, testing buys +2-5pt beyond the best single model at 1.9-3.6x its cost.
 Caveats: draws that produced no patch are skipped for free (mild optimism for cascades); single SWE dataset;
 writers' costs include only writing + ~1.5 s runs; posterior uses naive-Bayes independence across writers.
+
+### 4.A.3 CodeContests replication -- DEFINITIVE (2026-09-27; 700 problems, split 346/87/267)
+Pass rates oss20lo 51.6 / oss20md 72.4 / dsv4f 84.1 / oss120md 79.2 / oss120hi 88.1%.
+**Bug found and fixed in `activation_cost_preds.py`.** The last step (dollar-space linear recalibration on calibration)
+had slope 1.2-1.7 with a negative intercept on CC, pushing the low tail to <= 0, which the clip turned into ONE token:
+oss120hi was priced ~free on 68/700 problems, so every learned-cost policy bought it (that was the 2-3.5x
+"learned-cost Bellman" anomaly and the 1.95x one-shot ratio at 60%). Fix: floor every prediction at the cheapest
+per-problem mean observed on TRAIN for that route. LCB re-run with the fix: only 57 entries change (55 oss120md,
+2 oss20lo), headline identical (ratio 0.51 / 0.51 / 0.51 / 0.62 / 0.86 / 0.97 at 60-85% targets;
+analysis/costhead_matched_accuracy_ci_lcb_floored.json). Unfloored preds kept as cost_preds_unfloored.jsonl.
+**One-shot (the Track A claim), after the fix** (analysis/costhead_matched_accuracy_ci_codecontests.json):
+target 60/65/70/75/80% -> ratio 1.05 / 0.93 / 0.82 [0.69,0.99] / 0.88 [0.78,0.99] / 0.87 [0.78,0.96], but ours lands
+1.4-2.5pt LOWER in accuracy. At EXACTLY matched accuracy (interpolating the paper-rule curve at ours' accuracy):
+CC x1.04 / 0.97 / 0.95 / 0.93 / 0.94 -- a ~5% edge, not meaningful. Same view on LCB: x0.57 / 0.57 / 0.66 / 0.82.
+=> **CodeContests does NOT replicate the LCB effect** (no harm, ~5% at most). Likely why: CC cost head dollar R2 on
+calibration only 0.21-0.38 (LCB up to 0.79 with --rich), and dsv4f's per-problem cost spread is ~4x p90/p10 on CC vs
+~63x range on LCB -- the rerouting mechanism (oss20lo <-> dsv4f) has little to exploit.
+**Verifier regime (free perfect verifier), after the fix:** vs the fixed cascade at matched accuracy 45-70%:
+Bellman content/global 0.90-1.04, content/learned 0.88-1.16, dist/global 0.88-1.37, global/learned 1.11-1.34,
+RoR-style counts 1.03-1.14 -- no arm beats the cascade (all CIs include 1 or are above it). Matches LCB/BCB
+(`clean_comparison`): planning ~= cascade.
+**Track A scorecard:** LCB positive (and gpt-oss-only LCB ladder); BCB null (flat ladder); SWE-Smith null (x2);
+CodeContests null. The claim is one dataset deep -- a workshop paper must frame it as "when does per-query cost
+pay" (large per-problem cost spread on a route that is also accurate), with CC/BCB/SWE-Smith as the negative cells.

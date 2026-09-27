@@ -281,6 +281,15 @@ for j, s in enumerate(slots):
                 print(f"  {s:8s} dollar-space shrinkage slope b={cd[1]:.3f}"
                       + ("  (no dollar-space signal; collapses to the constant)"
                          if cd[1] < 0.25 else ""))
+    # Floor at the cheapest per-problem mean seen on TRAIN. The dollar-space recalibration can have
+    # slope > 1 and a negative intercept (CodeContests: b = 1.2-1.7), which drives the low tail to
+    # <= 0 and the clip above to ONE token -- gpt-oss-120b high then looks free on 11% of problems
+    # and every cost-aware policy routes there. No problem is cheaper than the cheapest one observed.
+    floor = float(np.nanmin(per_problem))
+    n_fl = int((tokens < floor).sum())
+    tokens = np.maximum(tokens, floor)
+    if n_fl:
+        print(f"  {s:8s} floored {n_fl} predictions at the train minimum ({floor:.0f} tokens)")
     C[:, j] = tokens * _PRICE[s] / 1e6
     const = true_mean_tr * _PRICE[s] / 1e6
     print(f"  {s:8s} constant ${const:.6f}  predicted mean ${C[:, j].mean():.6f}  "
