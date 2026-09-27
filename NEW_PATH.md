@@ -585,3 +585,14 @@ To do: gpt-oss-only pool; horizon >8; priced checks (v>0); why BCB plateaus (giv
   => With a free verifier, the best fixed cascade is essentially as good as anything we built; the only real
   gain is +3-4pt accuracy at equal cost around 80-85% on LCB, using the prefill. The earlier "25-30% cheaper"
   came from comparing against a weak cascade candidate set (6 plans) -- RETRACTED.
+
+### 4.B.1 Track B: one-shot + abstain, HELD-OUT on 368 Verified instances (2026-09-26)
+`offline_router/analyze_oneshot_abstain.py --cv 5` (pair and rule chosen on 4/5 of instances, scored on 1/5;
+open generators oss20/qwen30/oss120, testers oss20/qcoder30/dsv4f/oss120/devstral; all 368 instances,
+not just the disagreement-selected pilot). Utility +1 correct / -lambda wrong / 0 abstain:
+lambda 0: tests lose (-0.120); 0.5: +0.020 [-0.026,+0.062]; **1: +0.160 [+0.095,+0.226]** (gpt-oss-120b +
+dsv4f test, strict, chosen in 4/5 folds); 2: +0.005 n.s.; 4: -0.011 n.s. The pilot's +0.09/+0.14/+0.10 at
+lambda 0.5/1/2 was optimistic (selection on the same 100 disagreement instances). Real but NARROW: tests pay
+only around lambda ~1. Self vs other tester (precision/coverage): gpt-oss-20b 65%/31% self vs 72%/18%
+qcoder30; gpt-oss-120b 72%/43% self vs 76%/23% devstral -- other testers more precise but accept less.
+Redraw verdicts (scripts x 4 redraw patches) queued after plan D labelling -> then the sequential setting.
