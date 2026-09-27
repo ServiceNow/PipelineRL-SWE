@@ -90,6 +90,11 @@ async def main_async(a):
     ds = {r["instance_id"]: r for r in load_dataset("princeton-nlp/SWE-bench_Verified", split="test")}
     ids = json.loads(Path(a.instances_file).read_text())
     runs = json.loads(Path(a.patch_runs).read_text())
+    # --patch-files label=predictions.jsonl,... : run the scripts on THESE patches only (e.g. extra redraws)
+    extra = {}
+    for kv in [x for x in a.patch_files.split(",") if x]:
+        k, path = kv.split("=", 1)
+        extra[k] = {json.loads(l)["instance_id"]: json.loads(l).get("model_patch", "") for l in open(path)}
     R = Path(a.results_root)
     pool = {k: {json.loads(l)["instance_id"]: json.loads(l).get("model_patch", "")
                 for l in open(R / f"opus_verified_daytona_eval_{r}/predictions/predictions_opus_verified.jsonl")}
@@ -107,7 +112,9 @@ async def main_async(a):
     print(f"{len(todo)} instances to execute ({len(done)} done)", flush=True)
     sem = asyncio.Semaphore(a.concurrency)
     async with AsyncDaytona() as daytona:
-        tasks = [one(daytona, sem, i, scripts[i], {**{k: pool[k].get(i, "") for k in runs}, "gold": ds[i]["patch"]}, a.timeout)
+        tasks = [one(daytona, sem, i, scripts[i],
+                     ({k: extra[k].get(i, "") for k in extra} if extra
+                      else {**{k: pool[k].get(i, "") for k in runs}, "gold": ds[i]["patch"]}), a.timeout)
                  for i in todo]
         with open(out, "a") as f:
             for n, t in enumerate(asyncio.as_completed(tasks), 1):
@@ -126,6 +133,7 @@ def main():
     ap.add_argument("--concurrency", type=int, default=8)
     ap.add_argument("--timeout", type=int, default=120)
     ap.add_argument("--writers", default="", help="comma list: run only these writers' scripts")
+    ap.add_argument("--patch-files", default="", help="label=predictions.jsonl,... replaces the pool + gold patch set")
     a = ap.parse_args()
     if not os.environ.get("DAYTONA_API_KEY"):
         for env in ("/home/toolkit/PipelineRL-SWE/.env", "/home/toolkit/.env"):
