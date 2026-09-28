@@ -63,6 +63,9 @@ def main():
     if "--own" in sys.argv:
         own = dict(kv.split("=") for kv in sys.argv[sys.argv.index("--own") + 1].split(","))
     D = R / name; t = np.load(D / "tensors.npz", allow_pickle=True)
+    PT = dict(MK)
+    if (D / "prices.json").exists():                       # pool-specific (in, out) $/M, e.g. RouterBench's recovered prices
+        PT.update({k: tuple(v) for k, v in json.load(open(D / "prices.json")).items()})
     S = [str(s) for s in t["model_slots"]]; pids = [str(p) for p in t["problem_ids"]]; pi = {p: i for i, p in enumerate(pids)}
     v = t["valid"].astype(bool); ct = t["completion_tokens"].astype(float); pt = t["prompt_tokens"].astype(float)
     n = v.sum(2); outm = np.where(n > 0, np.where(v, ct, 0).sum(2) / np.maximum(n, 1), np.nan)
@@ -94,7 +97,7 @@ def main():
                 yh = RidgeCV(alphas=np.geomspace(1e1, 1e7, 13)).fit(Xs[trm], y[trm]).predict(Xs)
             smear = np.mean(np.exp(y[trm] - yh[trm])); out_tok = np.exp(yh) * smear
             out_tok *= np.nanmean(outm[trm, m]) / out_tok[trm].mean()
-            pin, pout = MK[s][0] / 1e6, MK[s][1] / 1e6
+            pin, pout = PT[s][0] / 1e6, PT[s][1] / 1e6
             C[:, m] = np.nan_to_num(inp[:, m], nan=np.nanmean(inp[:, m])) * pin + out_tok * pout
             tt = te[a[te]]; r2s.append(1 - ((y[tt] - np.log(out_tok[tt])) ** 2).sum() / ((y[tt] - y[tt].mean()) ** 2).sum())
         with open(D / f"cost_preds_{meth}.jsonl", "w") as f:

@@ -899,3 +899,7 @@ their reported cost_usd; Codex / Cursor have no cost.
 between the routed models.** Holds across one-shot reasoning (20-47%), non-reasoning chat (RouterBench 10.5%), and agentic
 SWE (open-weight 25.7% vs mixed 8.5%). Next (free): is agentic per-task cost PREDICTABLE from the task statement (4B prefill of
 the 111 statements; leave-one-task-out) -- 111 tasks is small, treat as indicative.
+- **RouterBench head-to-head (MixLLM's and 2509.09782's own benchmark)**: log-output R2 (mean over 11 models) probe 0.60,
+  MixLLM-style 0.58, prompt-GBM 0.49; routing gain probe 8.5% [5.6,11.0], MixLLM-style 8.1% [5.3,10.3], GBM 7.0% [4.4,8.9]
+  of a 10.5% headroom. On their benchmark we are at least as good, but low headroom makes every predictor converge.
+  (analysis/cost_headroom/routerbench_h2h; baseline_cost_heads.py now reads a pool's prices.json.)
