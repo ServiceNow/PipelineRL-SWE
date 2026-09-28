@@ -944,3 +944,17 @@ cite this table instead.
   oss120md .45 -> .35; plain probe -> probe+prefix). **R2 is the wrong yardstick for a routing cost predictor: what matters is
   accuracy on decision-relevant problems and routes.** Paper point; also explains why "better cost predictor" claims need
   not translate into routing gains.
+
+### 4.A.16 WHY better cost prediction does not flip decisions: level vs relative cost (2026-09-28)
+**4B READS problem + gpt-oss-20b-low prefix + cost question** (LCB, CC; plain ridge on the prefill): log-output R2 LCB .69-.76
+-> .82-.87, CC .34-.47 -> .60-.75, and it improves the HARD problems on every route (CC .09-.22 -> .27-.45; LCB .27-.45 ->
+.49-.59) -- unlike the hand-crafted prefix head. Yet routing: LCB 35.6% (probe) -> 32.2% free / 15.0% charged / 27.3%
+continuation; CC 2.0% -> 2.9% / -19.9% / -6.5%. No gain even for free.
+**Mechanism (analysis in chat, pairwise R2):** the prefix improves the SHARED per-problem length LEVEL (mean over routes:
+CC .51 -> .72, LCB .77 -> .87) but not the between-route DIFFERENCES that decide a route (LCB dsv4f-oss20lo .59 -> .61,
+dsv4f-oss120md .52 -> .53, dsv4f-oss120hi .32 -> .29; CC differences stay .0-.36). The shared level is essentially
+difficulty, which the success head already carries. Routing needs per-query RELATIVE cost across models (model-specific
+verbosity on this problem), not better per-query length. Explains the pools (LCB: prompt predicts differences .3-.6 ->
+savings; CC: differences ~unpredictable by any reader -> none) and every "better R2, no savings" result (Thinking probe,
+prefixes, prefix-reading). Reframes the capture curve: synthetic noise hit level and differences equally; real predictors
+mostly get the level. Fine-tuned 137M reader: LCB problem-only R2 .52-.57 (< frozen 4B probe .69-.76); other 3 runs pending.
