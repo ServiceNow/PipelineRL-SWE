@@ -962,3 +962,17 @@ mostly get the level. Fine-tuned 137M reader: LCB problem-only R2 .52-.57 (< fro
   4B in all four cells -- test log-output R2 LCB problem .52-.57 (4B .69-.76), LCB +prefix .71-.78 (4B .82-.87), CC problem
   ~0 (4B .34-.47), CC +prefix .43-.62 (4B .60-.75); routing (prefix free) LCB 26.3% / 21.8%, CC -2.3% / -3.4%. 350-450
   training problems cannot train a representation as good as the 4B's existing one.
+
+### 4.A.17 Level vs relative cost -- the user's caveat holds; corrects part of 4.A.16 (2026-09-28; `level_vs_relative.py`)
+Headroom (vs paper rule) when the router gets only one component of the TRUE log cost (level = mean over routes):
+| pool | full | level only (true level + train-avg route ratios) | differences only (true differences + avg level) |
+| LCB | 46.0% | 35.6% | 36.5% |   | Omni | 44.2% | 21.0% | 41.1% |   | CC | 21.8% | 12.7% | 19.3% |
+| BCB | 20.2% | 9.8% | 15.2% |   | TACO | 36.1% | -1.9% | 30.0% |
+=> The SHARED level ("long for everyone") is worth 10-36% by itself on 4/5 pools ("cheapest model that can plausibly
+succeed"); 4.A.16's "level rarely changes the decision" was WRONG as stated. Real predictors: LCB probe level R2 .77 ->
+33.3% (of 35.6), Omni .79 -> 18.6% (of 21.0) -- most of our savings come through the level; CC probe .51 -> 4.0%, CC
+4B-reads-prefix .72 -> 2.0% (of 12.7). Synthetic calibrated LEVEL predictor on CC: R2 .50 / .72 / .90 -> 1.5 / 6.2 / 10.9%.
+So (1) the level's value needs very high accuracy (steep convex curve), and (2) the real predictor at R2 .72 captures a
+THIRD of what random noise at equal R2 does -> its errors concentrate where decisions happen (hypothesis: the long,
+expensive tail). Differences carry comparable or more headroom (all of TACO's); real predictors capture them less
+(LCB 22.8 of 36.5, Omni 14.2 of 41.1, CC ~0).
