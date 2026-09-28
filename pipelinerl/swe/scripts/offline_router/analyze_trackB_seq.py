@@ -7,6 +7,9 @@ Every bought test runs on every candidate (runs are ~free: 1 vCPU-second-ish, st
   route-once   submit the first candidate of one generator, no tests                     (B0)
   self         each candidate checked by its OWN model's test; accept on valid & pass     (B1)
   fixed:<w>    one writer's test for all candidates; accept on valid & pass              (B2)
+  escalate     per-instance, label-free writer choice. `invalid`: buy writers in `order` until one's test is VALID
+               (fails on the unpatched repo), use it. `confirm`: first writer's pass is checked by the second
+               (bought only then). `rescue`: first writer's FAIL gets a second opinion (bought only then)
   posterior    writers S bought up front; each candidate's P(correct | verdicts) = generator base rate x
                per-writer likelihood ratios (P(pass|correct), P(pass|wrong) for VALID tests, fit on TRAIN folds);
                accept when posterior >= tau; at the end of the ladder submit the highest-posterior candidate
@@ -21,6 +24,11 @@ import numpy as np
 LADDER = ["oss20", "oss20_d1", "oss20_d2", "qwen30", "qwen30_d1", "qwen30_d2", "oss120"]
 SELF = {"oss20": "oss20", "qwen30": "qcoder30", "oss120": "oss120"}
 WRITERS = ["oss20", "qcoder30", "dsv4f", "oss120", "devstral"]
+ESC_ORDERS = {  # cheapest writer first (median write cost: oss20 0.030c, dsv4f 0.064c, qcoder30 0.064c, oss120 0.188c)
+    "invalid": [("oss20", "dsv4f"), ("oss20", "dsv4f", "oss120"), ("oss20", "qcoder30", "dsv4f"), ("dsv4f", "oss120"),
+                ("oss20", "dsv4f", "oss120", "devstral")],
+    "confirm": [("oss20", "dsv4f"), ("dsv4f", "oss120"), ("oss20", "oss120")],
+    "rescue":  [("oss20", "dsv4f"), ("dsv4f", "oss120"), ("oss20", "oss120")]}
 
 
 def fit_reliability(recs):
@@ -42,7 +50,7 @@ def fit_reliability(recs):
     return base, rel
 
 
-def run(r, family, k, tau=None, S=(), fixed=None, base=None, rel=None, g=None):
+def run(r, family, k, tau=None, S=(), fixed=None, base=None, rel=None, g=None, order=(), mode=None):
     cands = {c["cid"]: c for c in r["candidates"]}
     tests = {t["writer"]: t for t in r["tests"]}
     if family == "route-once":            # the chosen generator's first draw; no patch = a wrong submission
@@ -67,6 +75,37 @@ def run(r, family, k, tau=None, S=(), fixed=None, base=None, rel=None, g=None):
             buy(SELF[c["gen"]]); ws = [SELF[c["gen"]]]
         elif family == "fixed":
             buy(fixed); ws = [fixed]
+        elif family == "escalate":
+            ok = lambda w: w in tests and tests[w]["valid"] is not False
+            passes = lambda w: tests[w]["passes"].get(cid, False)
+            if mode == "invalid":
+                w = None
+                for x in order:
+                    buy(x)
+                    if ok(x):
+                        w = x; break
+                if w is not None and passes(w):
+                    return float(c["correct"]), spent
+                continue
+            a_, b_ = order
+            buy(a_)
+            if not ok(a_):                       # first test uninformative: fall back to the second
+                buy(b_)
+                if ok(b_) and passes(b_):
+                    return float(c["correct"]), spent
+                continue
+            if mode == "confirm":
+                if passes(a_):
+                    buy(b_)
+                    if not ok(b_) or passes(b_):
+                        return float(c["correct"]), spent
+                continue
+            if passes(a_):                       # rescue
+                return float(c["correct"]), spent
+            buy(b_)
+            if ok(b_) and passes(b_):
+                return float(c["correct"]), spent
+            continue
         else:
             ws = list(S)
         valid = [w for w in ws if w in tests and tests[w]["valid"] is not False]
@@ -94,6 +133,10 @@ def settings(train, family):
         return [dict(k=1, g=g) for g in ("oss20", "qwen30", "oss120")], base, rel
     if family in ("self",) or family.startswith("fixed"):
         return [dict(k=k) for k in range(1, len(LADDER) + 1)], base, rel
+    if family.startswith("escalate"):
+        mode = family.split(":")[1]
+        orders = ESC_ORDERS[mode]
+        return [dict(k=k, order=o, mode=mode) for k in range(1, len(LADDER) + 1) for o in orders], base, rel
     out = []
     for S in [("oss20",), ("dsv4f",), ("qcoder30",), ("oss20", "dsv4f"), ("oss20", "qcoder30"), ("oss20", "qcoder30", "dsv4f")]:
         for tau in (0.5, 0.6, 0.7, 0.8, 0.9, 0.95):
@@ -103,22 +146,25 @@ def settings(train, family):
 
 
 def evaluate(recs, family, fold_of, targets, folds=5):
-    held = {t: np.zeros((len(recs), 2)) for t in targets}
+    held = {t: np.zeros((len(recs), 2)) for t in targets}; picks = {}
     for f in range(folds):
         tr = [r for r, g in zip(recs, fold_of) if g != f]; te_idx = [i for i, g in enumerate(fold_of) if g == f]
         grid, base, rel = settings(tr, family)
         fixed = family.split(":")[1] if family.startswith("fixed:") else None
-        fam = "fixed" if fixed else family
+        fam = "fixed" if fixed else ("escalate" if family.startswith("escalate") else family)
         pts = []
         for s in grid:
-            res = np.array([run(r, fam, s["k"], s.get("tau"), s.get("S", ()), fixed, base, rel, s.get("g")) for r in tr])
+            res = np.array([run(r, fam, s["k"], s.get("tau"), s.get("S", ()), fixed, base, rel, s.get("g"),
+                                s.get("order", ()), s.get("mode")) for r in tr])
             pts.append((res[:, 1].mean(), res[:, 0].mean(), s))
         for t in targets:
             ok = [p for p in pts if p[1] >= t]
             s = min(ok, key=lambda p: p[0])[2] if ok else max(pts, key=lambda p: p[1])[2]
             for i in te_idx:
-                held[t][i] = run(recs[i], fam, s["k"], s.get("tau"), s.get("S", ()), fixed, base, rel, s.get("g"))
-    return held
+                held[t][i] = run(recs[i], fam, s["k"], s.get("tau"), s.get("S", ()), fixed, base, rel, s.get("g"),
+                                 s.get("order", ()), s.get("mode"))
+            picks.setdefault(t, []).append(s)
+    return held, picks
 
 
 def main():
@@ -126,6 +172,7 @@ def main():
     ap.add_argument("--pass-matrix", required=True)
     ap.add_argument("--targets", default="0.45,0.50,0.55,0.60")
     ap.add_argument("--folds", type=int, default=5)
+    ap.add_argument("--families", default="", help="comma subset of families (self is always kept as the reference)")
     a = ap.parse_args()
     rng = np.random.default_rng(0)
     recs = [json.loads(l) for l in open(a.pass_matrix)]
@@ -133,8 +180,15 @@ def main():
     targets = [float(x) for x in a.targets.split(",")]
     anyc = np.mean([any(c["correct"] for c in r["candidates"] if c["cid"] in LADDER) for r in recs])
     print(f"{len(recs)} instances; ceiling (some open candidate correct) {anyc*100:.1f}%")
-    fams = ["route-once", "self", "posterior"] + [f"fixed:{w}" for w in WRITERS]
-    res = {fam: evaluate(recs, fam, fold_of, targets, a.folds) for fam in fams}
+    fams = ["route-once", "self", "posterior"] + [f"fixed:{w}" for w in WRITERS] + [f"escalate:{m}" for m in ESC_ORDERS]
+    if a.families:
+        fams = [f for f in fams if f in a.families.split(",") or f == "self"]
+    out = {fam: evaluate(recs, fam, fold_of, targets, a.folds) for fam in fams}
+    res = {f: v[0] for f, v in out.items()}
+    for f in fams:
+        if f.startswith("escalate"):
+            print(f"  {f} settings chosen per target (5 folds): " + "; ".join(
+                f"{t*100:.0f}%: " + ",".join(f"k{s['k']}/{'>'.join(s['order'])}" for s in out[f][1][t]) for t in targets))
     for t in targets:
         print(f"\n  target {t*100:.0f}% (chosen on train folds; held-out accuracy / cost cents):")
         ref = res["self"][t]

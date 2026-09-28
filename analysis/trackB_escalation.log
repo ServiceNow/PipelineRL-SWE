@@ -1,0 +1,40 @@
+368 instances; ceiling (some open candidate correct) 66.6%
+  escalate:invalid settings chosen per target (5 folds): 45%: k2/oss20>dsv4f,k3/oss20>dsv4f,k3/oss20>dsv4f,k3/oss20>dsv4f,k3/oss20>dsv4f; 50%: k3/oss20>dsv4f,k5/dsv4f>oss120,k5/oss20>dsv4f,k5/dsv4f>oss120,k7/oss20>dsv4f; 52%: k4/oss20>dsv4f,k7/dsv4f>oss120,k5/dsv4f>oss120,k7/dsv4f>oss120,k7/oss20>dsv4f; 55%: k7/oss20>dsv4f,k7/oss20>dsv4f,k7/dsv4f>oss120,k7/oss20>dsv4f,k7/oss20>dsv4f
+  escalate:confirm settings chosen per target (5 folds): 45%: k2/oss20>dsv4f,k3/oss20>dsv4f,k3/oss20>dsv4f,k3/oss20>dsv4f,k3/oss20>dsv4f; 50%: k4/oss20>dsv4f,k7/oss20>dsv4f,k5/oss20>dsv4f,k7/oss20>dsv4f,k7/oss20>dsv4f; 52%: k4/oss20>dsv4f,k7/oss20>dsv4f,k7/oss20>dsv4f,k7/oss20>dsv4f,k7/dsv4f>oss120; 55%: k7/oss20>dsv4f,k7/oss20>dsv4f,k7/dsv4f>oss120,k7/oss20>dsv4f,k7/dsv4f>oss120
+  escalate:rescue settings chosen per target (5 folds): 45%: k2/oss20>dsv4f,k3/oss20>dsv4f,k2/oss20>dsv4f,k3/oss20>dsv4f,k3/oss20>dsv4f; 50%: k3/oss20>dsv4f,k4/oss20>dsv4f,k4/oss20>dsv4f,k5/oss20>dsv4f,k7/oss20>dsv4f; 52%: k4/oss20>dsv4f,k7/oss20>dsv4f,k5/oss20>dsv4f,k7/oss20>dsv4f,k7/oss20>dsv4f; 55%: k5/oss20>dsv4f,k7/oss20>oss120,k7/oss20>dsv4f,k7/oss20>oss120,k7/oss20>oss120
+
+  target 45% (chosen on train folds; held-out accuracy / cost cents):
+     route-once        47.8% @ 0.1590c   vs self: acc +1.9 [-3.0,+6.5]  cost x1.72 [1.61,1.85]
+     self              45.9% @ 0.0922c   vs self: acc +0.0 [+0.0,+0.0]  cost x1.00 [1.00,1.00]
+     fixed:oss20       45.9% @ 0.0922c   vs self: acc +0.0 [+0.0,+0.0]  cost x1.00 [1.00,1.00]
+     fixed:dsv4f       47.6% @ 0.1386c   vs self: acc +1.6 [-0.5,+3.8]  cost x1.50 [1.40,1.61]
+     escalate:invalid  46.7% @ 0.0971c   vs self: acc +0.8 [+0.0,+1.9]  cost x1.05 [1.02,1.09]
+     escalate:confirm  46.7% @ 0.1258c   vs self: acc +0.8 [-0.3,+1.9]  cost x1.36 [1.29,1.45]
+     escalate:rescue   46.5% @ 0.1439c   vs self: acc +0.5 [-1.6,+2.7]  cost x1.56 [1.46,1.66]
+
+  target 50% (chosen on train folds; held-out accuracy / cost cents):
+     route-once        52.4% @ 0.1801c   vs self: acc +3.5 [-0.5,+7.6]  cost x0.48 [0.44,0.52]
+     self              48.9% @ 0.3784c   vs self: acc +0.0 [+0.0,+0.0]  cost x1.00 [1.00,1.00]
+     fixed:oss20       50.5% @ 0.3213c   vs self: acc +1.6 [-0.5,+3.8]  cost x0.85 [0.81,0.89]
+     fixed:dsv4f       53.0% @ 0.2206c   vs self: acc +4.1 [+0.8,+7.3]  cost x0.58 [0.54,0.63]
+     escalate:invalid  50.0% @ 0.2322c   vs self: acc +1.1 [-1.6,+3.8]  cost x0.61 [0.57,0.66]
+     escalate:confirm  47.8% @ 0.3148c   vs self: acc -1.1 [-3.5,+1.1]  cost x0.83 [0.78,0.89]
+     escalate:rescue   52.2% @ 0.2160c   vs self: acc +3.3 [+0.0,+6.2]  cost x0.57 [0.53,0.62]
+
+  target 52% (chosen on train folds; held-out accuracy / cost cents):
+     route-once        52.4% @ 0.1801c   vs self: acc +1.1 [-2.7,+4.9]  cost x0.41 [0.38,0.45]
+     self              51.4% @ 0.4368c   vs self: acc +0.0 [+0.0,+0.0]  cost x1.00 [1.00,1.00]
+     fixed:oss20       50.5% @ 0.3213c   vs self: acc -0.8 [-2.2,+0.3]  cost x0.74 [0.71,0.76]
+     fixed:dsv4f       51.6% @ 0.2830c   vs self: acc +0.3 [-2.7,+3.0]  cost x0.65 [0.60,0.70]
+     escalate:invalid  50.3% @ 0.2913c   vs self: acc -1.1 [-3.3,+1.1]  cost x0.67 [0.62,0.72]
+     escalate:confirm  50.5% @ 0.3836c   vs self: acc -0.8 [-3.0,+1.1]  cost x0.88 [0.83,0.94]
+     escalate:rescue   52.2% @ 0.2804c   vs self: acc +0.8 [-1.6,+3.0]  cost x0.64 [0.60,0.69]
+
+  target 55% (chosen on train folds; held-out accuracy / cost cents):
+     route-once        52.4% @ 0.1801c   vs self: acc -2.2 [-5.4,+1.1]  cost x0.36 [0.34,0.39]
+     self              54.6% @ 0.5003c   vs self: acc +0.0 [+0.0,+0.0]  cost x1.00 [1.00,1.00]
+     fixed:oss20       53.8% @ 0.3637c   vs self: acc -0.8 [-2.2,+0.3]  cost x0.73 [0.71,0.75]
+     fixed:dsv4f       54.3% @ 0.3364c   vs self: acc -0.3 [-2.7,+2.2]  cost x0.67 [0.62,0.72]
+     escalate:invalid  53.8% @ 0.3369c   vs self: acc -0.8 [-2.4,+0.8]  cost x0.67 [0.64,0.71]
+     escalate:confirm  53.5% @ 0.4444c   vs self: acc -1.1 [-3.5,+1.1]  cost x0.89 [0.84,0.94]
+     escalate:rescue   52.2% @ 0.3598c   vs self: acc -2.4 [-4.6,-0.3]  cost x0.72 [0.68,0.76]

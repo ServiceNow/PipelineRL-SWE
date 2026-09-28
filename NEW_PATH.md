@@ -645,3 +645,23 @@ RoR-style counts 1.03-1.14 -- no arm beats the cascade (all CIs include 1 or are
 **Track A scorecard:** LCB positive (and gpt-oss-only LCB ladder); BCB null (flat ladder); SWE-Smith null (x2);
 CodeContests null. The claim is one dataset deep -- a workshop paper must frame it as "when does per-query cost
 pay" (large per-problem cost spread on a route that is also accurate), with CC/BCB/SWE-Smith as the negative cells.
+
+### 4.B.3 Per-instance test-writer choice, sequential (2026-09-28; 368 Verified, open only)
+Question: does choosing the test-WRITER per instance beat always-dsv4f? Two steps.
+1. **Label-oracle ceiling** (`offline_router/trackB_oracle_writer_ceiling.py`, analysis/trackB_oracle_writer_ceiling.json):
+   per instance, the writer maximising correct - mu*cost chosen WITH labels, ladder length shared. Cost vs the best
+   fixed writer at matched accuracy: 45% x0.70 [0.46,0.78], 50% x0.42 [0.32,0.74]; max accuracy 60.9% vs 54.9%.
+   Oracle picks the cheapest writer that happens to work (oss20 48%, dsv4f 23%, qcoder30 15%). INFLATED: with 12-25%
+   false accepts, label-picking among 5 noisy tests exploits luck (the pilot's split-half version gave -0.6pt). Not a kill.
+2. **Label-free per-instance escalation, held out** (`analyze_trackB_seq.py --families escalate:*`, 5-fold, same protocol
+   as 4.B.2; analysis/trackB_escalation.log). Families: `invalid` (buy writers cheapest-first until one's test is valid),
+   `confirm` (second writer re-checks a pass), `rescue` (second writer re-checks a fail). Held-out, acc @ cents:
+   | target | fixed dsv4f | escalate:invalid | escalate:rescue | escalate:confirm | self | route-once oss120 |
+   | 50% | 53.0 @0.221 | 50.0 @0.232 | 52.2 @0.216 | 47.8 @0.315 | 48.9 @0.378 | 52.4 @0.180 |
+   | 52% | 51.6 @0.283 | 50.3 @0.291 | 52.2 @0.280 | 50.5 @0.384 | 51.4 @0.437 | 52.4 @0.180 |
+   | 55% | 54.3 @0.336 | 53.8 @0.337 | 52.2 @0.360 | 53.5 @0.444 | 54.6 @0.500 | 52.4 @0.180 |
+   Train folds almost always pick an oss20 -> dsv4f order. **No escalation rule beats always-dsv4f** (rescue ties it at
+   50-52%; invalid ties at 55%; confirm is worse). All tested policies still lose to route-once below ~52%.
+**Verdict:** per-instance writer choice has no demonstrated value in the sequential setting. The writer claim stays
+"a cheap cross-model writer (dsv4f) beats self-verification by 33-42% at matched accuracy". A learned writer router is
+not worth building on this data (label-free rules already sit at the fixed writer; the oracle headroom is mostly luck).
