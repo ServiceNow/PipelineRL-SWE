@@ -1,0 +1,3 @@
+6362 auxiliary rated problems. Readability of the Codeforces rating on the 700-problem pool: probe CV on the pool itself R2 0.51 -> reader trained on the auxiliary set R2 0.46
+probe + rating_pred  test log-output R2: oss20lo +0.41  oss20md +0.40  dsv4f +0.41  oss120md +0.43  oss120hi +0.41
+probe + rating_true  test log-output R2: oss20lo +0.49  oss20md +0.46  dsv4f +0.49  oss120md +0.52  oss120hi +0.52

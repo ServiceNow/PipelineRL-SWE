@@ -836,3 +836,14 @@ itself only if nearly free) or a changed representation (fine-tuning).
   TACIT-Switch 2608.27911, Doomed from the Start 2607.06503, EarlyEval 2609.02783). Dropped.
 - Running: prompted probing (prefill with a difficulty question appended; CC + LCB, GPU); Codeforces-API ratings for the
   full CodeContests set (download of the remaining 35 train shards) -> train a rating reader on thousands of free labels.
+- **Prompted probing** (difficulty question appended before reading the prefill): CC R2 .34-.47 -> .38-.48, gain 2.0 -> 2.2%;
+  LCB 35.6 -> 34.4%. NULL.
+- **#1 rating reader from free labels** (`analysis/cost_headroom/rating_reader.py`; 6362 CodeContests problems rated via the
+  Codeforces API, outside the pool): readability of the rating on the pool 0.51 (pool-only CV) -> 0.46 (9x more labels):
+  the frozen representation, not the label count, limits it. Stacking into the cost head: predicted rating 2.2%,
+  even the TRUE rating only 4.0% [-4.7, 11.5] (log R2 .46-.52). NULL -- labelled difficulty explains too little of length;
+  what drives length is the models' experienced difficulty (solve rate), which no label carries. Lowers the prior on
+  fine-tuning to read difficulty; fine-tuning directly on length (~350 examples/pool) held.
+**Boosting summary:** every prompt-side lever tried (bigger/own/Thinking/Base/prompted probes, text predictors, pooling,
+low-rank, kNN, selective use, dollar calibration, difficulty labels at scale) leaves CodeContests at <= ~6%. The prompt-only
+ceiling there is real; paper framing: diagnose, do not promise to fix.
