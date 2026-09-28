@@ -75,6 +75,10 @@ ap.add_argument("--no-shrink", action="store_true", help=(
     "than the constant it replaces -- the failure mode measured on TACO, where cost R2 falls to "
     "0.09 and conditioning actively hurt."))
 ap.add_argument("--out", required=True)
+ap.add_argument("--in-out-prices", default="", help=(
+    "label=in/out $/M, e.g. 'oss120md=0.15/0.6'. When set, the head predicts OUTPUT tokens only and the cost is "
+    "this problem's own mean input tokens x in-price + predicted output x out-price -- market accounting, where "
+    "input and output are priced separately (on SWE input is most of the bill). --prices is then ignored."))
 ap.add_argument("--prices", default="", help="label=USD_per_M overrides, e.g. 'oss20lo=0.12'. "
                 "The built-in table names the legacy three-route pool; pool_v2 rungs are effort "
                 "tiers with their own labels.")
@@ -101,6 +105,15 @@ slots = [str(s) for s in t["model_slots"]]
 valid = t["valid"]
 completion = t["completion_tokens"].astype(float)
 total = t["prompt_tokens"].astype(float) + completion
+_IO = {}
+for _kv in (a.in_out_prices or "").split(","):
+    if _kv.strip():
+        _k, _, _v = _kv.partition("=")
+        _pi, _, _po = _v.partition("/")
+        _IO[_k.strip()] = (float(_pi), float(_po))
+if _IO:
+    _prompt_mean = np.nanmean(np.where(valid, t["prompt_tokens"].astype(float), np.nan), 2)   # [problem, route]
+    total = completion.copy()                                   # the regression target becomes output tokens
 outcome = t["final_outcome"]
 probs = {str(json.loads(l)["problem_id"]): json.loads(l)
          for l in open(T / "problems.jsonl") if l.strip()}
@@ -290,8 +303,14 @@ for j, s in enumerate(slots):
     tokens = np.maximum(tokens, floor)
     if n_fl:
         print(f"  {s:8s} floored {n_fl} predictions at the train minimum ({floor:.0f} tokens)")
-    C[:, j] = tokens * _PRICE[s] / 1e6
-    const = true_mean_tr * _PRICE[s] / 1e6
+    if _IO:
+        _inp = np.array([_prompt_mean[ti[p], j] for p in pk])
+        _inp = np.where(np.isfinite(_inp), _inp, np.nanmean(_inp))
+        C[:, j] = (_inp * _IO[s][0] + tokens * _IO[s][1]) / 1e6
+        const = (np.nanmean(_inp) * _IO[s][0] + true_mean_tr * _IO[s][1]) / 1e6
+    else:
+        C[:, j] = tokens * _PRICE[s] / 1e6
+        const = true_mean_tr * _PRICE[s] / 1e6
     print(f"  {s:8s} constant ${const:.6f}  predicted mean ${C[:, j].mean():.6f}  "
           f"p10 ${np.percentile(C[:, j],10):.6f}  p90 ${np.percentile(C[:, j],90):.6f}  "
           f"smearing {smear:.3f}  level {level:.3f}")

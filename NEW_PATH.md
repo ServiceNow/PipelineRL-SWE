@@ -665,3 +665,26 @@ Question: does choosing the test-WRITER per instance beat always-dsv4f? Two step
 **Verdict:** per-instance writer choice has no demonstrated value in the sequential setting. The writer claim stays
 "a cheap cross-model writer (dsv4f) beats self-verification by 33-42% at matched accuracy". A learned writer router is
 not worth building on this data (label-free rules already sit at the fixed writer; the oracle headroom is mostly luck).
+
+### 4.A.4 Headroom x capture across 7 pools (2026-09-28; `analysis/cost_headroom/decompose.py --curve`)
+HEADROOM = cost saved at matched accuracy by PERFECT per-problem cost vs the paper rule (input + median output);
+LEARNED = the 4B-prefill head; test frontiers, same success head for every arm, paired bootstrap. Market in/out
+prices for every pool (legacy blended prices give the same picture; analysis/cost_headroom/decompose_all.log).
+| pool (market prices) | headroom [95% CI] | learned [95% CI] | head dollar R2 on the key routes |
+| LCB 5 routes | 47.3% [39.7,52.9] | 34.4% [25.6,40.0] | 0.44-0.51 |
+| LCB gpt-oss only | 30.8% [23.3,36.4] | 18.7% [12.4,23.6] | 0.44-0.56 |
+| TACO (scout/oss20/oss120) | 36.1% [24.9,46.0] | 0.1% [-7.5,9.0] | 0.14-0.35 |
+| CodeContests | 21.8% [13.5,29.1] | 0.7% [-9.5,8.2] | 0.22-0.27 |
+| BCB 5 routes | 20.2% [9.9,29.8] | -4.3% [-26.5,15.5] | dsv4f 0.04, oss120hi 0.13 |
+| SWE-Smith reasoning | 14.2% [-2.1,29.6] | 7.5% [-5.5,20.0] | 0.10-0.85 (n=150 test) |
+| BCB gpt-oss only | 6.7% [-6.2,17.3] | 6.8% [-4.1,18.9] | |
+**Findings.** (1) Headroom is large and general for reasoning-model pools (20-47% on 5 of 7, CIs excluding 0): output
+length varies 10-90x per route across problems and 81-96% of its variance is between problems. CORRECTION of an
+earlier claim: CodeContests does not lack variability (dsv4f p90/p10 22-26x, not ~4x -- that was the spread of the
+predictions). (2) The bottleneck is PREDICTABILITY. A calibrated synthetic head with controlled R2 traces a convex
+capture curve: ~0 gain below dollar R2 ~0.3, most of the headroom only above ~0.5-0.6. The 4B probe reaches ~0.5 only
+on LCB. Real heads sit on the synthetic curve on LCB x2, CodeContests and BCB gpt-oss-only; TACO and BCB-5 fall below it
+(unweighted mean R2 hides route heterogeneity). (3) So Track A's story: "the price isn't constant (20-47% headroom);
+capturing it is a cost-PREDICTION problem, and a cheap probe clears the bar on 1 of 7 pools." Next: stronger cost
+predictors (each route's OWN prefill -- TACO has oss20/oss120 activations; fine-tuned encoder) to move pools along
+the curve; a non-reasoning contrast (RouterBench activations exist); a pre-registered math pool.
