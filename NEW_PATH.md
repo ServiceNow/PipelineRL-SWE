@@ -753,5 +753,5 @@ deficit (capture ~ R2 - 0.2 in 4.A.4's curves) -- fix calibration in dollars bef
 - **Probe model** (`analysis/cost_headroom/probe_model_compare.py`; same plain ridge, only the prefill changes). Log-output
   R2 on the reasoning routes: Qwen3-4B-Thinking beats Instruct everywhere but modestly (LCB .69-.76 -> .73-.79, CC
   .34-.47 -> .40-.54, TACO oss20/oss120 .36/.47 -> .42/.54); Base is far worse (CC .14-.21); gpt-oss-20b's own prefill
-  no better than Instruct (CC .34-.41). Routing gain Instruct -> Thinking: LCB 35.6 -> 34.6, CC 2.0 -> 6.3, TACO 2.1 ->
+  no better than Instruct (CC .34-.41), nor is gpt-oss-120b's (CC .37-.44, gain 0.6%). Routing gain Instruct -> Thinking: LCB 35.6 -> 34.6, CC 2.0 -> 6.3, TACO 2.1 ->
   -1.2 -- all within noise. A reasoning-model probe is slightly better at predicting length, not enough to move pools.
