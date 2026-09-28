@@ -53,8 +53,11 @@ def pool(spec):
     name, _, rest = spec.partition(":")
     cfile, _, pricing = rest.partition(":")
     D = R / name
-    pin_of = (lambda s: MK[s][0]) if pricing == "market" else (lambda s: PR[s])
-    pout_of = (lambda s: MK[s][1]) if pricing == "market" else (lambda s: PR[s]); t = np.load(D / "tensors.npz", allow_pickle=True)
+    PT = dict(MK)
+    if (D / "prices.json").exists():                       # a pool with its own (in, out) $/M table, e.g. RouterBench
+        PT.update({k: tuple(v) for k, v in json.load(open(D / "prices.json")).items()})
+    pin_of = (lambda s: PT[s][0]) if pricing == "market" else (lambda s: PR[s])
+    pout_of = (lambda s: PT[s][1]) if pricing == "market" else (lambda s: PR[s]); t = np.load(D / "tensors.npz", allow_pickle=True)
     S = [str(s) for s in t["model_slots"]]; M = len(S)
     pids = [str(p) for p in t["problem_ids"]]; pi = {p: i for i, p in enumerate(pids)}
     v = t["valid"].astype(bool); ok = (t["final_outcome"] & t["valid"]).astype(float)
