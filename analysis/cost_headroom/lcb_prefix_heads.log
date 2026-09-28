@@ -1,0 +1,7 @@
+/home/toolkit/PipelineRL-SWE/analysis/cost_headroom/prefix_cost_head.py:50: RuntimeWarning: Mean of empty slice.
+  print(f"prefixes: " + ", ".join(f"{s} {have[s].sum()} (finished inside cap {F[s][have[s], 0].mean()*100:.0f}%, "
+/home/toolkit/.conda/envs/pipeline-rl/lib/python3.11/site-packages/numpy/core/_methods.py:129: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+prefixes: oss20lo 892 (finished inside cap 54%, mean cost 0.0070c), oss20md 0 (finished inside cap nan%, mean cost 0.0000c), dsv4f 0 (finished inside cap nan%, mean cost 0.0000c), oss120md 0 (finished inside cap nan%, mean cost 0.0000c), oss120hi 0 (finished inside cap nan%, mean cost 0.0000c)
+prefix_cheap  test log-output R2: oss20lo +0.86  oss20md +0.80  dsv4f +0.70  oss120md +0.76  oss120hi +0.81   overhead 0.0070c/problem
+probe (ref)   test log-output R2: oss20lo +0.72  oss20md +0.54  dsv4f +0.61  oss120md +0.51  oss120hi +0.70

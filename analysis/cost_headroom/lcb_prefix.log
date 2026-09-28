@@ -1,0 +1,37 @@
+HEADROOM = cost saved at matched accuracy by PERFECT per-problem cost knowledge vs the paper rule; learned = the 4B-prefill head; capture = learned / headroom (test frontiers, band = accuracies all arms reach)
+pool                                         band       headroom [95% CI]        learned [95% CI]  capture  reroute or/lrn
+pool_v2_tensors_5rung [market]          55- 87%    47.3% [ 39.7, 52.9]    34.4% [ 25.6, 40.0]     0.73      50%/52%
+pool_v2_tensors_5rung [market]          54- 87%    46.1% [ 38.8, 51.3]    26.1% [ 17.9, 33.4]     0.57      50%/48%
+pool_v2_tensors_5rung [market] +overhead 0.0066c    54- 87%    46.1% [ 38.8, 51.3]     8.9% [ -0.9, 16.7]     0.19      50%/48%
+pool_v2_tensors_5rung [market] +overhead 0.0066c    54- 87%    46.1% [ 38.8, 51.3]    21.1% [ 12.5, 28.7]     0.46      50%/48%
+
+per route: acc, mean cost (c), p90/p10 per-problem cost, sd log cost, ICC (between-problem share), output share, head test R2
+  pool_v2_tensors_5rung [market]
+    oss20lo   acc  52.7%  0.0081c  p90/p10    7.4  sdlog 0.76  ICC 0.88  out  87%  R2 +0.56
+    oss20md   acc  68.5%  0.0416c  p90/p10   32.1  sdlog 1.26  ICC 0.90  out  98%  R2 +0.45
+    dsv4f     acc  88.4%  0.1446c  p90/p10   89.4  sdlog 1.67  ICC 0.89  out  98%  R2 +0.51
+    oss120md  acc  81.5%  0.1495c  p90/p10   18.5  sdlog 1.06  ICC 0.95  out  94%  R2 +0.44
+    oss120hi  acc  88.9%  0.8236c  p90/p10   39.8  sdlog 1.35  ICC 0.96  out  99%  R2 +0.46
+  pool_v2_tensors_5rung [market]
+    oss20lo   acc  52.7%  0.0081c  p90/p10    7.4  sdlog 0.76  ICC 0.88  out  87%  R2 +0.72
+    oss20md   acc  68.5%  0.0416c  p90/p10   32.1  sdlog 1.26  ICC 0.90  out  98%  R2 +0.59
+    dsv4f     acc  88.4%  0.1446c  p90/p10   89.4  sdlog 1.67  ICC 0.89  out  98%  R2 +0.48
+    oss120md  acc  81.5%  0.1495c  p90/p10   18.5  sdlog 1.06  ICC 0.95  out  94%  R2 +0.55
+    oss120hi  acc  88.9%  0.8236c  p90/p10   39.8  sdlog 1.35  ICC 0.96  out  99%  R2 +0.54
+  pool_v2_tensors_5rung [market] +overhead 0.0066c
+    oss20lo   acc  52.7%  0.0081c  p90/p10    7.4  sdlog 0.76  ICC 0.88  out  87%  R2 +0.72
+    oss20md   acc  68.5%  0.0416c  p90/p10   32.1  sdlog 1.26  ICC 0.90  out  98%  R2 +0.59
+    dsv4f     acc  88.4%  0.1446c  p90/p10   89.4  sdlog 1.67  ICC 0.89  out  98%  R2 +0.48
+    oss120md  acc  81.5%  0.1495c  p90/p10   18.5  sdlog 1.06  ICC 0.95  out  94%  R2 +0.55
+    oss120hi  acc  88.9%  0.8236c  p90/p10   39.8  sdlog 1.35  ICC 0.96  out  99%  R2 +0.54
+  pool_v2_tensors_5rung [market] +overhead 0.0066c
+    oss20lo   acc  52.7%  0.0081c  p90/p10    7.4  sdlog 0.76  ICC 0.88  out  87%  R2 +0.72
+    oss20md   acc  68.5%  0.0416c  p90/p10   32.1  sdlog 1.26  ICC 0.90  out  98%  R2 +0.59
+    dsv4f     acc  88.4%  0.1446c  p90/p10   89.4  sdlog 1.67  ICC 0.89  out  98%  R2 +0.48
+    oss120md  acc  81.5%  0.1495c  p90/p10   18.5  sdlog 1.06  ICC 0.95  out  94%  R2 +0.55
+    oss120hi  acc  88.9%  0.8236c  p90/p10   39.8  sdlog 1.35  ICC 0.96  out  99%  R2 +0.54
+pool_v2_tensors_5rung [market] acc 55%: x0.65 | acc 61%: x0.53 | acc 67%: x0.56 | acc 73%: x0.62 | acc 79%: x0.71 | acc 84%: x0.87
+pool_v2_tensors_5rung [market] acc 54%: x0.85 | acc 60%: x0.62 | acc 66%: x0.58 | acc 72%: x0.68 | acc 78%: x0.83 | acc 84%: x0.95
+pool_v2_tensors_5rung [market] +overhead 0.0 acc 54%: x1.48 | acc 60%: x0.86 | acc 66%: x0.72 | acc 72%: x0.78 | acc 78%: x0.90 | acc 84%: x1.01
+pool_v2_tensors_5rung [market] +overhead 0.0 acc 54%: x0.87 | acc 60%: x0.67 | acc 66%: x0.63 | acc 72%: x0.73 | acc 78%: x0.88 | acc 84%: x1.00
+EVAL DONE

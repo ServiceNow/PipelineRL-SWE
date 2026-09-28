@@ -936,3 +936,11 @@ cite this table instead.
   models' per-task cost at R2 **+0.16** (range .01-.28; statement prefill +0.01, hand-crafted -0.54), with only 111 tasks.
   First agentic predictor with real cross-model cost signal; below the ~0.5 routing threshold, so no routing claim yet.
   Supports "explore cheaply, then price the candidates" (SWE-Router with cost in the decision -- a gap they assume away).
+- **LCB prefix test** (gpt-oss-20b-low 512-token prefixes on 892 LCB problems, $0.06; same arms as CC): R2 on the test set
+  rises (tuned probe .51-.72 -> probe+prefix .70-.86) but ROUTING GETS WORSE: gain 34.4% (probe) -> 26.1% [17.9,33.4] with a
+  free prefix, 8.9% [-0.9,16.7] charged, 21.1% [12.5,28.7] with continuation credit; worse at every accuracy level. Why: 51%
+  of prefixes FINISH inside 512 tokens -- R2 gains sit on those easy problems (e.g. oss120md .49 -> .69), which are routed
+  cheaply anyway; on the hard, decision-relevant problems the prefix head is WORSE for the key routes (dsv4f .42 -> .33,
+  oss120md .45 -> .35; plain probe -> probe+prefix). **R2 is the wrong yardstick for a routing cost predictor: what matters is
+  accuracy on decision-relevant problems and routes.** Paper point; also explains why "better cost predictor" claims need
+  not translate into routing gains.
