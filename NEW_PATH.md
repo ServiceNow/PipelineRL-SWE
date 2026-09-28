@@ -903,3 +903,8 @@ the 111 statements; leave-one-task-out) -- 111 tasks is small, treat as indicati
   MixLLM-style 0.58, prompt-GBM 0.49; routing gain probe 8.5% [5.6,11.0], MixLLM-style 8.1% [5.3,10.3], GBM 7.0% [4.4,8.9]
   of a 10.5% headroom. On their benchmark we are at least as good, but low headroom makes every predictor converge.
   (analysis/cost_headroom/routerbench_h2h; baseline_cost_heads.py now reads a pool's prices.json.)
+- **Agentic predictability (SWE-rebench, 111 tasks; `analysis/cost_headroom/agentic_predictability.py`)**: out-of-fold log-cost R2
+  from the issue text (4B Instruct prefill, 10-fold ridge per model) is ~0 (-0.13 to +0.08, mean +0.01); routing with the
+  predicted cost among the 7 open models 2.6% [-15.8, 15.1] vs the 25.7% headroom. NOT predictable here -- but heavily
+  data-starved (~100 training tasks per fold; on CodeContests a quarter of the training data, ~87 problems, gave R2 .24).
+  Agentic headroom is real; whether it is capturable needs >= several hundred tasks with repeated runs.

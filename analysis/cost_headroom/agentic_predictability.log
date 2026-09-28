@@ -1,0 +1,2 @@
+out-of-fold log-cost R2 from the task statement (4B prefill), per open model: Qwen3.5-35B-A3B +0.08  Qwen3.6-27B +0.04  Qwen3.6-35B-A3B +0.02  deepseek-v4-pro -0.13  minimax-m3 +0.07  mimo-v2.5-pro -0.00  glm-5.2 -0.04   mean +0.01
+routing among the 7 open-weight models, cross-fitted: HEADROOM (oracle per-task cost) 25.7% [6.3, 40.6]; PREDICTED per-task cost 2.6% [-15.8, 15.1]  (vs each model's median cost)
