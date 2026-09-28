@@ -768,3 +768,9 @@ plain-ridge probe's gain vs the paper rule at matched accuracy (decompose.py, ma
   - in between   -> no directional call; report as a test of the capture curve only.
 Also predicted regardless of (a): HEADROOM >= 15% (reasoning routes, 1.5k-18k output tokens, large length spread).
 Whichever probe (Instruct/Thinking) scores higher on (a) is the one evaluated -- decided on step-1 data, stated before step 2.
+**Step-1 result and the PREDICTION (committed 2026-09-28 02:50 ET, before step 2):** gpt-oss-20b-low on all 500: acc 0.46,
+mean output 1542 tok, sd log length 0.90. (b) difficulty -> log length CV R2 0.51 (LCB tier 0.57-0.66; CC rating
+0.37-0.49). (c) readability of the rating: Instruct 0.73, Thinking 0.75 (LCB tier 0.72; CC rating 0.50). (a) probe CV
+log-output R2 on oss20lo: Instruct 0.66, Thinking 0.67 -> evaluated probe = Thinking.
+**PREDICTION: GAIN -- the Thinking-probe plain-ridge head saves >= 10% vs the paper rule at matched accuracy, 95% CI
+excluding 0; headroom >= 15%.** (Omni looks LCB-like on both rule inputs.)
