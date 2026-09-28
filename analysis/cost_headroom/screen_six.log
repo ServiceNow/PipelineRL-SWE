@@ -1,0 +1,30 @@
+== zebra
+995 problems; gpt-oss-20b-low accuracy 0.00; mean output 1951 tok; sd log length 1.17
+(b) difficulty -> log length, CV R2: 0.40
+probe=instruct  (a) CV log-output R2 on oss20lo 0.34   (c) readability of the rating 1.00
+
+PRE-REGISTERED PREDICTION for the full pool: probe = instruct (a = 0.34) -> NO GAIN (CI includes 0); headroom >= 15% regardless
+== kk
+700 problems; gpt-oss-20b-low accuracy 0.85; mean output 1052 tok; sd log length 0.64
+(b) difficulty -> log length, CV R2: 0.54
+probe=instruct  (a) CV log-output R2 on oss20lo 0.61   (c) readability of the rating 1.00
+
+PRE-REGISTERED PREDICTION for the full pool: probe = instruct (a = 0.61) -> GAIN (>= 10%, CI excluding 0); headroom >= 15% regardless
+== supergpqa
+1000 problems; gpt-oss-20b-low accuracy 0.29; mean output 309 tok; sd log length 0.79
+(b) difficulty -> log length, CV R2: 0.26
+probe=instruct  (a) CV log-output R2 on oss20lo 0.58   (c) readability of the rating 0.59
+
+PRE-REGISTERED PREDICTION for the full pool: probe = instruct (a = 0.58) -> GAIN (>= 10%, CI excluding 0); headroom >= 15% regardless
+== mmlupro
+1000 problems; gpt-oss-20b-low accuracy 0.59; mean output 343 tok; sd log length 0.82
+(b) no graded difficulty label
+probe=instruct  (a) CV log-output R2 on oss20lo 0.65   (c) readability of the rating nan
+
+PRE-REGISTERED PREDICTION for the full pool: probe = instruct (a = 0.65) -> GAIN (>= 10%, CI excluding 0); headroom >= 15% regardless
+== bbeh
+1000 problems; gpt-oss-20b-low accuracy 0.22; mean output 617 tok; sd log length 1.33
+(b) no graded difficulty label
+probe=instruct  (a) CV log-output R2 on oss20lo 0.28   (c) readability of the rating nan
+
+PRE-REGISTERED PREDICTION for the full pool: probe = instruct (a = 0.28) -> NO GAIN (CI includes 0); headroom >= 15% regardless

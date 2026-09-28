@@ -868,3 +868,15 @@ ZebraLogic grid (1000; difficulty = houses x features), Knights & Knaves (700; 2
 MMLU-Pro (1000; by subject), BIG-Bench Extra Hard (1000; by task), APPS stdin/stdout (1000; intro/interview/competition).
 Loaders + graders `math_pool/reasoning_datasets.py` (each grader: correct reference answers pass 100%, perturbed answers 0%).
 Step 1 = gpt-oss-20b-low x1 + Qwen3-4B Instruct prefill; decision variable (a) as in 4.A.9. No full pool without sign-off.
+**Screen results (2026-09-28 14:03 ET, before any full pool)** -- gpt-oss-20b-low x1 + Instruct prefill (analysis/cost_headroom/screen_six.log):
+| dataset | n | oss20lo acc | mean out | sd log len | (b) label->length | (a) probe R2 | PREDICTION |
+| Knights & Knaves | 700 | 0.85 | 1052 | 0.64 | 0.54 (people) | 0.61 | GAIN |
+| SuperGPQA | 1000 | 0.29 | 309 | 0.79 | 0.26 (tier) | 0.58 | GAIN |
+| MMLU-Pro | 1000 | 0.59 | 343 | 0.82 | -- | 0.65 | GAIN |
+| BIG-Bench Extra Hard | 1000 | 0.22 | 617 | 1.33 | -- | 0.28 | NO GAIN |
+| ZebraLogic | 995 | (INVALID) | 1951 | 1.17 | 0.40 (size) | 0.34 | (NO GAIN on length; UNGRADABLE) |
+ZebraLogic: the public allenai/ZebraLogicBench test solutions are REDACTED ("___"); accuracy 0.00 is an artefact. My grader
+check built "correct" answers from those placeholders and passed trivially -- graders must be checked on non-placeholder
+references. Not a routing pool unless graded solutions are found. Caveats: K&K oss20lo already 85% (ladder may be flat at
+the top); SuperGPQA / MMLU-Pro outputs are short at low effort (309-343 tok) -- headroom depends on the high-effort routes.
+Running tally of decisive pre-registered calls: GAIN Omni (CONFIRMED), K&K, SuperGPQA, MMLU-Pro; NO GAIN AIME, BBEH. APPS pending.
