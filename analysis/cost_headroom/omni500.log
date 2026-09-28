@@ -1,0 +1,42 @@
+HEADROOM = cost saved at matched accuracy by PERFECT per-problem cost knowledge vs the paper rule; learned = the 4B-prefill head; capture = learned / headroom (test frontiers, band = accuracies all arms reach)
+pool                                         band       headroom [95% CI]        learned [95% CI]  capture  reroute or/lrn
+omni500_tensors [market]                53- 73%    44.2% [ 31.8, 53.5]    21.9% [  8.9, 33.5]     0.49      74%/69%
+omni500_tensors [market]                53- 73%    44.2% [ 31.8, 53.4]    27.4% [ 15.0, 37.4]     0.62      74%/67%
+
+CAPTURE CURVE: gain vs paper rule of a calibrated synthetic head at log-output R2 = rho^2 (test dollar R2: mean over routes / weighted by oracle usage); 'learned' = the real 4B head
+  omni500_tensors [market]  (headroom 44.2%)
+    rho=0.00  gain   -3.2%   dollar R2 +0.00 / usage-weighted +0.00
+    rho=0.30  gain    8.2%   dollar R2 +0.03 / usage-weighted +0.01
+    rho=0.50  gain   15.8%   dollar R2 +0.03 / usage-weighted -0.05
+    rho=0.60  gain   18.1%   dollar R2 +0.03 / usage-weighted -0.08
+    rho=0.70  gain   21.7%   dollar R2 +0.06 / usage-weighted -0.06
+    rho=0.80  gain   27.9%   dollar R2 +0.18 / usage-weighted +0.07
+    rho=0.90  gain   35.9%   dollar R2 +0.47 / usage-weighted +0.40
+    rho=0.95  gain   40.6%   dollar R2 +0.70 / usage-weighted +0.66
+    rho=1.00  gain   44.2%   dollar R2 +1.00 / usage-weighted +1.00
+    learned   gain   21.9%   dollar R2 +0.46 / usage-weighted +0.53
+  omni500_tensors [market]  (headroom 44.2%)
+    rho=0.00  gain   -3.2%   dollar R2 +0.00 / usage-weighted +0.00
+    rho=0.30  gain    8.2%   dollar R2 +0.03 / usage-weighted +0.01
+    rho=0.50  gain   15.8%   dollar R2 +0.03 / usage-weighted -0.05
+    rho=0.60  gain   18.1%   dollar R2 +0.03 / usage-weighted -0.08
+    rho=0.70  gain   21.7%   dollar R2 +0.06 / usage-weighted -0.06
+    rho=0.80  gain   27.9%   dollar R2 +0.18 / usage-weighted +0.07
+    rho=0.90  gain   35.9%   dollar R2 +0.47 / usage-weighted +0.40
+    rho=0.95  gain   40.6%   dollar R2 +0.70 / usage-weighted +0.66
+    rho=1.00  gain   44.2%   dollar R2 +1.00 / usage-weighted +1.00
+    learned   gain   27.4%   dollar R2 +0.39 / usage-weighted +0.47
+
+per route: acc, mean cost (c), p90/p10 per-problem cost, sd log cost, ICC (between-problem share), output share, head test R2
+  omni500_tensors [market]
+    oss20lo   acc  46.1%  0.0140c  p90/p10    7.8  sdlog 0.80  ICC 0.88  out  98%  R2 +0.63
+    oss20md   acc  61.5%  0.0781c  p90/p10   32.6  sdlog 1.30  ICC 0.92  out 100%  R2 +0.35
+    dsv4f     acc  74.6%  0.1728c  p90/p10  110.6  sdlog 1.69  ICC 0.95  out 100%  R2 +0.51
+    oss120md  acc  62.6%  0.2715c  p90/p10   20.4  sdlog 1.12  ICC 0.97  out  99%  R2 +0.35
+    oss120hi  acc  69.3%  1.0318c  p90/p10   42.0  sdlog 1.42  ICC 0.97  out 100%  R2 +0.48
+  omni500_tensors [market]
+    oss20lo   acc  46.1%  0.0140c  p90/p10    7.8  sdlog 0.80  ICC 0.88  out  98%  R2 +0.60
+    oss20md   acc  61.5%  0.0781c  p90/p10   32.6  sdlog 1.30  ICC 0.92  out 100%  R2 +0.28
+    dsv4f     acc  74.6%  0.1728c  p90/p10  110.6  sdlog 1.69  ICC 0.95  out 100%  R2 +0.41
+    oss120md  acc  62.6%  0.2715c  p90/p10   20.4  sdlog 1.12  ICC 0.97  out  99%  R2 +0.29
+    oss120hi  acc  69.3%  1.0318c  p90/p10   42.0  sdlog 1.42  ICC 0.97  out 100%  R2 +0.39

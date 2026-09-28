@@ -790,3 +790,10 @@ dsv4f / qcoder30 each writing 2 independent PATCH-AWARE scripts per candidate (1
   vs gpt-oss 10.6% vs 11.0%. Seeing the patch lowers dsv4f's false accepts ~20% vs issue-only (25.6 -> 20.3%, 18.8 -> 14.4%).
 **Track B: parked.** The defensible content is a measurement (cheap cross-model writer beats self-verification; tests pay
 only above route-once), fit for a section/appendix of the Track A paper, not a paper of its own.
+**RESULT (2026-09-28 05:55 ET): PREDICTION CONFIRMED.** Full pool: 500 problems, valid draws 2000/1500/1473/1000/994 (14 dsv4f
+draws still in flight, 0.2%; each affected problem keeps its other dsv4f draws), accuracy 46/62/75/63/70%, mean output
+1.5k-17.7k tokens. Thinking-probe plain-ridge head: test log-output R2 0.72-0.81 (step-1 screen said 0.67). **Gain vs the
+paper rule at matched accuracy 21.9% [8.9, 33.5]** (predicted >= 10%, CI excluding 0: YES). **Headroom 44.2% [31.8, 53.5]**
+(predicted >= 15%: YES). (Instruct, not the pre-registered probe: 27.4% [15.0, 37.4].) analysis/cost_headroom/omni500.log.
+The rule -- difficulty drives length AND the probe reads difficulty -> a cheap probe clears the capture threshold --
+forecast a new dataset correctly before its data existed.
