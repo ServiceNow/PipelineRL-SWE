@@ -1,0 +1,41 @@
+/home/toolkit/PipelineRL-SWE/analysis/cost_headroom/decompose.py:76: RuntimeWarning: Mean of empty slice
+  tr = idx["train"]; inp = np.nanmean(np.where(v, pt, np.nan), 2)
+HEADROOM = cost saved at matched accuracy by PERFECT per-problem cost knowledge vs the paper rule; learned = the 4B-prefill head; capture = learned / headroom (test frontiers, band = accuracies all arms reach)
+pool                                         band       headroom [95% CI]        learned [95% CI]  capture  reroute or/lrn
+cc_tensors [market]                     51- 83%    21.8% [ 13.5, 29.1]     0.7% [ -9.5,  8.2]     0.03      40%/31%
+cc_tensors [market]                     51- 83%    21.8% [ 13.7, 29.0]     2.0% [ -6.1,  9.0]     0.09      40%/28%
+cc_tensors [market] +overhead 0.0084c    51- 83%    21.8% [ 13.7, 29.1]   -16.5% [-28.3, -9.0]    -0.76      40%/30%
+cc_tensors [market] +overhead 0.1098c    51- 83%    21.8% [ 13.7, 29.0]   -238.2% [-299.5,-202.3]   -10.94      40%/32%
+cc_tensors [market] +overhead 0.1098c    51- 83%    21.8% [ 13.7, 29.0]   -243.4% [-309.2,-209.6]   -11.17      40%/34%
+
+per route: acc, mean cost (c), p90/p10 per-problem cost, sd log cost, ICC (between-problem share), output share, head test R2
+  cc_tensors [market]
+    oss20lo   acc  51.6%  0.0092c  p90/p10    4.3  sdlog 0.56  ICC 0.81  out  88%  R2 +0.39
+    oss20md   acc  72.4%  0.0534c  p90/p10   15.3  sdlog 1.02  ICC 0.88  out  98%  R2 +0.22
+    dsv4f     acc  84.2%  0.1653c  p90/p10   25.9  sdlog 1.21  ICC 0.85  out  98%  R2 +0.24
+    oss120md  acc  79.2%  0.1961c  p90/p10   10.6  sdlog 0.85  ICC 0.94  out  95%  R2 +0.27
+    oss120hi  acc  88.0%  1.0773c  p90/p10   13.7  sdlog 1.02  ICC 0.95  out  99%  R2 +0.22
+  cc_tensors [market]
+    oss20lo   acc  51.6%  0.0092c  p90/p10    4.3  sdlog 0.56  ICC 0.81  out  88%  R2 +0.41
+    oss20md   acc  72.4%  0.0534c  p90/p10   15.3  sdlog 1.02  ICC 0.88  out  98%  R2 +0.21
+    dsv4f     acc  84.2%  0.1653c  p90/p10   25.9  sdlog 1.21  ICC 0.85  out  98%  R2 +0.24
+    oss120md  acc  79.2%  0.1961c  p90/p10   10.6  sdlog 0.85  ICC 0.94  out  95%  R2 +0.29
+    oss120hi  acc  88.0%  1.0773c  p90/p10   13.7  sdlog 1.02  ICC 0.95  out  99%  R2 +0.27
+  cc_tensors [market] +overhead 0.0084c
+    oss20lo   acc  51.6%  0.0092c  p90/p10    4.3  sdlog 0.56  ICC 0.81  out  88%  R2 +0.39
+    oss20md   acc  72.4%  0.0534c  p90/p10   15.3  sdlog 1.02  ICC 0.88  out  98%  R2 +0.29
+    dsv4f     acc  84.2%  0.1653c  p90/p10   25.9  sdlog 1.21  ICC 0.85  out  98%  R2 +0.30
+    oss120md  acc  79.2%  0.1961c  p90/p10   10.6  sdlog 0.85  ICC 0.94  out  95%  R2 +0.34
+    oss120hi  acc  88.0%  1.0773c  p90/p10   13.7  sdlog 1.02  ICC 0.95  out  99%  R2 +0.28
+  cc_tensors [market] +overhead 0.1098c
+    oss20lo   acc  51.6%  0.0092c  p90/p10    4.3  sdlog 0.56  ICC 0.81  out  88%  R2 +0.39
+    oss20md   acc  72.4%  0.0534c  p90/p10   15.3  sdlog 1.02  ICC 0.88  out  98%  R2 +0.15
+    dsv4f     acc  84.2%  0.1653c  p90/p10   25.9  sdlog 1.21  ICC 0.85  out  98%  R2 +0.21
+    oss120md  acc  79.2%  0.1961c  p90/p10   10.6  sdlog 0.85  ICC 0.94  out  95%  R2 +0.27
+    oss120hi  acc  88.0%  1.0773c  p90/p10   13.7  sdlog 1.02  ICC 0.95  out  99%  R2 +0.24
+  cc_tensors [market] +overhead 0.1098c
+    oss20lo   acc  51.6%  0.0092c  p90/p10    4.3  sdlog 0.56  ICC 0.81  out  88%  R2 +0.50
+    oss20md   acc  72.4%  0.0534c  p90/p10   15.3  sdlog 1.02  ICC 0.88  out  98%  R2 +0.05
+    dsv4f     acc  84.2%  0.1653c  p90/p10   25.9  sdlog 1.21  ICC 0.85  out  98%  R2 +0.08
+    oss120md  acc  79.2%  0.1961c  p90/p10   10.6  sdlog 0.85  ICC 0.94  out  95%  R2 +0.20
+    oss120hi  acc  88.0%  1.0773c  p90/p10   13.7  sdlog 1.02  ICC 0.95  out  99%  R2 +0.07

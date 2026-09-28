@@ -724,3 +724,16 @@ RidgeCV (CC .18-.43 -> .34-.47, TACO -.25-.29 -> .31-.47) without changing captu
 (5) CC's plain-ridge R2 .34-.47 still captures ~2%: consistent with the threshold (4.A.4). (6) SWE-Smith: learned gain >
 "headroom" -- with ONE draw per problem the realised cost carries success information (failed patches run longer), so
 perfect cost knowledge is not an upper bound there; small test set (150). Treat as a flag, not a result.
+
+### 4.A.7 RouterBench contrast + partial-generation predictor on CodeContests (2026-09-28)
+**RouterBench (non-reasoning; 11 chat models, 6k-query stratified sample, prices recovered from total_cost):**
+headroom 10.5% [7.4,12.8] vs 20-47% for reasoning pools (output 17-42% of the bill, 24-58 tokens); the probe captures
+8.5% (0.81) because cost is input-dominated. Prediction ("small headroom for non-reasoning models") held.
+**Partial generation (CodeContests; `codecontests/collect_prefixes.py`, `analysis/cost_headroom/prefix_cost_head.py`):**
+first 512 tokens per route (providers overran the cap: 527-1414 tokens mean). Test log-output R2: probe 0.18-0.43 ->
++ gpt-oss-20b-low's prefix 0.50-0.54 on EVERY route (dsv4f 0.18 -> 0.54, oss120hi 0.19 -> 0.50); own prefixes no better
+(0.37-0.53) and 15x the price. But in one-shot routing it does NOT pay: gain vs paper rule 6.2% [-2.8,12.7] if the prefix
+were free; -16.5% [-28.3,-9.0] with the prefix charged (0.008c/problem = up to +47% at the cheap end); -2.3% [-11.6,5.1]
+with continuation credit (prefix free when oss20lo is the chosen route). Per accuracy: x0.87 at 51% -> x1.18 at 80%.
+Even free, the prefix head is WORSE than the paper rule at the expensive end (x1.12 at 80%): the dollar-miscalibration
+deficit (capture ~ R2 - 0.2 in 4.A.4's curves) -- fix calibration in dollars before revisiting prefixes.

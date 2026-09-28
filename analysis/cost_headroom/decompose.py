@@ -83,14 +83,15 @@ def pool(spec):
     # a predictor that needs a partial generation pays for it: <cost file>.overhead.json = {problem_id: cents},
     # added to every problem's realised cost on the LEARNED arm only
     ohf = D / ((cfile or "cost_preds.jsonl").replace(".jsonl", ".overhead.json"))
-    OH = np.zeros(len(pids))
-    if ohf.exists():
-        oh = json.load(open(ohf)); OH = np.array([float(oh.get(p, 0.0)) for p in pids])
+    OH = np.zeros((len(pids), M))           # per (problem, chosen route): a list value = route-dependent overhead,
+    if ohf.exists():                        # e.g. 0 when the chosen route CONTINUES from the prefix it already paid for
+        oh = json.load(open(ohf))
+        OH = np.array([np.broadcast_to(np.asarray(oh.get(p, 0.0), float), (M,)) for p in pids])
     curves = {}
     for a, C in arms.items():
         U = np.where(avail[te][None], P[te][None] * VS[:, None, None] - C[te][None], -np.inf)
         ch = U.argmax(2)
-        paid = Cr[te] + (OH[te][:, None] if a == "learned" else 0.0)
+        paid = Cr[te] + (OH[te] if a == "learned" else 0.0)
         curves[a] = (np.take_along_axis(np.broadcast_to(Q[te], (len(VS),) + Q[te].shape), ch[..., None], 2)[..., 0],
                      np.take_along_axis(np.broadcast_to(paid, (len(VS),) + paid.shape), ch[..., None], 2)[..., 0], ch)
 
@@ -165,7 +166,7 @@ def pool(spec):
         routes[s] = dict(acc=float(Q[ok_p, m].mean()), mean_cost_c=float(c.mean()),
                          p90_p10=float(np.percentile(c, 90) / np.percentile(c, 10)), sd_log=float(np.log(c).std()),
                          icc=float(1 - within / tot) if tot > 0 else np.nan, output_share=out_share, test_r2=float(r2))
-    return dict(pool=name + (" [market]" if pricing == "market" else "") + (f" +overhead {OH[te].mean():.4f}c" if OH.any() else ""), cost_file=cfile or "cost_preds.jsonl", n_test=int(len(te)), band=[float(T[0]), float(T[-1])],
+    return dict(pool=name + (" [market]" if pricing == "market" else "") + (f" +overhead {OH[te].max(1).mean():.4f}c" if OH.any() else ""), cost_file=cfile or "cost_preds.jsonl", n_test=int(len(te)), band=[float(T[0]), float(T[-1])],
                 headroom=g["ORACLE"], headroom_ci=ci["ORACLE"], learned_gain=g["learned"], learned_ci=ci["learned"],
                 capture=g["learned"] / g["ORACLE"] if g["ORACLE"] > 0.01 else np.nan,
                 reroute_oracle=reroute, reroute_learned=reroute_l, routes=routes, curve=curve,
