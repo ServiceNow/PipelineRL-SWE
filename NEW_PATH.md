@@ -930,3 +930,9 @@ cite this table instead.
   (still rising). So agentic per-task cost IS moderately predictable from the issue and the SWE-rebench null (111 tasks)
   was largely data; but ~0.3 is below the ~0.5 capture threshold seen on the one-shot pools. One dominant model -> no
   routing headroom computable from this set.
+- **Partial agent trajectory READ by the 4B** (issue + first 10 steps + "how many more steps / how costly will the rest be?";
+  `analysis/cost_headroom/agentic_partial_probe.py`, 7215 SWE-rebench runs): own-run final-cost R2 **+0.28** (range .06-.74;
+  hand-crafted trace features -0.01); CROSS-model -- the cheap scout's (MiMo-V2.5-Pro) first 10 steps predict the other
+  models' per-task cost at R2 **+0.16** (range .01-.28; statement prefill +0.01, hand-crafted -0.54), with only 111 tasks.
+  First agentic predictor with real cross-model cost signal; below the ~0.5 routing threshold, so no routing claim yet.
+  Supports "explore cheaply, then price the candidates" (SWE-Router with cost in the decision -- a gap they assume away).

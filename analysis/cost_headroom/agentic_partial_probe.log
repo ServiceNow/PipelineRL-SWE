@@ -1,0 +1,4 @@
+OWN run: log final cost from the run's first k steps (runs still going at step k only); mean over models
+CROSS-model: scout xiaomi/mimo-v2.5-pro runs k steps (run 0); predict each other model's log mean cost on the task
+OWN run, 4B reads issue + first 10 steps: log final-cost R2 mean +0.28 (range +0.06..+0.74, 10 models)   [hand-crafted features at k=10: -0.01]
+CROSS-model, 4B reads the scout's first 10 steps: other models' log mean-cost R2 mean +0.16 (range +0.01..+0.28)   [hand-crafted: -0.54; statement prefill: +0.01]
