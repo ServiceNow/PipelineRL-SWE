@@ -9,8 +9,8 @@ R=/mnt/llmd/results/exps/aristides/reason
 PILOT=${PILOT:-40}
 ROUTES=${ROUTES:-oss20lo:1,oss20md:1,dsv4f:1,oss120md:1,oss120hi:1}
 DATASETS=${DATASETS:-math500,omni500}
-O=${R}/math_pool$([ "${PILOT}" != "0" ] && echo "_pilot")
-NAME="math_pool$([ "${PILOT}" != "0" ] && echo "_pilot")_$(date -u +%Y%m%d_%H%M%S)"
+O=${R}/math_pool$([ "${PILOT}" != "0" ] && echo "_pilot" || true)
+NAME="math_pool$([ "${PILOT}" != "0" ] && echo "_pilot" || true)_$(date -u +%Y%m%d_%H%M%S)"
 mkdir -p "${O}"
 cat > "${O}/run.sh" <<EOF
 #!/usr/bin/env bash
