@@ -750,3 +750,8 @@ deficit (capture ~ R2 - 0.2 in 4.A.4's curves) -- fix calibration in dollars bef
   (+1.3/+1.5/-0.1, CIs incl 0); 0.94 at 85%. 60-65% targets land 3-4pt lower in accuracy -> not matched, excluded.
   Claim: 27-37% cheaper at 70-80% accuracy. (analysis/costhead_ci_lcb_market_cost_preds_probe.json)
 - **TACO MixLLM-style 8.3% was noise:** 5 seeds give 1.3-6.2%, every CI includes 0.
+- **Probe model** (`analysis/cost_headroom/probe_model_compare.py`; same plain ridge, only the prefill changes). Log-output
+  R2 on the reasoning routes: Qwen3-4B-Thinking beats Instruct everywhere but modestly (LCB .69-.76 -> .73-.79, CC
+  .34-.47 -> .40-.54, TACO oss20/oss120 .36/.47 -> .42/.54); Base is far worse (CC .14-.21); gpt-oss-20b's own prefill
+  no better than Instruct (CC .34-.41). Routing gain Instruct -> Thinking: LCB 35.6 -> 34.6, CC 2.0 -> 6.3, TACO 2.1 ->
+  -1.2 -- all within noise. A reasoning-model probe is slightly better at predicting length, not enough to move pools.

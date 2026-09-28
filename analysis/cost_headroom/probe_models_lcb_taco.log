@@ -1,0 +1,28 @@
+HEADROOM = cost saved at matched accuracy by PERFECT per-problem cost knowledge vs the paper rule; learned = the 4B-prefill head; capture = learned / headroom (test frontiers, band = accuracies all arms reach)
+pool                                         band       headroom [95% CI]        learned [95% CI]  capture  reroute or/lrn
+pool_v2_tensors_5rung [market]          54- 87%    46.0% [ 38.7, 51.1]    35.6% [ 27.1, 41.9]     0.77      50%/48%
+pool_v2_tensors_5rung [market]          54- 87%    46.0% [ 38.8, 51.1]    34.6% [ 25.5, 41.0]     0.75      50%/50%
+taco_tensors_ha [market]                29- 46%    36.1% [ 24.3, 46.0]     2.1% [ -7.8, 12.6]     0.06      32%/26%
+taco_tensors_ha [market]                29- 46%    36.5% [ 25.3, 46.4]    -1.2% [-10.7, 11.8]    -0.03      32%/24%
+
+per route: acc, mean cost (c), p90/p10 per-problem cost, sd log cost, ICC (between-problem share), output share, head test R2
+  pool_v2_tensors_5rung [market]
+    oss20lo   acc  52.7%  0.0081c  p90/p10    7.4  sdlog 0.76  ICC 0.88  out  87%  R2 +0.56
+    oss20md   acc  68.5%  0.0416c  p90/p10   32.1  sdlog 1.26  ICC 0.90  out  98%  R2 +0.49
+    dsv4f     acc  88.4%  0.1446c  p90/p10   89.4  sdlog 1.67  ICC 0.89  out  98%  R2 +0.47
+    oss120md  acc  81.5%  0.1495c  p90/p10   18.5  sdlog 1.06  ICC 0.95  out  94%  R2 +0.55
+    oss120hi  acc  88.9%  0.8236c  p90/p10   39.8  sdlog 1.35  ICC 0.96  out  99%  R2 +0.48
+  pool_v2_tensors_5rung [market]
+    oss20lo   acc  52.7%  0.0081c  p90/p10    7.4  sdlog 0.76  ICC 0.88  out  87%  R2 +0.61
+    oss20md   acc  68.5%  0.0416c  p90/p10   32.1  sdlog 1.26  ICC 0.90  out  98%  R2 +0.55
+    dsv4f     acc  88.4%  0.1446c  p90/p10   89.4  sdlog 1.67  ICC 0.89  out  98%  R2 +0.53
+    oss120md  acc  81.5%  0.1495c  p90/p10   18.5  sdlog 1.06  ICC 0.95  out  94%  R2 +0.60
+    oss120hi  acc  88.9%  0.8236c  p90/p10   39.8  sdlog 1.35  ICC 0.96  out  99%  R2 +0.51
+  taco_tensors_ha [market]
+    scout     acc  16.3%  0.0481c  p90/p10   48.0  sdlog 1.50  ICC 0.81  out  98%  R2 +0.12
+    oss20     acc  37.3%  0.0731c  p90/p10   23.9  sdlog 1.17  ICC 0.86  out  98%  R2 +0.28
+    oss120    acc  46.1%  0.2521c  p90/p10    9.6  sdlog 0.87  ICC 0.91  out  96%  R2 +0.43
+  taco_tensors_ha [market]
+    scout     acc  16.3%  0.0481c  p90/p10   48.0  sdlog 1.50  ICC 0.81  out  98%  R2 +0.13
+    oss20     acc  37.3%  0.0731c  p90/p10   23.9  sdlog 1.17  ICC 0.86  out  98%  R2 +0.35
+    oss120    acc  46.1%  0.2521c  p90/p10    9.6  sdlog 0.87  ICC 0.91  out  96%  R2 +0.45
