@@ -853,3 +853,6 @@ Identical rule to 4.A.9, no retuning: from gpt-oss-20b-low x1 + the Qwen3-4B Ins
 log-output R2 on oss20lo decides: >= 0.50 -> GAIN (>= 10%, CI excluding 0); <= 0.35 -> NO GAIN; else no call; headroom >= 15%
 predicted for any reasoning pool. (b) difficulty -> length uses AIME's problem number (1-15); OlympiadBench has no graded label.
 Full pools (the five gpt-oss/dsv4f routes, as Omni) only with sign-off; prefer one predicted GAIN and one predicted NO GAIN.
+**AIME screen (2026-09-28 13:37 ET, before any full pool):** gpt-oss-20b-low on 931: acc 0.56, mean output 1896 tok, sd log
+length 0.58 (Omni 0.90). (b) problem number -> log length CV R2 0.14; (c) readability of the problem number 0.42;
+(a) probe CV log-output R2 on oss20lo **0.13** -> **PREDICTION: NO GAIN** (CI includes 0 or negative); headroom >= 15%.

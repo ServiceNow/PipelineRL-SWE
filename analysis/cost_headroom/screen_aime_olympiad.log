@@ -1,0 +1,11 @@
+== aime
+931 problems; gpt-oss-20b-low accuracy 0.56; mean output 1896 tok; sd log length 0.58
+(b) difficulty -> log length, CV R2: 0.14
+probe=instruct  (a) CV log-output R2 on oss20lo 0.13   (c) readability of the rating 0.42
+
+PRE-REGISTERED PREDICTION for the full pool: probe = instruct (a = 0.13) -> NO GAIN (CI includes 0); headroom >= 15% regardless
+== olympiad
+674 problems; gpt-oss-20b-low accuracy 0.63; mean output 1371 tok; sd log length 0.73
+(b) no graded difficulty label
+Traceback (most recent call last):
+zipfile.BadZipFile: File is not a zip file
