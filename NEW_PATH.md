@@ -976,3 +976,7 @@ So (1) the level's value needs very high accuracy (steep convex curve), and (2) 
 THIRD of what random noise at equal R2 does -> its errors concentrate where decisions happen (hypothesis: the long,
 expensive tail). Differences carry comparable or more headroom (all of TACO's); real predictors capture them less
 (LCB 22.8 of 36.5, Omni 14.2 of 41.1, CC ~0).
+- **Joint 5-pool fine-tuned 137M reader** (~2150 training problems; `finetune_cost_reader_joint.py`): test log-output R2 LCB
+  .51-.56 (single-pool FT .52-.57; frozen 4B .69-.76), CC .06-.14 (single ~0; frozen .34-.47), Omni .52-.57 (frozen ~.75),
+  BCB .14-.48 (frozen .15-.71), TACO .04-.14 (frozen .31-.52). Sharing across pools helps CC only marginally; a trained
+  small reader stays far below the frozen 4B everywhere. Closed.

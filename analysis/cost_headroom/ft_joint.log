@@ -1,0 +1,26 @@
+pool_v2_tensors_5rung: train 441 / cal 110 / test 341
+/home/toolkit/snapshots2/ad917c207658d7c724a6c9526b6895123b4cb730/analysis/cost_headroom/finetune_cost_reader_joint.py:29: RuntimeWarning: Mean of empty slice
+  inp=np.nanmean(np.where(v, pt, np.nan), 2))
+cc_tensors: train 346 / cal 87 / test 267
+omni500_tensors: train 275 / cal 75 / test 150
+bcb_tensors_5r: train 544 / cal 136 / test 421
+taco_tensors_ha: train 547 / cal 168 / test 168
+/home/toolkit/.conda/envs/pipeline-rl/lib/python3.11/site-packages/requests/__init__.py:113: RequestsDependencyWarning: urllib3 (2.7.0) or chardet (7.4.3)/charset_normalizer (3.4.4) doesn't match a supported version!
+  warnings.warn(
+/home/toolkit/.cache/huggingface/modules/transformers_modules/jinaai/jina-bert-v2-qk-post-norm/3baf9e3ac750e76e8edd3019170176884695fb94/configuration_bert.py:29: UserWarning: optimum is not installed. To use OnnxConfig and BertOnnxConfig, make sure that `optimum` package is installed
+  warnings.warn("optimum is not installed. To use OnnxConfig and BertOnnxConfig, make sure that `optimum` package is installed")
+[2026-09-28 21:04:30,040] [INFO] [real_accelerator.py:219:get_accelerator] Setting ds_accelerator to cuda (auto detect)
+Warning: The cache directory for DeepSpeed Triton autotune, /home/toolkit/.triton/autotune, appears to be on an NFS system. While this is generally acceptable, if you experience slowdowns or hanging when DeepSpeed exits, it is recommended to set the TRITON_CACHE_DIR environment variable to a non-NFS path.
+epoch 0: calibration MSE pool 0.493 cc 1.006 omni500 0.375 bcb 0.825 taco 0.785  sum 3.484
+epoch 1: calibration MSE pool 0.606 cc 1.130 omni500 0.407 bcb 0.784 taco 0.862  sum 3.789
+epoch 2: calibration MSE pool 0.414 cc 0.894 omni500 0.405 bcb 0.764 taco 0.719  sum 3.197
+epoch 3: calibration MSE pool 0.524 cc 0.898 omni500 0.449 bcb 0.834 taco 0.727  sum 3.433
+epoch 4: calibration MSE pool 0.470 cc 0.922 omni500 0.422 bcb 0.766 taco 0.775  sum 3.356
+epoch 5: calibration MSE pool 0.453 cc 0.928 omni500 0.389 bcb 0.803 taco 0.724  sum 3.297
+best epoch 2
+pool_v2_tensors_5rung ft_joint: test log-output R2 oss20lo +0.55  oss20md +0.51  dsv4f +0.54  oss120md +0.51  oss120hi +0.56   mean +0.53
+cc_tensors ft_joint: test log-output R2 oss20lo +0.12  oss20md +0.06  dsv4f +0.14  oss120md +0.11  oss120hi +0.07   mean +0.10
+omni500_tensors ft_joint: test log-output R2 oss20lo +0.54  oss20md +0.54  dsv4f +0.52  oss120md +0.57  oss120hi +0.55   mean +0.54
+bcb_tensors_5r ft_joint: test log-output R2 oss20lo +0.48  oss20md +0.39  dsv4f +0.14  oss120md +0.46  oss120hi +0.29   mean +0.35
+taco_tensors_ha ft_joint: test log-output R2 scout +0.11  oss20 +0.04  oss120 +0.14   mean +0.10
+ALL DONE
