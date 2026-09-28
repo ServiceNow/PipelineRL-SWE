@@ -8,6 +8,7 @@ set -euo pipefail
 R=/mnt/llmd/results/exps/aristides/reason
 PILOT=${PILOT:-40}
 ROUTES=${ROUTES:-oss20lo:1,oss20md:1,dsv4f:1,oss120md:1,oss120hi:1}
+DATASETS=${DATASETS:-math500,omni500}
 O=${R}/math_pool$([ "${PILOT}" != "0" ] && echo "_pilot")
 NAME="math_pool$([ "${PILOT}" != "0" ] && echo "_pilot")_$(date -u +%Y%m%d_%H%M%S)"
 mkdir -p "${O}"
@@ -15,7 +16,7 @@ cat > "${O}/run.sh" <<EOF
 #!/usr/bin/env bash
 set -uo pipefail
 export HF_HOME=/home/toolkit/.cache/huggingface HF_DATASETS_CACHE=/home/toolkit/.cache/huggingface/datasets HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1
-python pipelinerl/swe/scripts/math_pool/collect_math_pool.py --out-dir ${O} --pilot ${PILOT} --routes ${ROUTES} \
+python pipelinerl/swe/scripts/math_pool/collect_math_pool.py --out-dir ${O} --pilot ${PILOT} --routes ${ROUTES} --datasets ${DATASETS} \
   --concurrency 48 > ${O}/collect.log 2>&1
 echo ALL DONE >> ${O}/collect.log
 EOF
