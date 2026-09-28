@@ -24,10 +24,10 @@ ROUTES = {  # as in the CodeContests pool: (OpenRouter id, reasoning body, tempe
 IGNORE = ["Parasail", "AkashML"]
 
 
-async def call(session, key, route, user, sem, max_tokens):
+async def call(session, key, route, user, sem, max_tokens, system=SYSTEM):
     model, extra, temp, top_p = ROUTES[route]
     body = {"model": model, "max_tokens": max_tokens, "temperature": temp, "top_p": top_p,
-            "messages": [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}],
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
             "provider": {"ignore": IGNORE, "require_parameters": True}, **extra}
     err = None
     for attempt in range(4):
@@ -58,7 +58,7 @@ async def run(a):
             todo = [t for t in tasks if t["problem_id"] not in done]
 
             async def one(t):
-                r = await call(session, key, route, t["prompt"], sem, a.max_tokens)
+                r = await call(session, key, route, t["prompt"], sem, a.max_tokens, a.system_prompt or SYSTEM)
                 r.update(problem_id=t["problem_id"], route_label=route); return r
             rows = await asyncio.gather(*[one(t) for t in todo])
             with open(path, "a") as f:
@@ -79,6 +79,7 @@ def main():
     ap.add_argument("--out-dir", default="/mnt/llmd/results/exps/aristides/reason/cc_prefixes")
     ap.add_argument("--routes", default=",".join(ROUTES))
     ap.add_argument("--max-tokens", type=int, default=512)
+    ap.add_argument("--system-prompt", default="", help="override the CodeContests stdin system prompt (e.g. LCB's)")
     ap.add_argument("--api-key-file", default="/home/toolkit/.secrets/openrouter_api_key")
     ap.add_argument("--concurrency", type=int, default=64)
     asyncio.run(run(ap.parse_args()))

@@ -31,7 +31,7 @@ def feats(r):
 
 
 def main():
-    name = "cc_tensors"; P = R / "cc_prefixes"
+    name = sys.argv[1] if len(sys.argv) > 1 else "cc_tensors"; P = R / (sys.argv[2] if len(sys.argv) > 2 else "cc_prefixes")
     D = R / name; t = np.load(D / "tensors.npz", allow_pickle=True)
     S = [str(s) for s in t["model_slots"]]; pids = [str(p) for p in t["problem_ids"]]; pi = {p: i for i, p in enumerate(pids)}
     v = t["valid"].astype(bool); ct = t["completion_tokens"].astype(float); pt = t["prompt_tokens"].astype(float)
@@ -39,7 +39,8 @@ def main():
     inp = np.nanmean(np.where(v, pt, np.nan), 2)
     sp = json.load(open(D / "split_manifest.json")); tr = np.array([pi[str(p)] for p in sp["train_problem_ids"]])
     te = np.array([pi[str(p)] for p in sp["test_problem_ids"]])
-    pre = {s: {json.loads(l)["problem_id"]: json.loads(l) for l in open(P / f"{s}.jsonl") if not json.loads(l).get("error")} for s in S}
+    pre = {s: ({json.loads(l)["problem_id"]: json.loads(l) for l in open(P / f"{s}.jsonl") if not json.loads(l).get("error")}
+               if (P / f"{s}.jsonl").exists() else {}) for s in S}
     F = {s: np.array([feats(pre[s].get(p, {})) for p in pids]) for s in S}
     have = {s: np.array([p in pre[s] for p in pids]) for s in S}
     pcost = {s: np.array([(pre[s][p]["prompt_tokens"] * MK[s][0] + pre[s][p]["completion_tokens"] * MK[s][1]) / 1e6 * 100
@@ -49,7 +50,7 @@ def main():
     print(f"prefixes: " + ", ".join(f"{s} {have[s].sum()} (finished inside cap {F[s][have[s], 0].mean()*100:.0f}%, "
                                      f"mean cost {pcost[s].mean():.4f}c)" for s in S))
     rep = {}
-    for meth in ("prefix_own", "prefix_cheap", "prefix_alone"):
+    for meth in [x for x in ("prefix_own", "prefix_cheap", "prefix_alone") if x == "prefix_cheap" or all(pre[s] for s in S)]:
         C = np.zeros((len(pids), len(S))); r2 = []
         for m, s in enumerate(S):
             pin, pout = MK[s][0] / 1e6, MK[s][1] / 1e6
