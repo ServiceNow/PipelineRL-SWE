@@ -990,3 +990,19 @@ expensive tail). Differences carry comparable or more headroom (all of TACO's); 
 **Summary of "predict the between-model differences":** prefix (hand-crafted / 4B-read), Thinking / Base / own-model
 prefills, fine-tuned readers (single / joint), entropy scalars, self-estimates -- none moves the between-route differences
 materially. The model-specific part of per-query cost looks unpredictable from anything available before generation.
+
+### 4.A.18 Two constructive methods from the level-vs-relative analysis (2026-09-28; exploratory, offline)
+**#1 Per-query token CAPS** (`analysis/cost_headroom/percall_caps.py`): router picks (model, max_tokens cap); caps from the probe's
+predicted log-normal length distribution (quantiles), simulated exactly from stored draws (success iff solved AND length <= cap;
+cost = input + min(length, cap)). Gain vs the paper rule at matched accuracy (test; this simulator's no-cap number differs from
+decompose.py -- 23.0 vs 35.6 on LCB -- reconcile before quoting absolutes; arms are comparable within it):
+| pool | runaway draws (> 4x problem median) | no cap | one global cap per model | PER-QUERY cap |
+| TACO | 1.8% | 0.1% | 4.9% [-11.3, 22.6] | **14.3% [7.0, 26.9]** |
+| LCB | 0.8% | 23.0% | 17.5% | 22.4% |   | Omni | 0.4% | 28.7% | 28.3% | 28.7% |   | CC | 0.7% | -4.8% | -1.2% | -4.8% |
+=> caps help where runaways exist (TACO: rescues a pool where cost PREDICTION captured nothing), are neutral elsewhere; the
+per-query cap beats a global per-model cap -> the predicted level sets tight caps on problems that should be short.
+**#2 Onboarding a NEW model from k examples** (`onboard_new_model.py`): new model's cost = shared level (other routes' probe
+predictions) + one offset from k labelled problems; its success head stays fully trained. Mean over held-out routes, gain vs
+paper rule: LCB k=5 21.2% (full heads 23.0%) vs median-from-k 1.3% (oss120hi -43.6% at k=5); Omni k=5 26.5% (full 28.7%);
+CC no gain to transfer (-4.5 vs -4.8). => ~92% of a fully trained cost head from 5 examples; limit = models with large
+model-specific variation (dsv4f 15.0 vs 23.0 on LCB). Combine with IRT-style success onboarding for the full "add a model" story.
