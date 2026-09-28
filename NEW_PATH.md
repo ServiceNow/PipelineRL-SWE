@@ -774,3 +774,19 @@ mean output 1542 tok, sd log length 0.90. (b) difficulty -> log length CV R2 0.5
 log-output R2 on oss20lo: Instruct 0.66, Thinking 0.67 -> evaluated probe = Thinking.
 **PREDICTION: GAIN -- the Thinking-probe plain-ridge head saves >= 10% vs the paper rule at matched accuracy, 95% CI
 excluding 0; headroom >= 15%.** (Omni looks LCB-like on both rule inputs.)
+
+### 4.B.4 Patch-aware test pilot: per-candidate writer selection is dead (2026-09-28; `offline_router/swe_patchaware_pilot.py`,
+analysis/trackB_patchaware.log). 166 Verified instances (one correct + one wrong ladder patch each), writers oss20 /
+dsv4f / qcoder30 each writing 2 independent PATCH-AWARE scripts per candidate (1992 scripts, $2.2 writing).
+- Per writer (patch-aware): dsv4f valid 96%, beta 66.6%, alpha 17.5%, Lambda 3.81, 0.093c; oss20 94% / 37.7% / 15.4% / 2.45,
+  0.033c; qcoder30 66% / 29.2% / 10.8% / 2.69, 0.055c (qcoder30: 184/664 replies had no code block, 166 from provider Novita;
+  counted as no check). Draw-to-draw verdict agreement 81-85%.
+- Pair selection: always dsv4f 74.5% @0.295c; oss20 61.1% @0.073c; qcoder30 59.2% @0.166c. Split-draw per-candidate
+  writer ceiling (labels on one draw, scored on the other): max 69.0% @0.115c -> vs always-dsv4f -5.6pt [-8.3,-2.6] at
+  equal cost and never reaches its accuracy; vs oss20 1.36x [1.20,1.52] cost at equal accuracy.
+- **PRE-REGISTERED verdict: NO GO.** (The job's own printout said GO: the code tested "beats ANY writer" instead of
+  the pre-registered "beats EVERY writer"; fixed, rerun -> NO GO.)
+- Same-family rubber-stamping is ABSENT: false accepts oss20 on gpt-oss vs qwen patches 16.3% vs 14.4%; qcoder30 on qwen
+  vs gpt-oss 10.6% vs 11.0%. Seeing the patch lowers dsv4f's false accepts ~20% vs issue-only (25.6 -> 20.3%, 18.8 -> 14.4%).
+**Track B: parked.** The defensible content is a measurement (cheap cross-model writer beats self-verification; tests pay
+only above route-once), fit for a section/appendix of the Track A paper, not a paper of its own.

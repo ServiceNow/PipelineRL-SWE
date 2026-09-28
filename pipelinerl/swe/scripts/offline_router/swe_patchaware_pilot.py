@@ -253,7 +253,7 @@ def cmd_analyze(a):
     for wi, w in enumerate(Wr):
         print(f"   always {w:<9} {fx[wi][1]*100:5.1f}% @ {fx[wi][0]:.3f}c")
     print(f"   split-draw per-candidate writer (labels on one draw, scored on the other): max {ho[-1][1]*100:.1f}% @ {ho[-1][0]:.3f}c")
-    go = False
+    beats = []
     for wi, w in enumerate(Wr):
         c0, s0 = fx[wi]
         # accuracy of the oracle hull AT the fixed writer's cost (interpolated)
@@ -268,11 +268,13 @@ def cmd_analyze(a):
         gb = np.array([acc_at(b[1], b[2][wi][0]) - b[2][wi][1] for b in B]); gb = gb[np.isfinite(gb)]
         cr = cost_at(ho, s0) / c0
         cb = np.array([cost_at(b[1], b[2][wi][1]) / b[2][wi][0] for b in B]); cb = cb[np.isfinite(cb)]
-        lo, hi = np.percentile(gb, [2.5, 97.5]); clo, chi = np.percentile(cb, [2.5, 97.5])
+        # a fixed writer whose cost / accuracy lies outside the split-draw frontier has no comparison there
+        lo, hi = np.percentile(gb, [2.5, 97.5]) if len(gb) > 20 else (np.nan, np.nan)
+        clo, chi = np.percentile(cb, [2.5, 97.5]) if len(cb) > 20 else (np.nan, np.nan)
         print(f"   vs always {w:<9} at equal cost: {g*100:+.1f}pt [{lo*100:+.1f},{hi*100:+.1f}]   "
               f"at equal accuracy: cost x{cr:.2f} [{clo:.2f},{chi:.2f}]")
-        if (g >= 0.05 and lo > 0) or (cr <= 0.75 and chi < 1):
-            go = True
+        beats.append(bool((g >= 0.05 and lo > 0) or (cr <= 0.75 and chi < 1)))   # pre-registered: must beat EVERY writer
+    go = bool(beats) and all(beats)
     best = max(range(len(Wr)), key=lambda wi: fx[wi][1])
     print(f"\nPRE-REGISTERED go (vs every fixed writer incl. the best, {Wr[best]}): split-draw ceiling >= +5pt at equal cost "
           f"or <= 0.75x cost at equal accuracy, CI excluding 0 -> {'GO (per-candidate writer choice has room)' if go else 'NO GO'}")

@@ -1,0 +1,22 @@
+166 instances executed; 166 with both candidates applying (analysis set); writers ['oss20', 'dsv4f', 'qcoder30'], mode aware
+
+per writer (patch-aware; both draws): valid, beta = P(accept | correct), alpha = P(accept | wrong), median write cost
+   oss20     valid   94%  beta  37.7%  alpha  15.4%  Lambda  2.45  cost 0.033c  draw1-draw2 verdict agreement 81%
+   dsv4f     valid   96%  beta  66.6%  alpha  17.5%  Lambda  3.81  cost 0.093c  draw1-draw2 verdict agreement 84%
+   qcoder30  valid   66%  beta  29.2%  alpha  10.8%  Lambda  2.69  cost 0.055c  draw1-draw2 verdict agreement 85%
+
+pair selection (pick the candidate whose own check accepts it; ties 1/2), cost = two checks, cents:
+   always oss20      61.1% @ 0.073c
+   always dsv4f      74.5% @ 0.295c
+   always qcoder30   59.2% @ 0.166c
+   split-draw per-candidate writer (labels on one draw, scored on the other): max 69.0% @ 0.115c
+   vs always oss20     at equal cost: +nanpt [+nan,+nan]   at equal accuracy: cost x1.36 [1.20,1.52]
+   vs always dsv4f     at equal cost: -5.6pt [-8.3,-2.6]   at equal accuracy: cost xnan [nan,nan]
+   vs always qcoder30  at equal cost: +9.8pt [+6.0,+13.7]   at equal accuracy: cost x0.60 [0.52,0.70]
+
+PRE-REGISTERED go (vs every fixed writer incl. the best, dsv4f): split-draw ceiling >= +5pt at equal cost or <= 0.75x cost at equal accuracy, CI excluding 0 -> NO GO
+
+false accepts on WRONG candidates, by writer and the patch's generator family (patch-aware, both draws | issue-only):
+   oss20     gpt-oss patches (SAME, n=86): 16.3% | 19.8%   qwen patches (other, n=80): 14.4% | 13.8%
+   dsv4f     gpt-oss patches (other, n=86): 20.3% | 25.6%   qwen patches (other, n=80): 14.4% | 18.8%
+   qcoder30  gpt-oss patches (other, n=86): 11.0% | 12.8%   qwen patches (SAME, n=80): 10.6% |  5.0%
