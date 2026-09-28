@@ -707,3 +707,20 @@ that matter. LCB's head sits at 0.51-0.72 and clears it; CC 0.18-0.43, TACO <= 0
 oss120hi) <= 0.12 do not -- and CC's true rating (0.37-0.49) falls just short too. Mechanism to state in the paper:
 a routing decision flips only when the cost error is smaller than the utility margin between routes, so a weak
 cost signal reroutes about as often wrongly as rightly until it crosses that margin.
+
+### 4.A.6 Head-to-head with the literature's cost predictors (2026-09-28; `analysis/cost_headroom/baseline_cost_heads.py`,
+analysis/cost_headroom/head_to_head.log). Same success head, same decomposition, market prices. Learned gain at matched
+accuracy vs the paper rule [95% CI]; test log-output R2 in brackets after.
+| pool | headroom | tuned 4B head | plain-ridge 4B probe | MixLLM-style (jina-code emb -> MLP+RF+kNN) | prompt-feature GBM | own-model prefill |
+| LCB | 46-47% | 34.4% | 35.6% [27.1,41.9] (R2 .69-.76) | 14.1% [5.3,21.0] (.22-.30) | 12.3% [0.7,21.4] (.27-.35) | 34.0% (.64-.76) |
+| CodeContests | 21.8% | 0.7% | 2.0% [-6.1,9.0] (.34-.47) | 0.8% (-.52..-.13) | -11.1% [-20.9,-1.3] | -- |
+| BCB | 20.2% | -4.3% | -3.3% (.15-.71) | -4.5% | -10.1% | -- |
+| TACO | 36.1% | 0.1% | 2.1% (.31-.47) | 8.3% [0.2,16.9] (.05-.09; likely noise) | -18.9% [-38.3,-5.4] | -- |
+| SWE-Smith | 14.2% | 7.5% | 24.8% [8.2,36.0] (!) | void (adapter stored no statements) | void | -- |
+Findings: (1) the 4B probe beats the literature's text predictors everywhere; on LCB they capture only 12-14% vs 34-36%.
+(2) No pre-generation predictor captures CodeContests / BCB headroom; prompt-feature GBM actively hurts (-11 to -19%).
+(3) Each model's OWN prefill is no better than the 4B scout's (LCB). (4) Our tuned calibration pipeline LOWERS R2 vs plain
+RidgeCV (CC .18-.43 -> .34-.47, TACO -.25-.29 -> .31-.47) without changing capture on LCB -- simplify the head.
+(5) CC's plain-ridge R2 .34-.47 still captures ~2%: consistent with the threshold (4.A.4). (6) SWE-Smith: learned gain >
+"headroom" -- with ONE draw per problem the realised cost carries success information (failed patches run longer), so
+perfect cost knowledge is not an upper bound there; small test set (150). Treat as a flag, not a result.
