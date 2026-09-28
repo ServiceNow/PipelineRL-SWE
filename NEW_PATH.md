@@ -797,3 +797,21 @@ paper rule at matched accuracy 21.9% [8.9, 33.5]** (predicted >= 10%, CI excludi
 (predicted >= 15%: YES). (Instruct, not the pre-registered probe: 27.4% [15.0, 37.4].) analysis/cost_headroom/omni500.log.
 The rule -- difficulty drives length AND the probe reads difficulty -> a cheap probe clears the capture threshold --
 forecast a new dataset correctly before its data existed.
+
+### 4.A.10 WHY is output length predictable? Variance decomposition (2026-09-28; `analysis/cost_headroom/why_decompose.py`)
+Test problems, 5-fold CV R2 of log output length, probe = plain-ridge out-of-sample prediction. shared = length explained by
+difficulty that the probe also captures; diff-only = difficulty the probe misses; probe-only = beyond difficulty.
+| pool | probe R2 | empirical difficulty R2 | shared | diff-only | probe-only | labelled difficulty R2 (shared) |
+| LCB | .73-.78 | .50-.58 | .47-.52 | .02-.06 | .21-.29 | .54-.65 (.53-.63) |
+| Omni-MATH | .75-.83 | .34-.59 | .34-.53 | .00-.07 | .23-.49 | .53-.59 (.54-.58) |
+| CodeContests | .42-.49 | .42-.49 | .30-.34 | .12-.17 | .09-.20 | .30-.47 (.29-.36) |
+| TACO | .41-.52 | .17-.22 | .12-.18 | .03-.05 | .27-.33 | .13-.38 |
+| BCB | .37-.71 | .08-.12 | .04-.09 | .01-.04 | .33-.63 | (no label) |
+Reading: where it works (LCB, Omni) ~2/3 of the probe's explained length variance is SHARED with difficulty and the probe
+misses almost none of the difficulty signal (<=.07); another .15-.29 is beyond difficulty. CodeContests: length is as
+difficulty-driven as LCB, but the probe MISSES .12-.17 of it (it cannot read Codeforces difficulty well). TACO / BCB:
+length is barely difficulty-driven (.08-.22); BCB's probe finds a lot beyond difficulty (.33-.63, library/boilerplate
+"size"), but its key routes (dsv4f .37, oss120hi .49) and flat accuracy ladder (45-51%) keep capture at zero.
+Mechanism check: within a problem-route, failed draws are NOT systematically longer than solved ones (x0.83-1.25; only
+Omni dsv4f x1.89), so "hard is long" is a property of the PROBLEM (ICC .85-.95), not of failing: reasoning models spend
+more tokens on problems they find hard even when they solve them.
