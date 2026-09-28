@@ -815,3 +815,15 @@ length is barely difficulty-driven (.08-.22); BCB's probe finds a lot beyond dif
 Mechanism check: within a problem-route, failed draws are NOT systematically longer than solved ones (x0.83-1.25; only
 Omni dsv4f x1.89), so "hard is long" is a property of the PROBLEM (ICC .85-.95), not of failing: reasoning models spend
 more tokens on problems they find hard even when they solve them.
+
+### 4.A.11 Boosting the cost head: free ideas are null (2026-09-28; `analysis/cost_headroom/boost_cost_head.py`)
+Frozen 4B Instruct probe, test log-output R2 (mean over routes): base ridge LCB .75, CC .46, TACO .46, BCB .58, Omni .75.
+- Learning curve (25/50/75/100% of train): saturated by 50-75% everywhere (CC .24/.39/.47/.46; LCB .71/.74/.74/.75;
+  Omni .68/.74/.73/.75; BCB .48/.54/.57/.58 mildly rising) -> NOT data-limited; more labels will not help much.
+- Shared-factor (reduced-rank) multi-output head: identical to base (+-.005).
+- Nearest-neighbour cost in probe space: worse (.27-.67); averaged with ridge: worse (-.02 to -.06).
+- Pooling training data across datasets (route-matched, pool indicator): worse (CC .42, BCB .39, LCB .74, Omni .74).
+Conclusion: the frozen prompt representation is the limit, not data or head. Combined with 4.A.6/4.A.8 (bigger / own /
+Thinking / Base prefills, text predictors): prompt-only cost prediction on CC-like data is near its ceiling; closing the
+difficulty gap (4.A.10: the probe misses .12-.17 on CC) needs information from generation (prefix R2 .50-.54 but pays for
+itself only if nearly free) or a changed representation (fine-tuning).
