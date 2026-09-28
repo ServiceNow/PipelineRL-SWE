@@ -847,3 +847,9 @@ itself only if nearly free) or a changed representation (fine-tuning).
 **Boosting summary:** every prompt-side lever tried (bigger/own/Thinking/Base/prompted probes, text predictors, pooling,
 low-rank, kNN, selective use, dollar calibration, difficulty labels at scale) leaves CodeContests at <= ~6%. The prompt-only
 ceiling there is real; paper framing: diagnose, do not promise to fix.
+
+### 4.A.12 Next pre-registered screens: AIME 1983-2024 (933) and OlympiadBench maths (674) -- rule committed BEFORE screen data
+Identical rule to 4.A.9, no retuning: from gpt-oss-20b-low x1 + the Qwen3-4B Instruct prefill, (a) the probe's 5-fold CV
+log-output R2 on oss20lo decides: >= 0.50 -> GAIN (>= 10%, CI excluding 0); <= 0.35 -> NO GAIN; else no call; headroom >= 15%
+predicted for any reasoning pool. (b) difficulty -> length uses AIME's problem number (1-15); OlympiadBench has no graded label.
+Full pools (the five gpt-oss/dsv4f routes, as Omni) only with sign-off; prefer one predicted GAIN and one predicted NO GAIN.
