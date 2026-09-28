@@ -827,3 +827,12 @@ Conclusion: the frozen prompt representation is the limit, not data or head. Com
 Thinking / Base prefills, text predictors): prompt-only cost prediction on CC-like data is near its ceiling; closing the
 difficulty gap (4.A.10: the probe misses .12-.17 on CC) needs information from generation (prefix R2 .50-.54 but pays for
 itself only if nearly free) or a changed representation (fine-tuning).
+- **#5 selective use of the learned cost** (`analysis/cost_headroom/selective_cost.py`; bootstrap-ensemble sigma, precision-
+  weighted blend with the paper rule, tau chosen on calibration): test gain plain -> selective: CC 2.0 -> 2.8, TACO 1.0 ->
+  1.2, BCB -1.5 -> -1.5, LCB 35.2 -> 35.2, Omni 24.3 -> 19.5. NULL. Ensemble sigma (0.04-0.27 log) is far below the actual
+  error: the error is missing information (bias), not estimator variance, so the head cannot tell which predictions to
+  distrust. Calibration-split gains are also unreliable at n = 87-136 (BCB calibration +27.5% vs test negative).
+- **Abort-and-reroute on observed length: TAKEN** (agentic: SWE-Router 2607.00053, Fail-Fast Restart-Smart 2608.03222,
+  TACIT-Switch 2608.27911, Doomed from the Start 2607.06503, EarlyEval 2609.02783). Dropped.
+- Running: prompted probing (prefill with a difficulty question appended; CC + LCB, GPU); Codeforces-API ratings for the
+  full CodeContests set (download of the remaining 35 train shards) -> train a rating reader on thousands of free labels.
