@@ -9,15 +9,20 @@ import os
 T=os.environ.get("CI_TENSORS","pool_v2_tensors_5rung"); t=np.load(f"{R}/{T}/tensors.npz",allow_pickle=True)
 S=[str(s) for s in t["model_slots"]]; pids=[str(p) for p in t["problem_ids"]]; pi={p:i for i,p in enumerate(pids)}
 v=t["valid"].astype(bool); ok=(t["final_outcome"]&t["valid"]).astype(float)
-real=np.stack([(t["prompt_tokens"][:,m]+t["completion_tokens"][:,m])*PR[s]/1e6*100 for m,s in enumerate(S)],1)
+# CI_MARKET=1: market input/output prices (analysis/cost_headroom/decompose.MK) instead of the legacy blended table
+MKT=os.environ.get("CI_MARKET")=="1"
+if MKT:
+    import sys; sys.path.insert(0,"analysis/cost_headroom"); from decompose import MK
+PIN={s:(MK[s][0] if MKT else PR[s]) for s in S}; POUT={s:(MK[s][1] if MKT else PR[s]) for s in S}
+real=np.stack([(t["prompt_tokens"][:,m]*PIN[s]+t["completion_tokens"][:,m]*POUT[s])/1e6*100 for m,s in enumerate(S)],1)
 n=v.sum(2); Q=np.where(n>0,(ok*v).sum(2)/np.maximum(n,1),0); Cr=np.where(n>0,(real*v).sum(2)/np.maximum(n,1),1e9)
 sp=json.load(open(f"{R}/{T}/split_manifest.json")); idx={k:np.array([pi[p] for p in sp[f"{k}_problem_ids"]]) for k in ("train","calibration","test")}
 lp={json.loads(l)["problem_id"]:json.loads(l)["p_successes"][:5] for l in open(f"{R}/{T}/content_preds.jsonl")}
-lc={json.loads(l)["problem_id"]:json.loads(l)["expected_costs"][:5] for l in open(f"{R}/{T}/cost_preds.jsonl")}
+lc={json.loads(l)["problem_id"]:json.loads(l)["expected_costs"][:5] for l in open(f"{R}/{T}/"+os.environ.get("CI_COST","cost_preds.jsonl"))}
 P=np.array([lp[p] for p in pids]); LC=np.array([lc[p] for p in pids])*100
 tr=idx["train"]; inp=np.nanmean(np.where(v,t["prompt_tokens"],np.nan),2)
 med=np.array([np.median(t["completion_tokens"][tr,m][v[tr,m]]) for m in range(5)])
-PC=np.stack([(np.nan_to_num(inp[:,m],nan=np.nanmean(inp[tr,m]))+med[m])*PR[S[m]]/1e6*100 for m in range(5)],1)
+PC=np.stack([(np.nan_to_num(inp[:,m],nan=np.nanmean(inp[tr,m]))*PIN[S[m]]+med[m]*POUT[S[m]])/1e6*100 for m in range(5)],1)
 avail=n>0
 Vs=np.geomspace(1e-5,100,400)
 def choose(C,ii,V): return np.argmax(np.where(avail[ii],P[ii]*V-C[ii],-np.inf),1)

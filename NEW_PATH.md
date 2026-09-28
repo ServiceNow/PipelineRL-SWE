@@ -737,3 +737,16 @@ were free; -16.5% [-28.3,-9.0] with the prefix charged (0.008c/problem = up to +
 with continuation credit (prefix free when oss20lo is the chosen route). Per accuracy: x0.87 at 51% -> x1.18 at 80%.
 Even free, the prefix head is WORSE than the paper rule at the expensive end (x1.12 at 80%): the dollar-miscalibration
 deficit (capture ~ R2 - 0.2 in 4.A.4's curves) -- fix calibration in dollars before revisiting prefixes.
+
+### 4.A.8 Calibration, headline, robustness (2026-09-28)
+- **Dollar calibration does not help** (`analysis/cost_headroom/dollar_calibrate.py`, isotonic on the calibration split):
+  heads were already unbiased in dollars (0.8-1.1x); gains before -> after: LCB 34.4/35.6 -> 34.0/33.2, CC 0.7/2.0 ->
+  -0.1/2.7, TACO 0.1/2.1 -> 3.2/3.1, BCB -4.3/-3.3 -> -5.2/-2.5, CC prefix 6.2 -> -1.2. The apparent "capture ~ R2 - 0.2"
+  deficit was the log-R2 axis: against DOLLAR R2 the synthetic capture exceeds R2, and every real head sits ON the
+  synthetic curve (LCB head 0.48 dollar R2 -> 34% vs synthetic ~34%; CC prefix -> 6.2% vs ~6.5%). The limit is
+  prediction quality, not calibration.
+- **Headline, simpler head (plain RidgeCV probe), market prices, honest calibration-chosen protocol, LCB test 341:**
+  cost ratio 0.63 [0.52,0.77] at 70%, 0.67 [0.55,0.80] at 75%, 0.73 [0.63,0.83] at 80% with accuracy matched
+  (+1.3/+1.5/-0.1, CIs incl 0); 0.94 at 85%. 60-65% targets land 3-4pt lower in accuracy -> not matched, excluded.
+  Claim: 27-37% cheaper at 70-80% accuracy. (analysis/costhead_ci_lcb_market_cost_preds_probe.json)
+- **TACO MixLLM-style 8.3% was noise:** 5 seeds give 1.3-6.2%, every CI includes 0.
