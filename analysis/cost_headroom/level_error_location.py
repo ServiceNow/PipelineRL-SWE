@@ -15,7 +15,8 @@ ld = lambda f: np.log(np.array([[json.loads(l)["expected_costs"][m] for m in ran
 lc = {json.loads(l)["problem_id"]: i for i, l in enumerate(open(D / "cost_preds_lvr_probe_prefixread_level.jsonl"))}
 real_lvl = np.nanmean(ld("cost_preds_lvr_probe_prefixread_level.jsonl"), 1); syn_lvl = np.nanmean(ld("cost_preds_lvr_synlevel_72_s0.jsonl"), 1)
 orc = ld("cost_preds_lvr_oracle_level.jsonl"); pap_raw = {json.loads(l)["problem_id"]: json.loads(l)["expected_costs"] for l in open(D / "cost_preds_market.jsonl")}
-P = np.array([json.loads(l)["p_successes"][:len(S)] for l in open(D / "content_preds.jsonl")])
+_lp = {json.loads(l)["problem_id"]: json.loads(l)["p_successes"][:len(S)] for l in open(D / "content_preds.jsonl")}
+P = np.array([_lp[p] for p in pids])                     # keyed by problem_id
 # bias-free comparison: remove each predictor's mean offset (level R2 is offset-sensitive; decisions via ratios are not)
 def err(x): e = x[te] - lvl[te]; return e - np.nanmean(e)
 er, es = err(real_lvl), err(syn_lvl)

@@ -26,7 +26,8 @@ inp = np.nanmean(np.where(v, pt, np.nan), 2)
 pin = np.array([MK[s][0] for s in S]) / 1e6 * 100; pout = np.array([MK[s][1] for s in S]) / 1e6 * 100     # cents / token
 sp = json.load(open(D / "split_manifest.json")); idx = {k: np.array([pi[str(p)] for p in sp[f"{k}_problem_ids"]]) for k in ("train", "calibration", "test")}
 tr, cal, te = idx["train"], idx["calibration"], idx["test"]
-P = np.array([json.loads(l)["p_successes"][:M] for l in open(D / "content_preds.jsonl")])
+_lp = {json.loads(l)["problem_id"]: json.loads(l)["p_successes"][:M] for l in open(D / "content_preds.jsonl")}
+P = np.array([_lp[p] for p in pids])                     # keyed by problem_id (file order differs from tensor order)
 lc = {json.loads(l)["problem_id"]: json.loads(l)["expected_costs"][:M] for l in open(D / CF)}
 LC = np.array([lc[p] for p in pids]) * 100
 MU = np.log(np.maximum((LC - np.nan_to_num(inp) * pin) / pout, 1.0))                     # predicted log output tokens
@@ -82,8 +83,17 @@ def paper_frontier(ii):
     return hull(pts)
 
 
-def gain(H, H0):
-    lo, hi = max(H[0][1], H0[0][1]), min(H[-1][1], H0[-1][1]); T = np.linspace(lo + .05 * (hi - lo), hi - .05 * (hi - lo), 12)
+def oracle_frontier(ii):                  # true per-problem cost (uncapped) -- only to fix the accuracy band, as decompose.py does
+    pts = []
+    for V in np.geomspace(1e-5, 100, 250):
+        m = np.where(avail[ii], P[ii] * V - C0[ii], -np.inf).argmax(1)
+        pts.append((np.nanmean(C0[ii, m]), np.nanmean(Q0[ii, m])))
+    return hull(pts)
+
+
+def gain(H, H0, Ho=None):
+    hs = [H, H0] + ([Ho] if Ho is not None else [])
+    lo, hi = max(h[0][1] for h in hs), min(h[-1][1] for h in hs); T = np.linspace(lo + .05 * (hi - lo), hi - .05 * (hi - lo), 12)
     r = np.array([cost_at(H, x) / cost_at(H0, x) for x in T]); return 1 - float(np.exp(np.nanmean(np.log(r)))), (lo, hi)
 
 
@@ -97,16 +107,16 @@ def global_cap_opts(q):
 H0c = paper_frontier(cal)
 gq = max((0.8, 0.9, 0.95, 0.98, 0.99), key=lambda q: gain(frontier(cal, [global_cap_opts(q)]), H0c)[0])
 g_opt = global_cap_opts(gq)
-H0 = paper_frontier(te)
+H0 = paper_frontier(te); HO = oracle_frontier(te)
 arms = {"nocap": [0], f"globalcap(q={gq})": [g_opt], "querycap": list(range(len(QS) + 1))}
 res = {}
 for k, o in arms.items():
-    g, band = gain(frontier(te, o), H0)
+    g, band = gain(frontier(te, o), H0, HO)
     rng = np.random.default_rng(0); B = []
     for _ in range(200):
-        ii = rng.choice(te, len(te)); B.append(gain(frontier(ii, o), paper_frontier(ii))[0])
-    res[k] = (g, np.percentile(B, [2.5, 97.5]))
+        ii = rng.choice(te, len(te)); B.append(gain(frontier(ii, o), paper_frontier(ii), oracle_frontier(ii))[0])
+    res[k] = (g, np.percentile(B, [2.5, 97.5]), band)
 print(f"{name}: predicted log-length spread per route {SIG.round(2)}; runaway share (draws > 4x the problem's median) "
       f"{np.nanmean(ct[v] > 4 * np.repeat(np.nanmedian(np.where(v, ct, np.nan), 2)[:, :, None], ct.shape[2], 2)[v]) * 100:.1f}%")
-for k, (g, ci) in res.items():
-    print(f"   {k:<20} gain vs paper rule at matched accuracy {g*100:6.1f}% [{ci[0]*100:5.1f}, {ci[1]*100:5.1f}]")
+for k, (g, ci, band) in res.items():
+    print(f"   {k:<20} gain vs paper rule at matched accuracy {g*100:6.1f}% [{ci[0]*100:5.1f}, {ci[1]*100:5.1f}]  (band {band[0]*100:.0f}-{band[1]*100:.0f}%)")

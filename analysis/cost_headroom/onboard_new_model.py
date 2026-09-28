@@ -25,7 +25,8 @@ outm = np.where(avail, np.where(v, ct, 0).sum(2) / np.maximum(n, 1), np.nan); Y 
 Q = np.where(avail, (ok * v).sum(2) / np.maximum(n, 1), 0)
 Cr = np.where(avail, inp * pin + outm * pout, 1e9)
 sp = json.load(open(D / "split_manifest.json")); tr = np.array([pi[str(p)] for p in sp["train_problem_ids"]]); te = np.array([pi[str(p)] for p in sp["test_problem_ids"]])
-P = np.array([json.loads(l)["p_successes"][:M] for l in open(D / "content_preds.jsonl")])
+_lp = {json.loads(l)["problem_id"]: json.loads(l)["p_successes"][:M] for l in open(D / "content_preds.jsonl")}
+P = np.array([_lp[p] for p in pids])                     # keyed by problem_id (file order differs from tensor order)
 lc = {json.loads(l)["problem_id"]: json.loads(l)["expected_costs"][:M] for l in open(D / CF)}
 LC = np.array([lc[p] for p in pids]) * 100
 MU = np.log(np.maximum((LC - inp * pin) / pout, 1.0))

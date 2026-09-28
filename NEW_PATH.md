@@ -1006,3 +1006,14 @@ predictions) + one offset from k labelled problems; its success head stays fully
 paper rule: LCB k=5 21.2% (full heads 23.0%) vs median-from-k 1.3% (oss120hi -43.6% at k=5); Omni k=5 26.5% (full 28.7%);
 CC no gain to transfer (-4.5 vs -4.8). => ~92% of a fully trained cost head from 5 examples; limit = models with large
 model-specific variation (dsv4f 15.0 vs 23.0 on LCB). Combine with IRT-style success onboarding for the full "add a model" story.
+**CORRECTION to 4.A.17 / 4.A.18 (bug):** `percall_caps.py`, `onboard_new_model.py`, `level_error_location.py` read content_preds.jsonl
+in FILE order; on LCB and CC that order differs from the tensor order (1/892 and 0/700 positions match; TACO, Omni match), so
+success predictions were misaligned there. Fixed (keyed by problem_id); re-run:
+- Caps simulator now agrees with decompose.py (no-cap LCB 36.0 vs 35.6, CC 2.4 vs 2.0). Caps: LCB 36.0 / global 35.2 / per-query
+  36.2; Omni 28.7 / 28.5 / 28.7; CC 2.4 / -4.1 / 2.4; TACO (unaffected by the bug) per-query **8.0% [-4.2, 19.3]** after aligning the
+  accuracy band with decompose.py (the earlier 14.3% [7.0, 26.9] used a 2-arm band). => caps: neutral where runaways are rare, a
+  non-significant trend on TACO. NOT a claim yet; the test is agentic step caps.
+- Onboarding (LCB) now STRONGER: k=5 34.5% (full heads 36.0%, 96%) vs median-from-k 12.3%; Omni unchanged 26.5 vs 28.7; CC 2.1 vs 2.0.
+- CC level redundancy: success predictions DO explain 0.47 of the true level (the "~0" was the bug); the real predictor captures
+  0.52 of the level's part beyond the success head vs 0.61 for synthetic noise at equal R2 -> partial redundancy explains part
+  of why it cashes in less.
