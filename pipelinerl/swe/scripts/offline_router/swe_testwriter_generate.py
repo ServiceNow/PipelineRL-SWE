@@ -106,7 +106,7 @@ async def run(a) -> None:
             ctx[iid] = {p: fetch(inst["repo"], inst["base_commit"], p, a.max_file_chars) for p in gold_files(inst["patch"])}
             f.write(json.dumps({"instance_id": iid, "files": ctx[iid]}) + "\n")
     sem = asyncio.Semaphore(a.concurrency)
-    async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=0)) as session:
         for w in a.writers.split(","):
             model, extra = WRITERS[w]
             path = out / f"scripts_{w}.jsonl"

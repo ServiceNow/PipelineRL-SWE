@@ -125,7 +125,7 @@ async def _generate(a):
     ctx = {json.loads(l)["instance_id"]: json.loads(l)["files"] for l in open(PILOT / "scripts" / "contexts.jsonl")}
     key = Path(a.api_key_file).read_text().strip()
     sem = asyncio.Semaphore(a.concurrency)
-    async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=0)) as session:
         for w in a.writers.split(","):
             model, extra = WRITERS[w]
             for mode in a.modes.split(","):

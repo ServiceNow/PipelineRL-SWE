@@ -84,7 +84,7 @@ async def call(session, key, route, prompt, sem, max_tokens):
 async def run(a):
     key = Path(a.api_key_file).read_text().strip(); sem = asyncio.Semaphore(a.concurrency)
     draws = {kv.split(":")[0]: int(kv.split(":")[1]) for kv in a.routes.split(",")}
-    async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=0)) as session:
         jobs = []
         for ds in a.datasets.split(","):
             tasks = load(ds)

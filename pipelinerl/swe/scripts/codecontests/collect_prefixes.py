@@ -51,7 +51,7 @@ async def run(a):
     keep = {str(p) for p in json.load(open(a.problem_ids))} if a.problem_ids else None
     tasks = [t for t in tasks if keep is None or t["problem_id"] in keep]
     out = Path(a.out_dir); out.mkdir(parents=True, exist_ok=True)
-    async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=0)) as session:
         async def one_route(route):
             path = out / f"{route}.jsonl"
             done = {json.loads(l)["problem_id"] for l in open(path) if not json.loads(l).get("error")} if path.exists() else set()
