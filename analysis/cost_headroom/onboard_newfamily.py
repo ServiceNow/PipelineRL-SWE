@@ -14,7 +14,10 @@ from sklearn.linear_model import LogisticRegression
 sys.path.insert(0, str(Path(__file__).parent))
 from decompose import MK, R, hull, cost_at
 
+import os
 NEW = {"glm47f": (0.061, 0.40), "nemo120": (0.08, 0.45), "mm25": (0.27, 1.08)}             # $/M in, out (OpenRouter 2026-09-28)
+if os.environ.get("NEWMODELS"):
+    NEW = {k: v for k, v in NEW.items() if k in os.environ["NEWMODELS"].split(",")}
 D = R / "mmlupro_tensors"; t = np.load(D / "tensors.npz", allow_pickle=True)
 S = [str(s) for s in t["model_slots"]]; M = len(S); pids = [str(p) for p in t["problem_ids"]]; pi = {p: i for i, p in enumerate(pids)}
 v = t["valid"].astype(bool); okd = (t["final_outcome"] & t["valid"]).astype(bool); ct = t["completion_tokens"].astype(float); pt = t["prompt_tokens"].astype(float)
