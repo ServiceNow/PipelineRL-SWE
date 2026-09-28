@@ -22,6 +22,12 @@ ROUTES = {  # label: (OpenRouter id, extra body, temperature, top_p) -- as in th
     "dsv4f": ("deepseek/deepseek-v4-flash", {"reasoning": {"enabled": True}}, 0.7, 0.95),
     "oss120md": ("openai/gpt-oss-120b", {"reasoning": {"effort": "medium"}}, 1.0, 1.0),
     "oss120hi": ("openai/gpt-oss-120b", {"reasoning": {"effort": "high"}}, 1.0, 1.0),
+    # other open reasoning families (ids and prices checked on /api/v1/models 2026-09-28)
+    "glm47f": ("z-ai/glm-4.7-flash", {"reasoning": {"enabled": True}}, 0.6, 0.95),
+    "nemo120": ("nvidia/nemotron-3-super-120b-a12b", {"reasoning": {"enabled": True}}, 0.6, 0.95),
+    "qwnext80": ("qwen/qwen3-next-80b-a3b-thinking", {"reasoning": {"enabled": True}}, 0.6, 0.95),
+    "mm25": ("minimax/minimax-m2.5", {"reasoning": {"enabled": True}}, 0.6, 0.95),
+    "qw235": ("qwen/qwen3-235b-a22b-thinking-2507", {"reasoning": {"enabled": True}}, 0.6, 0.95),
 }
 IGNORE = ["Parasail", "AkashML"]
 PROMPT = "Solve the following math problem. Reason step by step, then put your final answer within \\boxed{{}}.\n\n{problem}"
@@ -33,6 +39,22 @@ def load(name):
         d = load_dataset("HuggingFaceH4/MATH-500", split="test")
         return [{"problem_id": f"math500_{i}", "problem": r["problem"], "answer": r["answer"], "difficulty": float(r["level"]),
                  "subject": r["subject"]} for i, r in enumerate(d)]
+    if name == "aime":           # AIME 1983-2024; difficulty = problem number within the exam (1-15)
+        d = load_dataset("di-zhang-fdu/AIME_1983_2024", split="train")
+        return [{"problem_id": f"aime_{r['ID']}", "problem": r["Question"], "answer": str(r["Answer"]),
+                 "difficulty": float(r["Problem Number"]), "subject": str(r["Year"])} for r in d]
+    if name == "olympiad":       # OlympiadBench, text-only English maths, open-ended (difficulty label is constant)
+        d = load_dataset("Hothan/OlympiadBench", "OE_TO_maths_en_COMP", split="train")
+        import ast
+        def ans(x):
+            if isinstance(x, (list, tuple)):
+                return ", ".join(map(str, x))
+            try:
+                v = ast.literal_eval(x); return ", ".join(map(str, v)) if isinstance(v, list) else str(v)
+            except Exception:
+                return str(x)
+        return [{"problem_id": f"olymp_{r['id']}", "problem": r["question"], "answer": ans(r["final_answer"]),
+                 "difficulty": 0.0, "subject": str(r["subfield"])} for r in d]
     d = load_dataset("reliable-agents/Omni-MATH-500", split="test")
     return [{"problem_id": f"omni500_{i}", "problem": r["problem"], "answer": r["answer"], "difficulty": float(r["difficulty"]),
              "subject": str(r["domain"])[:120]} for i, r in enumerate(d)]
@@ -108,7 +130,10 @@ async def run(a):
             async def one(t):
                 r = await call(session, key, route, PROMPT.format(problem=t["problem"]), sem, a.max_tokens)
                 r.update(problem_id=t["problem_id"], dataset=ds, route_label=route, model=ROUTES[route][0], draw=d,
-                         difficulty=t["difficulty"], resolved=grade(r["content"], t["answer"]) if r["content"] else False)
+                         difficulty=t["difficulty"],
+                         # some providers leave the final answer on the reasoning channel: grade it there if content has no box
+                         resolved=grade(r["content"] if "boxed" in r["content"] else (r["content"] + "\n" + r["reasoning"][-4000:]),
+                                        t["answer"]) if (r["content"] or r["reasoning"]) else False)
                 fh.write(json.dumps(r) + "\n"); fh.flush()
                 return r
             rows = await asyncio.gather(*[one(t) for t in todo])
