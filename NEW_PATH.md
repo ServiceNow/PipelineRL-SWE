@@ -958,3 +958,7 @@ verbosity on this problem), not better per-query length. Explains the pools (LCB
 savings; CC: differences ~unpredictable by any reader -> none) and every "better R2, no savings" result (Thinking probe,
 prefixes, prefix-reading). Reframes the capture curve: synthetic noise hit level and differences equally; real predictors
 mostly get the level. Fine-tuned 137M reader: LCB problem-only R2 .52-.57 (< frozen 4B probe .69-.76); other 3 runs pending.
+- **Fine-tuned 137M reader (full fine-tune, jina-code; `analysis/cost_headroom/finetune_cost_reader.py`)** is WORSE than the frozen
+  4B in all four cells -- test log-output R2 LCB problem .52-.57 (4B .69-.76), LCB +prefix .71-.78 (4B .82-.87), CC problem
+  ~0 (4B .34-.47), CC +prefix .43-.62 (4B .60-.75); routing (prefix free) LCB 26.3% / 21.8%, CC -2.3% / -3.4%. 350-450
+  training problems cannot train a representation as good as the 4B's existing one.
