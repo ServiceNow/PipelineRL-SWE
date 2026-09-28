@@ -1,0 +1,29 @@
+/home/toolkit/PipelineRL-SWE/analysis/cost_headroom/why_predictable.py:40: RuntimeWarning: Mean of empty slice
+  inp = np.nanmean(np.where(v, pt, np.nan), 2)
+y = log mean OUTPUT tokens per problem. ceiling = best achievable R2 given draw noise; head = the 4B head (test);
+diff->len = R2 from TRUE difficulty (CV); probe diff = Spearman(success head, true solve rate), test;
+meta = R2 from statement length + platform/difficulty labels (CV); runaway = draws at the cap; straddle = problems with some draws capped and some not
+pool / route                          k   ICC  ceil   head diff->len probe diff  meta  runaway straddle  sd y
+pool_v2_tensors_5rung / oss20lo    16.0  0.88  0.99  +0.72      0.57       0.73  0.63     0.0%     0.2%  0.90
+pool_v2_tensors_5rung / oss20md    12.0  0.91  0.99  +0.54      0.64       0.72  0.58     0.0%     0.1%  1.34
+pool_v2_tensors_5rung / dsv4f       8.0  0.90  0.99  +0.61      0.56       0.54  0.67     0.2%     1.0%  1.86
+pool_v2_tensors_5rung / oss120md    6.0  0.95  0.99  +0.51      0.62       0.50  0.61     0.0%     0.1%  1.18
+pool_v2_tensors_5rung / oss120hi    3.0  0.96  0.99  +0.70      0.59       0.39  0.64     0.0%     0.1%  1.40
+cc_tensors / oss20lo                4.0  0.81  0.94  +0.43      0.43       0.51  0.01     0.0%     0.1%  0.65
+cc_tensors / oss20md                3.0  0.88  0.96  +0.32      0.53       0.43  0.00     0.0%     0.1%  1.07
+cc_tensors / dsv4f                  2.9  0.86  0.95  +0.18      0.44       0.34  0.03     0.3%     0.9%  1.30
+cc_tensors / oss120md               2.0  0.94  0.97  +0.31      0.50       0.35  0.00     0.1%     0.1%  0.92
+cc_tensors / oss120hi               2.0  0.95  0.98  +0.19      0.50       0.35  0.02     0.1%     0.1%  1.05
+taco_tensors_ha / scout             6.0  0.82  0.97  -0.25      0.14       0.42  0.17     8.6%    27.3%  1.63
+taco_tensors_ha / oss20             6.0  0.86  0.97  +0.06      0.19       0.61  0.29     8.8%    21.6%  1.22
+taco_tensors_ha / oss120            6.0  0.91  0.98  +0.29      0.19       0.62  0.34     0.0%     0.1%  0.92
+bcb_tensors_5r / oss20lo           16.0  0.67  0.97  +0.68      0.11       0.26  0.18     0.0%     0.1%  0.33
+bcb_tensors_5r / oss20md           12.0  0.70  0.97  +0.60      0.11       0.32  0.16     0.0%     0.1%  0.37
+bcb_tensors_5r / dsv4f              8.0  0.60  0.92  -0.06      0.10       0.34  0.09     0.0%     0.1%  0.87
+bcb_tensors_5r / oss120md           6.0  0.86  0.97  +0.71      0.12       0.31  0.21     0.0%     0.1%  0.34
+bcb_tensors_5r / oss120hi           3.0  0.81  0.93  +0.12      0.10       0.31  0.10     0.0%     0.1%  0.52
+swesmith_reason_tensor / oss20lo    1.0   nan   nan  +0.39     -0.02       0.39 -0.00     0.2%     nan%  1.88
+swesmith_reason_tensor / oss20md    1.0   nan   nan  +0.37     -0.02       0.48 -0.00     0.2%     nan%  2.29
+swesmith_reason_tensor / dsv4f      1.0   nan   nan  -0.55      0.05       0.44 -0.00     1.0%     nan%  1.66
+swesmith_reason_tensor / oss120md   1.0   nan   nan  +0.35      0.00       0.49 -0.00     0.2%     nan%  1.50
+swesmith_reason_tensor / oss120hi   1.0   nan   nan  +0.06      0.01       0.55 -0.00     0.2%     nan%  1.83

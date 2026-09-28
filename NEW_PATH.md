@@ -688,3 +688,22 @@ on LCB. Real heads sit on the synthetic curve on LCB x2, CodeContests and BCB gp
 capturing it is a cost-PREDICTION problem, and a cheap probe clears the bar on 1 of 7 pools." Next: stronger cost
 predictors (each route's OWN prefill -- TACO has oss20/oss120 activations; fine-tuned encoder) to move pools along
 the curve; a non-reasoning contrast (RouterBench activations exist); a pre-registered math pool.
+
+### 4.A.5 WHY is cost predictable on LCB and nowhere else? (2026-09-28; `analysis/cost_headroom/why_predictable.py`,
+`metadata_cost_head.py`, decompose_metadata.json)
+Target: log mean output tokens per problem, per route. Ruled out: (a) label noise -- the best achievable R2 given
+draw noise is 0.92-0.99 in every pool, CC included; (b) runaways -- ~0 capped draws except TACO's two small routes
+(9% of draws at the cap, 22-27% of problems straddling it: TACO's small routes are partly unpredictable by nature);
+(c) platform mixture -- platform explains 0% of LCB length.
+**The driver is a coarse, legible difficulty signal.** On LCB the easy/medium/hard tier alone explains 57-66% of log
+length (balanced 265/312/315); the 4B probe recovers the tier with CV R2 0.72; holding platform x tier fixed the
+head's R2 falls from 0.51-0.72 to 0.33-0.41 (dsv4f -0.08). A metadata-only cost head (tier + platform + statement
+length, NO probe) already gets 24.7% of LCB's 46% headroom; the probe adds the rest (34.4%).
+On CodeContests the Codeforces rating explains only 37-49% of log length, the probe reads the rating with R2 0.50, and
+even the TRUE rating as a feature captures ~1% (meta+probe 4.2%, n.s.). TACO: tier explains 10-31%, probe reads it
+at 0.35, metadata gives nothing.
+**Threshold, not a slope.** The capture curve (4.A.4) is convex: gains start near log-R2 ~0.5 (rho ~0.7) on the routes
+that matter. LCB's head sits at 0.51-0.72 and clears it; CC 0.18-0.43, TACO <= 0.29, BCB's key routes (dsv4f,
+oss120hi) <= 0.12 do not -- and CC's true rating (0.37-0.49) falls just short too. Mechanism to state in the paper:
+a routing decision flips only when the cost error is smaller than the utility margin between routes, so a weak
+cost signal reroutes about as often wrongly as rightly until it crosses that margin.
