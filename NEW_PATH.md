@@ -1017,3 +1017,13 @@ success predictions were misaligned there. Fixed (keyed by problem_id); re-run:
 - CC level redundancy: success predictions DO explain 0.47 of the true level (the "~0" was the bug); the real predictor captures
   0.52 of the level's part beyond the success head vs 0.61 for synthetic noise at equal R2 -> partial redundancy explains part
   of why it cashes in less.
+- **R2-Router read (2602.02823)**: jointly picks (LLM, per-query continuous output-length budget) and predicts quality vs budget;
+  enforces the budget with length-constrained PROMPT INSTRUCTIONS; needs its own R2-Bench (behaviour across budgets). Our caps
+  differed (hard max_tokens stop, simulated from ordinary uncapped runs, set by the cost predictor) -- moot, see below.
+- **Agentic STEP caps backfire** (`analysis/cost_headroom/agentic_step_caps.py`; nebius SWE-agent + Llama-3.1-70B, 3387 tasks, 74k
+  runs, exact simulation from per-step cumulative cost): per-task caps from the issue probe (R2 of mean log steps .32) cost
+  **-22.3% [-25.5, -19.7]** MORE than one global step cap at matched resolve rate; caps from the TRUE per-task mean -81.5%.
+  Mechanism: in agent runs long = mostly failing (loops); a global cap kills long runs everywhere, while per-task caps grant
+  hard tasks more budget that their (still mostly failing) long runs waste -- the better the length estimate, the worse.
+  The right cap is "how long a SUCCESSFUL run needs", which a global max_steps largely already captures.
+**Caps direction CLOSED** (one-shot: neutral; agentic: per-task worse than global). Coverage-guarantee and live checks dropped.

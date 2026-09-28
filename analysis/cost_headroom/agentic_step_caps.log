@@ -1,0 +1,4 @@
+3387 tasks, 74277 runs; out-of-fold R2 of per-task mean log steps 0.32; run-level sd around prediction 0.76 (around the true task mean 0.68); resolve rate 0.168
+no cap: mean cost proxy 1.21e+06, resolve 0.168
+   pertask  caps vs ONE global step cap: cost saved at matched resolve rate -22.3% [-25.5, -19.7]  (resolve band 6.3-16.8%)
+   oracle   caps vs ONE global step cap: cost saved at matched resolve rate -81.5% [-88.4, -74.6]  (resolve band 3.3-16.8%)
