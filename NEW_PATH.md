@@ -980,3 +980,13 @@ expensive tail). Differences carry comparable or more headroom (all of TACO's); 
   .51-.56 (single-pool FT .52-.57; frozen 4B .69-.76), CC .06-.14 (single ~0; frozen .34-.47), Omni .52-.57 (frozen ~.75),
   BCB .14-.48 (frozen .15-.71), TACO .04-.14 (frozen .31-.52). Sharing across pools helps CC only marginally; a trained
   small reader stays far below the frozen 4B everywhere. Closed.
+- **Entropy scalars** (prefill prompt NLL / next-token entropy / max logprob + squares, stacked on the probe;
+  `entropy_scalars.py`): routing LCB 35.6 -> 36.3%, Omni 27.4 -> 26.5, CC 2.0 -> 1.2, BCB -3.3 -> -2.8; between-route
+  differences R2 unchanged (LCB .44 -> .44, CC .08 -> .02). NULL.
+- **Per-model self-estimated budgets** (TALE-style; each route's model asked, at low effort, how many tokens it would need at
+  its own effort; `math_pool/self_budget.py`; 100 LCB problems, ~$0.1): self-estimates rank problems (Spearman .52-.77) but
+  worse than the probe (.88-.91); between-route DIFFERENCES Spearman **+0.12**; badly calibrated (gpt-oss-120b-high says
+  ~350 tokens, writes ~2540). Models do not know their own relative verbosity. NULL; no full run.
+**Summary of "predict the between-model differences":** prefix (hand-crafted / 4B-read), Thinking / Base / own-model
+prefills, fine-tuned readers (single / joint), entropy scalars, self-estimates -- none moves the between-route differences
+materially. The model-specific part of per-query cost looks unpredictable from anything available before generation.
