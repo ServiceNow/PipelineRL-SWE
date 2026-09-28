@@ -103,15 +103,16 @@ async def run(a):
                 done = {json.loads(l)["problem_id"] for l in open(path) if json.loads(l).get("finish_reason") != "error"}
             todo = [t for t in tasks if t["problem_id"] not in done]
 
+            fh = open(path, "a")                  # each row is written the moment it returns: a killed job loses nothing
+
             async def one(t):
                 r = await call(session, key, route, PROMPT.format(problem=t["problem"]), sem, a.max_tokens)
                 r.update(problem_id=t["problem_id"], dataset=ds, route_label=route, model=ROUTES[route][0], draw=d,
                          difficulty=t["difficulty"], resolved=grade(r["content"], t["answer"]) if r["content"] else False)
+                fh.write(json.dumps(r) + "\n"); fh.flush()
                 return r
             rows = await asyncio.gather(*[one(t) for t in todo])
-            with open(path, "a") as f:
-                for r in rows:
-                    f.write(json.dumps(r) + "\n")
+            fh.close()
             ok = [r for r in rows if r["finish_reason"] != "error"]
             print(f"{ds} {route} d{d}: {len(ok)}/{len(rows)} ok, acc {sum(r['resolved'] for r in ok)/max(len(ok),1):.2f}, "
                   f"mean out {sum(r['completion_tokens'] for r in ok)/max(len(ok),1):.0f} tok, "

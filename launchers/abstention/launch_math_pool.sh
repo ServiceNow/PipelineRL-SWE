@@ -17,7 +17,7 @@ cat > "${O}/run.sh" <<EOF
 set -uo pipefail
 export HF_HOME=/home/toolkit/.cache/huggingface HF_DATASETS_CACHE=/home/toolkit/.cache/huggingface/datasets HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1
 python pipelinerl/swe/scripts/math_pool/collect_math_pool.py --out-dir ${O} --pilot ${PILOT} --routes ${ROUTES} --datasets ${DATASETS} \
-  --concurrency 48 > ${O}/collect.log 2>&1
+  --concurrency ${CONCURRENCY:-256} > ${O}/collect.log 2>&1
 echo ALL DONE >> ${O}/collect.log
 EOF
 chmod +x "${O}/run.sh"
