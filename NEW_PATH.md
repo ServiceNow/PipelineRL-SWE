@@ -856,3 +856,5 @@ Full pools (the five gpt-oss/dsv4f routes, as Omni) only with sign-off; prefer o
 **AIME screen (2026-09-28 13:37 ET, before any full pool):** gpt-oss-20b-low on 931: acc 0.56, mean output 1896 tok, sd log
 length 0.58 (Omni 0.90). (b) problem number -> log length CV R2 0.14; (c) readability of the problem number 0.42;
 (a) probe CV log-output R2 on oss20lo **0.13** -> **PREDICTION: NO GAIN** (CI includes 0 or negative); headroom >= 15%.
+**OlympiadBench screen:** gpt-oss-20b-low on 674: acc 0.63, mean output 1371 tok, sd log length 0.73; no graded difficulty
+label; (a) probe CV log-output R2 **0.48** -> **no directional call** (between 0.35 and 0.50). Not a decisive test; AIME is.
