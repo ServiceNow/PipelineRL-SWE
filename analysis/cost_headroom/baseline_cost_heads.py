@@ -10,7 +10,8 @@ input/output prices (input exact). Writes <pool>/cost_preds_<method>.jsonl for d
              examples, topic keywords); sklearn HistGradientBoosting stands in for LightGBM.
   probe      OUR 4B prefill activations with the same simple ridge + post-processing (no calibration shrinkage,
              no target-space selection, no floor) -- the apples-to-apples version of our head.
-  ownprefill TRAIL / EGTP-style: each route's OWN prefill activations (TACO only: gpt-oss-20b / 120b readouts).
+  ownprefill TRAIL / EGTP-style: each route's OWN prefill activations (LCB: gpt-oss-20b / 120b readouts; dsv4f keeps the
+             scout's, no dsv4f activations exist).
 Usage: python baseline_cost_heads.py <pool> <scout_activations.npz> [--own route=path.npz,...]
 """
 import json, re, sys, numpy as np
