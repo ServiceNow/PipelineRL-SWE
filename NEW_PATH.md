@@ -755,3 +755,16 @@ deficit (capture ~ R2 - 0.2 in 4.A.4's curves) -- fix calibration in dollars bef
   .34-.47 -> .40-.54, TACO oss20/oss120 .36/.47 -> .42/.54); Base is far worse (CC .14-.21); gpt-oss-20b's own prefill
   no better than Instruct (CC .34-.41), nor is gpt-oss-120b's (CC .37-.44, gain 0.6%). Routing gain Instruct -> Thinking: LCB 35.6 -> 34.6, CC 2.0 -> 6.3, TACO 2.1 ->
   -1.2 -- all within noise. A reasoning-model probe is slightly better at predicting length, not enough to move pools.
+
+### 4.A.9 PRE-REGISTERED out-of-sample test: Omni-MATH-500 (rule committed 2026-09-28 02:45 ET, BEFORE any step-1 data)
+Pool: Omni-MATH-500, the five LCB/CC routes, draws 4/3/3/2/2 (pilot n=40: acc 47/65/69/55/67%). Step 1 (cheap): gpt-oss-20b-low
+x1 on all 500 + Qwen3-4B Instruct/Thinking prefills. Step 2 (~$17, pending sign-off): the full pool.
+**Rule (fixed now):** from step 1 compute (a) the probe's 5-fold CV log-output R2 on gpt-oss-20b-low (the head's R2 on
+the other routes was within ~0.1 of this one's on LCB/CC), (b) difficulty->length link (R2 of log length on the Omni
+difficulty rating), (c) probe readability (CV R2 of the rating from the prefill). Predict, for the full pool, the
+plain-ridge probe's gain vs the paper rule at matched accuracy (decompose.py, market prices):
+  - (a) >= 0.50  -> GAIN: point estimate >= 10% and the 95% CI excludes 0.
+  - (a) <= 0.35  -> NO GAIN: CI includes 0 (or the gain is negative).
+  - in between   -> no directional call; report as a test of the capture curve only.
+Also predicted regardless of (a): HEADROOM >= 15% (reasoning routes, 1.5k-18k output tokens, large length spread).
+Whichever probe (Instruct/Thinking) scores higher on (a) is the one evaluated -- decided on step-1 data, stated before step 2.
