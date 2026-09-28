@@ -1036,3 +1036,12 @@ success predictions were misaligned there. Fixed (keyed by problem_id); re-run:
 - **#2.2 Predicted onboarding loss:** loss concentrates in routes with a large MODEL-SPECIFIC share of cost variance
   (share .14-.22: losses 4-14 pt at k=50; share <= .07: 0-4 pt), exception LCB oss20md (share .04, loss 7.9 from the success
   side). => how much a model deviates from the shared difficulty predicts how cheaply it can be added.
+
+### 4.A.19 MMLU-Pro full pool: PRE-REGISTERED GAIN CONFIRMED (2026-09-28 18:40 ET)
+1000 problems (the screen's stratified sample), 5 routes, draws 4/3/3/2/2 (7 dsv4f draws of 14000 still hung, excluded), $~6.
+Accuracy 60.5 / 68.0 / 83.1 / 75.0 / 77.5%; mean output 373 / 1289 / 4346 / 888 / 3527 tokens. Instruct probe (the screen's):
+test log-output R2 .51 / .58 / .20 / .66 / .50. **Gain vs paper rule at matched accuracy 30.7% [16.3, 43.2]** (predicted >= 10%,
+CI > 0: YES); **headroom 65.1% [55.2, 71.2]** (predicted >= 15%: YES; largest of any pool). Deployable protocol (calibration-chosen,
+test once): cost ratio 0.55 / 0.39 / 0.52 / 0.58 at test accuracy 57-72% (accuracy diffs all n.s.), 0.91 [0.82, 0.99] at ~80%.
+=> 42-61% cheaper at matched accuracy. Pre-registered record: GAIN Omni (confirmed), MMLU-Pro (confirmed); GAIN pending APPS, SuperGPQA,
+K&K; NO GAIN pending AIME, BBEH.
