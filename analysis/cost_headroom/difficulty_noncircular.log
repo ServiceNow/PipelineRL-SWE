@@ -1,0 +1,7 @@
+per pool, mean over routes (5-fold CV R2). LINK = difficulty -> log length; LEGIBILITY = prefill -> difficulty
+pool                        cross-model: link  legib    split-draw: link  legib    external label: link  legib
+pool_v2_tensors_5rung               0.56    0.46              0.55    0.46                 0.61    0.72
+cc_tensors                          0.43    0.23              0.36    0.21                 0.43    0.51
+taco_tensors_ha                     0.08    0.32              0.12    0.33                 0.22    0.35
+bcb_tensors_5r                      0.10    0.09              0.10    0.09                  n/a     nan
+omni500_tensors                     0.44    0.47              0.42    0.47                 0.56    0.73

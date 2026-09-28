@@ -908,3 +908,18 @@ the 111 statements; leave-one-task-out) -- 111 tasks is small, treat as indicati
   predicted cost among the 7 open models 2.6% [-15.8, 15.1] vs the 25.7% headroom. NOT predictable here -- but heavily
   data-starved (~100 training tasks per fold; on CodeContests a quarter of the training data, ~87 problems, gave R2 .24).
   Agentic headroom is real; whether it is capturable needs >= several hundred tasks with repeated runs.
+
+### 4.A.15 Non-circular difficulty (reply to "is 4.A.10 circular?") -- `analysis/cost_headroom/difficulty_noncircular.py`
+4.A.10's "empirical difficulty" used solve rates from the SAME draws whose length it explained (partly circular; mitigated
+only by fail/solve length ratio ~1). Cross-fitted versions, mean over routes, 5-fold CV R2:
+| pool | link: other routes' solve rate -> length | link: even-draw solve rate -> odd-draw length | legibility (prefill -> that difficulty) | external label link / legibility |
+| LCB | 0.56 | 0.55 | 0.46 | 0.61 / 0.72 |
+| Omni | 0.44 | 0.42 | 0.47 | 0.56 / 0.73 |
+| CodeContests | 0.43 | 0.36 | 0.23 / 0.21 | 0.43 / 0.51 |
+| TACO | 0.08 | 0.12 | 0.32 | 0.22 / 0.35 |
+| BCB | 0.10 | 0.10 | 0.09 | n/a |
+Verdict survives: CodeContests = difficulty drives length (~0.4, like Omni) but experienced difficulty is half as legible
+(0.21-0.23 vs 0.46-0.47); TACO / BCB = length not difficulty-driven (~0.1). Residual caveat: cross-fitting removes the
+same-draw mechanical link but not a common cause of failure and length (operational difficulty = how often models fail);
+external labels agree in direction. The 4.A.10 "probe misses .12-.17 of difficulty on CC" used the circular measure --
+cite this table instead.
