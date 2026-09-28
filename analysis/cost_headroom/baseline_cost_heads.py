@@ -83,7 +83,7 @@ def main():
             y = np.log(np.maximum(outm[:, m], 1.0)); a = np.isfinite(outm[:, m]); trm = tr[a[tr]]
             sc = StandardScaler().fit(X[trm]); Xs = sc.transform(X)
             if meth == "mixllm":
-                models = [MLPRegressor((128,), alpha=1e-2, max_iter=500, early_stopping=True, random_state=0),
+                models = [MLPRegressor(hidden_layer_sizes=(128,), alpha=1e-2, max_iter=500, early_stopping=True, random_state=0),
                           RandomForestRegressor(300, min_samples_leaf=3, n_jobs=16, random_state=0),
                           KNeighborsRegressor(15, weights="distance")]
                 yh = np.mean([mdl.fit(Xs[trm], y[trm]).predict(Xs) for mdl in models], 0)
