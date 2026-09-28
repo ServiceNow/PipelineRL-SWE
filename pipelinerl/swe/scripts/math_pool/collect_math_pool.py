@@ -35,6 +35,9 @@ PROMPT = "Solve the following math problem. Reason step by step, then put your f
 
 def load(name):
     from datasets import load_dataset
+    if name in ("zebra", "kk", "supergpqa", "mmlupro", "bbeh"):       # own prompt + grader per task (reasoning_datasets.py)
+        from reasoning_datasets import load as rload
+        return rload(name)
     if name == "math500":
         d = load_dataset("HuggingFaceH4/MATH-500", split="test")
         return [{"problem_id": f"math500_{i}", "problem": r["problem"], "answer": r["answer"], "difficulty": float(r["level"]),
@@ -80,6 +83,17 @@ def grade(pred_text, gold):
         return bool(p) and bool(g) and bool(verify(g, p))
     except Exception:
         return False
+
+
+def _grade_task(t, r):
+    text = r["content"] if (r["content"] and ("boxed" in r["content"] or t.get("kind") in ("zebra", "kk"))) \
+        else (r["content"] + "\n" + r["reasoning"][-4000:])
+    if not (r["content"] or r["reasoning"]):
+        return False
+    if t.get("kind"):
+        from reasoning_datasets import grade as rgrade
+        return rgrade(t["kind"], text, t["answer"])
+    return grade(text, t["answer"])
 
 
 async def call(session, key, route, prompt, sem, max_tokens):
@@ -128,12 +142,11 @@ async def run(a):
             fh = open(path, "a")                  # each row is written the moment it returns: a killed job loses nothing
 
             async def one(t):
-                r = await call(session, key, route, PROMPT.format(problem=t["problem"]), sem, a.max_tokens)
+                r = await call(session, key, route, t.get("prompt") or PROMPT.format(problem=t["problem"]), sem, a.max_tokens)
                 r.update(problem_id=t["problem_id"], dataset=ds, route_label=route, model=ROUTES[route][0], draw=d,
                          difficulty=t["difficulty"],
                          # some providers leave the final answer on the reasoning channel: grade it there if content has no box
-                         resolved=grade(r["content"] if "boxed" in r["content"] else (r["content"] + "\n" + r["reasoning"][-4000:]),
-                                        t["answer"]) if (r["content"] or r["reasoning"]) else False)
+                         resolved=_grade_task(t, r))
                 fh.write(json.dumps(r) + "\n"); fh.flush()
                 return r
             rows = await asyncio.gather(*[one(t) for t in todo])

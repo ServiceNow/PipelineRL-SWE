@@ -862,3 +862,9 @@ label; (a) probe CV log-output R2 **0.48** -> **no directional call** (between 0
 market prices; analysis/costhead_ci_omni500_thinking.json): 60% target 0.70x [0.56,0.86] cost at acc -0.8 (n.s.);
 65% 0.73x [0.58,0.88] at -0.7 (n.s.); 70% 0.91x [0.79,1.04] with acc +2.7 [+1.1,+4.5]; 75% 1.00x with acc +2.1 [+0.5,+3.9];
 80-85% unreachable. => 27-30% cheaper at matched accuracy at 60-65%, same cost + 2-3pt accuracy at 70-75%.
+
+### 4.A.13 Six more screens (2026-09-28; rule of 4.A.9 unchanged, committed before screen data)
+ZebraLogic grid (1000; difficulty = houses x features), Knights & Knaves (700; 2-8 people), SuperGPQA (1000; easy/middle/hard),
+MMLU-Pro (1000; by subject), BIG-Bench Extra Hard (1000; by task), APPS stdin/stdout (1000; intro/interview/competition).
+Loaders + graders `math_pool/reasoning_datasets.py` (each grader: correct reference answers pass 100%, perturbed answers 0%).
+Step 1 = gpt-oss-20b-low x1 + Qwen3-4B Instruct prefill; decision variable (a) as in 4.A.9. No full pool without sign-off.
