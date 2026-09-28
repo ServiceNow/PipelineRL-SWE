@@ -1,0 +1,33 @@
+9435 runs, 17 participants, 111 tasks; runs with cost 8319
+/home/toolkit/PipelineRL-SWE/analysis/cost_headroom/agentic_swe_rebench.py:49: RuntimeWarning: Mean of empty slice
+  grand = np.nanmean(L); pm = np.nanmean(L, (1, 2)); tm = np.nanmean(L, (0, 2)); cell = np.nanmean(L, 2)
+/home/toolkit/PipelineRL-SWE/analysis/cost_headroom/agentic_swe_rebench.py:52: RuntimeWarning: Degrees of freedom <= 0 for slice.
+  v_run = np.nanmean(np.nanvar(L, 2))
+
+1. log-cost variance shares (approx.): participant 74%  task 15%  participant x task 6%  run-to-run 4%
+   => within a participant, the task (+ task x participant) share is what a per-query cost predictor could use
+
+2. per participant: resolve rate, mean $/run, per-task cost p90/p10, ICC of log cost across runs, mean steps
+   Qwen/Qwen3.5-35B-A3B   common_s resolve  17.1%  $0.998  p90/p10   4.5  ICC 0.69  steps 128.6
+   Qwen/Qwen3.6-27B       common_s resolve  31.2%  $1.052  p90/p10   6.1  ICC 0.78  steps  76.9
+   Qwen/Qwen3.6-35B-A3B   common_s resolve  24.7%  $0.272  p90/p10   6.4  ICC 0.77  steps  76.7
+   claude-code            agentic_ resolve  60.4%  $3.317  p90/p10   8.3  ICC 0.90  steps  47.2
+   claude-fable-5         common_s resolve  64.5%  $4.232  p90/p10   7.4  ICC 0.90  steps  51.6
+   claude-opus-5          common_s resolve  63.4%  $3.347  p90/p10   9.0  ICC 0.92  steps  64.7
+   claude-sonnet-5        common_s resolve  56.8%  $1.380  p90/p10   7.1  ICC 0.84  steps  73.8
+/home/toolkit/PipelineRL-SWE/analysis/cost_headroom/agentic_swe_rebench.py:61: RuntimeWarning: Mean of empty slice
+  m = np.nanmean(C[i], 1); ok = np.isfinite(m) & (m > 0)
+   codex                  agentic_ resolve  58.0%  (no cost data)
+   cursor                 agentic_ resolve  51.7%  (no cost data)
+   deepseek/deepseek-v4-pro common_s resolve  40.2%  $0.483  p90/p10   8.7  ICC 0.85  steps  71.7
+   gpt-5.6-luna           common_s resolve  43.6%  $0.022  p90/p10   2.7  ICC 0.77  steps  16.8
+   gpt-5.6-sol            common_s resolve  62.3%  $0.325  p90/p10   3.4  ICC 0.77  steps  18.4
+   junie                  agentic_ resolve  61.8%  $0.801  p90/p10   4.8  ICC 0.89  steps  72.4
+   minimax/minimax-m3     common_s resolve  47.2%  $0.955  p90/p10   6.3  ICC 0.79  steps 182.2
+   x-ai/grok-4.5          common_s resolve  63.8%  $1.010  p90/p10   5.8  ICC 0.86  steps  47.4
+   xiaomi/mimo-v2.5-pro   common_s resolve  46.5%  $0.106  p90/p10   5.4  ICC 0.84  steps  79.6
+   z-ai/glm-5.2           common_s resolve  62.9%  $0.948  p90/p10   7.7  ICC 0.84  steps  94.2
+
+routing pool (all standalone): Qwen/Qwen3.5-35B-A3B, Qwen/Qwen3.6-27B, Qwen/Qwen3.6-35B-A3B, claude-fable-5, claude-opus-5, claude-sonnet-5, deepseek/deepseek-v4-pro, gpt-5.6-luna, gpt-5.6-sol, minimax/minimax-m3, x-ai/grok-4.5, xiaomi/mimo-v2.5-pro, z-ai/glm-5.2; mean $/run range 0.022-4.232
+
+3. one-shot routing among 13 standalone models (cross-fitted on runs): HEADROOM of per-task cost knowledge vs each model's median cost = 8.5% [-5.0, 17.8] over accuracy 42-68%

@@ -1,0 +1,32 @@
+{
+ "parts": [
+  "Qwen/Qwen3.5-35B-A3B",
+  "Qwen/Qwen3.6-27B",
+  "Qwen/Qwen3.6-35B-A3B",
+  "claude-code",
+  "claude-fable-5",
+  "claude-opus-5",
+  "claude-sonnet-5",
+  "codex",
+  "cursor",
+  "deepseek/deepseek-v4-pro",
+  "gpt-5.6-luna",
+  "gpt-5.6-sol",
+  "junie",
+  "minimax/minimax-m3",
+  "x-ai/grok-4.5",
+  "xiaomi/mimo-v2.5-pro",
+  "z-ai/glm-5.2"
+ ],
+ "headroom": 0.08517287715593425,
+ "headroom_ci": [
+  -0.04978621635463004,
+  0.17833886670027785
+ ],
+ "shares": {
+  "participant": 0.7442852699886611,
+  "task": 0.15154285512657648,
+  "interaction": 0.06164079294214459,
+  "run": 0.04253108194261799
+ }
+}

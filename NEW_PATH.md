@@ -882,3 +882,20 @@ the top); SuperGPQA / MMLU-Pro outputs are short at low effort (309-343 tok) -- 
 Running tally of decisive pre-registered calls: GAIN Omni (CONFIRMED), K&K, SuperGPQA, MMLU-Pro; NO GAIN AIME, BBEH. APPS pending.
 | APPS (stdin/stdout) | 1000 | 0.59 | 798 | 0.87 | 0.34 (tier) | 0.61 | GAIN |
 Updated tally of decisive pre-registered calls: GAIN Omni (CONFIRMED), K&K, SuperGPQA, MMLU-Pro, APPS; NO GAIN AIME, BBEH.
+
+### 4.A.14 AGENTIC cost from public trajectories -- SWE-rebench July 2026 (2026-09-28; no API spend)
+`ibragim-bad/swe_rebench_07_2026_trajectories`: 111 SWE tasks x 17 participants (13 standalone models in one scaffold + Claude
+Code / Codex / Cursor / Junie) x 5 runs = 9435 runs with tokens, steps, resolved. Standalone runs priced from tokens at
+OpenRouter list prices incl. cache-read rates (`analysis/cost_headroom/agentic_swe_rebench.py`); Claude Code / Junie use
+their reported cost_usd; Codex / Cursor have no cost.
+- Log-cost variance: participant 74%, task 15%, participant x task 6%, run-to-run 4% -> ACROSS models agentic cost is
+  model-dominated (SWE-Router's "q-independent" assumption is roughly right in that sense).
+- WITHIN a model: per-task cost p90/p10 2.7-9.0x, ICC across runs 0.69-0.92 -> per-task agentic cost is a stable, in-principle
+  predictable property of the task.
+- Headroom of per-task cost knowledge, one-shot routing, cross-fitted (success + cost from runs 0-2, scored on runs 3-4):
+  all 13 standalone models (per-run price range ~190x): 8.5% [-5.0, 17.8] (n.s.); the 7 OPEN-WEIGHT models (range ~10x):
+  **25.7% [6.3, 40.6]** -- as large as the reasoning pools.
+**General statement: per-query cost knowledge pays when within-model cost variation is large RELATIVE TO the price gaps
+between the routed models.** Holds across one-shot reasoning (20-47%), non-reasoning chat (RouterBench 10.5%), and agentic
+SWE (open-weight 25.7% vs mixed 8.5%). Next (free): is agentic per-task cost PREDICTABLE from the task statement (4B prefill of
+the 111 statements; leave-one-task-out) -- 111 tasks is small, treat as indicative.
