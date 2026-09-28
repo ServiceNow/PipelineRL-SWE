@@ -1027,3 +1027,12 @@ success predictions were misaligned there. Fixed (keyed by problem_id); re-run:
   hard tasks more budget that their (still mostly failing) long runs waste -- the better the length estimate, the worse.
   The right cap is "how long a SUCCESSFUL run needs", which a global max_steps largely already captures.
 **Caps direction CLOSED** (one-shot: neutral; agentic: per-task worse than global). Coverage-guarantee and live checks dropped.
+- **#2.1 Full onboarding (cost + success) from k problems** (`analysis/cost_headroom/onboard_full.py`; success = logistic in the
+  shared difficulty = mean logit of the other routes' success predictions, 2 parameters; cost = level + offset): mean over
+  held-out routes, gain vs paper rule: LCB k=5 29.5% / k=50 32.1% (full heads 36.0%) vs naive median+base-rate from k -4.7% /
+  7.3%; Omni k=5 24.0% (full 28.7%) vs naive ~15%. Big win for expensive routes (LCB oss120hi 35.9% vs naive -50.9% at k=5);
+  WORSE than naive for the cheapest route (oss20lo LCB 25.3 vs 35.0, Omni 17.9 vs 30.2) -- its success does not track the
+  shared difficulty well enough for a 2-parameter fit.
+- **#2.2 Predicted onboarding loss:** loss concentrates in routes with a large MODEL-SPECIFIC share of cost variance
+  (share .14-.22: losses 4-14 pt at k=50; share <= .07: 0-4 pt), exception LCB oss20md (share .04, loss 7.9 from the success
+  side). => how much a model deviates from the shared difficulty predicts how cheaply it can be added.
