@@ -124,10 +124,13 @@ async def run(a):
         jobs = []
         for ds in a.datasets.split(","):
             tasks = load(ds)
+            if a.problem_ids:                                    # restrict to a given problem list (e.g. a test split)
+                keep = set(json.load(open(a.problem_ids))); tasks = [t for t in tasks if t["problem_id"] in keep]
             if a.pilot:
                 tasks = stratified(tasks, a.pilot)
             out = Path(a.out_dir) / ds; out.mkdir(parents=True, exist_ok=True)
-            (out / "problems.jsonl").write_text("".join(json.dumps({k: t[k] for k in ("problem_id", "difficulty", "subject", "answer")}
+            if not (out / "problems.jsonl").exists() or not a.problem_ids:
+                (out / "problems.jsonl").write_text("".join(json.dumps({k: t[k] for k in ("problem_id", "difficulty", "subject", "answer")}
                                                                    | {"problem_statement": t["problem"]}) + "\n" for t in tasks))
             for route, k in draws.items():
                 for d in range(k):
@@ -164,6 +167,7 @@ def main():
     ap.add_argument("--datasets", default="math500,omni500")
     ap.add_argument("--routes", default="oss20lo:1,oss20md:1,dsv4f:1,oss120md:1,oss120hi:1", help="label:draws,...")
     ap.add_argument("--pilot", type=int, default=0)
+    ap.add_argument("--problem-ids", default="", help="JSON list: collect only these problems")
     ap.add_argument("--api-key-file", default="/home/toolkit/.secrets/openrouter_api_key")
     ap.add_argument("--concurrency", type=int, default=48)
     ap.add_argument("--max-tokens", type=int, default=64000)
