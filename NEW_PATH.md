@@ -858,3 +858,7 @@ length 0.58 (Omni 0.90). (b) problem number -> log length CV R2 0.14; (c) readab
 (a) probe CV log-output R2 on oss20lo **0.13** -> **PREDICTION: NO GAIN** (CI includes 0 or negative); headroom >= 15%.
 **OlympiadBench screen:** gpt-oss-20b-low on 674: acc 0.63, mean output 1371 tok, sd log length 0.73; no graded difficulty
 label; (a) probe CV log-output R2 **0.48** -> **no directional call** (between 0.35 and 0.50). Not a decisive test; AIME is.
+**Omni-MATH, deployable protocol** (operating points chosen on calibration n=75, applied once to test n=150, Thinking probe,
+market prices; analysis/costhead_ci_omni500_thinking.json): 60% target 0.70x [0.56,0.86] cost at acc -0.8 (n.s.);
+65% 0.73x [0.58,0.88] at -0.7 (n.s.); 70% 0.91x [0.79,1.04] with acc +2.7 [+1.1,+4.5]; 75% 1.00x with acc +2.1 [+0.5,+3.9];
+80-85% unreachable. => 27-30% cheaper at matched accuracy at 60-65%, same cost + 2-3pt accuracy at 70-75%.
