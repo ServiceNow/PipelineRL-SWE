@@ -46,7 +46,7 @@ for SPEC in ${ROUTES}; do
     echo "python pipelinerl/swe/scripts/livecodebench/pool_activation_probe.py --phase extract \\"
     echo "  --model '${MODEL}' --route-label ${LABEL} \\"
     echo "  --prompts-file '${PROMPTS}' \\"
-    echo "  --activations '${BASE}/${LABEL}.npz' --max-len ${MAX_LEN}${SYSTEM_PROMPT_FILE:+ --system-prompt-file '${SYSTEM_PROMPT_FILE}'}"
+    echo "  --activations '${BASE}/${LABEL}.npz' --max-len ${MAX_LEN}${SYSTEM_PROMPT_FILE:+ --system-prompt-file '${SYSTEM_PROMPT_FILE}'}${USER_SUFFIX_FILE:+ --user-suffix-file '${USER_SUFFIX_FILE}'}"
   } > "${RUNNER}"
   chmod +x "${RUNNER}"
   if [[ "${SUBMIT}" == "1" ]]; then
