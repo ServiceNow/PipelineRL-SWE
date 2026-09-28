@@ -923,3 +923,10 @@ Verdict survives: CodeContests = difficulty drives length (~0.4, like Omni) but 
 same-draw mechanical link but not a common cause of failure and length (operational difficulty = how often models fail);
 external labels agree in direction. The 4.A.10 "probe misses .12-.17 of difficulty on CC" used the circular measure --
 cite this table instead.
+- **Agentic predictability at scale (nebius/SWE-agent-trajectories; SWE-agent + Llama-3.1-70B, 3387 tasks with >= 4 runs,
+  ~20 runs each; cost proxy = cumulative context + 4x output chars; `analysis/cost_headroom/nebius_predictability.py`)**:
+  single-run cost is mostly noise (ICC 0.29) but the per-task MEAN is reliable (split-half ceiling 0.91). Issue-text prefill
+  -> per-task mean log cost: 5-fold CV R2 **+0.29**; learning curve 100 / 300 / 1000 / 2710 tasks -> +0.18 / +0.21 / +0.27 / +0.32
+  (still rising). So agentic per-task cost IS moderately predictable from the issue and the SWE-rebench null (111 tasks)
+  was largely data; but ~0.3 is below the ~0.5 capture threshold seen on the one-shot pools. One dominant model -> no
+  routing headroom computable from this set.

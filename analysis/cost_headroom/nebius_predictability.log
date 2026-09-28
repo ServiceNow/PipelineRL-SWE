@@ -1,0 +1,6 @@
+swe-agent-llama-70b: 3387 tasks (>= 4 runs); per-task mean log-cost sd 0.75; reliability ceiling of the mean (split-half, Spearman-Brown) 0.91
+5-fold CV R2 of per-task mean log cost from the issue text: +0.29
+   learning curve: train on   100 tasks -> held-out R2 +0.18
+   learning curve: train on   300 tasks -> held-out R2 +0.21
+   learning curve: train on  1000 tasks -> held-out R2 +0.27
+   learning curve: train on  2710 tasks -> held-out R2 +0.32
