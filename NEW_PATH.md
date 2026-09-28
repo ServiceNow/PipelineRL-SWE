@@ -880,3 +880,5 @@ check built "correct" answers from those placeholders and passed trivially -- gr
 references. Not a routing pool unless graded solutions are found. Caveats: K&K oss20lo already 85% (ladder may be flat at
 the top); SuperGPQA / MMLU-Pro outputs are short at low effort (309-343 tok) -- headroom depends on the high-effort routes.
 Running tally of decisive pre-registered calls: GAIN Omni (CONFIRMED), K&K, SuperGPQA, MMLU-Pro; NO GAIN AIME, BBEH. APPS pending.
+| APPS (stdin/stdout) | 1000 | 0.59 | 798 | 0.87 | 0.34 (tier) | 0.61 | GAIN |
+Updated tally of decisive pre-registered calls: GAIN Omni (CONFIRMED), K&K, SuperGPQA, MMLU-Pro, APPS; NO GAIN AIME, BBEH.

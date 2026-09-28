@@ -7,7 +7,7 @@ tier = {json.loads(l)["problem_id"]: json.loads(l)["difficulty"] for l in open(R
 out = R / "math_pool" / "apps"; out.mkdir(parents=True, exist_ok=True); n = 0
 with open(out / "oss20lo_d0.jsonl", "w") as f:
     for part in ("train", "eval"):
-        p = R / "apps_pool" / f"oss20lo_{part}_d0.jsonl"
+        p = R / "apps_pool" / f"oss20lo_{part}.jsonl"
         for l in open(p):
             r = json.loads(l)
             if r.get("finish_reason") == "error":

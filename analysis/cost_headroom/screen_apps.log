@@ -1,0 +1,5 @@
+1000 problems; gpt-oss-20b-low accuracy 0.59; mean output 798 tok; sd log length 0.87
+(b) difficulty -> log length, CV R2: 0.34
+probe=instruct  (a) CV log-output R2 on oss20lo 0.61   (c) readability of the rating 0.53
+
+PRE-REGISTERED PREDICTION for the full pool: probe = instruct (a = 0.61) -> GAIN (>= 10%, CI excluding 0); headroom >= 15% regardless
