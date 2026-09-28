@@ -1,0 +1,18 @@
+
+   => within a participant, the task (+ task x participant) share is what a per-query cost predictor could use
+
+
+
+7215 standalone runs, 13 models, 111 tasks
+
+OWN run: log final cost from the run's first k steps (runs still going at step k only); mean over models
+   k= 3: R2 -0.02 (models 13, range -0.44..+0.54); share of runs still going 92%
+   k= 5: R2 +0.01 (models 13, range -0.36..+0.49); share of runs still going 84%
+   k=10: R2 -0.01 (models 10, range -0.29..+0.66); share of runs still going 77%
+   k=20: R2 +0.17 (models 10, range -0.10..+0.82); share of runs still going 66%
+
+CROSS-model: scout xiaomi/mimo-v2.5-pro runs k steps (run 0); predict each other model's log mean cost on the task
+   k= 3: R2 -0.08 (range -0.32..+0.10)
+   k= 5: R2 -0.44 (range -0.66..-0.21)
+   k=10: R2 -0.54 (range -0.62..-0.35)
+   k=20: R2 -0.14 (range -0.35..+0.07)
