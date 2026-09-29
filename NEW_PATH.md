@@ -1375,3 +1375,18 @@ By route: ours wins big on the valuable model (dsv4f +9..+31 pt everywhere), los
 exclude 0, robust to seed and bin count; on Omni (length ~ difficulty) it ties at its best bin count. The whole gap is on the pricing
 side. Onboarding: ours better on LCB and MMLU-Pro (CIs exclude 0), tie on Omni. Fairness to do: choose their K on calibration
 (Omni favours K=20); their own encoder (zr_encoder.py job running).
+
+### 4.A.34 ZeroRouter with its OWN encoder (fine-tuned DistilBERT + 11 linguistic features) (2026-09-29; `zr_encoder.py`, `zr_encoder_eval.py`)
+Their stage 2 as in the paper (distilbert-base-uncased, 40 epochs, lr 3e-5, batch 32, fusion trunk + residual difficulty head;
+features hand-computed; MSE onto the stage-1 targets; epoch chosen on held-out 10% of train), stage 1 on the 5 pool models, seed 0.
+Held-out-train R2 of the latent (log alpha, b): DistilBERT / 4B reader -- LCB .26 / .40 (D=1), .22 / .22 (D=5); Omni .23 / .03, .12 /
+.02; MMLU-Pro .03 / .00, .08 / .00. At pool size the fitted latent is barely readable from text by either reader (the targets are
+noisy estimates from 5 models' outcomes).
+Routing gain vs the paper rule, K = 5 / 10 / 20 (ours: LCB 36.0, Omni 22.7, MMLU-Pro 30.9):
+| pool | D | zr[their DistilBERT] | zr[4B reader] | their success (DistilBERT) + our cost |
+| LCB | 1 / 5 | 12.7 / 12.2 / 9.5; 3.4 / 11.3 / 7.6 | 9.8 / 9.1 / 9.0; 18.9 / 19.3 / 19.3 | 29.2; 26.9 |
+| Omni | 1 / 5 | 13.0 / 9.1 / 12.0; 5.3 / 0.8 / -10.9 | 13.8 / 20.1 / 20.0; 7.6 / 12.3 / 19.2 | 24.9; 23.5 |
+| MMLU-Pro | 1 / 5 | 8.4 / 7.1 / 8.2; 12.1 / 3.4 / 0.2 | 9.8 / 9.6 / 9.9; 21.6 / 8.0 / 2.3 | 33.3; 35.5 |
+=> With its own encoder ZeroRouter is at best 13% (LCB), 13% (Omni), 12% (MMLU-Pro) -- equal to or below the 4B-reader version
+(the Omni tie at K=20 in 4.A.33 disappears: 12.0%). Their success head + our cost head is again ~ours (27-36%). Conclusion unchanged
+and stronger: at deployment-pool size the method's pricing is the failure, and its own reader does not rescue it.
