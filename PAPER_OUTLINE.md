@@ -1,6 +1,6 @@
 # Paper outline: one prefill, a shared difficulty latent, and per-query cost in reasoning-model routing
 
-Status: draft outline, 2026-09-29. All numbers come from `NEW_PATH.md` §4.A.4–4.A.28 (section given in brackets).
+Status: draft outline, 2026-09-29. All numbers come from `NEW_PATH.md` §4.A.4–4.A.29 (section given in brackets).
 Target: a TMLR analysis paper, plus a 4-page workshop cut (at the end of this file).
 Track B (verification) enters only as one measurement subsection.
 
@@ -50,6 +50,7 @@ favours us but the CI touches 0. **Pending** means not yet run.
 | C10 | Onboarding: a new model's cost from 5 examples gives 96% of a trained head. Removing a strong model (deepseek-v4-flash; or gpt-oss-120b in a pool without deepseek) and re-adding it from ~10 examples restores most of the lost accuracy while still saving vs the reference; naive re-adding restores accuracy at a cost premium | [4.A.18 #2, #2.1, 4.A.21, 4.A.24] | Solid (offline, 3 pools × 2 pool variants) |
 | C11 | New families that are dominated by the pool are priced out correctly from ~10 examples (onboarding protects the router) | GLM / Nemotron / MiniMax on MMLU-Pro [4.A.19 #2.3] | Solid, but protective, not a gain |
 | C13 | Difficulty-only pricing (ZeroRouter-style bins, or cost read from the success head) matches a dedicated cost read where length is difficulty (LCB, Omni) and loses ~19 pt where it is not (MMLU-Pro) | [4.A.20, 4.A.26] | Solid on 3 pools; the MMLU-Pro case is one pool |
+| C14 | Under a per-query budget, per-query cost prediction buys +5–7.5 pt accuracy at a fixed budget in the middle band (constant rule needs up to 2.4–2.9× the budget there); averaged over budgets the advantage is similar to the average-cost regime | [4.A.29] | Solid for the hard cap on 3 pools; soft cap directional |
 | C12 | With no verifier and one submission, the prefill router beats single-submission cascades with a learned answer judge, and even a cascade with a PERFECT judge: a cascade pays for the cheap attempt on every problem, the prefill skips it | LCB [4.A.25] | Solid on LCB (4B judge, FrugalGPT-style 137M judge, perfect judge); other pools pending |
 
 ## 2. Section-by-section outline
@@ -169,6 +170,17 @@ Table 1: headroom [95% CI], market prices [4.A.4, 4.A.7, 4.A.9, 4.A.14, 4.A.19].
 - **Abstention adds nothing when a wrong answer costs nothing** [4.A.23]: letting the router skip problems saves
   0.1 / −7.0 (n.s.) / 0.0% on LCB / Omni / MMLU-Pro. The cheapest route costs ~0.008¢ and solves about half the
   problems, so skipping never pays. (Penalised-error settings, λ > 0, are out of scope.)
+- **Per-query budgets ("at most $X per request"; Table 3c)** [4.A.29]. Hard cap enforced with max_tokens (an overrun fails);
+  arms differ only in the length model (constant = each model's train distribution; ours = the probe's per-query shift +
+  empirical residuals):
+  - At a fixed budget in the band that matters, ours gains +5.7 pt (LCB, 0.20¢), +7.5 pt (Omni, 0.054¢) and +5.5 pt
+    (MMLU-Pro, 0.017¢) over the constant rule, CIs > 0.
+  - The constant rule needs up to 2.4–2.9× the budget there, but only 1.1–1.3× averaged over all budgets. That's
+    similar to the average-cost regime, not larger: at tight budgets everyone is forced to the cheapest model, and at loose
+    ones everything fits.
+  - Soft cap (no truncation), at a matched 10% violation rate: +2–5 pt, with smaller overshoots (directional, no CIs).
+  - Method note: a log-normal length model loses to constant on MMLU-Pro. Under a hard cap the tails matter, so use
+    empirical residuals.
 - **Vs single-submission cascades (Table 3b; LCB)** [4.A.25]. No verifier, one submission, each tier call is one real
   draw; cost saved vs our router at matched accuracy (negative = more expensive than the router):
 

@@ -1264,3 +1264,32 @@ Test R2 of log mean output tokens per route (oss20lo / oss20md / dsv4f / oss120m
 is to get it wrong). On LCB and Omni the two coincide (hard problems need more steps), so difficulty-only pricing suffices; on
 MMLU-Pro they come apart (easy-but-laborious engineering calculations, short-but-failed recall), and the prefill reads work
 required directly.
+
+### 4.A.29 Per-query BUDGET ("spend at most X on this query") -- hard and soft caps (2026-09-29; `budget_cap.py`)
+One call per query, market prices, exact replay from stored draws, same success head for every arm; budget X swept over 24
+values from ~an oss20lo call to ~an oss120hi call. Arms differ only in the length model: median (paper rule: fits iff median
+train length <= cap), constant (each model's TRAIN length distribution), ours (probe's per-query shift + the EMPIRICAL train
+residual distribution), oracle (the problem's own draws). If nothing is predicted to fit, every arm calls the model with the
+most room (a fix: without it the median rule made no call at tight budgets and looked absurdly bad).
+**HARD cap** (max_tokens enforces X; an overrun is cut off and fails). Accuracy gain of ours over constant, paired 95% CI:
+- LCB: +1.9 to +5.7 pt across 0.007-0.27c (all CIs > 0), e.g. +5.7 [+3.7, +7.8] at 0.20c (74.9 vs 69.3%); 0 at the extremes.
+- Omni: +1.7 to +7.5 pt across 0.006-0.054c, e.g. +7.5 [+3.9, +11.2] at 0.054c; +1.5-2.7 above (CIs mostly > 0).
+- MMLU-Pro: +2.4 to +5.5 pt across 0.01-0.046c, e.g. +5.5 [+2.2, +8.6] at 0.017c; ~0 above.
+Budget the baseline needs for the same accuracy, relative to ours (geo-mean over the whole accuracy range; peak in the middle):
+| | LCB | Omni | MMLU-Pro |
+| constant distribution | 1.29x (peak 2.35x) | 1.33x (peak 2.86x) | 1.10x (peak 1.51x) |
+| median rule | 1.44x (peak 2.9x) | 1.07x (peak 2.65x) | 1.07x (peak 1.95x) |
+| (average-cost regime, for comparison: paper rule / ours at matched accuracy) | 1.55x | 1.28x | 1.44x |
+- A LOG-NORMAL length model around the probe (instead of the empirical residuals) made MMLU-Pro WORSE than constant (-2 to -3.6
+  pt at 0.08-0.21c): the tails matter under a hard cap. Use empirical residuals.
+- Oracle length gives a further +2-4 pt (LCB), +1-6 (Omni), +4-11 (MMLU-Pro) in the middle band: prediction, not headroom, limits.
+**SOFT cap** (not enforced; violation = realised cost > X; each arm's safety margin swept; accuracy at a MATCHED violation rate,
+no CIs -- directional): at 10% violations, ours vs paper rule: LCB +3.2 / +5.3 / +4.3 pt at 0.03 / 0.08 / 0.20c with half
+the mean overshoot at 0.03c (10% vs 20% of X); Omni +1.8 / +2.8 / +3.5 at 0.04 / 0.10 / 0.25c; MMLU-Pro +4.6 / +3.1 / -0.9 at
+0.013 / 0.028 / 0.06c; at loose budgets all arms tie.
+=> Verdict on "does a per-query cap make cost prediction matter MORE": LOCALLY yes -- in the middle band, where the strong
+model's length straddles the cap, the constant rule needs up to 2.4-2.9x the budget and ours gains +5-7.5 pt accuracy at a
+fixed budget. OVERALL no -- averaged across budgets the advantage (1.1-1.3x) is similar to or smaller than the average-cost
+regime (1.3-1.55x), because at tight budgets every arm is forced to the cheapest model and at loose budgets every model fits.
+Paper framing: "under a per-request budget (an SLA), per-query cost prediction buys +5-7 points of accuracy in the budget band
+that matters".
