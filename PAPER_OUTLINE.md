@@ -1,6 +1,6 @@
 # Paper outline: one prefill, a shared difficulty latent, and per-query cost in reasoning-model routing
 
-Status: draft outline, 2026-09-29. All numbers come from `NEW_PATH.md` §4.A.4–4.A.26 (section given in brackets).
+Status: draft outline, 2026-09-29. All numbers come from `NEW_PATH.md` §4.A.4–4.A.27 (section given in brackets).
 Target: a TMLR analysis paper, plus a 4-page workshop cut (at the end of this file).
 Track B (verification) enters only as one measurement subsection.
 
@@ -50,7 +50,7 @@ favours us but the CI touches 0. **Pending** means not yet run.
 | C10 | Onboarding: a new model's cost from 5 examples gives 96% of a trained head. Removing a strong model (deepseek-v4-flash; or gpt-oss-120b in a pool without deepseek) and re-adding it from ~10 examples restores most of the lost accuracy while still saving vs the reference; naive re-adding restores accuracy at a cost premium | [4.A.18 #2, #2.1, 4.A.21, 4.A.24] | Solid (offline, 3 pools × 2 pool variants) |
 | C11 | New families that are dominated by the pool are priced out correctly from ~10 examples (onboarding protects the router) | GLM / Nemotron / MiniMax on MMLU-Pro [4.A.19 #2.3] | Solid, but protective, not a gain |
 | C13 | Difficulty-only pricing (ZeroRouter-style bins, or cost read from the success head) matches a dedicated cost read where length is difficulty (LCB, Omni) and loses ~19 pt where it is not (MMLU-Pro) | [4.A.20, 4.A.26] | Solid on 3 pools; the MMLU-Pro case is one pool |
-| C12 | With no verifier and one submission, the prefill router beats single-submission cascades with a learned answer judge, and even a cascade with a PERFECT judge: a cascade pays for the cheap attempt on every problem, the prefill skips it | LCB [4.A.25] | Solid on LCB for the 4B judge and the perfect judge; FrugalGPT-style 137M judge pending; other pools pending |
+| C12 | With no verifier and one submission, the prefill router beats single-submission cascades with a learned answer judge, and even a cascade with a PERFECT judge: a cascade pays for the cheap attempt on every problem, the prefill skips it | LCB [4.A.25] | Solid on LCB (4B judge, FrugalGPT-style 137M judge, perfect judge); other pools pending |
 
 ## 2. Section-by-section outline
 
@@ -178,8 +178,11 @@ Table 1: headroom [95% CI], market prices [4.A.4, 4.A.7, 4.A.9, 4.A.14, 4.A.19].
   | Cascade, 4B judge (FrugalGPT-style thresholds; judge charged uncached / cached) | −48.9% / −47.1% |
   | Hybrid: router picks the entry tier, 4B judge escalates | +0.7% [0.0, 5.5] |
   | Cascade with a PERFECT judge (ceiling) | −18.6% [−39, −1] |
-  | Cascade, fine-tuned 137M judge (FrugalGPT scorer in the code setting) | pending |
+  | Cascade, fine-tuned 137M judge (FrugalGPT scorer in the code setting, one per tier) | −25.1% [−45.4, −5.2] |
+  | Hybrid with the 137M judge | +2.1% [0.4, 8.6] |
 
+  - The frozen 4B probe beats the fine-tuned 137M on AUC on every tier (.91 vs .87 on cheap code, .84–.86 vs .76–.80
+    on strong code) with no gradient training [4.A.27].
   - The 4B judge is a frozen probe on "problem + code + Is this solution correct?". Test AUC .91 on gpt-oss-20b code
     (within-problem .80) but .83–.86 on strong-model code (within-problem .57–.66). It costs ~16% of a gpt-oss-20b-low
     call uncached, ~7% cached.
@@ -349,7 +352,7 @@ credited for the shared-latent framing. CARROT's marginal gain on chat benchmark
 - Everything is offline replay on stored draws; there are no live deployment numbers.
 - Market prices change. The principle (C2) is price-relative, which helps.
 - Agentic predictability is below threshold. The agentic headroom exists, but it is not captured.
-- The cascade comparison (C12) is LCB only so far, and the FrugalGPT-style 137M judge is still pending.
+- The cascade comparison (C12) is LCB only so far.
 - Onboarding pools share a model family (gpt-oss); the only other families tried were dominated.
 - The shared-latent framing is not new (ZeroRouter); our novelty is measurement, mechanism and the cheap regime.
 

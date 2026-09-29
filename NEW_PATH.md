@@ -1226,3 +1226,16 @@ DistilBERT version). Gain vs the paper rule; ours minus it, paired bootstrap:
 | MMLU-Pro | 30.7% | 10.9% (+19.6 [+7.8, +32.7]) | 13.3% (+19.1 [+7.6, +31.6]) | 9.2% (+19.4 [+8.5, +30.3]) |
 => Difficulty-bin pricing ties us where length is difficulty (LCB, Omni) and loses ~19 pt where it is not (MMLU-Pro) -- the
 same pattern as cost-from-success. This is our sharpest differentiator from ZeroRouter.
+
+### 4.A.27 FrugalGPT-style 137M judge: result (2026-09-29 03:30 ET; `finetune_judge_reader.py`, `judge_cascade.py`)
+Per-tier full fine-tune of jina-code 137M (8k context, problem + code -> correct?), epoch chosen on calibration log-loss.
+Test AUC 137M vs frozen 4B probe (within-problem in brackets): oss20lo .867 vs .909 (.751 vs .797); oss20md .876 vs .914
+(.791 vs .820); dsv4f .795 vs .834 (.683 vs .634); oss120md .774 vs .844 (.471 vs .567); oss120hi .762 vs .857 (.419 vs .661).
+=> The frozen 4B probe is the better judge on every tier overall, with zero gradient training (within-problem: better except dsv4f).
+Cascade replay (lam = 0; cost saved vs the one-shot router at matched accuracy; 137M judge charged 0):
+| cascade[137M] (FrugalGPT-style) | cascade[4B] | cascade[PERFECT judge] | hybrid[137M] | hybrid[4B] |
+| -25.1% [-45.4, -5.2] | -48.9% [-75.9, -29.0] | -18.6% [-39.0, -1.1] | +2.1% [+0.4, +8.6] | +0.7% [0.0, +5.5] |
+=> The prefill router beats the FrugalGPT-style cascade by 25% at matched accuracy, and every cascade including the
+perfect-judge one. As an escalation add-on to the router, a judge buys at most ~2%. The 137M cascade beats the 4B cascade
+despite the lower AUC (it is free; the thresholds landed better) -- not a paired comparison, CIs overlap; not a claim.
+LCB only. C12 now: Solid on LCB.
