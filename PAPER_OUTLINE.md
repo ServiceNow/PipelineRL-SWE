@@ -82,6 +82,8 @@ favours us but the CI touches 0. **Pending** means not yet run.
   - Level(x) = mean over routes of the predicted log length.
   - Difficulty(x) = mean over routes of the success logit.
   - Both are linear reads of the same activations.
+- **No abstention in any one-shot result:** every problem gets exactly one call; the frontier over V trades cheap routes
+  for accurate ones. The verifier-regime comparisons (§7, Track B) are the only places where a policy may stop or abstain.
 - **Reference rule:** input + median train output (arXiv 2603.20895).
   - Headroom = oracle per-problem cost vs the reference, at matched accuracy.
   - Gain = learned vs the reference.

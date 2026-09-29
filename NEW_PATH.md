@@ -1113,3 +1113,12 @@ the cascade; per-route information (0.24) is needed -- the model-specific part, 
 (5) The cascade's first cheap draw is itself a cheap noisy measurement of the latent -- the reason it is hard to beat.
 Caveat: oracle quantities use the problem's own draws (leaky ceilings); synthetic arms add noise to that leaky latent.
 Legacy prices give the same picture (analysis/dist_bellman/shortcut_lcb_legacy.json).
+Follow-up (same day): with a perfect SHARED latent the route order by c/q equals the global order on 85% of test problems
+(first call oss20lo on 87%, dsv4f 13%); with perfect PER-ROUTE info on only 47%. With a free verifier, the optimal policy
+for known q orders routes by c/q, and a one-dimensional latent that shifts every route's logit barely changes that order.
+So the optimal policy is ~ a fixed-order cascade plus a per-problem STOPPING rule, and the latent's 40% comes from the
+stopping rule (how many draws, how far up the ladder, when to quit), not from reordering. Only 3% of test problems are
+unsolved by every draw, so "hopeless" means "not worth the price at this V", not "unsolvable". Crossings exist (dsv4f
+solves >= 1 draw on 43% of the problems where oss120hi solved none), and exploiting them needs model-specific information.
+Abstention: all ONE-SHOT results (4.A.4-4.A.21, the outline's main claims) have NO abstain option -- every problem gets exactly
+one call. The verifier-regime policies (Bellman, index, 4.A.2/4.A.22) may stop at any point, including before the first call.
