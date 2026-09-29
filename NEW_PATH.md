@@ -1076,3 +1076,16 @@ ours minus baseline, paired bootstrap:
 (log-output R2: MixLLM-style Omni .04-.32 / MMLU-Pro ~.02; GBM .22-.29 / -.19..+.16; ours .70-.79 / .20-.66.)
 **Where we win, definitively:** vs the paper rule on LCB, Omni, MMLU-Pro; vs the literature predictors significantly on LCB and
 MMLU-Pro, directionally on Omni (+9 / +15 pt, CIs touch 0); vs cost-from-success only on MMLU-Pro (LCB, Omni: tie).
+
+### 4.A.21 Remove a good model, then re-add it from k examples (2026-09-29; `onboard_full.py`, "without" arm)
+Reference = the FULL 5-route pool's paper rule (fixed). "Without" = route made unavailable; onboard = cost (level + offset)
+AND success (logistic in the shared difficulty) from k examples; naive = median cost + base rate from k; 20 draws of k.
+| pool | full heads | WITHOUT dsv4f | re-added onboard k=5 / 10 / 50 | re-added naive k=5 / 10 / 50 |
+| LCB | 36.0% | 4.1% | 23.2 / 25.0 / 28.8% | -16.3 / -19.3 / -22.0% |
+| Omni | 28.7% | -25.0% | 18.9 / 19.1 / 23.5% | n/a / -14.9 / -11.6% |
+| MMLU-Pro | 30.9% | -22.1% | 16.6 / 29.0 / 29.9% | -16.0 / -16.1 / -13.8% |
+Other routes removed (LCB / Omni / MMLU-Pro): oss20lo 24.5 / 5.2 / 21.1; oss20md 30.0 / 35.2 / 35.7 (removing it HELPS on
+Omni / MMLU-Pro -- its heads mislead the router); oss120md, oss120hi ~no change (redundant with each other).
+=> Adding a genuinely useful model back from 5-10 examples recovers most of its value (LCB 4 -> 23-25 of 36; Omni -25 -> 19 of
+29; MMLU-Pro -22 -> 29 of 31 at k=10); adding it naively is WORSE than leaving it out. dsv4f is the hardest route to onboard
+(largest model-specific cost share, .21-.43), so this is a pessimistic case. See PAPER_OUTLINE.md for how this enters the paper.

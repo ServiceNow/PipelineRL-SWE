@@ -50,6 +50,10 @@ def gain(Pm, C):
 
 
 full = gain(P, LC); rng = np.random.default_rng(0); out = {}
+without = {}
+for h in range(M):                                    # the pool WITHOUT model h at all (h made unavailable)
+    Pw = P.copy(); Cw = LC.copy(); Pw[:, h] = 0.0; Cw[:, h] = 1e9
+    without[S[h]] = gain(Pw, Cw)
 L = np.log(np.maximum(outm, 1)); lvl_true = np.nanmean(L, 1); dd = L - lvl_true[:, None]
 for h in range(M):
     lvl = np.nanmean(np.delete(MU, h, 1), 1); dbar = np.nanmean(np.delete(LOGIT, h, 1), 1)
@@ -71,10 +75,10 @@ for h in range(M):
             Cn[:, h] = inp[:, h] * pin[h] + np.nanmedian(outm[kk, h]) * pout[h]; g_nv.append(gain(Pn, Cn))
         out[(S[h], k)] = (np.mean(g_on), np.mean(g_nv))
     out[(S[h], "spec_share")] = float(np.nanvar(dd[:, h]) / (np.nanvar(lvl_true) + np.nanvar(dd[:, h])))
-print(f"{name}: all routes on full heads {full*100:.1f}%.  onboard (cost+success) / naive_k, per held-out route:")
+print(f"{name}: all routes on full heads {full*100:.1f}%.  per held-out route: WITHOUT it | onboard (cost+success) / naive_k")
 for h in S:
-    print(f"   {h:<9}" + "".join(f"  k={k}: {out[(h,k)][0]*100:5.1f}% / {out[(h,k)][1]*100:5.1f}%" for k in (5, 10, 20, 50))
-          + f"   model-specific cost-variance share {out[(h,'spec_share')]:.2f}")
+    print(f"   {h:<9} without {without[h]*100:5.1f}% |" + "".join(f"  k={k}: {out[(h,k)][0]*100:5.1f}% / {out[(h,k)][1]*100:5.1f}%" for k in (5, 10, 50))
+          + f"   (full {full*100:.1f}%)")
 mean = lambda k, j: np.mean([out[(h, k)][j] for h in S])
 print("   mean     " + "".join(f"  k={k}: {mean(k,0)*100:5.1f}% / {mean(k,1)*100:5.1f}%" for k in (5, 10, 20, 50)))
-json.dump({f"{a}|{b}": v for (a, b), v in out.items()} | {"full": full}, open(f"analysis/cost_headroom/onboard_full_{name}.json", "w"), indent=1)
+json.dump({f"{a}|{b}": v for (a, b), v in out.items()} | {"full": full} | {f"without|{k}": v for k, v in without.items()}, open(f"analysis/cost_headroom/onboard_full_{name}.json", "w"), indent=1)
