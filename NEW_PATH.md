@@ -1144,3 +1144,41 @@ cost pays MORE with abstention and a larger error penalty (LCB 24 -> 30 -> 42%, 
 (3) The remaining headroom grows with lam (59-85% at lam >= 1): once wrong answers cost, knowing WHO will get it right
 (the success head) is the bottleneck, not cost. Caveats: test-selected hulls (like decompose.py), not the deployable
 protocol; lam is a chosen utility; Omni test n=150 (wide CIs); some lam=3 cells undefined (the always-answer arm never scores > 0).
+
+### 4.A.24 Onboarding without deepseek: remove gpt-oss-120b, add it back (2026-09-29; `onboard_full.py`, DROP=dsv4f, HOLDGROUPS)
+Pools with dsv4f removed entirely (4 routes: oss20lo/md, oss120md/hi); cost heads as 4.A.18 (LCB probe, Omni Instruct probe,
+MMLU-Pro Instruct probe). The strongest remaining MODEL, gpt-oss-120b (BOTH efforts), is held out and re-added from the same k
+labelled problems. Gain vs the 4-route paper rule at matched accuracy, and the frontier's MAX reachable test accuracy:
+| pool | full heads | WITHOUT gpt-oss-120b | re-added onboard k=10 / 50 | re-added naive k=10 / 50 |
+| LCB | 21.2% @ max 88.2 | max 67.0 (-21 pt) | 8.2% @ 86.7 / 12.2% @ 88.6 | -45.1% @ 86.0 / -44.4% @ 87.9 |
+| Omni | 18.9% @ 69.4 | max 62.7 (-7 pt) | 10.5% @ 66.0 / 11.6% @ 66.1 | -7.8% @ 64.5 / -6.3% @ 64.9 |
+| MMLU-Pro | 13.3% @ 73.4 | max 62.4 (-11 pt) | 15.7% @ 72.0 / 17.4% @ 72.6 | -20.2% @ 71.5 / -20.7% @ 71.8 |
+=> Without gpt-oss-120b the router loses 7-21 pt of reachable accuracy. Re-adding it from 10 labelled problems restores most of
+that accuracy while still saving 8-16% vs the paper rule; re-adding it naively restores similar accuracy but costs 8-45% MORE
+than the paper rule. Onboarding recovers 40-100%+ of the full heads' saving (LCB 8.2/21.2 at k=10, 12.2 at k=50; MMLU-Pro
+above full). Without dsv4f the pools are shallower (full-head gains 13-21% vs 29-36% with it).
+**Protocol caveat (applies to 4.A.21 too):** a "without" arm's gain is measured only over the accuracies it can still reach,
+so removing a strong model can LOOK better than the full pool (e.g. LCB without gpt-oss-120b 24.1% -- but only up to 67%).
+Always read "without" together with max reachable accuracy.
+**CORRECTION to 4.A.21:** max test accuracy full / without dsv4f / naive k=10 / onboard k=10: LCB 89.3 / 88.2 / 88.6 / 88.2;
+Omni 74.3 / 69.4 / 73.9 / 73.6; MMLU-Pro 82.1 / 73.4 / 80.9 / 80.7. On LCB the band is ~unchanged, so "naive re-adding is worse
+than leaving dsv4f out" (-19.3% vs 4.1%) holds there; on Omni and MMLU-Pro the "without" gains cover a truncated band, so that
+sentence does NOT hold as stated. Correct general statement: naive re-adding restores accuracy at a 14-19% cost premium over
+the paper rule; onboarding restores it while saving 16-29%.
+
+### 4.A.25 No-verifier single-submission CASCADE with a learned judge vs the prefill router (2026-09-29; `judge_cascade.py`)
+LCB, one submission, no test feedback; each tier call = one stored draw (3 orderings); market prices; cascades over <= 3 tiers
+cheapest-first with per-tier judge thresholds (FrugalGPT-style); hybrid = router picks the entry tier (same 60-point V grid),
+the judge escalates from there. 4B judge = frozen Qwen3-4B prefill probe on problem + code + "Is this solution correct?"
+(40,070 attempts prefilled in the Sep 24 no-verifier line), charged at gpt-oss-20b input price: 0.00134c uncached, 0.00055c
+cached (oss20lo call 0.0081c; ~16% / ~7%). Test AUC of the 4B judge: oss20lo .909 (within-problem .797), oss20md .914 (.820),
+dsv4f .834 (.634), oss120md .844 (.567), oss120hi .857 (.661) vs the problem-only prefill prior .81-.82.
+Cost saved vs the one-shot router at matched accuracy (lam = 0, decompose.py protocol, test hulls -- generous to the cascades,
+~1000 plans vs 60 V values):
+| paper rule | cascade[4B] | cascade[4B cached] | hybrid[4B] | cascade[PERFECT judge] |
+| -64.4% [-89, -41] | -48.9% [-76, -29] | -47.1% [-74, -27] | +0.7% [0.0, 5.5] | -18.6% [-39, -1] |
+=> The prefill router beats every single-submission cascade here, INCLUDING one with a perfect judge: a cascade pays the cheap
+attempt on every problem, the prefill shortcut skips it (the "jump to the right tier" value, realised). The 4B judge adds
+nothing on top of the router (hybrid +0.7%). (lam > 0 dropped as out of scope: a perfect judge would win 46-70% there, the 4B
+judge loses badly -- its weakness is strong-model code.) Pending: the FrugalGPT-style per-tier fine-tuned 137M scorer
+(finetune_judge_reader.py; first job OOM'd, relaunched 2026-09-29 07:00 UTC).

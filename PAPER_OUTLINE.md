@@ -1,6 +1,6 @@
 # Paper outline: one prefill, a shared difficulty latent, and per-query cost in reasoning-model routing
 
-Status: draft outline, 2026-09-29. All numbers come from `NEW_PATH.md` §4.A.4–4.A.21 (section given in brackets).
+Status: draft outline, 2026-09-29. All numbers come from `NEW_PATH.md` §4.A.4–4.A.25 (section given in brackets).
 Target: a TMLR analysis paper, plus a 4-page workshop cut (at the end of this file).
 Track B (verification) enters only as one measurement subsection.
 
@@ -41,8 +41,9 @@ favours us but the CI touches 0. **Pending** means not yet run.
 | C7 | Length is not just difficulty on MMLU-Pro: a dedicated cost read adds +21.5 pt over cost-from-success | [4.A.20] | Solid on one pool |
 | C8 | The model-specific part of cost resists every pre-generation predictor tried | ~12 nulls [4.A.11, 4.A.16, 4.A.17] | Solid as a negative |
 | C9 | Higher cost-prediction R² does not imply better routing | LCB prefix: R² .70–.86 but gain 34→26% [4.A.15] | Solid |
-| C10 | Onboarding: a new model's cost from 5 examples gives 96% of a trained head; cost + success from 5–10 examples recovers most of a removed model's value; naive onboarding is worse than leaving the model out | [4.A.18 #2, #2.1, 4.A.21] | Solid (offline, 3 pools) |
+| C10 | Onboarding: a new model's cost from 5 examples gives 96% of a trained head. Removing a strong model (deepseek-v4-flash; or gpt-oss-120b in a pool without deepseek) and re-adding it from ~10 examples restores most of the lost accuracy while still saving vs the reference; naive re-adding restores accuracy at a cost premium | [4.A.18 #2, #2.1, 4.A.21, 4.A.24] | Solid (offline, 3 pools × 2 pool variants) |
 | C11 | New families that are dominated by the pool are priced out correctly from ~10 examples (onboarding protects the router) | GLM / Nemotron / MiniMax on MMLU-Pro [4.A.19 #2.3] | Solid, but protective, not a gain |
+| C12 | With no verifier and one submission, the prefill router beats single-submission cascades with a learned answer judge, and even a cascade with a PERFECT judge: a cascade pays for the cheap attempt on every problem, the prefill skips it | LCB [4.A.25] | Solid on LCB for the 4B judge and the perfect judge; FrugalGPT-style 137M judge pending; other pools pending |
 
 ## 2. Section-by-section outline
 
@@ -62,7 +63,9 @@ favours us but the CI touches 0. **Pending** means not yet run.
   3. An account of why it works (legible difficulty drives length) and where it cannot: the model-specific remainder is
      unpredictable, and R² is not routing value.
   4. Onboarding a new model against the latent from ~5–10 examples.
-  5. Scope results: agentic step caps backfire; cross-model verification as a measurement.
+  5. The prefill "shortcut" vs cascades: with one submission and no verifier, the router beats FrugalGPT-style judge
+     cascades, even one with a perfect judge (C12).
+  6. Scope results: agentic step caps backfire; cross-model verification as a measurement.
 
 ### §2 Setting and protocol
 - **Pools (one-shot):**
@@ -154,6 +157,27 @@ Table 1: headroom [95% CI], market prices [4.A.4, 4.A.7, 4.A.9, 4.A.14, 4.A.19].
 - **RouterBench (their benchmark):** probe 8.5% vs MixLLM-style 8.1% vs GBM 7.0% of 10.5%. We're at least as good,
   but there's little headroom to separate predictors.
 
+- **Abstention adds nothing when a wrong answer costs nothing** [4.A.23]: letting the router skip problems saves
+  0.1 / −7.0 (n.s.) / 0.0% on LCB / Omni / MMLU-Pro. The cheapest route costs ~0.008¢ and solves about half the
+  problems, so skipping never pays. (Penalised-error settings, λ > 0, are out of scope.)
+- **Vs single-submission cascades (Table 3b; LCB)** [4.A.25]. No verifier, one submission, each tier call is one real
+  draw; cost saved vs our router at matched accuracy (negative = more expensive than the router):
+
+  | Arm | Cost vs our router |
+  |---|---|
+  | Paper rule | −64.4% [−89, −41] |
+  | Cascade, 4B judge (FrugalGPT-style thresholds; judge charged uncached / cached) | −48.9% / −47.1% |
+  | Hybrid: router picks the entry tier, 4B judge escalates | +0.7% [0.0, 5.5] |
+  | Cascade with a PERFECT judge (ceiling) | −18.6% [−39, −1] |
+  | Cascade, fine-tuned 137M judge (FrugalGPT scorer in the code setting) | pending |
+
+  - The 4B judge is a frozen probe on "problem + code + Is this solution correct?". Test AUC .91 on gpt-oss-20b code
+    (within-problem .80) but .83–.86 on strong-model code (within-problem .57–.66). It costs ~16% of a gpt-oss-20b-low
+    call uncached, ~7% cached.
+  - Protocol is generous to the cascades (~1000 plans vs the router's 60 V values).
+  - Message: the prefill's value is the shortcut. Knowing which tier to call beats checking the cheap tier's answer, even
+    with a perfect checker, because the check still pays for the cheap attempt.
+
 ### §5 Why it works, and when (the shared latent)
 - **5.1 Hard is long for everyone.**
   - Between-problem variance share is 81–96%.
@@ -222,20 +246,36 @@ Table 1: headroom [95% CI], market prices [4.A.4, 4.A.7, 4.A.9, 4.A.14, 4.A.19].
 - **6.1 Hold out each route, then re-add it** [4.A.18].
   - Cost only, k=5: LCB 34.5 vs 36.0 full (96%); Omni 26.5 vs 28.7.
   - Cost + success, k=5: LCB 29.5, Omni 24.0; naive (median + base rate) −4.7 / ~15.
-- **6.2 Remove a genuinely useful model, then add it back (Table 5)** [4.A.21]:
+- **6.2 Remove a genuinely useful model, then add it back (Table 5)** [4.A.21, corrected in 4.A.24]. Gain vs the
+  reference; max reachable test accuracy in brackets:
 
-  | Pool | Full | Without dsv4f | Onboard k=5 / 10 / 50 | Naive k=5 / 10 / 50 |
+  | Pool | Full | Without dsv4f | Onboard k=10 | Naive k=10 |
   |---|---|---|---|---|
-  | LCB | 36.0 | 4.1 | 23.2 / 25.0 / 28.8 | −16.3 / −19.3 / −22.0 |
-  | Omni | 28.7 | −25.0 | 18.9 / 19.1 / 23.5 | — / −14.9 / −11.6 |
-  | MMLU-Pro | 30.9 | −22.1 | 16.6 / 29.0 / 29.9 | −16.0 / −16.1 / −13.8 |
+  | LCB | 36.0 (89.3) | 4.1 (88.2) | 25.0 (88.2) | −19.3 (88.6) |
+  | Omni | 28.7 (74.3) | −25.0 (69.4) | 19.1 (73.6) | −14.9 (73.9) |
+  | MMLU-Pro | 30.9 (82.1) | −22.1 (73.4) | 29.0 (80.7) | −16.1 (80.9) |
 
-  - Naive onboarding is worse than not adding the model.
+  - Read "without" with its max accuracy: its gain covers only the accuracies it can still reach.
+  - Re-adding restores the lost accuracy either way; onboarding does it while saving 19–29%, naive re-adding at a
+    15–19% cost premium over the reference.
   - dsv4f is the hardest case (largest model-specific share).
-- **6.3 Predicting onboarding loss:** the loss tracks each model's model-specific share of cost variance
+- **6.3 The same test without deepseek (Table 5b)** [4.A.24]. Pool = gpt-oss only (4 routes). Hold out gpt-oss-120b
+  (both efforts) and re-add it from the same k problems:
+
+  | Pool | Full | Without gpt-oss-120b | Onboard k=10 / 50 | Naive k=10 |
+  |---|---|---|---|---|
+  | LCB | 21.2 (88.2) | max 67.0 | 8.2 (86.7) / 12.2 (88.6) | −45.1 (86.0) |
+  | Omni | 18.9 (69.4) | max 62.7 | 10.5 (66.0) / 11.6 (66.1) | −7.8 (64.5) |
+  | MMLU-Pro | 13.3 (73.4) | max 62.4 | 15.7 (72.0) / 17.4 (72.6) | −20.2 (71.5) |
+
+  - Removing gpt-oss-120b costs 7–21 points of reachable accuracy.
+  - From 10 examples, onboarding recovers most of that accuracy and still saves 8–16%; naive re-adding costs 8–45% more
+    than the reference.
+  - Without deepseek the pools are shallower: full-head gains are 13–21% vs 29–36%.
+- **6.4 Predicting onboarding loss:** the loss tracks each model's model-specific share of cost variance
   (.14–.22 → 4–14 pt; ≤ .07 → 0–4 pt) [4.A.18 #2.2]. How far a model deviates from the latent says how cheaply it can
   be added.
-- **6.4 A genuinely new family** (GLM-4.7-flash, Nemotron-3-super, MiniMax-M2.5 on MMLU-Pro) [4.A.19 #2.3].
+- **6.5 A genuinely new family** (GLM-4.7-flash, Nemotron-3-super, MiniMax-M2.5 on MMLU-Pro) [4.A.19 #2.3].
   - All three are dominated by the pool.
   - Onboarded at k=10: 30.0% vs 30.9% base; naive: −12.3%.
   - The latent protects the router from newcomers that look good on average.
@@ -271,6 +311,8 @@ Group by what each assumes about cost.
 | Length / difficulty prediction | EGTP / PLP 2602.11812; TRAIL; OUTLETS 2609.01068 |
 | Abort and reroute | SWE-Router 2607.00053; Fail-Fast 2608.03222; TACIT-Switch; EarlyEval 2609.02783 |
 | Cold start / shared latents | IRT-Router; universal latent space 2601.06220; SCOPE 2601.22323; 2607.18253 |
+| Cascades with a learned answer check | FrugalGPT (per-tier fine-tuned DistilBERT scorer); AutoMix (prompted self-verification + POMDP); bi-directional cascading with proxy confidence 2504.19391 (small model's own hidden states); Dekoninck 2410.10347 (cascade routing); Cheap Verifiers, Large Blind Spots 2609.01345 (cheap verifiers miss more as students get stronger) |
+| Correctness probes on hidden states | Openia 2501.12934, AutoProbe 2510.02934, 2512.07404, 2606.14530 (code; mostly the generator's own states, sample selection); HSRM 2608.30841 (best-of-N); judge probes 2512.22245 (calibration) |
 
 **To do:** read 2601.06220 and IRT-Router's cold-start closely. They are the closest to §6.
 
@@ -287,6 +329,8 @@ per-query cost off the success / difficulty latent they already have. Claim this
 - Everything is offline replay on stored draws; there are no live deployment numbers.
 - Market prices change. The principle (C2) is price-relative, which helps.
 - Agentic predictability is below threshold. The agentic headroom exists, but it is not captured.
+- The cascade comparison (C12) is LCB only so far, and the FrugalGPT-style 137M judge is still pending.
+- Onboarding pools share a model family (gpt-oss); the only other families tried were dominated.
 
 ## 3. Figures and tables
 1. **Fig. 1:** headroom bars, grouped reasoning / chat / agentic-open / agentic-mixed, with CIs (C1, C2).
@@ -295,9 +339,11 @@ per-query cost off the success / difficulty latent they already have. Claim this
 3. **Fig. 3:** level vs differences stacked bars per pool (true components vs what our predictor captures).
 4. **Fig. 4:** pre-registration scorecard: screen R² on x, realised gain on y, thresholds .35 / .50 drawn, calls
    marked before/after.
-5. **Fig. 5:** onboarding curves vs k (onboard vs naive vs full vs without), 3 pools.
+5. **Fig. 5:** onboarding curves vs k (onboard vs naive vs full vs without), 3 pools, with max reachable accuracy
+   marked; both pool variants (with and without deepseek).
 6. **Fig. 6:** the R² ≠ routing panel: R² rises, gain falls (LCB prefix), split by easy vs hard problems.
-7. Tables 1–5 as above; an appendix table of nulls; an appendix table of all pool statistics (n, draws, accuracy
+7. **Fig. 7:** router vs single-submission cascades (4B judge, 137M judge, perfect judge, hybrid): cost vs accuracy on LCB.
+8. Tables 1–5 as above; an appendix table of nulls; an appendix table of all pool statistics (n, draws, accuracy
    ladder, output p90/p10, prices).
 
 ## 4. Before submission (ranked; spend needs sign-off)
@@ -310,7 +356,11 @@ per-query cost off the success / difficulty latent they already have. Claim this
 4. **A positive new-model test:** a newcomer that is cheaper or better than part of the pool, so onboarding can show
    a gain, not just protection. This needs choosing a model; ~$2–5.
 5. **Decide the MMLU-Pro story** (why length ≠ difficulty there: subject-driven verbosity?). Offline analysis.
-6. Figures, and a clean re-run of every table from one script per table.
+6. **Cascade comparison beyond LCB:** 137M FrugalGPT-style scorers on Omni and MMLU-Pro answers (cheap GPU job); the 4B
+   judge arm there would need ~7k / ~14k new judge prefills (our GPUs, no API).
+7. **Targeted literature check before claiming "nobody prices per query from the prefill":** 2601.06220, IRT-Router's
+   cold start, AutoProbe's setup, 2025–26 probe-routing papers.
+8. Figures, and a clean re-run of every table from one script per table.
 
 ## 5. Workshop cut (4 pages)
 - **Title:** "The Price Isn't Constant: One Prefill Prices a Pool of Reasoning Models."
@@ -320,6 +370,7 @@ per-query cost off the success / difficulty latent they already have. Claim this
   - Main result + baselines + pre-registration (Table 2 / 3, Fig. 4)
   - Why: legible difficulty + level vs differences (Table 4, Fig. 3)
   - Onboarding in one paragraph (Table 5 condensed)
+  - One sentence + Table 3b row: the prefill router beats even a perfect-judge single-submission cascade
   - Limitations
 - **Drop:** agentic, caps, verification, the nulls table (one sentence each).
 
