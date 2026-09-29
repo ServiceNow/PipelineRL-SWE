@@ -1068,3 +1068,11 @@ But on LCB and Omni a DEDICATED cost probe adds nothing over cost inferred from 
 "harder problems cost more", which the success head already knows. Existing prefill routers could get most of it for free
 from their own success predictions. The separate cost probe matters only where length is not just difficulty (MMLU-Pro,
 +21.5 pt). Constant-vs-constant (mean vs median) is worthless. Pending: MixLLM-style / prompt-GBM on Omni + MMLU-Pro (GPU).
+**Literature predictors on the pre-registered pools** (baseline_cost_heads.py, GPU embeddings; baselines_lit.json). Gain vs paper rule;
+ours minus baseline, paired bootstrap:
+| pool | ours | MixLLM-style | prompt-GBM | from-success |
+| Omni | 21.9% | 12.5% (+9.4 [-4.4, +24.2]) | 6.6% (+15.2 [-1.4, +34.1]) | 21.0% (+0.8 n.s.) |
+| MMLU-Pro | 30.7% | 4.0% (**+26.7 [+12.4, +40.2]**) | 9.8% (**+20.9 [+3.8, +33.3]**) | 9.2% (**+21.5 [+8.5, +30.3]**) |
+(log-output R2: MixLLM-style Omni .04-.32 / MMLU-Pro ~.02; GBM .22-.29 / -.19..+.16; ours .70-.79 / .20-.66.)
+**Where we win, definitively:** vs the paper rule on LCB, Omni, MMLU-Pro; vs the literature predictors significantly on LCB and
+MMLU-Pro, directionally on Omni (+9 / +15 pt, CIs touch 0); vs cost-from-success only on MMLU-Pro (LCB, Omni: tie).

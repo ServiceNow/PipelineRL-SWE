@@ -1,0 +1,60 @@
+HEADROOM = cost saved at matched accuracy by PERFECT per-problem cost knowledge vs the paper rule; learned = the 4B-prefill head; capture = learned / headroom (test frontiers, band = accuracies all arms reach)
+pool                                         band       headroom [95% CI]        learned [95% CI]  capture  reroute or/lrn
+omni500_tensors [market]                53- 73%    44.2% [ 31.8, 53.5]    21.9% [  8.9, 33.5]     0.49      74%/69%
+omni500_tensors [market]                53- 73%    44.2% [ 31.8, 53.5]    12.5% [ -2.4, 25.6]     0.28      74%/52%
+omni500_tensors [market]                53- 73%    44.2% [ 31.8, 53.7]     6.6% [-12.2, 21.2]     0.15      74%/61%
+omni500_tensors [market]                53- 73%    44.2% [ 31.8, 53.4]    21.0% [  6.6, 33.7]     0.48      74%/68%
+mmlupro_tensors [market]                58- 81%    65.1% [ 55.2, 71.2]    30.7% [ 16.3, 43.2]     0.47      54%/47%
+mmlupro_tensors [market]                58- 81%    65.1% [ 55.2, 71.2]     4.0% [ -4.7, 14.9]     0.06      54%/38%
+mmlupro_tensors [market]                58- 81%    65.2% [ 55.2, 71.5]     9.8% [ -4.5, 25.9]     0.15      54%/42%
+mmlupro_tensors [market]                58- 81%    65.1% [ 55.2, 71.2]     9.2% [ -2.2, 24.6]     0.14      54%/46%
+
+per route: acc, mean cost (c), p90/p10 per-problem cost, sd log cost, ICC (between-problem share), output share, head test R2
+  omni500_tensors [market]
+    oss20lo   acc  46.1%  0.0140c  p90/p10    7.8  sdlog 0.80  ICC 0.88  out  98%  R2 +0.63
+    oss20md   acc  61.5%  0.0781c  p90/p10   32.6  sdlog 1.30  ICC 0.92  out 100%  R2 +0.35
+    dsv4f     acc  74.6%  0.1728c  p90/p10  110.6  sdlog 1.69  ICC 0.95  out 100%  R2 +0.51
+    oss120md  acc  62.6%  0.2715c  p90/p10   20.4  sdlog 1.12  ICC 0.97  out  99%  R2 +0.35
+    oss120hi  acc  69.3%  1.0318c  p90/p10   42.0  sdlog 1.42  ICC 0.97  out 100%  R2 +0.48
+  omni500_tensors [market]
+    oss20lo   acc  46.1%  0.0140c  p90/p10    7.8  sdlog 0.80  ICC 0.88  out  98%  R2 -0.36
+    oss20md   acc  61.5%  0.0781c  p90/p10   32.6  sdlog 1.30  ICC 0.92  out 100%  R2 -0.21
+    dsv4f     acc  74.6%  0.1728c  p90/p10  110.6  sdlog 1.69  ICC 0.95  out 100%  R2 -0.07
+    oss120md  acc  62.6%  0.2715c  p90/p10   20.4  sdlog 1.12  ICC 0.97  out  99%  R2 -0.06
+    oss120hi  acc  69.3%  1.0318c  p90/p10   42.0  sdlog 1.42  ICC 0.97  out 100%  R2 -0.15
+  omni500_tensors [market]
+    oss20lo   acc  46.1%  0.0140c  p90/p10    7.8  sdlog 0.80  ICC 0.88  out  98%  R2 -0.05
+    oss20md   acc  61.5%  0.0781c  p90/p10   32.6  sdlog 1.30  ICC 0.92  out 100%  R2 -0.10
+    dsv4f     acc  74.6%  0.1728c  p90/p10  110.6  sdlog 1.69  ICC 0.95  out 100%  R2 -0.05
+    oss120md  acc  62.6%  0.2715c  p90/p10   20.4  sdlog 1.12  ICC 0.97  out  99%  R2 -0.10
+    oss120hi  acc  69.3%  1.0318c  p90/p10   42.0  sdlog 1.42  ICC 0.97  out 100%  R2 -0.10
+  omni500_tensors [market]
+    oss20lo   acc  46.1%  0.0140c  p90/p10    7.8  sdlog 0.80  ICC 0.88  out  98%  R2 +0.51
+    oss20md   acc  61.5%  0.0781c  p90/p10   32.6  sdlog 1.30  ICC 0.92  out 100%  R2 +0.33
+    dsv4f     acc  74.6%  0.1728c  p90/p10  110.6  sdlog 1.69  ICC 0.95  out 100%  R2 +0.46
+    oss120md  acc  62.6%  0.2715c  p90/p10   20.4  sdlog 1.12  ICC 0.97  out  99%  R2 +0.29
+    oss120hi  acc  69.3%  1.0318c  p90/p10   42.0  sdlog 1.42  ICC 0.97  out 100%  R2 +0.41
+  mmlupro_tensors [market]
+    oss20lo   acc  60.5%  0.0039c  p90/p10    6.0  sdlog 0.69  ICC 0.79  out  87%  R2 +0.45
+    oss20md   acc  68.0%  0.0121c  p90/p10    8.8  sdlog 0.82  ICC 0.86  out  96%  R2 +0.50
+    dsv4f     acc  82.9%  0.0435c  p90/p10   29.5  sdlog 1.30  ICC 0.89  out  97%  R2 +0.22
+    oss120md  acc  75.0%  0.0575c  p90/p10    5.1  sdlog 0.68  ICC 0.94  out  93%  R2 +0.62
+    oss120hi  acc  77.3%  0.2210c  p90/p10   12.0  sdlog 0.99  ICC 0.95  out  98%  R2 +0.43
+  mmlupro_tensors [market]
+    oss20lo   acc  60.5%  0.0039c  p90/p10    6.0  sdlog 0.69  ICC 0.79  out  87%  R2 +0.08
+    oss20md   acc  68.0%  0.0121c  p90/p10    8.8  sdlog 0.82  ICC 0.86  out  96%  R2 +0.16
+    dsv4f     acc  82.9%  0.0435c  p90/p10   29.5  sdlog 1.30  ICC 0.89  out  97%  R2 +0.01
+    oss120md  acc  75.0%  0.0575c  p90/p10    5.1  sdlog 0.68  ICC 0.94  out  93%  R2 +0.26
+    oss120hi  acc  77.3%  0.2210c  p90/p10   12.0  sdlog 0.99  ICC 0.95  out  98%  R2 +0.08
+  mmlupro_tensors [market]
+    oss20lo   acc  60.5%  0.0039c  p90/p10    6.0  sdlog 0.69  ICC 0.79  out  87%  R2 +0.11
+    oss20md   acc  68.0%  0.0121c  p90/p10    8.8  sdlog 0.82  ICC 0.86  out  96%  R2 -0.08
+    dsv4f     acc  82.9%  0.0435c  p90/p10   29.5  sdlog 1.30  ICC 0.89  out  97%  R2 -0.08
+    oss120md  acc  75.0%  0.0575c  p90/p10    5.1  sdlog 0.68  ICC 0.94  out  93%  R2 -0.03
+    oss120hi  acc  77.3%  0.2210c  p90/p10   12.0  sdlog 0.99  ICC 0.95  out  98%  R2 -0.28
+  mmlupro_tensors [market]
+    oss20lo   acc  60.5%  0.0039c  p90/p10    6.0  sdlog 0.69  ICC 0.79  out  87%  R2 +0.14
+    oss20md   acc  68.0%  0.0121c  p90/p10    8.8  sdlog 0.82  ICC 0.86  out  96%  R2 +0.16
+    dsv4f     acc  82.9%  0.0435c  p90/p10   29.5  sdlog 1.30  ICC 0.89  out  97%  R2 +0.12
+    oss120md  acc  75.0%  0.0575c  p90/p10    5.1  sdlog 0.68  ICC 0.94  out  93%  R2 +0.16
+    oss120hi  acc  77.3%  0.2210c  p90/p10   12.0  sdlog 0.99  ICC 0.95  out  98%  R2 +0.23
