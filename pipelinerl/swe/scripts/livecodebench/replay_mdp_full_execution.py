@@ -4,7 +4,8 @@
 The start protocol is either scout-first or free-start. Free-start exposes
 {abstain, scout, oss20, oss120} at the root and after every failed attempt. A
 verified pass terminates immediately. Decisions use expected model cost
-estimated on the train split; reports charge realized prompt+completion tokens.
+estimated on the train split by default; one-shot paper-style and learned-cost
+variants are separate arms. Reports charge realized prompt+completion tokens.
 
 The replay also writes per-episode decision traces, aggregate route-choice
 diagnostics, and paired confidence intervals clustered by problem.
@@ -232,6 +233,17 @@ def _next_valid_draw(order: np.ndarray, ptr: int, valid: np.ndarray) -> tuple[in
         ptr += 1
     return (int(order[ptr]), ptr) if ptr < len(order) else (None, ptr)
 
+
+
+def _judged_draw_value(scores: np.ndarray, predicted_success: float,
+                       held_score: float, expected_cost: float,
+                       value_of_correct: float) -> float:
+    """One-step net gain from a judge-ranked draw under the score-distribution model."""
+    if not len(scores):
+        raise ValueError("empty judge-score distribution")
+    shifted = np.clip(scores + predicted_success - float(scores.mean()), 0.0, 1.0)
+    gain = float(np.maximum(shifted - held_score, 0.0).mean())
+    return gain * value_of_correct - expected_cost
 
 
 def _spike_slab_posterior_mean(pi0, a, b, failures):
@@ -489,6 +501,9 @@ def replay_adaptive(
             raise ValueError("--bellman-horizon must be at least 1 (1 == myopic)")
     if learned_transitions and bellman_horizon is None:
         raise ValueError("Learned transitions require a Bellman horizon")
+    if no_verifier and bellman_horizon is not None and not single_commit:
+        raise ValueError("Verifier Bellman transitions cannot score judged candidates; "
+                         "use the no-verifier marginal-value policy")
     controls = (tau_abstain, min_success_per_cost, value_of_correct)
     if sum(control is not None for control in controls) > 1:
         raise ValueError(
@@ -572,8 +587,11 @@ def replay_adaptive(
             # candidate worth R * judged P(correct | problem, this attempt), and the policy chooses
             # between submitting the best it holds, drawing again, and abstaining.
             nonlocal held_q, held_true
-            _jv = 0.0 if judge_values is None else float(
-                judge_values.get((slots[mi], int(draw)), 0.0))
+            key = (slots[mi], int(draw))
+            if judge_values is None or key not in judge_values:
+                raise ValueError(f"missing judge score for {problem_id}||{slots[mi]}{draw}; "
+                                 "the no-verifier replay needs full coverage")
+            _jv = float(judge_values[key])
             _banked_count[mi] += 1
             if _jv > held_q:
                 held_q = _jv; held_true = bool(outcomes[mi, draw])
@@ -867,7 +885,20 @@ def replay_adaptive(
         state_value: float | None = None
         if value_of_correct is None:
             action_values = None
+        elif no_verifier and judge_dist is not None and not single_commit:
+            # Without a verifier, success on the next draw is not automatically banked.
+            # The draw helps only when its judged candidate improves the held one.
+            # Use this SAME net continuation value to choose a route and to stop.
+            action_values = {}
+            for mi in available:
+                scores = judge_dist.get(slots[mi])
+                if scores is None or not len(scores):
+                    raise ValueError(f"no training judge-score distribution for {slots[mi]}")
+                action_values[mi] = _judged_draw_value(
+                    scores, float(p_each[mi]), held_q, float(cost_est[mi]),
+                    float(value_of_correct))
         elif bellman_horizon is None:
+            # The single-commit arm must use the one-draw routing value p_m R - c_m.
             action_values = {
                 mi: float(p_each[mi] * value_of_correct - cost_est[mi])
                 for mi in available
@@ -951,6 +982,8 @@ def replay_adaptive(
         # continue, density decides what to buy.
         if action_values is None:
             selection = ratios
+        elif no_verifier and judge_dist is not None and not single_commit:
+            selection = action_values
         elif select_by_density:
             selection = {mi: ratios[mi] for mi in action_values}
         else:
@@ -1029,47 +1062,30 @@ def replay_adaptive(
                     else:
                         _ds = pseudo_count if decay_pseudo_count is None else decay_pseudo_count
                         _ps = np.asarray(stop_theta, dtype=float) * _ds / (_ds + failures)
-                    _vals = [float(_ps[mi] * value_of_correct - cost_est[mi]) for mi in action_values]
-                elif no_verifier and judge_dist is not None:
-                    # Problem-CONDITIONAL. The pooled judged-score distribution per route is the
-                    # wrong reference: on a hard problem it predicts the next dsv4f draw will score
-                    # ~0.87 (the pool mean) when it will score ~0.3, so the policy buys draws that
-                    # never improve what it holds -- 24.5 attempts per problem and 70% accuracy
-                    # where one dsv4f draw gets 88%. Shift each route's judged-score distribution
-                    # to this problem's predicted success rate p_m(x), keeping its shape, then the
-                    # gain E[max(J, held_q)] - held_q reflects THIS problem's prospects.
-                    # MARGINAL VALUE OF ANOTHER DRAW WITHOUT A VERIFIER. With a verifier, drawing
-                    # and succeeding converts into a banked win with probability p_m, so p_m*R-c_m
-                    # is the right action value. Without one, a new attempt only helps if the JUDGE
-                    # scores it above what we already hold: the gain is E[max(held_q, J)] - held_q,
-                    # where J is the judge's score for the undrawn attempt. That is far smaller
-                    # than p_m -- using p_m made the policy draw 19.3 times per problem and never
-                    # stop, because p(dsv4f)=0.88 always exceeded a mean judged value of 0.75.
-                    _vals = []
-                    for mi in action_values:
-                        _js = judge_dist.get(slots[mi])
-                        if _js is None or len(_js) == 0:
-                            _vals.append(-1.0); continue
-                        # recentre the route's judged-score distribution on p_m for THIS problem
-                        _shift = float(p_each[mi]) - float(_js.mean())
-                        _jp = np.clip(_js + _shift, 0.0, 1.0)
-                        _gain = float(np.mean(np.maximum(_jp, held_q))) - held_q
-                        _vals.append(_gain * float(value_of_correct) - cost_est[mi])
+                    if no_verifier and judge_dist is not None:
+                        _vals = [_judged_draw_value(judge_dist[slots[mi]], float(_ps[mi]),
+                                                    held_q, float(cost_est[mi]),
+                                                    float(value_of_correct))
+                                 for mi in action_values]
+                    else:
+                        _vals = [float(_ps[mi] * value_of_correct - cost_est[mi])
+                                 for mi in action_values]
+                elif no_verifier and judge_dist is not None and not single_commit:
+                    _vals = list(action_values.values())
                 else:
                     _vals = list(action_values.values())
                 _mx = max(_vals)
                 if argmax_shrink > 0.0 and len(_vals) > 1:
                     _mean = sum(_vals) / len(_vals)
                     _mx = _mx - argmax_shrink * (_mx - _mean)
-                # Stopping is worth R*held_q now, not 0: with nothing banked this is the original
-                # zero-crossing; with a candidate in hand the bar to keep buying rises.
-                # Under --no-verifier the banked candidate comes from the JUDGE, not from a weak
-                # verifier pass, so the floor must apply there too -- otherwise the policy ignores
-                # what it is holding and can never choose to submit it.
+                # Verifier-era action values include the value of a banked candidate, so
+                # compare them against that candidate's value. No-verifier action values
+                # already subtract the held candidate's judged value; compare those to zero.
                 _floor = (held_q * float(value_of_correct)
                           if ((accept_values is not None or no_verifier)
                               and value_of_correct is not None) else 0.0)
-                value_stop = _mx <= (0.0 if (no_verifier and judge_dist is not None) else _floor)
+                value_stop = _mx <= (0.0 if (no_verifier and judge_dist is not None
+                                              and not single_commit) else _floor)
         # Diagnostic upper bound: replace only the stopping decision with perfect
         # knowledge of the stored future outcomes. Route scores, rankings, costs,
         # capacities, R, and Bellman horizon remain untouched. This deliberately
@@ -1090,12 +1106,10 @@ def replay_adaptive(
             and (probability_stop or marginal_stop or value_stop)
         )
         if single_commit:
-            # The published prefill router (2603.20895) commits to exactly one model before
-            # generation: "We instead commit to one model before generation, and ask whether
-            # richer signals can raise that decision's accuracy without multi-stage fallback."
-            # It has no give-up action -- the policy is argmax_k s_k,q -- and never resamples.
-            # Running it on OUR beliefs isolates what the sequential machinery adds over the
-            # closest prior work, holding the signal fixed.
+            # One-shot policy: commit to one route before generation, with no give-up
+            # action or resampling. Running it on OUR beliefs isolates the effect of
+            # sequential decisions; it is a matched-signal policy comparison, not a
+            # reproduction of the published router's trained confidence model.
             regular_stop = False; probability_stop = marginal_stop = value_stop = False
         if oracle_stop or q_stop or regular_stop:
             if decision is not None:
@@ -1413,10 +1427,10 @@ def main() -> None:
     )
     parser.add_argument(
         "--single-commit-arm", action="store_true", help=(
-            "Add a `content_commit` arm: the published prefill-router policy (2603.20895) run on "
-            "OUR beliefs -- commit to one model before generation, no give-up action, no "
-            "resampling. Isolates what the sequential machinery adds over the closest prior work "
-            "with the signal held fixed."))
+            "Add matched-belief one-shot arms: `content_commit` uses train mean cost and "
+            "`content_commit_papercost` uses known prompt tokens plus train median output "
+            "tokens, as in the published prefill router (2603.20895). Each commits to one "
+            "model without abstention or resampling; neither retrains that router's predictor."))
     parser.add_argument(
         "--cost-update-weight", type=float, default=0.0, help=(
             "Pseudo-count for shrinking the prefill cost estimate toward observed costs on the "
@@ -1670,8 +1684,8 @@ def main() -> None:
         "JSONL of per-problem expected costs: {problem_id, expected_costs:[c_m ...]} in USD, "
         "same units as the training-set constant they replace. Enables the `_qcost` families, "
         "which are identical to their base family except that c_m in `p_m*R - c_m` is "
-        "query-conditioned instead of a per-route training-set mean. Every routing system we "
-        "know of -- RoR and the prefill-activation routers alike -- uses the constant."))
+        "query-conditioned instead of a per-route training-set mean. This learned cost head "
+        "is ours; `content_commit_papercost` uses only prompt length and a train median output."))
     parser.add_argument("--sequential-model-dir")
     parser.add_argument(
         "--state-layout", choices=["problem_first", "counts_last"], default="counts_last",
@@ -1717,6 +1731,8 @@ def main() -> None:
         raise ValueError("--oracle-stopping-horizon requires --oracle-stopping-family")
     if args.oracle_stopping_horizon is not None and args.oracle_stopping_horizon < 1:
         raise ValueError("--oracle-stopping-horizon must be at least 1")
+    if args.no_verifier and not args.judge_preds:
+        raise ValueError("--no-verifier requires --judge-preds from a causal judge")
 
     tensor_dir = Path(args.tensors_dir)
     data = np.load(tensor_dir / "tensors.npz", allow_pickle=True)
@@ -1839,6 +1855,25 @@ def main() -> None:
         float(realized_costs[train_idx, mi][valid[train_idx, mi]].mean())
         for mi in range(len(slots))
     ])
+    paper_costs: dict[str, np.ndarray] = {}
+    if args.cost_mode == "usd" and args.single_commit_arm:
+        # Published router cost proxy: known input tokens for this query plus the
+        # route's median output tokens on TRAIN. The first stored prompt is the
+        # pre-generation prompt for this problem/route; output lengths and outcomes
+        # of this problem are never read when estimating its cost.
+        output_medians = np.array([
+            float(np.median(data["completion_tokens"][train_idx, mi, :]
+                            [valid[train_idx, mi, :]]))
+            for mi in range(len(slots))
+        ])
+        for pi, pid in enumerate(pids):
+            costs = np.empty(len(slots), dtype=float)
+            for mi, slot in enumerate(slots):
+                draws = np.flatnonzero(valid[pi, mi])
+                prompt = float(data["prompt_tokens"][pi, mi, int(draws[0])]) if len(draws) else 0.0
+                costs[mi] = ((prompt + output_medians[mi]) * price_table[slot] / 1_000_000.0
+                             + args.execution_cost_usd)
+            paper_costs[pid] = costs
     priors = np.array([
         float(outcomes[train_idx, mi][valid[train_idx, mi]].mean())
         for mi in range(len(slots))
@@ -1902,15 +1937,30 @@ def main() -> None:
             _m = _jrx.match(_h)
             if _m is None:
                 continue
+            if args.no_verifier and _row.get("judge_mode") != "independent":
+                raise ValueError("--no-verifier requires independent, causal judge predictions; "
+                                 "refit with fit_judge_head.py")
             judge_table.setdefault(_pid, {})[(_m.group(1), int(_m.group(2)))] = float(
                 _row.get("p_correct", _row.get("p", 0.0)))
+        train_pids = {pids[int(i)] for i in train_idx}
         judge_dist = {}
         for _pid, _d in judge_table.items():
+            if _pid not in train_pids:
+                continue
             for (_sl, _k), _v in _d.items():
                 judge_dist.setdefault(_sl, []).append(_v)
         judge_dist = {k: np.asarray(v, dtype=float) for k, v in judge_dist.items()}
+        if args.no_verifier:
+            missing_scores = [(pid, slots[mi], draw)
+                              for pi, pid in enumerate(pids)
+                              for mi in range(len(slots))
+                              for draw in np.flatnonzero(valid[pi, mi])
+                              if (slots[mi], int(draw)) not in judge_table.get(pid, {})]
+            if missing_scores:
+                raise ValueError(f"judge predictions miss {len(missing_scores)} valid draws; "
+                                 f"first missing: {missing_scores[0]}. Refit on full-depth shards")
         print(f"judge values for {len(judge_table)} problems; "
-              f"score distribution per route: "
+              f"training score distribution per route: "
               + ", ".join(f"{k} mean {v.mean():.2f}" for k, v in judge_dist.items()))
     hist_recal = json.loads(Path(args.history_recal).read_text()) if args.history_recal else None
     if args.content_preds:
@@ -2015,11 +2065,14 @@ def main() -> None:
             pid = pids[int(pi)]
             # `_qcost` is orthogonal to the belief source: same beliefs, same decay, only the
             # cost term changes. Strip it before any belief-source test so the arms stay paired.
-            base = family[:-6] if family.endswith("_qcost") else family
+            base = (family[:-10] if family.endswith("_papercost") else
+                    family[:-6] if family.endswith("_qcost") else family)
             _single = base.endswith("_commit")
             if _single:
                 base = base[:-len("_commit")]
-            ec = cost_preds.get(pid, expected_costs) if family.endswith("_qcost") else expected_costs
+            ec = (paper_costs[pid] if family.endswith("_papercost") else
+                  cost_preds.get(pid, expected_costs) if family.endswith("_qcost")
+                  else expected_costs)
             for oi in range(args.num_orderings):
                 result = replay_adaptive(
                     outcomes[int(pi)], valid[int(pi)], realized_costs[int(pi)], ec,
@@ -2100,6 +2153,8 @@ def main() -> None:
         + (["content_decay_coupled"] if (content and args.cross_pseudo_count > 0) else [])
         + (["content_post"] if posterior else [])
         + (["content_commit"] if (content and args.single_commit_arm) else [])
+        + (["content_commit_papercost"] if (content and paper_costs and args.single_commit_arm) else [])
+        + (["content_commit_qcost"] if (content and cost_preds and args.single_commit_arm) else [])
         + (["counts_qcost"] if cost_preds else [])
         + (["content_qcost", "content_decay_qcost"] if (content and cost_preds) else [])
         + (scorer_families if scorer else [])

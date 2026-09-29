@@ -338,3 +338,64 @@ it, don't build it. Prior art to cite/check: "Heteroskedastic Signals in Budgete
   price vectors; CodeContests pilot as out-of-sample test.
 - Qwen-4B "ask" control job failed on missing `accelerate` (local_ask_judge.py uses device_map);
   moot since dsv4f-ask didn't beat the probe.
+
+### Codex continuation 2026-09-25: Q1 and Q2 run
+
+Completed CPU replays on LCB and BCB with 3 draw orderings, calibration-selected
+value mixtures, fixed perfect-test prices 0/.01/.1/.3/1/3 times the cheapest
+draw's train mean cost, global vs learned cost, and count vs content priors.
+The full method, paired test-spend-normalized comparisons, raw per-problem
+outputs, and strongest enumerated fixed-cascade baselines are in
+`analysis/priced_verification/README.md` and adjacent JSON files. Scripts:
+`replay_priced_verification.py`, `analyze_priced_verification.py`, and optimized
+`measure_best_fixed_cascade.py` (same plan semantics, cached vectorized scores).
+
+Q1: At 0.10c realized spend with a free perfect verifier, LCB fixed cascade
+80.4%, adaptive count/global 81.7%, count/learned 82.3%, content/global 82.9%,
+content/learned 82.2%, one-shot content/learned 77.5%. Learned cost only adds
+~2pt to counts near 0.06c; that shrinks to +0.5pt at 0.10c and reverses at
+higher spend. BCB at 0.10c: fixed 69.9%, count/global 69.5%, count/learned
+69.1%, content/global 68.6%, content/learned 68.0%, one-shot 50.6%. Thus the
+one-shot cost edge does not survive as a general verifier-era advantage; the
+sequential/verifier benefit itself remains large, especially on BCB.
+
+Q2: At 0.10c, with verification priced at 1x/3x the cheapest draw, selective
+versus always versus one-shot is LCB 79.3/77.5/77.5% and 77.2/68.9/77.5%; BCB
+65.7/64.1/50.6% and 61.5/56.7/50.6%. High test prices can make one-shot the
+right LCB choice while BCB still benefits from selective testing. `v=0`
+selective equals always exactly. At 1000 USD per check, selective and one-shot
+matched on a 50-problem LCB endpoint check. Prior art found: arXiv 2504.01005
+and 2606.15841; no novelty claim for selective verification itself.
+
+The initial selective policy was a one-retry lookahead; the exact Bellman
+follow-up is recorded below. Also still open: a real attempt-level signal from
+generated code/token confidence and SWE-priced tests.
+LCB logprob follow-up completed: confidence gain +2.6pt pick-4 on oss20md
+(95% CI -1.2 to +6.5), +0.2pt on dsv4f (-1.9 to +2.3), +0.1pt across models.
+
+### Exact Bellman continuation 2026-09-25
+
+Implemented `replay_bellman_verification.py` and `analyze_bellman_verification.py`;
+ran an 8-draw finite-horizon DP on both datasets, using content priors and
+global vs learned costs, with v=0/1/3 x cheapest draw. Raw and matched results
+are alongside the prior files in `analysis/priced_verification/`.
+
+At 0.10c realized spend, learned minus global cost under Bellman is LCB +1.1pt
+at v=0 (CI -0.1,+2.3), +4.3pt at v=1 (CI +2.5,+6.1), +4.3pt at v=3
+(CI +1.8,+6.9); BCB -0.2/-0.3/-0.4pt, all CIs include zero. LCB learned-cost
+Bellman at v=0 reaches 84.6% vs 71.4% for the corrected global-cost one-shot
+baseline (+13.2pt, paired CI +9.8,+16.6); versus the learned-cost one-shot
+ablation the gap is +7.2pt (CI +5.0,+9.5). On BCB the global-cost one-shot is
+50.1%, so learned Bellman is +16.4pt (CI +13.7,+19.2). The learned-cost edge on
+LCB is operating-point dependent and not present on BCB. Against the one-retry heuristic on the same
+14-point reward grid, Bellman gains +3.0pt on LCB at free checks (CI +2.2,+3.8),
+but loses 1.6pt on BCB (CI -3.1,-0.3); at priced checks the results vary by
+price and dataset.
+
+The 8-draw DP is exact for a factorized Beta-Bernoulli belief model, not the
+correlated true outcome process. It does not uniformly beat the earlier
+one-retry heuristic, especially at priced checks. Its calibration-selected
+test spend also drifts; test-spend interpolation is descriptive. Next useful
+method improvement: fit a cross-route hardness/transition model on train, and
+test on a deployment-style spend controller before claiming a robust adaptive
+cost-head gain.

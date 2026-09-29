@@ -272,6 +272,11 @@ Group by what each assumes about cost.
 
 **To do:** read 2601.06220 and IRT-Router's cold-start closely. They are the closest to §6.
 
+**Positioning point:** routers that already predict success from a prefill (IRT-Router, C3PO, 2602.09924) still price every
+query at a per-model constant, and MixLLM trains a separate cost predictor from embeddings. To our knowledge nobody reads
+per-query cost off the success / difficulty latent they already have. Claim this "to our knowledge", pending the
+2601.06220 read.
+
 ### §9 Limitations (write plainly)
 - Two confirmed pre-registrations; 5 decisive calls pending.
 - The dedicated-cost-read advantage over from-success rests on one pool (MMLU-Pro).

@@ -50,22 +50,37 @@ def main() -> None:
     plans = [p for p in itertools.product(*[range(k + 1) for k in K])
              if 0 < sum(p) <= a.max_total_draws]
 
-    def run(plan, rows):
-        acc, cost = [], []
-        for i in rows:
+    # Cache each rung's spend and success through its first k draws. This keeps
+    # full five-rung enumeration practical and scores test only for chosen plans.
+    rung_cost = []
+    rung_ok = []
+    for m in range(len(slots)):
+        costs_m = np.zeros((K[m] + 1, len(pids)), dtype=float)
+        solved_m = np.zeros((K[m] + 1, len(pids)), dtype=bool)
+        for i in range(len(pids)):
             spent, solved = 0.0, False
-            for m in range(len(slots)):                       # cheapest rung first
-                for k in [k for k in range(ok.shape[2]) if valid[i, m, k]][: plan[m]]:
-                    spent += usd[i, m, k]
-                    if ok[i, m, k]:
-                        solved = True; break
-                if solved:
-                    break
-            acc.append(solved); cost.append(spent)
-        return float(np.mean(cost) * 100), float(np.mean(acc) * 100)
+            draws = np.flatnonzero(valid[i, m])
+            for k in range(1, K[m] + 1):
+                if k <= len(draws) and not solved:
+                    draw = int(draws[k - 1])
+                    spent += usd[i, m, draw]
+                    solved = bool(ok[i, m, draw])
+                costs_m[k, i] = spent
+                solved_m[k, i] = solved
+        rung_cost.append(costs_m)
+        rung_ok.append(solved_m)
+
+    def run(plan, rows, detail=False):
+        active = np.ones(len(rows), dtype=bool)
+        spent = np.zeros(len(rows), dtype=float)
+        for m, k in enumerate(plan):                         # cheapest rung first
+            spent += active * rung_cost[m][k, rows]
+            active &= ~rung_ok[m][k, rows]
+        if detail:
+            return ((~active).astype(float), spent * 100)
+        return float(spent.mean() * 100), float((~active).mean() * 100)
 
     F = {p: run(p, fi) for p in plans}
-    S = {p: run(p, ti) for p in plans}
     H = [(0.0, 0.0, None)]
     for p, (c, acc) in sorted(F.items(), key=lambda kv: kv[1][0]):
         while len(H) >= 2 and (H[-1][1] - H[-2][1]) * (c - H[-1][0]) <= (acc - H[-1][1]) * (H[-1][0] - H[-2][0]):
@@ -80,10 +95,12 @@ def main() -> None:
         if not elig:
             continue
         _, _, p = elig[-1]
-        tc, ta = S[p]
+        tc, ta = run(p, ti)
         print(f"{b:>8.2f}c{str(dict(zip(slots, p))):>34}{F[p][1]:>8.1f}%{ta:>9.1f}%{tc:>10.3f}c")
         out.append({"budget": b, "plan": dict(zip(slots, p)), "fit_acc": F[p][1],
-                    "test_acc": ta, "test_cost": tc})
+                    "test_acc": ta, "test_cost": tc,
+                    "test_accuracy_by_problem": run(p, ti, detail=True)[0].tolist(),
+                    "test_cost_cents_by_problem": run(p, ti, detail=True)[1].tolist()})
     if a.out:
         Path(a.out).write_text(json.dumps(out, indent=1))
         print("wrote", a.out)
