@@ -1315,3 +1315,22 @@ theta_u (20 params) by BCE on ~200 D-optimal anchors; fill its length-per-bin ta
 5. Budgets: they predict a mean length per bin; per-request budgets need P(length <= cap | query), where the distribution's
    shape matters (4.A.29).
 Their advantage to acknowledge: with a large model population, stage 1 gets a lot of free supervision for SUCCESS prediction.
+
+### 4.A.31 Low-shot onboarding head-to-head vs ZeroRouter-style (2026-09-29; `onboard_vs_zerorouter.py`)
+Hold out one route; all other routes keep identical full heads. ZeroRouter-style = 1-D 2PL IRT fitted on the other 4 routes'
+TRAIN outcomes (their 20-D version is not identifiable from 4 models), stage 2 regresses (log a, b) on the same prefill
+features we use (other routes' success logits + squares), new model = theta fitted on k anchors + per-bin (K=5) length
+lookup; "zr-dopt" = their D-optimal anchors (deterministic, one draw). 20 draws of the k random anchors. Gain vs the full pool's
+paper rule, MEAN over the 5 held-out routes (ours / zr / zr-dopt / naive):
+| pool (full heads) | k=5 | k=10 | k=50 | k=200 |
+| LCB (36.0) | 28.5 / 20.6 / 19.2 / 5.1 | 30.9 / 21.6 / 17.5 / 5.2 | 32.2 / 25.0 / 25.4 / 6.4 | 32.8 / 26.4 / 26.2 / 6.7 |
+| Omni (28.7) | 23.1 / 21.3 / 27.6 / 6.3 | 23.6 / 24.3 / 28.0 / 13.7 | 23.9 / 26.1 / 28.2 / 16.9 | 23.6 / 26.3 / 26.4 / 18.3 |
+| MMLU-Pro (30.9) | 26.9 / 21.0 / 26.6 / 3.5 | 28.3 / 19.2 / 24.9 / 4.7 | 30.3 / 23.6 / 23.5 / 8.7 | 29.9 / 24.8 / 24.2 / 9.6 |
+On the model that matters most (dsv4f; without it: LCB 4.1, Omni -25.0, MMLU-Pro -22.1): LCB ours 23.0-30.8 vs zr -11.8..+6.5;
+MMLU-Pro ours 23.8-31.2 vs zr 4.5-17.0; Omni ours 13.6-25.0 vs zr 21.3-35.9 (zr even beats our full heads there).
+=> Ours wins clearly on LCB (+7-9 pt mean) and MMLU-Pro (+5-9 pt, ours > zr on 4-5 of 5 routes at every k); ZeroRouter-style wins
+on Omni at k >= 10 (+1-3 pt; its D-optimal anchors +4-5). Consistent with where their cost design breaks: LCB has a large
+model-specific cost share for dsv4f, MMLU-Pro has work != difficulty; Omni length IS difficulty, so difficulty bins are right.
+No CIs (means over 20 anchor draws). CORRECTIONS to 4.A.30: point 2 ("their latent needs ~200 models") is too strong -- a 1-D
+version fitted on only 4 models is competitive and wins on Omni; restate as "their 20-D latent needs a population; the version a
+small pool supports is 1-D". Point 3 (onboarding) is a win on 2 of 3 pools, not across the board.
