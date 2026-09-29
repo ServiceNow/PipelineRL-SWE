@@ -1122,3 +1122,25 @@ unsolved by every draw, so "hopeless" means "not worth the price at this V", not
 solves >= 1 draw on 43% of the problems where oss120hi solved none), and exploiting them needs model-specific information.
 Abstention: all ONE-SHOT results (4.A.4-4.A.21, the outline's main claims) have NO abstain option -- every problem gets exactly
 one call. The verifier-regime policies (Bellman, index, 4.A.2/4.A.22) may stop at any point, including before the first call.
+
+### 4.A.23 One-shot routing WITH abstention (2026-09-29; `analysis/cost_headroom/abstain_oneshot.py`, abstain_oneshot.log)
+No verifier, one submission; per problem answer with route m or abstain (cost 0). Score = accuracy - lam x error rate over
+all problems (lam = 0: abstaining only saves money; lam > 0: a wrong answer is worse than none). Rule: answer iff
+max_m V((1+lam)p_m - lam) - c_m > 0. decompose.py protocol (test frontiers over V, hulls through the origin so random
+abstention is free for every arm; pairwise matched-score band where both arms have real points; paired bootstrap). Market
+prices, the outline's cost heads (LCB probe, Omni Thinking, MMLU-Pro Instruct). Cost saved at matched score [95% CI]:
+| | lam | LCB | Omni | MMLU-Pro |
+| ours vs paper, no abstention (sanity: matches 35.6 / 21.9 / 30.7) | 0 | 37.0 | 22.0 | 30.2 |
+| abstention vs none (ours+A vs ours) | 0 | 0.1 [-2.7, 2.9] | -7.0 [-15.4, 2.1] | 0.0 |
+| ours+A vs paper+A | 0 | 23.8 [19.0, 28.1] | 20.0 [10.1, 27.4] | 13.5 [6.7, 21.2] |
+| ours+A vs paper+A | 1 | 30.2 [21.3, 36.7] | 23.7 [3.8, 40.2] | 13.3 [-2.1, 29.6] |
+| ours+A vs paper+A | 3 | 42.4 [31.5, 52.1] | 43.3 [27.6, 61.0] | 26.0 [-5.3, 49.5] |
+| perfect success + cost, abstaining, vs ours+A (remaining headroom) | 0 / 1 / 3 | 37 / 59 / 66 | 45 / 63 / 73 | 59 / 81 / 85 |
+Max achievable score, no abstention -> with (ours): lam=1 LCB .788 -> .792, Omni .484 -> .576, MMLU-Pro .642 -> .652;
+lam=3 LCB .576 -> .655, Omni 0 -> .489, MMLU-Pro .284 -> .417.
+Findings. (1) lam = 0: abstention buys nothing -- the cheapest route costs almost nothing and solves ~50%, so skipping a
+problem saves ~0. (2) lam > 0: abstention is necessary (the always-answer routers cannot reach its scores), and per-query
+cost pays MORE with abstention and a larger error penalty (LCB 24 -> 30 -> 42%, Omni 20 -> 24 -> 43%; MMLU-Pro n.s. at lam>0).
+(3) The remaining headroom grows with lam (59-85% at lam >= 1): once wrong answers cost, knowing WHO will get it right
+(the success head) is the bottleneck, not cost. Caveats: test-selected hulls (like decompose.py), not the deployable
+protocol; lam is a chosen utility; Omni test n=150 (wide CIs); some lam=3 cells undefined (the always-answer arm never scores > 0).
