@@ -109,6 +109,11 @@ def pool(spec):
     for _ in range(500):
         gb, *_ = summary(rng.integers(0, len(te), len(te))); B.append(gb)
     ci = {a: np.percentile([b[a] for b in B], [2.5, 97.5]).tolist() for a in g}
+    boot = [float(b["learned"]) for b in B]          # identical resamples for every arm of a pool (rng seed 0) -> paired diffs
+    # single models alone (always route m), mixing two allowed: does ROUTING beat just picking one model?
+    Hs = hull([(float(np.mean(Cr[te, m][avail[te, m]])), float(np.mean(Q[te, m][avail[te, m]]))) for m in range(M) if avail[te, m].any()])
+    H0f = H["paper"]; Ts = [x for x in T if Hs[0][1] <= x <= Hs[-1][1]]
+    single = 1 - float(np.exp(np.nanmean(np.log([cost_at(Hs, x) / cost_at(H0f, x) for x in Ts])))) if Ts else np.nan
     # reroute rate at the V whose paper-rule accuracy is closest to the middle of the matched band
     mid = T[len(T) // 2]; vi = int(np.argmin(np.abs(curves["paper"][0].mean(1) - mid)))
     reroute = float((curves["ORACLE"][2][vi] != curves["paper"][2][vi]).mean())
@@ -169,7 +174,7 @@ def pool(spec):
     return dict(pool=name + (" [market]" if pricing == "market" else "") + (f" +overhead {OH[te].max(1).mean():.4f}c" if OH.any() else ""), cost_file=cfile or "cost_preds.jsonl", n_test=int(len(te)), band=[float(T[0]), float(T[-1])],
                 headroom=g["ORACLE"], headroom_ci=ci["ORACLE"], learned_gain=g["learned"], learned_ci=ci["learned"],
                 capture=g["learned"] / g["ORACLE"] if g["ORACLE"] > 0.01 else np.nan,
-                reroute_oracle=reroute, reroute_learned=reroute_l, routes=routes, curve=curve,
+                reroute_oracle=reroute, reroute_learned=reroute_l, routes=routes, curve=curve, boot=boot, single_best=single,
                 ratios={a: dict(zip([round(float(x), 3) for x in T], [float(y) for y in r[a]])) for a in r})
 
 

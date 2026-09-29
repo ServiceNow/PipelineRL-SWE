@@ -1053,3 +1053,18 @@ K&K; NO GAIN pending AIME, BBEH.
   base rate from k) -> -43.9 / -12.3 / -5.5 / +4.3%. => onboarding PROTECTS the router (prices dominated newcomers correctly from
   ~10 examples); naive onboarding wrecks it. A positive "new model lowers cost" test needs a newcomer that is actually cheaper or
   better than the pool.
+
+### 4.A.20 Baselines for the win claim (2026-09-29; `simple_baselines.py`, decompose.py now saves paired bootstrap draws + single-best)
+Gain vs the paper rule at matched accuracy (test), and OURS minus baseline as a PAIRED bootstrap difference:
+| pool | ours | mean-per-model constant | cost FROM THE SUCCESS HEAD | ours - from-success [95% CI] | single best model |
+| LCB | 35.6% | 1.3% | 34.1% | +1.5 [-1.3, +4.3] | -3.7% |
+| Omni (pre-reg Thinking probe) | 21.9% | -1.4% | 21.0% | +0.8 [-7.2, +9.0] | -20.1% |
+| MMLU-Pro (pre-reg Instruct) | 30.7% | 1.2% | 9.2% | **+21.5 [+8.5, +30.3]** | +5.4% |
+| CC | 2.0% | -2.5% | 5.3% | -3.3 [-8.6, +2.4] | +3.2% |
+(cost-from-success = per-model ridge of log output on the success head's logits (+squares); its log-output R2 LCB .67-.72,
+Omni .68-.72, CC .37-.46 -- close to the dedicated probe -- but MMLU-Pro .14-.36 vs probe .20-.66.)
+**Consequence for the claim:** the win vs the paper rule stands on all three pools, and routing beats the single best model.
+But on LCB and Omni a DEDICATED cost probe adds nothing over cost inferred from the success head: the capturable value is
+"harder problems cost more", which the success head already knows. Existing prefill routers could get most of it for free
+from their own success predictions. The separate cost probe matters only where length is not just difficulty (MMLU-Pro,
++21.5 pt). Constant-vs-constant (mean vs median) is worthless. Pending: MixLLM-style / prompt-GBM on Omni + MMLU-Pro (GPU).
