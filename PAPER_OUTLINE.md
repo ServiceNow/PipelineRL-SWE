@@ -12,8 +12,8 @@ Track B (verification) enters only as one measurement subsection.
 That latent does three jobs across a whole pool of reasoning models:**
 
 1. **Route:** who can solve it.
-2. **Price:** how many tokens each model will spend on it. This is worth 20–30% of cost at matched accuracy, a gain the
-   routing literature leaves unclaimed by treating cost as a per-model constant.
+2. **Price:** how many tokens each model will spend on it. This is worth 20–30% of cost at matched accuracy. Most routers
+   treat cost as a per-model constant; the few that predict it per query never measured what it is worth.
 3. **Onboard:** a new model is added from ~5–10 labelled examples by fitting 1–3 parameters against the latent.
 
 The latent is "shared" in a measurable sense. For reasoning models, most variation in output length is between
@@ -57,8 +57,9 @@ favours us but the CI touches 0. **Pending** means not yet run.
 ### §1 Introduction
 - **Setup:**
   - Routers choose argmax_m p_m(x)·V − c_m(x).
-  - Nearly all prior work sets c_m(x) to a per-model constant: a price × median length, "q-independent" (SWE-Router), or
-    "less critical" (Dekoninck et al.).
+  - Most prior work sets c_m(x) to a per-model constant: a price × median length, "q-independent" (SWE-Router), or
+    "less critical" (Dekoninck et al.). A few routers predict it per query (MixLLM, CARROT, GraphRouter, Route-To-Reason,
+    ZeroRouter), but none ablates it against the constant; CARROT reports only marginal gains on chat benchmarks.
   - That was reasonable for chat models, where output is a few dozen tokens and cost is input-dominated (RouterBench:
     output is 17–42% of the bill).
 - **The shift:** a reasoning model's output length varies 10–90× across problems within one model and setting, and
