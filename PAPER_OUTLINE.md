@@ -1,6 +1,6 @@
 # Paper outline: one prefill, a shared difficulty latent, and per-query cost in reasoning-model routing
 
-Status: draft outline, 2026-09-29. All numbers come from `NEW_PATH.md` §4.A.4–4.A.29 (section given in brackets).
+Status: draft outline, 2026-09-29. All numbers come from `NEW_PATH.md` §4.A.4–4.A.30 (section given in brackets).
 Target: a TMLR analysis paper, plus a 4-page workshop cut (at the end of this file).
 Track B (verification) enters only as one measurement subsection.
 
@@ -361,7 +361,18 @@ anchors). Prefill-probe routers (2602.09924, 2603.20895) and IRT-Router use per-
 - onboarding from 5–10 examples;
 - the router-vs-cascade shortcut result.
 Frame the paper as "per-query cost for reasoning-model routing: when it pays, why, and how cheaply", with ZeroRouter
-credited for the shared-latent framing. CARROT's marginal gain on chat benchmarks is predicted by our principle (C2).
+credited for the shared-latent framing.
+
+**Method differentiation from ZeroRouter [4.A.30]:**
+1. Price by work required, not difficulty: their length is a lookup on a scalar of the success parameters (s = αᵀb), so
+   it cannot price easy-but-laborious items. Evidence so far: MMLU-Pro (−19 pt for difficulty-only pricing). Needs a
+   coding pool too (planned).
+2. No model population needed: their 20-D IRT latent is identified from ~200 models' outcomes; a 5-model deployment pool
+   cannot identify it. Our probes use only the pool's own labels.
+3. Onboarding from 5–10 examples (1 + 2 parameters) vs ~200 anchors (20 parameters). Head-to-head at matched k: to do.
+4. Frozen 4B prefill vs fine-tuned DistilBERT (our frozen 4B already beats a fine-tuned 137M on cost and judging).
+5. Budgets need the per-query length distribution, not a per-bin mean (C14).
+Acknowledge: with a large model population their stage 1 gets a lot of free supervision for success prediction. CARROT's marginal gain on chat benchmarks is predicted by our principle (C2).
 
 ### §9 Limitations (write plainly)
 - Two confirmed pre-registrations; 5 decisive calls pending.

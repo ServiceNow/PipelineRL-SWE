@@ -1293,3 +1293,25 @@ fixed budget. OVERALL no -- averaged across budgets the advantage (1.1-1.3x) is 
 regime (1.3-1.55x), because at tight budgets every arm is forced to the cheapest model and at loose budgets every model fits.
 Paper framing: "under a per-request budget (an SLA), per-query cost prediction buys +5-7 points of accuracy in the budget band
 that matters".
+
+### 4.A.30 How ZeroRouter works, and where we differ (2026-09-29; from the paper's method section)
+**Their pipeline.** Stage 1 (defines the latent): fit a 20-D multidimensional 2PL IRT model, P(u solves i) =
+sigma(alpha_i^T (theta_u - b_i)), to the correctness matrix of ~200 Open-LLM-Leaderboard models, hierarchical Bayesian priors,
+SVI. Every training query gets alpha_i, b_i in R^20; every model an ability theta_u in R^20. Stage 2 (reads it from text):
+fine-tune DistilBERT ([CLS], final layer; 40 epochs) + 11 linguistic features -> fusion trunk -> heads predicting b (residual
+from the mean) and alpha (clustered expert heads). Inference: one DistilBERT pass -> alpha, b -> every model's P via the IRT
+formula; complexity s = alpha^T b -> one of K bins -> per-model mean output length (lookup). New model: everything frozen, fit
+theta_u (20 params) by BCE on ~200 D-optimal anchors; fill its length-per-bin table from those anchors.
+**Differentiation (ours vs theirs):**
+1. Cost from WORK, not difficulty: their length is a function of s = alpha^T b, a scalar of the success parameters -- locked to
+   difficulty by construction. Where work != difficulty (MMLU-Pro, 4.A.28) difficulty-only pricing loses ~19 pt. Needs more
+   pools (coding) to be a claim.
+2. Population requirement: their latent is identified from a response matrix over ~200 models (40 numbers per query from its
+   row of outcomes). A deployment pool of ~5 models cannot identify it; our probes need only the pool's own labels.
+3. Onboarding cost: 20 ability parameters from ~200 anchors vs our 1 + 2 parameters from 5-10 examples. Head-to-head at
+   matched k (5 / 10 / 50 / 200), giving them a low-D IRT our pool can support: TO DO (free, offline).
+4. Reader: fine-tuned 66M DistilBERT vs a frozen 4B prefill. Our frozen 4B already beat a fine-tuned 137M on cost R2 and as a
+   judge; their encoder not yet run on our pools.
+5. Budgets: they predict a mean length per bin; per-request budgets need P(length <= cap | query), where the distribution's
+   shape matters (4.A.29).
+Their advantage to acknowledge: with a large model population, stage 1 gets a lot of free supervision for SUCCESS prediction.
