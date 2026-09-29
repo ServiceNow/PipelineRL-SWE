@@ -1352,3 +1352,26 @@ tracks difficulty, because s = alpha^T b from a fitted IRT is a noisier difficul
 ahead by 9-21 pt at k=10 on LCB and MMLU-Pro; Omni about even (zr +0-2 pt at k=50). Caveats: MAP not SVI; K unstated (10 used);
 one seed, no CIs; stage 2 on our features, not their encoder. Supersedes the ZeroRouter-style stand-in (4.A.26 table used OUR
 difficulty for the bins, which is kinder to them: 17.9-21.7% on Omni vs 10-14% here).
+
+### 4.A.33 Hardened ZeroRouter reproduction: seeds, bin counts, paired CIs (2026-09-29; `zr_repro.py`, zr_repro.json)
+Setup as 4.A.32 (their stage 1 at D = 1, 5 on the 5 pool models, stage 2 on our frozen 4B activations); 3 stage-1 seeds; K = 5 /
+10 / 20 bins; paired bootstrap (500 test resamples, identical across arms) at K = 10; onboarding with 20 anchor draws per route.
+Routing, ours minus ZeroRouter [95% CI], ranges over the 3 seeds (ours: LCB 36.0, Omni 22.7, MMLU-Pro 30.9):
+| pool | D=1: ours - zr | D=1: cost side only (ours - our succ + zr cost) | D=5: ours - zr | D=5: cost side only |
+| LCB | +26.9..+27.1 [~+17, ~+37] | +21.5..+21.9 [~+15, ~+29] | +16.7..+17.7 [~+9, ~+25] | +18.7..+19.9 [~+13, ~+27] |
+| Omni | +2.3..+3.5 [~-11, ~+17] | +7.8..+8.5 [~-2, ~+19] | +11.3..+14.1 [~0, ~+25] | +10.5..+11.3 [~0, ~+21] |
+| MMLU-Pro | +21.4 [+6, +39] | +24.9 [+12, +35] | +21.8..+25.1 [~+8, ~+38] | +26.7..+29.7 [~+13, ~+41] |
+- Seeds barely matter (spread <= 3 pt). K matters on Omni: zr at D=1 ranges 13.8% (K=5) .. 16.6-22.7% (K=20), i.e. at its best bin
+  count it ties us on Omni. On LCB zr stays at ~9-19% for every K; on MMLU-Pro 2-22% (best at K=5), always well below 31%.
+- Their success model + our cost head ~= ours on every pool and setting (LCB 32-36, Omni 19-22, MMLU-Pro 32-34): the gap is the
+  bin-lookup pricing.
+Onboarding, ours minus zr (mean over held-out routes, 95% interval over anchor draws):
+| pool | D=1 k=10 | D=1 k=50 | D=5 k=10 | D=5 k=50 |
+| LCB | +10.4 [+4.9, +18.5] | +6.1 [+3.7, +8.4] | (see log) | |
+| Omni | +0.7 [-5.4, +5.1] | -1.0 [-2.9, +0.2] | +2.6 [-13.2, +12.7] | -0.7 [-2.7, +0.6] |
+| MMLU-Pro | +8.3 [+1.4, +16.0] | +6.7 [+3.6, +10.3] | +10.0 [+1.1, +19.4] | +7.3 [+4.4, +9.6] |
+By route: ours wins big on the valuable model (dsv4f +9..+31 pt everywhere), loses on the cheapest (oss20lo -3..-19).
+=> DEFINITIVE for the reproduction at pool size: ZeroRouter loses 17-27 pt (LCB) and 21-25 pt (MMLU-Pro) of cost savings to us, CIs
+exclude 0, robust to seed and bin count; on Omni (length ~ difficulty) it ties at its best bin count. The whole gap is on the pricing
+side. Onboarding: ours better on LCB and MMLU-Pro (CIs exclude 0), tie on Omni. Fairness to do: choose their K on calibration
+(Omni favours K=20); their own encoder (zr_encoder.py job running).

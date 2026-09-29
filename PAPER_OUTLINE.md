@@ -1,6 +1,6 @@
 # Paper outline: one prefill, a shared difficulty latent, and per-query cost in reasoning-model routing
 
-Status: draft outline, 2026-09-29. All numbers come from `NEW_PATH.md` §4.A.4–4.A.32 (section given in brackets).
+Status: draft outline, 2026-09-29. All numbers come from `NEW_PATH.md` §4.A.4–4.A.33 (section given in brackets).
 Target: a TMLR analysis paper, plus a 4-page workshop cut (at the end of this file).
 Track B (verification) enters only as one measurement subsection.
 
@@ -379,7 +379,9 @@ credited for the shared-latent framing.
    component swap puts the whole gap on the COST side: their success model + our cost head ≈ ours on all three pools,
    our success model + their bin-lookup pricing collapses (LCB 4–17%, Omni 10–14%, MMLU-Pro 2–7% vs ours 36 / 23 / 31%).
    This is the cleanest differentiation we have: success routing is commoditised; per-query cost is where the method
-   matters.
+   matters. Hardened (4.A.33; 3 seeds, K = 5/10/20, paired CIs): ours beats ZeroRouter by 17–27 pt on LCB and 21–25 pt
+   on MMLU-Pro (CIs exclude 0), ties on Omni at their best bin count; onboarding better on LCB and MMLU-Pro, tie on Omni.
+   Framing: a deployment pool has ~5 models; nobody fits a 200-model population on their own workload.
 Acknowledge: with a large model population their stage 1 gets a lot of free supervision for success prediction (to test:
 population-size curve on MMLU-Pro with Open LLM Leaderboard data, ~19 GB for 50 models, ~75 GB for 200). CARROT's marginal gain on chat benchmarks is predicted by our principle (C2).
 
