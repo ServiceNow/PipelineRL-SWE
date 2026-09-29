@@ -58,7 +58,7 @@ def fit_theta(a, bb, s, n, D):
 
 
 out = {}
-for label, name, cfile, act in POOLS:
+for label, name, cfile, act in (POOLS if __name__ == "__main__" else []):     # importable without running
     D_ = R / name; t = np.load(D_ / "tensors.npz", allow_pickle=True)
     S = [str(s) for s in t["model_slots"]]; M = len(S); pids = [str(p) for p in t["problem_ids"]]; pi = {p: i for i, p in enumerate(pids)}
     v = t["valid"].astype(bool); okd = (t["final_outcome"] & t["valid"]).astype(bool); ct = t["completion_tokens"].astype(float)
@@ -141,4 +141,5 @@ for label, name, cfile, act in POOLS:
               + " | onboarding k=10: ours {:.1f}% zr {:.1f}%; k=50: ours {:.1f}% zr {:.1f}%".format(
                   *[res[f"D={D}"]["onboard"][k][a] * 100 for k in (10, 50) for a in ("ours", "zr")]), flush=True)
     out[label] = res
-json.dump(out, open(Path(__file__).parent / "zr_dimsweep.json", "w"), indent=1, default=float)
+if __name__ == "__main__":
+    json.dump(out, open(Path(__file__).parent / "zr_dimsweep.json", "w"), indent=1, default=float)
