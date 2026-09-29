@@ -1,6 +1,6 @@
 # Paper outline: one prefill, a shared difficulty latent, and per-query cost in reasoning-model routing
 
-Status: draft outline, 2026-09-29. All numbers come from `NEW_PATH.md` §4.A.4–4.A.31 (section given in brackets).
+Status: draft outline, 2026-09-29. All numbers come from `NEW_PATH.md` §4.A.4–4.A.32 (section given in brackets).
 Target: a TMLR analysis paper, plus a 4-page workshop cut (at the end of this file).
 Track B (verification) enters only as one measurement subsection.
 
@@ -375,7 +375,13 @@ credited for the shared-latent framing.
    LCB, work ≠ difficulty on MMLU-Pro). No CIs yet.
 4. Frozen 4B prefill vs fine-tuned DistilBERT (our frozen 4B already beats a fine-tuned 137M on cost and judging).
 5. Budgets need the per-query length distribution, not a per-bin mean (C14).
-Acknowledge: with a large model population their stage 1 gets a lot of free supervision for success prediction. CARROT's marginal gain on chat benchmarks is predicted by our principle (C2).
+6. **ZeroRouter reproduced on our 5-model pools (4.A.32):** its latent gains nothing from dimension (D = 1 → 20), and a
+   component swap puts the whole gap on the COST side: their success model + our cost head ≈ ours on all three pools,
+   our success model + their bin-lookup pricing collapses (LCB 4–17%, Omni 10–14%, MMLU-Pro 2–7% vs ours 36 / 23 / 31%).
+   This is the cleanest differentiation we have: success routing is commoditised; per-query cost is where the method
+   matters.
+Acknowledge: with a large model population their stage 1 gets a lot of free supervision for success prediction (to test:
+population-size curve on MMLU-Pro with Open LLM Leaderboard data, ~19 GB for 50 models, ~75 GB for 200). CARROT's marginal gain on chat benchmarks is predicted by our principle (C2).
 
 ### §9 Limitations (write plainly)
 - Two confirmed pre-registrations; 5 decisive calls pending.

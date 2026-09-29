@@ -1334,3 +1334,21 @@ model-specific cost share for dsv4f, MMLU-Pro has work != difficulty; Omni lengt
 No CIs (means over 20 anchor draws). CORRECTIONS to 4.A.30: point 2 ("their latent needs ~200 models") is too strong -- a 1-D
 version fitted on only 4 models is competitive and wins on Omni; restate as "their 20-D latent needs a population; the version a
 small pool supports is 1-D". Point 3 (onboarding) is a win on 2 of 3 pools, not across the board.
+
+### 4.A.32 ZeroRouter fitted on our 5-model pools: dimension sweep + component swap (2026-09-29; `zr_dimsweep.py`)
+Their stage 1 (D-dim 2PL IRT, MAP with Gaussian priors -- the paper uses SVI on the same model) fitted on the 5 pool models'
+TRAIN outcomes; stage 2 = frozen 4B prefill activations -> PCA(256) -> ridge onto (log alpha, b) (a stronger reader than their
+DistilBERT: generous to them); cost = their Eq. 8-10 (s = alpha^T b, K=10 bins, per-model mean train output per bin).
+| pool | D | success log-loss zr (ours) | routing gain vs paper: zr / zr success + OUR cost / OUR success + zr cost (ours) | onboarding k=10 ours / zr; k=50 |
+| LCB | 1 / 2 / 5 / 20 | .435 / .432 / .417 / .428 (.387) | 9.1 / -8.1 / 19.3 / 14.5; 32.4 / 27.3 / 35.7 / 35.1; 13.8 / 4.1 / 16.5 / 12.2 (36.0) | 30.8/18.5 30.3/9.3 30.3/19.2 29.5/12.7; k=50 ~32/18-26 |
+| Omni | 1 / 2 / 5 / 20 | .502 / .495 / .483 / .499 (.449) | 20.1 / 6.9 / 12.3 / 7.3; 22.0 / 19.2 / 20.2 / 20.0; 14.1 / 10.1 / 11.8 / 11.3 (22.7) | 17.4/17.7 18.7/11.9 19.3/15.2 19.3/16.6; k=50 zr +0.1..2.0 |
+| MMLU-Pro | 1 / 2 / 5 / 20 | .593 / .608 / .630 / .628 (.519) | 9.6 / 9.4 / 8.0 / 10.0; 33.6 / 31.2 / 32.4 / 33.9; 5.1 / 6.7 / 1.9 / 6.9 (30.9) | 28.2/19.6 28.8/14.7 28.0/18.5 29.6/19.0; k=50 ~30/20-23 |
+Findings. (1) With 5 models, dimensionality buys nothing: no trend from D=1 to D=20 in success log-loss, routing or onboarding
+(only noise, e.g. LCB routing 9 / -8 / 19 / 15%). The latent collapses as predicted. (2) COMPONENT SWAP -- the difference is the
+COST side: their success model + our cost head ~= ours on every pool (LCB 27-36 vs 36.0, Omni 19-22 vs 22.7, MMLU-Pro 31-34 vs
+30.9), while our success model + their bin-lookup cost collapses (LCB 4-17, Omni 10-14, MMLU-Pro 2-7). Their success predictions
+are usable for routing (log-loss somewhat worse than our probes); their pricing is what fails -- even on Omni, where length
+tracks difficulty, because s = alpha^T b from a fitted IRT is a noisier difficulty scalar than a direct read. (3) Onboarding: ours
+ahead by 9-21 pt at k=10 on LCB and MMLU-Pro; Omni about even (zr +0-2 pt at k=50). Caveats: MAP not SVI; K unstated (10 used);
+one seed, no CIs; stage 2 on our features, not their encoder. Supersedes the ZeroRouter-style stand-in (4.A.26 table used OUR
+difficulty for the bins, which is kinder to them: 17.9-21.7% on Omni vs 10-14% here).
