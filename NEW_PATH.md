@@ -1089,3 +1089,27 @@ Omni / MMLU-Pro -- its heads mislead the router); oss120md, oss120hi ~no change 
 => Adding a genuinely useful model back from 5-10 examples recovers most of its value (LCB 4 -> 23-25 of 36; Omni -25 -> 19 of
 29; MMLU-Pro -22 -> 29 of 31 at k=10); adding it naively is WORSE than leaving it out. dsv4f is the hardest route to onboard
 (largest model-specific cost share, .21-.43), so this is a pessimistic case. See PAPER_OUTLINE.md for how this enters the paper.
+
+### 4.A.22 Why a shared difficulty latent does not beat the fixed cascade (2026-09-29; `analysis/dist_bellman/shortcut_ceiling.py`)
+LCB 5-rung pool, free perfect verifier, clean_comparison protocol (operating point chosen on calibration, applied once to
+test; cascade = best of 728 enumerated plans). All non-cascade arms run ONE index policy (call the route with the lowest
+c/q while V*q > c; stop at first success); only the per-problem information changes. Market prices; cost ratio vs cascade:
+| information | 70% | 80% | 85% | 90% |
+| ours (prefill q, cost head) | 1.23 | 1.67 | 1.52 | 1.88 |
+| synthetic latent R2 .50 / .70 / .85 | 1.98 / 0.85 / 0.65 | 2.10 / 1.17 / 0.72 | 1.92 / 1.26 / 0.77 | 1.70 / 1.30 / 0.81 |
+| ORACLE shared latent (true difficulty + true cost level) | 0.42 | 0.59 | 0.55 | 0.85 [0.66,1.06] |
+| ORACLE per-route pass rates and costs | 0.40 | 0.28 | 0.24 | 0.24 |
+| clairvoyant (knows which draw succeeds) | 0.13 | 0.08 | 0.08 | 0.07 |
+Our prefill vs the true shared latent on test: difficulty R2 **0.42**, cost level R2 0.79.
+Findings. (1) LATENT QUALITY is the bottleneck: a perfect shared latent is 40-45% cheaper than the cascade at 70-85%; the
+break-even is around difficulty R2 ~.7-.8; ours reads .42. Convex, like the one-shot capture curve. (The index policy does
+not update after failures, which handicaps weak information; with the Bellman policy ours ~= cascade, 0.99x / +2.8 pt at 85%,
+4.A.2 DEFINITIVE -- same conclusion.) (2) NOT the price ladder: scaling oss120's price x0.25 or x4 moves the oracle-latent ratio
+little (80%: 0.76 / 0.59 / 0.66). (3) "Shortcut to the right tier" is not where the money is: even oracle arms skip the
+cheapest route on only 0-10% (latent) / 5-16% (per-route) of problems -- oss20lo costs 1/18-1/100 of the others and solves
+53%, so trying it first is nearly always right. The savings come from stopping early on hopeless problems and not re-buying
+draws that will fail (cascade: 52-84% of spend is on failed draws). (4) At >= 90% even the perfect SHARED latent only ties
+the cascade; per-route information (0.24) is needed -- the model-specific part, which nothing predicts (4.A.17).
+(5) The cascade's first cheap draw is itself a cheap noisy measurement of the latent -- the reason it is hard to beat.
+Caveat: oracle quantities use the problem's own draws (leaky ceilings); synthetic arms add noise to that leaky latent.
+Legacy prices give the same picture (analysis/dist_bellman/shortcut_lcb_legacy.json).
