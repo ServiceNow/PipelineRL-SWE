@@ -1,6 +1,6 @@
 # Paper outline: one prefill, a shared difficulty latent, and per-query cost in reasoning-model routing
 
-Status: draft outline, 2026-09-29. All numbers come from `NEW_PATH.md` §4.A.4–4.A.25 (section given in brackets).
+Status: draft outline, 2026-09-29. All numbers come from `NEW_PATH.md` §4.A.4–4.A.26 (section given in brackets).
 Target: a TMLR analysis paper, plus a 4-page workshop cut (at the end of this file).
 Track B (verification) enters only as one measurement subsection.
 
@@ -19,6 +19,12 @@ That latent does three jobs across a whole pool of reasoning models:**
 The latent is "shared" in a measurable sense. For reasoning models, most variation in output length is between
 problems rather than between models (81–96% of variance). Hard problems are long for everyone, and the
 model-specific remainder is essentially unpredictable before generation.
+
+**Prior art for the framing (must be cited up front):** ZeroRouter (2601.06220) already builds a shared IRT difficulty
+latent that routes, prices each query (per-model mean output in the query's difficulty bin) and onboards new models from
+~200 anchors. Route-To-Reason, CARROT, GraphRouter and MixLLM also predict per-query cost. None of them measures whether
+per-query cost helps against a per-model constant, or when; none reads cost from an LLM prefill; none onboards from fewer
+than ~200 examples. Our paper is the measurement and the account, not the invention of the idea [4.A.26].
 
 What makes this a paper and not a trick:
 - **When:** the rule for when it pays was stated and pre-registered, then confirmed on 2 new datasets.
@@ -43,6 +49,7 @@ favours us but the CI touches 0. **Pending** means not yet run.
 | C9 | Higher cost-prediction R² does not imply better routing | LCB prefix: R² .70–.86 but gain 34→26% [4.A.15] | Solid |
 | C10 | Onboarding: a new model's cost from 5 examples gives 96% of a trained head. Removing a strong model (deepseek-v4-flash; or gpt-oss-120b in a pool without deepseek) and re-adding it from ~10 examples restores most of the lost accuracy while still saving vs the reference; naive re-adding restores accuracy at a cost premium | [4.A.18 #2, #2.1, 4.A.21, 4.A.24] | Solid (offline, 3 pools × 2 pool variants) |
 | C11 | New families that are dominated by the pool are priced out correctly from ~10 examples (onboarding protects the router) | GLM / Nemotron / MiniMax on MMLU-Pro [4.A.19 #2.3] | Solid, but protective, not a gain |
+| C13 | Difficulty-only pricing (ZeroRouter-style bins, or cost read from the success head) matches a dedicated cost read where length is difficulty (LCB, Omni) and loses ~19 pt where it is not (MMLU-Pro) | [4.A.20, 4.A.26] | Solid on 3 pools; the MMLU-Pro case is one pool |
 | C12 | With no verifier and one submission, the prefill router beats single-submission cascades with a learned answer judge, and even a cascade with a PERFECT judge: a cascade pays for the cheap attempt on every problem, the prefill skips it | LCB [4.A.25] | Solid on LCB for the 4B judge and the perfect judge; FrugalGPT-style 137M judge pending; other pools pending |
 
 ## 2. Section-by-section outline
@@ -142,6 +149,7 @@ Table 1: headroom [95% CI], market prices [4.A.4, 4.A.7, 4.A.9, 4.A.14, 4.A.19].
   | MixLLM-style (embeddings → MLP / RF / kNN) | +21.5 | +9.4 [−4.4, 24.2] | +26.7 [12.4, 40.2] |
   | Prompt-feature GBM | +23.3 | +15.2 [−1.4, 34.1] | +20.9 [3.8, 33.3] |
   | Cost from the success head | +1.5 [−1.3, 4.3] | +0.8 [−7.2, 9.0] | +21.5 [8.5, 30.3] |
+  | ZeroRouter-style difficulty bins, K=5 / 10 (on our prefill latent: an upper bound for theirs) | +3.7 [0.1, 7.4] / +1.8 (n.s.) | −0.1 / +3.5 (n.s.) | +19.6 [7.8, 32.7] / +19.1 [7.6, 31.6] |
 
   - Rows without brackets are point differences of separately reported gains. The baselines' own gains vs the
     reference: mean-constant 1.3 / −1.4 / 1.2; single best model −3.7 / −20.1 / +5.4; LCB MixLLM-style 14.1 [5.3, 21.0];
@@ -310,16 +318,27 @@ Group by what each assumes about cost.
 | Budget control | R2-Router 2602.02823 (prompt-instructed budgets, own bench); TALE-style self-estimates |
 | Length / difficulty prediction | EGTP / PLP 2602.11812; TRAIL; OUTLETS 2609.01068 |
 | Abort and reroute | SWE-Router 2607.00053; Fail-Fast 2608.03222; TACIT-Switch; EarlyEval 2609.02783 |
-| Cold start / shared latents | IRT-Router; universal latent space 2601.06220; SCOPE 2601.22323; 2607.18253 |
+| Cold start / shared latents | ZeroRouter 2601.06220 (IRT latent, per-query cost by difficulty bin, ~200-anchor onboarding); IRT-Router; SCOPE 2601.22323; 2607.18253 |
+| Per-query cost predictors | MixLLM 2502.18482; CARROT 2502.03261; GraphRouter 2410.03834; Route-To-Reason 2505.19435; ZeroRouter |
 | Cascades with a learned answer check | FrugalGPT (per-tier fine-tuned DistilBERT scorer); AutoMix (prompted self-verification + POMDP); bi-directional cascading with proxy confidence 2504.19391 (small model's own hidden states); Dekoninck 2410.10347 (cascade routing); Cheap Verifiers, Large Blind Spots 2609.01345 (cheap verifiers miss more as students get stronger) |
 | Correctness probes on hidden states | Openia 2501.12934, AutoProbe 2510.02934, 2512.07404, 2606.14530 (code; mostly the generator's own states, sample selection); HSRM 2608.30841 (best-of-N); judge probes 2512.22245 (calibration) |
 
-**To do:** read 2601.06220 and IRT-Router's cold-start closely. They are the closest to §6.
+**Done (4.A.26):** ZeroRouter is the closest to §6 (onboarding from ~200 anchors; ours from 5–10). IRT-Router's cold
+start for new models is weak (one model tested). A head-to-head onboarding baseline against ZeroRouter's anchor fit at
+k = 5–200 is still to do.
 
-**Positioning point:** routers that already predict success from a prefill (IRT-Router, C3PO, 2602.09924) still price every
-query at a per-model constant, and MixLLM trains a separate cost predictor from embeddings. To our knowledge nobody reads
-per-query cost off the success / difficulty latent they already have. Claim this "to our knowledge", pending the
-2601.06220 read.
+**Positioning (after the targeted check, 4.A.26):** per-query cost prediction in routers exists: MixLLM, CARROT (kNN /
+RoBERTa; only "marginal" gains over a constant on RouterBench / SPROUT), GraphRouter, Route-To-Reason (text-embedding MLP
+predicts reasoning-model output length), and ZeroRouter (difficulty-bin lookup on a shared IRT latent, onboarding from ~200
+anchors). Prefill-probe routers (2602.09924, 2603.20895) and IRT-Router use per-model constant costs. What nobody reports:
+- an ablation of per-query cost against a per-model constant at matched accuracy, or a headroom measurement;
+- when it pays (reasoning vs chat vs agents) and a rule that predicts it, tested out of sample;
+- cost read from an LLM prefill;
+- whether difficulty-only pricing is enough (we show: yes on LCB / Omni, no on MMLU-Pro);
+- onboarding from 5–10 examples;
+- the router-vs-cascade shortcut result.
+Frame the paper as "per-query cost for reasoning-model routing: when it pays, why, and how cheaply", with ZeroRouter
+credited for the shared-latent framing. CARROT's marginal gain on chat benchmarks is predicted by our principle (C2).
 
 ### §9 Limitations (write plainly)
 - Two confirmed pre-registrations; 5 decisive calls pending.
@@ -331,6 +350,7 @@ per-query cost off the success / difficulty latent they already have. Claim this
 - Agentic predictability is below threshold. The agentic headroom exists, but it is not captured.
 - The cascade comparison (C12) is LCB only so far, and the FrugalGPT-style 137M judge is still pending.
 - Onboarding pools share a model family (gpt-oss); the only other families tried were dominated.
+- The shared-latent framing is not new (ZeroRouter); our novelty is measurement, mechanism and the cheap regime.
 
 ## 3. Figures and tables
 1. **Fig. 1:** headroom bars, grouped reasoning / chat / agentic-open / agentic-mixed, with CIs (C1, C2).
@@ -358,8 +378,8 @@ per-query cost off the success / difficulty latent they already have. Claim this
 5. **Decide the MMLU-Pro story** (why length ≠ difficulty there: subject-driven verbosity?). Offline analysis.
 6. **Cascade comparison beyond LCB:** 137M FrugalGPT-style scorers on Omni and MMLU-Pro answers (cheap GPU job); the 4B
    judge arm there would need ~7k / ~14k new judge prefills (our GPUs, no API).
-7. **Targeted literature check before claiming "nobody prices per query from the prefill":** 2601.06220, IRT-Router's
-   cold start, AutoProbe's setup, 2025–26 probe-routing papers.
+7. **Done: targeted literature check (4.A.26).** Remaining: an onboarding baseline in ZeroRouter's style (IRT ability fit
+   + bin lookup) at k = 5 / 10 / 50 / 200.
 8. Figures, and a clean re-run of every table from one script per table.
 
 ## 5. Workshop cut (4 pages)

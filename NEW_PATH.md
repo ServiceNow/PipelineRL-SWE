@@ -1182,3 +1182,47 @@ attempt on every problem, the prefill shortcut skips it (the "jump to the right 
 nothing on top of the router (hybrid +0.7%). (lam > 0 dropped as out of scope: a perfect judge would win 46-70% there, the 4B
 judge loses badly -- its weakness is strong-model code.) Pending: the FrugalGPT-style per-tier fine-tuned 137M scorer
 (finetune_judge_reader.py; first job OOM'd, relaunched 2026-09-29 07:00 UTC).
+
+### 4.A.26 Targeted literature check (2026-09-29, overnight) + ZeroRouter-style baseline
+Question: has anyone (a) priced each query from a prefill / shared difficulty latent, (b) onboarded models against it,
+(c) measured when per-query cost pays? Read in full or in the relevant sections:
+- **ZeroRouter (2601.06220, Yan et al., Jan 2026) -- CLOSEST PRIOR ART.** "Universal latent space" of query difficulty
+  (multidimensional IRT, D=20) from a fine-tuned DistilBERT + 11 linguistic features. PER-QUERY output length = each model's
+  mean output in the query's complexity bin (s_q = alpha_q^T b_q discretised into K bins, K unstated; Eq. 10); cost =
+  fixed $/token x predicted tokens; latency = TTFT + tokens x TPOT. New models onboarded "zero-shot" from ~200 anchor queries
+  (IRT ability fit + the same bin lookup for cost). Pool mostly non-reasoning (Qwen3-235B/32B, R1-Distill-70B, Mixtral,
+  Phi-4, Llama-8B, ...); Open-LLM-leaderboard tasks (IFEval, BBH, MATH, GPQA, MuSR, MMLU-Pro). NO ablation of the per-query
+  cost component vs a per-model average; NO test of fewer than 200 anchors; no analysis of output-length variation.
+  => The FRAMING "one shared difficulty latent routes, prices and onboards" is theirs. Our paper must cite it as such.
+- **Route-To-Reason (2505.19435, Pan et al.; WWW 2026)**: routes over (model x reasoning strategy) incl. reasoning models
+  (R1, QwQ-32B); MLP on all-mpnet-base-v2 text embeddings predicts output tokens (~60% within 600 tokens for reasoning
+  models); predicted length enters the score. No ablation vs average cost.
+- **CARROT (2502.03261)**: per-query cost via kNN / RoBERTa on text embeddings; SPROUT dataset (15 models incl. o3-mini;
+  GPQA, MuSR, MMLU-Pro, MATH, ...). Its comparison with the RouterBench router (constant per-model average cost) shows only
+  "marginal improvements" -- consistent with our chat-pool headroom (RouterBench 10.5%); no cost-predictor accuracy reported.
+- **GraphRouter (2410.03834, ICLR 2025)**: GNN edge prediction of both effect and cost per (query, LLM); new LLMs without
+  retraining.
+- **IRT-Router (2506.01048)**: cost is FIXED per model (output price mapped to [0,1]); BERT embeddings; cold start for new
+  queries by kNN warm-up; new models weak (tested on one).
+- **LLMs Encode Their Failures (2602.09924)**: prefill probes predict success (gpt-oss-20b low/med/high, Qwen-Math,
+  R1-Distill-7B; MATH/GSM8K/AIME); routing cost = average output cost per model from train -- no per-query cost.
+- **2603.20895 (prefill-activation router)**: median length per model (our reference rule).
+- **RouterXBench (2602.11877)**: router evaluation assumes uniform cost per call.
+- **AutoProbe (2510.02934)**: probes the GENERATOR's own hidden states for code correctness; not routing/cascades; degrades
+  across models. (So our external 4B judge of other models' code is not AutoProbe's setting.)
+Verdict: per-query cost prediction in routers EXISTS (MixLLM, CARROT, GraphRouter, Route-To-Reason, ZeroRouter), including a
+difficulty-latent version with onboarding (ZeroRouter). What we did not find anywhere: (1) a measurement of what per-query cost
+is worth (headroom vs a per-model constant at matched accuracy) and WHEN it pays (reasoning vs chat vs agents; the rule,
+pre-registered); (2) cost read from an LLM prefill; (3) evidence that difficulty-only pricing is enough on some pools and not
+others; (4) onboarding from 5-10 examples; (5) the router-vs-cascade shortcut result. The positioning must change from "nobody
+prices per query from the latent" to "several routers price per query, none measured whether or when it helps; we do, and we
+show where difficulty-only pricing (ZeroRouter's) fails".
+**ZeroRouter-style pricing as a baseline** (`zerorouter_cost.py`: complexity = our shared difficulty = mean success logit,
+K quantile bins on train, per-model mean train output per bin; uses OUR prefill latent, so it is an upper bound on their
+DistilBERT version). Gain vs the paper rule; ours minus it, paired bootstrap:
+| pool | ours | ZeroRouter-style K=5 | K=10 | cost-from-success (continuous) |
+| LCB | 35.6% | 32.2% (+3.7 [+0.1, +7.4]) | 34.0% (+1.8 [-1.6, +5.1]) | 34.1% (+1.6 [-1.3, +4.3]) |
+| Omni | 21.9% | 21.7% (-0.1 [-12.1, +10.7]) | 17.9% (+3.5 [-8.2, +14.9]) | 21.0% (+0.3 [-7.2, +9.0]) |
+| MMLU-Pro | 30.7% | 10.9% (+19.6 [+7.8, +32.7]) | 13.3% (+19.1 [+7.6, +31.6]) | 9.2% (+19.4 [+8.5, +30.3]) |
+=> Difficulty-bin pricing ties us where length is difficulty (LCB, Omni) and loses ~19 pt where it is not (MMLU-Pro) -- the
+same pattern as cost-from-success. This is our sharpest differentiator from ZeroRouter.
