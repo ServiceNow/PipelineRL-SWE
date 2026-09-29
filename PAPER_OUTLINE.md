@@ -1,6 +1,6 @@
 # Paper outline: one prefill, a shared difficulty latent, and per-query cost in reasoning-model routing
 
-Status: draft outline, 2026-09-29. All numbers come from `NEW_PATH.md` §4.A.4–4.A.27 (section given in brackets).
+Status: draft outline, 2026-09-29. All numbers come from `NEW_PATH.md` §4.A.4–4.A.28 (section given in brackets).
 Target: a TMLR analysis paper, plus a 4-page workshop cut (at the end of this file).
 Track B (verification) enters only as one measurement subsection.
 
@@ -226,8 +226,15 @@ Table 1: headroom [95% CI], market prices [4.A.4, 4.A.7, 4.A.9, 4.A.14, 4.A.19].
 - **5.5 Success and cost are (mostly) one latent.**
   - Cost inferred from the success head ties the dedicated cost read on LCB and Omni.
   - It loses by 21.5 pt on MMLU-Pro, where the from-success log-length R² is .14–.36 vs the probe's .20–.66 [4.A.20].
-  - Framing: one representation, two linear read-outs. Usually one direction suffices; on some tasks
-    (MMLU-Pro: subject-driven verbosity?) length needs its own direction.
+  - Framing: one representation, two linear read-outs. Usually one direction suffices; on MMLU-Pro length needs its own
+    direction [4.A.28]:
+    - Even TRUE difficulty explains little of MMLU-Pro length (R² .19 vs .46–.51 on Omni / LCB), so it is not a weak
+      success head.
+    - Subject closes half the routing gap (9.2% → 22.3%, probe 30.7%); source and option count add nothing.
+    - The rest is item-level WORK REQUIRED: multi-quantity engineering calculations and multi-part "explain and
+      distinguish" questions run long; fill-in-the-blank recall and one-formula plug-ins run short, whatever their
+      difficulty. The probe's extra signal correlates .64 with the true residual.
+    - Paper line: price by work required, not by difficulty. They coincide on LCB / Omni and come apart on MMLU-Pro.
   - Honest statement: routers that already have a prefill success head get much of this for free. Our contribution
     is showing it, measuring it, and saying when a separate read-out is needed.
 - **5.6 The model-specific remainder is unpredictable** (C8). Table of nulls on between-route differences:
@@ -379,7 +386,8 @@ credited for the shared-latent framing. CARROT's marginal gain on chat benchmark
 3. **Re-run the LCB baselines under the paired bootstrap with saved draws** (Table 3 consistency). Free.
 4. **A positive new-model test:** a newcomer that is cheaper or better than part of the pool, so onboarding can show
    a gain, not just protection. This needs choosing a model; ~$2–5.
-5. **Decide the MMLU-Pro story** (why length ≠ difficulty there: subject-driven verbosity?). Offline analysis.
+5. **Done: the MMLU-Pro story** (4.A.28): work required vs difficulty. Optional: a cheap check that "work required"
+   generalises, e.g. a second pool where the two come apart (SuperGPQA, from the pending pre-registered pools).
 6. **Cascade comparison beyond LCB:** 137M FrugalGPT-style scorers on Omni and MMLU-Pro answers (cheap GPU job); the 4B
    judge arm there would need ~7k / ~14k new judge prefills (our GPUs, no API).
 7. **Done: targeted literature check (4.A.26).** Remaining: an onboarding baseline in ZeroRouter's style (IRT ability fit

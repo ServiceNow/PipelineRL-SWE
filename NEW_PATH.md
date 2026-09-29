@@ -1239,3 +1239,28 @@ Cascade replay (lam = 0; cost saved vs the one-shot router at matched accuracy; 
 perfect-judge one. As an escalation add-on to the router, a judge buys at most ~2%. The 137M cascade beats the 4B cascade
 despite the lower AUC (it is free; the thresholds landed better) -- not a paired comparison, CIs overlap; not a claim.
 LCB only. C12 now: Solid on LCB.
+
+### 4.A.28 What drives MMLU-Pro output length beyond difficulty? (2026-09-29; `mmlupro_length_driver.py` + inline checks)
+Test R2 of log mean output tokens per route (oss20lo / oss20md / dsv4f / oss120md / oss120hi):
+| features | R2 |
+| success-head difficulty | .14 / .25 / .25 / .21 / .36 |
+| TRUE difficulty (other routes' solve rate) | .02 / .19 / .27 / .12 / .33 (Omni mean .46, LCB .51) |
+| subject (14) | .22 / .17 / .16 / .25 / .20 |
+| difficulty + subject | .36 / .37 / .30 / .43 / .42 |
+| + source (ori_mmlu / stemez / theoremQA / scibench) + n options + option length | .39 / .39 / .31 / .47 / .42 |
+| 4B cost probe | .51 / .58 / .20 / .66 / .50 |
+- Not a weak success head: even TRUE difficulty explains little of MMLU-Pro length (mean .19 vs .46-.51 on Omni/LCB). Caveat:
+  solve rates are high (60-83%) and coarse, so "true difficulty" is itself a blunt measure here.
+- Harder = longer both across and within subjects (corr -0.14..-0.54 either way): no Simpson reversal. My first hypothesis
+  (computational vs recall subjects) is WRONG: law (solve .45) and engineering are the longest subjects, math is short.
+- Subject closes about HALF the routing gap: difficulty only 9.2%, difficulty + subject 22.3%, probe 30.7% (probe minus
+  difficulty+subject +9.7 [+0.3, +19.4]).
+- The probe's remaining signal is real (corr .64 with the true residual after difficulty + subject) and item-level: questions
+  it prices LONG are multi-quantity engineering calculations (pipes, heat transfer, mass transfer: many givens, unit
+  conversions, multi-step formulas) and multi-part open-ended "explain X and distinguish it from Y"; questions it prices SHORT
+  are fill-in-the-blank / single-concept recall and one-formula plug-ins. Surface proxies catch only part of it (digits in the
+  question .27, question length .19).
+=> Name for the paper: WORK REQUIRED (how many steps / quantities / parts the answer needs) vs DIFFICULTY (how likely the model
+is to get it wrong). On LCB and Omni the two coincide (hard problems need more steps), so difficulty-only pricing suffices; on
+MMLU-Pro they come apart (easy-but-laborious engineering calculations, short-but-failed recall), and the prefill reads work
+required directly.
