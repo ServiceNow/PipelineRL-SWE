@@ -7,7 +7,7 @@ O=${R}/judge_reader_ft; NAME="judge_ft137m_$(date -u +%Y%m%d_%H%M%S)"; mkdir -p 
 cat > ${O}/run.sh <<EOS
 #!/usr/bin/env bash
 set -uo pipefail
-export HF_HOME=/home/toolkit/.cache/huggingface
+export HF_HOME=/home/toolkit/.cache/huggingface PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 python analysis/cost_headroom/finetune_judge_reader.py > ${O}/ft.log 2>&1
 echo EXIT \$? >> ${O}/ft.log
 EOS

@@ -30,6 +30,14 @@ P = np.clip(np.array([_lp[p] for p in pids]), 1e-4, 1 - 1e-4); LOGIT = np.log(P 
 lc = {json.loads(l)["problem_id"]: json.loads(l)["expected_costs"][:M] for l in open(D / CF)}
 LC = np.array([lc[p] for p in pids]) * 100; MU = np.log(np.maximum((LC - inp * pin) / pout, 1.0))
 VS = np.geomspace(1e-5, 100, 250); med = np.array([np.median(ct[tr, m][v[tr, m]]) for m in range(M)])
+import os
+DROP = [x for x in os.environ.get("DROP", "").split(",") if x]           # routes removed from the pool entirely (e.g. dsv4f)
+if DROP:
+    keep = [i for i, s in enumerate(S) if s not in DROP]; S = [S[i] for i in keep]; M = len(S)
+    v, okd, ct, pt, n, avail, inp, outm, Y, Q, Cr, P, LOGIT, LC, MU = (x[:, keep] for x in (v, okd, ct, pt, n, avail, inp, outm, Y, Q, Cr, P, LOGIT, LC, MU))
+    pin, pout, med = pin[keep], pout[keep], med[keep]
+# held-out GROUPS: each single route, plus extra groups onboarded together from the same k problems (e.g. a model's two efforts)
+GROUPS = [[h] for h in range(M)] + [[S.index(x) for x in g.split("+")] for g in os.environ.get("HOLDGROUPS", "").split(",") if g]
 
 
 def frontier(Pm, C, ii):
@@ -43,42 +51,50 @@ def frontier(Pm, C, ii):
 H0 = frontier(P, inp * pin + med[None] * pout, te)
 
 
+MAXACC = []                                           # max test accuracy of the last gain() call's frontier
+
+
 def gain(Pm, C):
-    H = frontier(Pm, C, te); lo, hi = max(H[0][1], H0[0][1]), min(H[-1][1], H0[-1][1])
+    H = frontier(Pm, C, te); MAXACC.append(H[-1][1]); lo, hi = max(H[0][1], H0[0][1]), min(H[-1][1], H0[-1][1])
     T = np.linspace(lo + .05 * (hi - lo), hi - .05 * (hi - lo), 12)
     return 1 - float(np.exp(np.nanmean(np.log([cost_at(H, x) / cost_at(H0, x) for x in T]))))
 
 
-full = gain(P, LC); rng = np.random.default_rng(0); out = {}
+full = gain(P, LC); FULLACC = MAXACC[-1]; rng = np.random.default_rng(0); out = {}
 without = {}
-for h in range(M):                                    # the pool WITHOUT model h at all (h made unavailable)
-    Pw = P.copy(); Cw = LC.copy(); Pw[:, h] = 0.0; Cw[:, h] = 1e9
-    without[S[h]] = gain(Pw, Cw)
+for G in GROUPS:                                      # the pool WITHOUT the group at all (made unavailable)
+    Pw = P.copy(); Cw = LC.copy(); Pw[:, G] = 0.0; Cw[:, G] = 1e9
+    without["+".join(S[h] for h in G)] = gain(Pw, Cw); out[("+".join(S[h] for h in G), "maxacc_without")] = MAXACC[-1]
 L = np.log(np.maximum(outm, 1)); lvl_true = np.nanmean(L, 1); dd = L - lvl_true[:, None]
-for h in range(M):
-    lvl = np.nanmean(np.delete(MU, h, 1), 1); dbar = np.nanmean(np.delete(LOGIT, h, 1), 1)
-    trh = tr[avail[tr, h]]
+for G in GROUPS:
+    gname = "+".join(S[h] for h in G)
+    lvl = np.nanmean(np.delete(MU, G, 1), 1); dbar = np.nanmean(np.delete(LOGIT, G, 1), 1)
+    trh = tr[avail[tr][:, G].all(1)]
+    acc_k = []
     for k in (5, 10, 20, 50):
         g_on, g_nv = [], []
         for _ in range(20):
             kk = rng.choice(trh, k, replace=False)
-            off = np.mean(Y[kk, h] - lvl[kk]); smear = np.mean(np.exp(Y[kk, h] - (lvl[kk] + off)))
-            Xk = np.repeat(dbar[kk], n[kk, h]); yk = np.concatenate([okd[i, h][v[i, h]] for i in kk]).astype(int)
-            Pm = P.copy(); C = LC.copy()
-            C[:, h] = inp[:, h] * pin[h] + np.exp(lvl + off) * smear * pout[h]
-            if len(set(yk)) == 2:
-                lr = LogisticRegression(C=1.0).fit(Xk[:, None], yk); Pm[:, h] = lr.predict_proba(dbar[:, None])[:, 1]
-            else:
-                Pm[:, h] = np.clip(yk.mean(), 0.02, 0.98)
-            g_on.append(gain(Pm, C))
-            Pn = P.copy(); Cn = LC.copy(); Pn[:, h] = np.clip(yk.mean(), 0.02, 0.98)
-            Cn[:, h] = inp[:, h] * pin[h] + np.nanmedian(outm[kk, h]) * pout[h]; g_nv.append(gain(Pn, Cn))
-        out[(S[h], k)] = (np.mean(g_on), np.mean(g_nv))
-    out[(S[h], "spec_share")] = float(np.nanvar(dd[:, h]) / (np.nanvar(lvl_true) + np.nanvar(dd[:, h])))
+            Pm = P.copy(); C = LC.copy(); Pn = P.copy(); Cn = LC.copy()
+            for h in G:
+                off = np.mean(Y[kk, h] - lvl[kk]); smear = np.mean(np.exp(Y[kk, h] - (lvl[kk] + off)))
+                Xk = np.repeat(dbar[kk], n[kk, h]); yk = np.concatenate([okd[i, h][v[i, h]] for i in kk]).astype(int)
+                C[:, h] = inp[:, h] * pin[h] + np.exp(lvl + off) * smear * pout[h]
+                if len(set(yk)) == 2:
+                    lr = LogisticRegression(C=1.0).fit(Xk[:, None], yk); Pm[:, h] = lr.predict_proba(dbar[:, None])[:, 1]
+                else:
+                    Pm[:, h] = np.clip(yk.mean(), 0.02, 0.98)
+                Pn[:, h] = np.clip(yk.mean(), 0.02, 0.98); Cn[:, h] = inp[:, h] * pin[h] + np.nanmedian(outm[kk, h]) * pout[h]
+            g_on.append(gain(Pm, C)); a_on = MAXACC[-1]; g_nv.append(gain(Pn, Cn)); acc_k.append((a_on, MAXACC[-1]))
+        out[(gname, k)] = (np.mean(g_on), np.mean(g_nv)); out[(gname, f"maxacc_{k}")] = tuple(np.mean(acc_k, 0)); acc_k.clear()
+    if len(G) == 1:
+        h = G[0]; out[(gname, "spec_share")] = float(np.nanvar(dd[:, h]) / (np.nanvar(lvl_true) + np.nanvar(dd[:, h])))
+GN = ["+".join(S[h] for h in G) for G in GROUPS]
 print(f"{name}: all routes on full heads {full*100:.1f}%.  per held-out route: WITHOUT it | onboard (cost+success) / naive_k")
-for h in S:
-    print(f"   {h:<9} without {without[h]*100:5.1f}% |" + "".join(f"  k={k}: {out[(h,k)][0]*100:5.1f}% / {out[(h,k)][1]*100:5.1f}%" for k in (5, 10, 50))
-          + f"   (full {full*100:.1f}%)")
-mean = lambda k, j: np.mean([out[(h, k)][j] for h in S])
+for h in GN:
+    print(f"   {h:<17} without {without[h]*100:5.1f}% |" + "".join(f"  k={k}: {out[(h,k)][0]*100:5.1f}% / {out[(h,k)][1]*100:5.1f}%" for k in (5, 10, 50))
+          + f"   (full {full*100:.1f}%)\n{'':20}max test accuracy: full {FULLACC*100:.1f} | without {out[(h,'maxacc_without')]*100:.1f} | "
+          + "  ".join(f"k={k}: onboard {out[(h,f'maxacc_{k}')][0]*100:.1f} / naive {out[(h,f'maxacc_{k}')][1]*100:.1f}" for k in (5, 10, 50)))
+mean = lambda k, j: np.mean([out[(h, k)][j] for h in S])     # single routes only
 print("   mean     " + "".join(f"  k={k}: {mean(k,0)*100:5.1f}% / {mean(k,1)*100:5.1f}%" for k in (5, 10, 20, 50)))
-json.dump({f"{a}|{b}": v for (a, b), v in out.items()} | {"full": full} | {f"without|{k}": v for k, v in without.items()}, open(f"analysis/cost_headroom/onboard_full_{name}.json", "w"), indent=1)
+json.dump({f"{a}|{b}": v for (a, b), v in out.items()} | {"full": full} | {f"without|{k}": v for k, v in without.items()}, open(f"analysis/cost_headroom/onboard_full_{name}{'_no_' + '_'.join(DROP) if DROP else ''}.json", "w"), indent=1)

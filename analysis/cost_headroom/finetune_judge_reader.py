@@ -15,7 +15,7 @@ from decompose import R
 ap = argparse.ArgumentParser()
 ap.add_argument("--judge-dir", default=str(R / "pool_v2_judge_full")); ap.add_argument("--pool", default="pool_v2_tensors_5rung")
 ap.add_argument("--max-len", type=int, default=2048); ap.add_argument("--epochs", type=int, default=3)
-ap.add_argument("--batch", type=int, default=16); ap.add_argument("--lr", type=float, default=2e-5); ap.add_argument("--head-lr", type=float, default=1e-3)
+ap.add_argument("--batch", type=int, default=16); ap.add_argument("--micro", type=int, default=4); ap.add_argument("--lr", type=float, default=2e-5); ap.add_argument("--head-lr", type=float, default=1e-3)
 a = ap.parse_args()
 assert torch.cuda.is_available(), "GPU job only"
 J = Path(a.judge_dir)
@@ -58,20 +58,21 @@ for slot in sorted({r["slot"] for r in man}):
     def predict(rs):
         enc.eval(); ps = []
         with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
-            for i in range(0, len(rs), 32):
-                ps.append(torch.sigmoid(forward(rs[i:i + 32]).float()).cpu().numpy())
+            for i in range(0, len(rs), 8):
+                ps.append(torch.sigmoid(forward(rs[i:i + 8]).float()).cpu().numpy())
         enc.train(); return np.concatenate(ps) if ps else np.zeros(0)
 
     best = (np.inf, None, -1)
     for ep in range(a.epochs):
         perm = np.random.permutation(len(split["train"]))
         for i in range(0, len(perm), a.batch):
-            batch = [split["train"][j] for j in perm[i:i + a.batch]]
-            y = torch.tensor([float(r["correct"]) for r in batch], device="cuda")
-            with torch.autocast("cuda", dtype=torch.bfloat16):
-                z = forward(batch).float()
-            loss = torch.nn.functional.binary_cross_entropy_with_logits(z, y)
-            opt.zero_grad(); loss.backward(); torch.nn.utils.clip_grad_norm_(list(enc.parameters()) + list(head.parameters()), 1.0); opt.step()
+            batch = [split["train"][j] for j in perm[i:i + a.batch]]; opt.zero_grad()
+            for j in range(0, len(batch), a.micro):                  # gradient accumulation: effective batch a.batch
+                mb = batch[j:j + a.micro]; y = torch.tensor([float(r["correct"]) for r in mb], device="cuda")
+                with torch.autocast("cuda", dtype=torch.bfloat16):
+                    z = forward(mb).float()
+                (torch.nn.functional.binary_cross_entropy_with_logits(z, y) * len(mb) / len(batch)).backward()
+            torch.nn.utils.clip_grad_norm_(list(enc.parameters()) + list(head.parameters()), 1.0); opt.step()
         pc = np.clip(predict(split["calibration"]), 1e-4, 1 - 1e-4); yc = np.array([r["correct"] for r in split["calibration"]], float)
         ll = float(-(yc * np.log(pc) + (1 - yc) * np.log(1 - pc)).mean())
         print(f"{slot} epoch {ep}: calibration log-loss {ll:.4f}", flush=True)
