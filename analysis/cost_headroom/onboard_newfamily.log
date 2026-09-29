@@ -1,0 +1,8 @@
+glm47f   test coverage 100%  test acc 0.732  mean cost 0.2172c
+nemo120  test coverage 89%  test acc 0.828  mean cost 0.1822c
+mm25     test coverage 100%  test acc 0.769  mean cost 0.3391c
+5-route router (full heads): 30.9% vs the 5-route paper rule; max test accuracy 82.1%
+k= 5: + 3 new models  onboard  14.9% (max acc 81.0%)   naive -43.9% (max acc 80.0%)
+k=10: + 3 new models  onboard  30.0% (max acc 81.9%)   naive -12.3% (max acc 81.2%)
+k=20: + 3 new models  onboard  30.8% (max acc 82.2%)   naive  -5.5% (max acc 81.5%)
+k=50: + 3 new models  onboard  30.7% (max acc 82.1%)   naive   4.3% (max acc 81.4%)

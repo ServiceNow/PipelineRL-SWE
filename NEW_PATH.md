@@ -1045,3 +1045,11 @@ CI > 0: YES); **headroom 65.1% [55.2, 71.2]** (predicted >= 15%: YES; largest of
 test once): cost ratio 0.55 / 0.39 / 0.52 / 0.58 at test accuracy 57-72% (accuracy diffs all n.s.), 0.91 [0.82, 0.99] at ~80%.
 => 42-61% cheaper at matched accuracy. Pre-registered record: GAIN Omni (confirmed), MMLU-Pro (confirmed); GAIN pending APPS, SuperGPQA,
 K&K; NO GAIN pending AIME, BBEH.
+- **#2.3 A genuinely NEW model family onboarded into the MMLU-Pro router** (`onboard_newfamily.py`; GLM-4.7-flash, Nemotron-3-super,
+  MiniMax-M2.5 run once on MMLU-Pro test (300) + 50 train problems, ~$2.5 incl. a $0.3 token check; Nemotron hit 429s at 256
+  concurrent -> retried at 16, 89% test coverage). New models: acc 73.2 / 82.8 / 76.9% at 0.22 / 0.18 / 0.34c per call -- all
+  DOMINATED by the existing pool (dsv4f 83% for less), so adding them cannot lower cost. Gain vs the 5-route paper rule (5-route
+  router with full heads: 30.9%): +3 onboarded from k = 5 / 10 / 20 / 50 -> 14.9 / 30.0 / 30.8 / 30.7%; +3 naive (median cost +
+  base rate from k) -> -43.9 / -12.3 / -5.5 / +4.3%. => onboarding PROTECTS the router (prices dominated newcomers correctly from
+  ~10 examples); naive onboarding wrecks it. A positive "new model lowers cost" test needs a newcomer that is actually cheaper or
+  better than the pool.
