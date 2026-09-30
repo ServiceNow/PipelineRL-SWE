@@ -1418,3 +1418,26 @@ Headline figure: analysis/figures/fig0_headline_vs_zerorouter.png.
   1.06 at 54 / 60 / 67 / 74 / 80 / 87%; Omni x1.16 / 1.13 / 1.05 / 1.02 / 1.00 / 0.79 at 53 / 57 / 61 / 65 / 69 / 73%; MMLU-Pro
   x1.12 / 1.23 / 1.14 / 1.18 / 1.06 / 1.01 at 57 / 61 / 66 / 71 / 76 / 81%. Our edge is in the low-to-mid accuracy range and
   vanishes at the top (everyone calls the strongest model); on Omni ZeroRouter is cheaper at the very top.
+
+### 4.A.37 Joint MLP heads versus linear rich-prefill heads (2026-09-30)
+Authorized controlled comparison on LCB and Omni; `analysis/cost_headroom/mlp_heads.py`,
+protocol and detailed results in `analysis/cost_headroom/MLP_HEADS.md`, compact raw results in
+`mlp_heads_results.json`. Frozen identical mean+last features across eight stored layers,
+same splits, labels and market prices. Width 64/128 shared-trunk MLPs, three seeds,
+calibration-selected widths and epochs, all-seed ensembles. Four arms isolate success,
+cost, and combined replacement. All 24 GPU runs plus CPU aggregation succeeded.
+
+Direct additional cost saved versus linear at matched test accuracy [paired 95% CI]:
+| replacement | LCB | Omni |
+| --- | --- | --- |
+| success only | -1.5% [-6.1, +2.1] | -0.03% [-7.0, +8.1] |
+| cost only | -0.7% [-5.0, +2.7] | +5.5% [-2.4, +12.3] |
+| both | -1.9% [-7.3, +2.4] | +7.1% [-1.6, +15.4] |
+
+Shared bands: LCB 53.7–87.4%, Omni 52.6–73.1%. Reconstruction versus published
+linear predictions changes routing cost by only .13% on LCB and 0% on Omni.
+No significant averaged MLP improvement; keep linear heads primary. Omni cost
+effect is positive across seeds, but uncertain. Calibration-selected deployment
+rows show no consistent dominance (see raw results; achieved test accuracies differ).
+This tests head architecture on our rich features, not the prefill-router paper's
+PCA and layer-selection pipeline. No implication that every MLP is inferior.

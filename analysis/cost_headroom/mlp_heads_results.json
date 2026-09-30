@@ -1,0 +1,1277 @@
+{
+  "run_directory": "/mnt/llmd/results/exps/aristides/reason/mlp_heads_20260930_175029",
+  "training_revision": "e617f421307c7ecd1822ae0912bb222f688bdcc7",
+  "aggregation_revision": "2777db9",
+  "results": {
+    "LCB": {
+      "pool": "LCB",
+      "slots": [
+        "oss20lo",
+        "oss20md",
+        "dsv4f",
+        "oss120md",
+        "oss120hi"
+      ],
+      "splits": {
+        "train": 441,
+        "calibration": 110,
+        "test": 341
+      },
+      "feature_dimension": 40960,
+      "activation_file": "pv2_scout_prefill_1756715297/scout.npz",
+      "selections": {
+        "success": {
+          "config": {
+            "width": 64,
+            "dropout": 0.2,
+            "weight_decay": 0.1
+          },
+          "runs": [
+            {
+              "seed": 0,
+              "best_epoch": 23,
+              "calibration_loss": 0.365077406167984
+            },
+            {
+              "seed": 1,
+              "best_epoch": 23,
+              "calibration_loss": 0.3602381646633148
+            },
+            {
+              "seed": 2,
+              "best_epoch": 20,
+              "calibration_loss": 0.35828515887260437
+            }
+          ],
+          "candidates": [
+            {
+              "config": {
+                "width": 64,
+                "dropout": 0.2,
+                "weight_decay": 0.1
+              },
+              "mean_calibration_loss": 0.3612002432346344
+            },
+            {
+              "config": {
+                "width": 128,
+                "dropout": 0.2,
+                "weight_decay": 0.1
+              },
+              "mean_calibration_loss": 0.3651736279328664
+            }
+          ]
+        },
+        "cost": {
+          "config": {
+            "width": 64,
+            "dropout": 0.2,
+            "weight_decay": 0.1
+          },
+          "runs": [
+            {
+              "seed": 0,
+              "best_epoch": 21,
+              "calibration_loss": 0.24269993603229523
+            },
+            {
+              "seed": 1,
+              "best_epoch": 27,
+              "calibration_loss": 0.24862146377563477
+            },
+            {
+              "seed": 2,
+              "best_epoch": 81,
+              "calibration_loss": 0.2560095191001892
+            }
+          ],
+          "candidates": [
+            {
+              "config": {
+                "width": 64,
+                "dropout": 0.2,
+                "weight_decay": 0.1
+              },
+              "mean_calibration_loss": 0.2491103063027064
+            },
+            {
+              "config": {
+                "width": 128,
+                "dropout": 0.2,
+                "weight_decay": 0.1
+              },
+              "mean_calibration_loss": 0.25733379522959393
+            }
+          ]
+        }
+      },
+      "matched_accuracy": {
+        "accuracy_targets": [
+          0.5370234604105572,
+          0.567615302585977,
+          0.598207144761397,
+          0.6287989869368169,
+          0.6593908291122368,
+          0.6899826712876567,
+          0.7205745134630767,
+          0.7511663556384965,
+          0.7817581978139164,
+          0.8123500399893364,
+          0.8429418821647563,
+          0.8735337243401762
+        ],
+        "bootstrap_valid": 500,
+        "arms": {
+          "linear": {
+            "cost_saved_vs_linear": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ]
+          },
+          "mlp_success": {
+            "cost_saved_vs_linear": -0.015464692252680656,
+            "ci95": [
+              -0.06074781854532605,
+              0.020544794308556238
+            ]
+          },
+          "mlp_cost": {
+            "cost_saved_vs_linear": -0.007316251030625498,
+            "ci95": [
+              -0.050124349871262734,
+              0.027028920932195607
+            ]
+          },
+          "mlp_both": {
+            "cost_saved_vs_linear": -0.018746658277267958,
+            "ci95": [
+              -0.07306005742598945,
+              0.023747605805892247
+            ]
+          }
+        }
+      },
+      "deployable": {
+        "0.7": {
+          "linear": {
+            "reachable_on_calibration": true,
+            "V": [
+              0.17276596646690345,
+              0.2961910329772553
+            ],
+            "mixture_weight": 0.38297872340425454,
+            "test_accuracy": 0.6828703835005699,
+            "test_cost_cents": 0.032276360732445795,
+            "accuracy_difference_vs_linear": 0.0,
+            "accuracy_difference_ci95": [
+              0.0,
+              0.0
+            ],
+            "cost_difference_vs_linear_cents": 0.0,
+            "cost_difference_ci95_cents": [
+              0.0,
+              0.0
+            ]
+          },
+          "mlp_success": {
+            "reachable_on_calibration": true,
+            "V": [
+              0.18233480008684386,
+              0.3878187145610719
+            ],
+            "mixture_weight": 0.18889629876625563,
+            "test_accuracy": 0.6916330749797905,
+            "test_cost_cents": 0.033715913192221614,
+            "accuracy_difference_vs_linear": 0.008762691479220541,
+            "accuracy_difference_ci95": [
+              -0.0014581793840294853,
+              0.019163872070241936
+            ],
+            "cost_difference_vs_linear_cents": 0.0014395524597758187,
+            "cost_difference_ci95_cents": [
+              -0.0013026460952360048,
+              0.0043763079664834
+            ]
+          },
+          "mlp_cost": {
+            "reachable_on_calibration": true,
+            "V": [
+              0.16369930016117018,
+              0.22621169304690217
+            ],
+            "mixture_weight": 0.32183908045976933,
+            "test_accuracy": 0.7017200995990559,
+            "test_cost_cents": 0.03527866265548343,
+            "accuracy_difference_vs_linear": 0.01884971609848598,
+            "accuracy_difference_ci95": [
+              0.006539582467962644,
+              0.032565560761316246
+            ],
+            "cost_difference_vs_linear_cents": 0.0030023019230376313,
+            "cost_difference_ci95_cents": [
+              -0.0005004159326875275,
+              0.006073831988219118
+            ]
+          },
+          "mlp_both": {
+            "reachable_on_calibration": true,
+            "V": [
+              0.1392556128874462,
+              0.17276596646690345
+            ],
+            "mixture_weight": 0.6079354404841939,
+            "test_accuracy": 0.6814700647669218,
+            "test_cost_cents": 0.029762667210727553,
+            "accuracy_difference_vs_linear": -0.001400318733648102,
+            "accuracy_difference_ci95": [
+              -0.01425241395093067,
+              0.013421815388972493
+            ],
+            "cost_difference_vs_linear_cents": -0.0025136935217182424,
+            "cost_difference_ci95_cents": [
+              -0.006084265659333199,
+              0.0009473295286932232
+            ]
+          }
+        },
+        "0.75": {
+          "linear": {
+            "reachable_on_calibration": true,
+            "V": [
+              0.3125959000482278,
+              0.34818176306889664
+            ],
+            "mixture_weight": 0.4691358024691384,
+            "test_accuracy": 0.7623611755658025,
+            "test_cost_cents": 0.051298583290253476,
+            "accuracy_difference_vs_linear": 0.0,
+            "accuracy_difference_ci95": [
+              0.0,
+              0.0
+            ],
+            "cost_difference_vs_linear_cents": 0.0,
+            "cost_difference_ci95_cents": [
+              0.0,
+              0.0
+            ]
+          },
+          "mlp_success": {
+            "reachable_on_calibration": true,
+            "V": [
+              0.18233480008684386,
+              0.3878187145610719
+            ],
+            "mixture_weight": 0.6730576858952991,
+            "test_accuracy": 0.7507845125557567,
+            "test_cost_cents": 0.05124847304896959,
+            "accuracy_difference_vs_linear": -0.01157666301004577,
+            "accuracy_difference_ci95": [
+              -0.025691103533834338,
+              0.0004300336959928925
+            ],
+            "cost_difference_vs_linear_cents": -5.011024128389829e-05,
+            "cost_difference_ci95_cents": [
+              -0.0055788382194025725,
+              0.004521978038199114
+            ]
+          },
+          "mlp_cost": {
+            "reachable_on_calibration": true,
+            "V": [
+              0.22621169304690217,
+              0.2961910329772553
+            ],
+            "mixture_weight": 0.7699115044247802,
+            "test_accuracy": 0.7738287840197243,
+            "test_cost_cents": 0.055338668012049896,
+            "accuracy_difference_vs_linear": 0.011467608453921755,
+            "accuracy_difference_ci95": [
+              -0.0022843226395439817,
+              0.02396226757994048
+            ],
+            "cost_difference_vs_linear_cents": 0.004040084721796417,
+            "cost_difference_ci95_cents": [
+              -0.001017157574192659,
+              0.008662688475671204
+            ]
+          },
+          "mlp_both": {
+            "reachable_on_calibration": true,
+            "V": [
+              0.17276596646690345,
+              0.2806470846309833
+            ],
+            "mixture_weight": 0.9678899082568829,
+            "test_accuracy": 0.788770285984026,
+            "test_cost_cents": 0.059696881715704614,
+            "accuracy_difference_vs_linear": 0.02640911041822359,
+            "accuracy_difference_ci95": [
+              0.012002325397149748,
+              0.043875324433150176
+            ],
+            "cost_difference_vs_linear_cents": 0.008398298425451136,
+            "cost_difference_ci95_cents": [
+              0.002515508773342927,
+              0.014943081425704425
+            ]
+          }
+        },
+        "0.8": {
+          "linear": {
+            "reachable_on_calibration": true,
+            "V": [
+              0.4558929499981059,
+              0.629986297838068
+            ],
+            "mixture_weight": 0.06162464985994909,
+            "test_accuracy": 0.8050225044252128,
+            "test_cost_cents": 0.06647404784901363,
+            "accuracy_difference_vs_linear": 0.0,
+            "accuracy_difference_ci95": [
+              0.0,
+              0.0
+            ],
+            "cost_difference_vs_linear_cents": 0.0,
+            "cost_difference_ci95_cents": [
+              0.0,
+              0.0
+            ]
+          },
+          "mlp_success": {
+            "reachable_on_calibration": true,
+            "V": [
+              0.3878187145610719,
+              0.6648787838417263
+            ],
+            "mixture_weight": 0.3401875901875919,
+            "test_accuracy": 0.807729094111059,
+            "test_cost_cents": 0.07470844492630012,
+            "accuracy_difference_vs_linear": 0.002706589685846161,
+            "accuracy_difference_ci95": [
+              -0.012081086072347685,
+              0.016526608829200633
+            ],
+            "cost_difference_vs_linear_cents": 0.008234397077286492,
+            "cost_difference_ci95_cents": [
+              0.0016833181598816722,
+              0.013915183958573977
+            ]
+          },
+          "mlp_cost": {
+            "reachable_on_calibration": true,
+            "V": [
+              0.32990936877709354,
+              0.48114308390032545
+            ],
+            "mixture_weight": 0.48638132295720055,
+            "test_accuracy": 0.7985863364606076,
+            "test_cost_cents": 0.06853154448851048,
+            "accuracy_difference_vs_linear": -0.0064361679646051965,
+            "accuracy_difference_ci95": [
+              -0.01976896691387627,
+              0.006276368827994776
+            ],
+            "cost_difference_vs_linear_cents": 0.002057496639496845,
+            "cost_difference_ci95_cents": [
+              -0.0032610971576723558,
+              0.007162826717358661
+            ]
+          },
+          "mlp_both": {
+            "reachable_on_calibration": true,
+            "V": [
+              0.2806470846309833,
+              0.40929848184524337
+            ],
+            "mixture_weight": 0.98364648573417,
+            "test_accuracy": 0.8117789376854114,
+            "test_cost_cents": 0.0781320382445072,
+            "accuracy_difference_vs_linear": 0.006756433260198529,
+            "accuracy_difference_ci95": [
+              -0.012305138563219967,
+              0.025302457770658357
+            ],
+            "cost_difference_vs_linear_cents": 0.011657990395493534,
+            "cost_difference_ci95_cents": [
+              0.00452313709870216,
+              0.019756853411179477
+            ]
+          }
+        }
+      },
+      "caveat": "Bootstrap conditions on fitted heads and calibration selections; frontier comparisons use test hulls. Deployable rows report achieved accuracy, not test-matched accuracy.",
+      "individual_seeds": {
+        "0": {
+          "accuracy_targets": [
+            0.5370601173020528,
+            0.5677119434817383,
+            0.5983637696614237,
+            0.6290155958411091,
+            0.6596674220207945,
+            0.69031924820048,
+            0.7209710743801654,
+            0.7516229005598508,
+            0.7822747267395362,
+            0.8129265529192217,
+            0.8435783790989071,
+            0.8742302052785925
+          ],
+          "bootstrap_valid": 200,
+          "arms": {
+            "linear": {
+              "cost_saved_vs_linear": 0.0,
+              "ci95": [
+                0.0,
+                0.0
+              ]
+            },
+            "mlp_success": {
+              "cost_saved_vs_linear": -0.02868742132491353,
+              "ci95": [
+                -0.08024825757677952,
+                0.011109332838476855
+              ]
+            },
+            "mlp_cost": {
+              "cost_saved_vs_linear": -0.08454013957839335,
+              "ci95": [
+                -0.14135435123950227,
+                -0.02913720765855295
+              ]
+            },
+            "mlp_both": {
+              "cost_saved_vs_linear": -0.09606667226551724,
+              "ci95": [
+                -0.17456578135851364,
+                -0.03997601802260753
+              ]
+            }
+          }
+        },
+        "1": {
+          "accuracy_targets": [
+            0.5370234604105572,
+            0.567615302585977,
+            0.598207144761397,
+            0.6287989869368169,
+            0.6593908291122368,
+            0.6899826712876567,
+            0.7205745134630767,
+            0.7511663556384965,
+            0.7817581978139164,
+            0.8123500399893364,
+            0.8429418821647563,
+            0.8735337243401762
+          ],
+          "bootstrap_valid": 200,
+          "arms": {
+            "linear": {
+              "cost_saved_vs_linear": 0.0,
+              "ci95": [
+                0.0,
+                0.0
+              ]
+            },
+            "mlp_success": {
+              "cost_saved_vs_linear": -0.026794857549216067,
+              "ci95": [
+                -0.0727310470039591,
+                0.005530207285380594
+              ]
+            },
+            "mlp_cost": {
+              "cost_saved_vs_linear": -0.0291925848075818,
+              "ci95": [
+                -0.08230295656980091,
+                0.017785441904302587
+              ]
+            },
+            "mlp_both": {
+              "cost_saved_vs_linear": -0.030172988656160138,
+              "ci95": [
+                -0.08826592758298366,
+                0.009231244137977917
+              ]
+            }
+          }
+        },
+        "2": {
+          "accuracy_targets": [
+            0.5373869745845552,
+            0.5678738447525105,
+            0.5983607149204656,
+            0.6288475850884209,
+            0.659334455256376,
+            0.6898213254243313,
+            0.7203081955922865,
+            0.7507950657602418,
+            0.781281935928197,
+            0.8117688060961521,
+            0.8422556762641074,
+            0.8727425464320626
+          ],
+          "bootstrap_valid": 200,
+          "arms": {
+            "linear": {
+              "cost_saved_vs_linear": 0.0,
+              "ci95": [
+                0.0,
+                0.0
+              ]
+            },
+            "mlp_success": {
+              "cost_saved_vs_linear": -0.0029245552919661133,
+              "ci95": [
+                -0.04987088044567874,
+                0.039841996276395
+              ]
+            },
+            "mlp_cost": {
+              "cost_saved_vs_linear": -0.03264014926642478,
+              "ci95": [
+                -0.089554363576289,
+                0.0074011515231707315
+              ]
+            },
+            "mlp_both": {
+              "cost_saved_vs_linear": -0.027930198698948194,
+              "ci95": [
+                -0.09330428593792242,
+                0.02486907904166382
+              ]
+            }
+          }
+        }
+      },
+      "published_baseline_audit": {
+        "success_max_absolute_difference": 0.0015787780284881592,
+        "cost_max_absolute_difference_cents": 3.7632921388031093e-06,
+        "comparison": {
+          "accuracy_targets": [
+            0.5370601173020528,
+            0.5677119434817383,
+            0.5983637696614237,
+            0.6290155958411091,
+            0.6596674220207945,
+            0.69031924820048,
+            0.7209710743801654,
+            0.7516229005598508,
+            0.7822747267395362,
+            0.8129265529192217,
+            0.8435783790989071,
+            0.8742302052785925
+          ],
+          "bootstrap_valid": 500,
+          "arms": {
+            "linear": {
+              "cost_saved_vs_linear": 0.0,
+              "ci95": [
+                0.0,
+                0.0
+              ]
+            },
+            "published": {
+              "cost_saved_vs_linear": 0.0013383537702444936,
+              "ci95": [
+                -0.001803386966586884,
+                0.0026939970674577413
+              ]
+            }
+          }
+        }
+      },
+      "prediction_metrics": {
+        "linear": {
+          "oss20lo": {
+            "binomial_log_loss": 0.5291779481489091,
+            "cost_dollar_r2": 0.559357035277839,
+            "first_draw_auc": 0.8198621553884712
+          },
+          "oss20md": {
+            "binomial_log_loss": 0.4890285357091729,
+            "cost_dollar_r2": 0.4915388506943975,
+            "first_draw_auc": 0.8012772351615327
+          },
+          "dsv4f": {
+            "binomial_log_loss": 0.2790928350992184,
+            "cost_dollar_r2": 0.47493801796676094,
+            "first_draw_auc": 0.7957207207207208
+          },
+          "oss120md": {
+            "binomial_log_loss": 0.3694827514052293,
+            "cost_dollar_r2": 0.5475759681121448,
+            "first_draw_auc": 0.8300445930880713
+          },
+          "oss120hi": {
+            "binomial_log_loss": 0.26941618435348713,
+            "cost_dollar_r2": 0.4819558871094266,
+            "first_draw_auc": 0.8037873399715504
+          }
+        },
+        "mlp": {
+          "oss20lo": {
+            "binomial_log_loss": 0.5344412787001487,
+            "cost_dollar_r2": 0.48202384673386545,
+            "first_draw_auc": 0.8226817042606516
+          },
+          "oss20md": {
+            "binomial_log_loss": 0.498396928721152,
+            "cost_dollar_r2": 0.3684477306199643,
+            "first_draw_auc": 0.8077468903915185
+          },
+          "dsv4f": {
+            "binomial_log_loss": 0.282551416147061,
+            "cost_dollar_r2": 0.3782236769886499,
+            "first_draw_auc": 0.7917417417417417
+          },
+          "oss120md": {
+            "binomial_log_loss": 0.37825448511333143,
+            "cost_dollar_r2": 0.47898585739291744,
+            "first_draw_auc": 0.8172240802675586
+          },
+          "oss120hi": {
+            "binomial_log_loss": 0.2615654320993044,
+            "cost_dollar_r2": 0.39825854288749507,
+            "first_draw_auc": 0.8294807965860598
+          }
+        }
+      }
+    },
+    "Omni": {
+      "pool": "Omni",
+      "slots": [
+        "oss20lo",
+        "oss20md",
+        "dsv4f",
+        "oss120md",
+        "oss120hi"
+      ],
+      "splits": {
+        "train": 275,
+        "calibration": 75,
+        "test": 150
+      },
+      "feature_dimension": 40960,
+      "activation_file": "omni500_probe/thinking.npz",
+      "selections": {
+        "success": {
+          "config": {
+            "width": 64,
+            "dropout": 0.2,
+            "weight_decay": 0.1
+          },
+          "runs": [
+            {
+              "seed": 0,
+              "best_epoch": 4,
+              "calibration_loss": 0.5395016074180603
+            },
+            {
+              "seed": 1,
+              "best_epoch": 4,
+              "calibration_loss": 0.5281813144683838
+            },
+            {
+              "seed": 2,
+              "best_epoch": 4,
+              "calibration_loss": 0.5299423336982727
+            }
+          ],
+          "candidates": [
+            {
+              "config": {
+                "width": 64,
+                "dropout": 0.2,
+                "weight_decay": 0.1
+              },
+              "mean_calibration_loss": 0.5325417518615723
+            },
+            {
+              "config": {
+                "width": 128,
+                "dropout": 0.2,
+                "weight_decay": 0.1
+              },
+              "mean_calibration_loss": 0.5375522971153259
+            }
+          ]
+        },
+        "cost": {
+          "config": {
+            "width": 64,
+            "dropout": 0.2,
+            "weight_decay": 0.1
+          },
+          "runs": [
+            {
+              "seed": 0,
+              "best_epoch": 10,
+              "calibration_loss": 0.28895822167396545
+            },
+            {
+              "seed": 1,
+              "best_epoch": 37,
+              "calibration_loss": 0.2817949950695038
+            },
+            {
+              "seed": 2,
+              "best_epoch": 27,
+              "calibration_loss": 0.29938778281211853
+            }
+          ],
+          "candidates": [
+            {
+              "config": {
+                "width": 64,
+                "dropout": 0.2,
+                "weight_decay": 0.1
+              },
+              "mean_calibration_loss": 0.2900469998518626
+            },
+            {
+              "config": {
+                "width": 128,
+                "dropout": 0.2,
+                "weight_decay": 0.1
+              },
+              "mean_calibration_loss": 0.29286110401153564
+            }
+          ]
+        }
+      },
+      "matched_accuracy": {
+        "accuracy_targets": [
+          0.5263611111111112,
+          0.5449520202020203,
+          0.5635429292929293,
+          0.5821338383838384,
+          0.6007247474747475,
+          0.6193156565656566,
+          0.6379065656565656,
+          0.6564974747474747,
+          0.6750883838383838,
+          0.6936792929292928,
+          0.7122702020202019,
+          0.730861111111111
+        ],
+        "bootstrap_valid": 500,
+        "arms": {
+          "linear": {
+            "cost_saved_vs_linear": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ]
+          },
+          "mlp_success": {
+            "cost_saved_vs_linear": -0.0003427901047097226,
+            "ci95": [
+              -0.07044406337276946,
+              0.08052071790824325
+            ]
+          },
+          "mlp_cost": {
+            "cost_saved_vs_linear": 0.05466370410796728,
+            "ci95": [
+              -0.023553159515380517,
+              0.12325374522944928
+            ]
+          },
+          "mlp_both": {
+            "cost_saved_vs_linear": 0.07128730216619528,
+            "ci95": [
+              -0.016140422653219563,
+              0.15422099751307752
+            ]
+          }
+        }
+      },
+      "deployable": {
+        "0.6": {
+          "linear": {
+            "reachable_on_calibration": true,
+            "V": [
+              0.16369930016117018,
+              0.25196359293170134
+            ],
+            "mixture_weight": 0.5308641975308641,
+            "test_accuracy": 0.6012688614540467,
+            "test_cost_cents": 0.042932024066666664,
+            "accuracy_difference_vs_linear": 0.0,
+            "accuracy_difference_ci95": [
+              0.0,
+              0.0
+            ],
+            "cost_difference_vs_linear_cents": 0.0,
+            "cost_difference_ci95_cents": [
+              0.0,
+              0.0
+            ]
+          },
+          "mlp_success": {
+            "reachable_on_calibration": true,
+            "V": [
+              0.10635449574860112,
+              0.2806470846309833
+            ],
+            "mixture_weight": 0.777777777777778,
+            "test_accuracy": 0.5924691358024692,
+            "test_cost_cents": 0.048331585613333346,
+            "accuracy_difference_vs_linear": -0.008799725651577484,
+            "accuracy_difference_ci95": [
+              -0.022009945130315484,
+              0.002654663923182459
+            ],
+            "cost_difference_vs_linear_cents": 0.005399561546666677,
+            "cost_difference_ci95_cents": [
+              -0.00034319009861315974,
+              0.012070815315584368
+            ]
+          },
+          "mlp_cost": {
+            "reachable_on_calibration": true,
+            "V": [
+              0.1392556128874462,
+              0.3878187145610719
+            ],
+            "mixture_weight": 0.13333333333333297,
+            "test_accuracy": 0.6128518518518519,
+            "test_cost_cents": 0.04352005225955553,
+            "accuracy_difference_vs_linear": 0.011582990397805182,
+            "accuracy_difference_ci95": [
+              -0.005191323731138571,
+              0.030578360768175543
+            ],
+            "cost_difference_vs_linear_cents": 0.0005880281928888739,
+            "cost_difference_ci95_cents": [
+              -0.00541734382688479,
+              0.00655961878297282
+            ]
+          },
+          "mlp_both": {
+            "reachable_on_calibration": true,
+            "V": [
+              0.17276596646690345,
+              0.18233480008684386
+            ],
+            "mixture_weight": 0.6428571428571439,
+            "test_accuracy": 0.6081746031746033,
+            "test_cost_cents": 0.045561691183809525,
+            "accuracy_difference_vs_linear": 0.006905741720556546,
+            "accuracy_difference_ci95": [
+              -0.013574931412894366,
+              0.02867413776210073
+            ],
+            "cost_difference_vs_linear_cents": 0.002629667117142862,
+            "cost_difference_ci95_cents": [
+              -0.004958911249840972,
+              0.009995472717432397
+            ]
+          }
+        },
+        "0.65": {
+          "linear": {
+            "reachable_on_calibration": true,
+            "V": [
+              0.25196359293170134,
+              0.3125959000482278
+            ],
+            "mixture_weight": 0.2799999999999997,
+            "test_accuracy": 0.6287999999999999,
+            "test_cost_cents": 0.0575153875808,
+            "accuracy_difference_vs_linear": 0.0,
+            "accuracy_difference_ci95": [
+              0.0,
+              0.0
+            ],
+            "cost_difference_vs_linear_cents": 0.0,
+            "cost_difference_ci95_cents": [
+              0.0,
+              0.0
+            ]
+          },
+          "mlp_success": {
+            "reachable_on_calibration": true,
+            "V": [
+              0.2806470846309833,
+              0.8705612479099856
+            ],
+            "mixture_weight": 0.06944444444444563,
+            "test_accuracy": 0.6160648148148149,
+            "test_cost_cents": 0.060579457960555604,
+            "accuracy_difference_vs_linear": -0.012735185185185056,
+            "accuracy_difference_ci95": [
+              -0.02963926697530852,
+              0.0003244058641976454
+            ],
+            "cost_difference_vs_linear_cents": 0.003064070379755611,
+            "cost_difference_ci95_cents": [
+              -0.002252579662767914,
+              0.0092724390195919
+            ]
+          },
+          "mlp_cost": {
+            "reachable_on_calibration": true,
+            "V": [
+              0.1392556128874462,
+              0.3878187145610719
+            ],
+            "mixture_weight": 0.7333333333333341,
+            "test_accuracy": 0.6631851851851852,
+            "test_cost_cents": 0.07123551922755557,
+            "accuracy_difference_vs_linear": 0.034385185185185255,
+            "accuracy_difference_ci95": [
+              0.013519259259259332,
+              0.061125925925926
+            ],
+            "cost_difference_vs_linear_cents": 0.013720131646755594,
+            "cost_difference_ci95_cents": [
+              0.0048426421940400335,
+              0.022943249926173376
+            ]
+          },
+          "mlp_both": {
+            "reachable_on_calibration": true,
+            "V": [
+              0.18233480008684386,
+              0.48114308390032545
+            ],
+            "mixture_weight": 0.5633802816901416,
+            "test_accuracy": 0.6575039123630674,
+            "test_cost_cents": 0.06840366393746483,
+            "accuracy_difference_vs_linear": 0.02870391236306737,
+            "accuracy_difference_ci95": [
+              0.0044034194053209005,
+              0.05144593896713621
+            ],
+            "cost_difference_vs_linear_cents": 0.010888276356664823,
+            "cost_difference_ci95_cents": [
+              0.002425254606367354,
+              0.018874421763123976
+            ]
+          }
+        },
+        "0.7": {
+          "linear": {
+            "reachable_on_calibration": true,
+            "V": [
+              0.3125959000482278,
+              0.6648787838417263
+            ],
+            "mixture_weight": 0.8709677419354829,
+            "test_accuracy": 0.6954838709677419,
+            "test_cost_cents": 0.09250214277548384,
+            "accuracy_difference_vs_linear": 0.0,
+            "accuracy_difference_ci95": [
+              0.0,
+              0.0
+            ],
+            "cost_difference_vs_linear_cents": 0.0,
+            "cost_difference_ci95_cents": [
+              0.0,
+              0.0
+            ]
+          },
+          "mlp_success": {
+            "reachable_on_calibration": true,
+            "V": [
+              0.2806470846309833,
+              0.8705612479099856
+            ],
+            "mixture_weight": 0.6944444444444451,
+            "test_accuracy": 0.6806481481481482,
+            "test_cost_cents": 0.08751738268555556,
+            "accuracy_difference_vs_linear": -0.01483572281959367,
+            "accuracy_difference_ci95": [
+              -0.030116325667064785,
+              0.0020888590203107485
+            ],
+            "cost_difference_vs_linear_cents": -0.004984760089928258,
+            "cost_difference_ci95_cents": [
+              -0.01164319200674694,
+              0.0016683278173901237
+            ]
+          },
+          "mlp_cost": {
+            "reachable_on_calibration": true,
+            "V": [
+              0.3878187145610719,
+              0.6648787838417263
+            ],
+            "mixture_weight": 0.7575757575757565,
+            "test_accuracy": 0.7049158249158248,
+            "test_cost_cents": 0.0925929126880808,
+            "accuracy_difference_vs_linear": 0.009431953948083004,
+            "accuracy_difference_ci95": [
+              0.0028053654827848457,
+              0.0171523840556099
+            ],
+            "cost_difference_vs_linear_cents": 9.0769912596953e-05,
+            "cost_difference_ci95_cents": [
+              -0.004717464480306597,
+              0.0044288245080293335
+            ]
+          },
+          "mlp_both": {
+            "reachable_on_calibration": true,
+            "V": [
+              0.48114308390032545,
+              0.7405684692262428
+            ],
+            "mixture_weight": 0.583333333333334,
+            "test_accuracy": 0.7052314814814815,
+            "test_cost_cents": 0.09179042168000001,
+            "accuracy_difference_vs_linear": 0.00974761051373961,
+            "accuracy_difference_ci95": [
+              -0.0016378808243727053,
+              0.020633811230585514
+            ],
+            "cost_difference_vs_linear_cents": -0.0007117210954838345,
+            "cost_difference_ci95_cents": [
+              -0.007414252133775049,
+              0.004729480479552906
+            ]
+          }
+        }
+      },
+      "caveat": "Bootstrap conditions on fitted heads and calibration selections; frontier comparisons use test hulls. Deployable rows report achieved accuracy, not test-matched accuracy.",
+      "individual_seeds": {
+        "0": {
+          "accuracy_targets": [
+            0.5263055555555556,
+            0.5448055555555555,
+            0.5633055555555556,
+            0.5818055555555556,
+            0.6003055555555555,
+            0.6188055555555555,
+            0.6373055555555556,
+            0.6558055555555555,
+            0.6743055555555555,
+            0.6928055555555555,
+            0.7113055555555555,
+            0.7298055555555555
+          ],
+          "bootstrap_valid": 200,
+          "arms": {
+            "linear": {
+              "cost_saved_vs_linear": 0.0,
+              "ci95": [
+                0.0,
+                0.0
+              ]
+            },
+            "mlp_success": {
+              "cost_saved_vs_linear": -0.015483518885992753,
+              "ci95": [
+                -0.12183620972910715,
+                0.06420835917404633
+              ]
+            },
+            "mlp_cost": {
+              "cost_saved_vs_linear": 0.04722398356592861,
+              "ci95": [
+                -0.05279475512936766,
+                0.12383909519083713
+              ]
+            },
+            "mlp_both": {
+              "cost_saved_vs_linear": 0.06521733909148963,
+              "ci95": [
+                -0.032002884196232505,
+                0.17290420666280176
+              ]
+            }
+          }
+        },
+        "1": {
+          "accuracy_targets": [
+            0.527888888888889,
+            0.5462525252525253,
+            0.5646161616161617,
+            0.582979797979798,
+            0.6013434343434344,
+            0.6197070707070707,
+            0.638070707070707,
+            0.6564343434343434,
+            0.6747979797979797,
+            0.6931616161616161,
+            0.7115252525252524,
+            0.7298888888888888
+          ],
+          "bootstrap_valid": 200,
+          "arms": {
+            "linear": {
+              "cost_saved_vs_linear": 0.0,
+              "ci95": [
+                0.0,
+                0.0
+              ]
+            },
+            "mlp_success": {
+              "cost_saved_vs_linear": 0.009704320950193579,
+              "ci95": [
+                -0.05929085726378561,
+                0.08929951036905502
+              ]
+            },
+            "mlp_cost": {
+              "cost_saved_vs_linear": 0.025001050821307325,
+              "ci95": [
+                -0.06007992774688862,
+                0.11099218976415064
+              ]
+            },
+            "mlp_both": {
+              "cost_saved_vs_linear": 0.025061184397573766,
+              "ci95": [
+                -0.07342150787492442,
+                0.12722504462313886
+              ]
+            }
+          }
+        },
+        "2": {
+          "accuracy_targets": [
+            0.5263611111111112,
+            0.5449520202020203,
+            0.5635429292929293,
+            0.5821338383838384,
+            0.6007247474747475,
+            0.6193156565656566,
+            0.6379065656565656,
+            0.6564974747474747,
+            0.6750883838383838,
+            0.6936792929292928,
+            0.7122702020202019,
+            0.730861111111111
+          ],
+          "bootstrap_valid": 200,
+          "arms": {
+            "linear": {
+              "cost_saved_vs_linear": 0.0,
+              "ci95": [
+                0.0,
+                0.0
+              ]
+            },
+            "mlp_success": {
+              "cost_saved_vs_linear": -0.01988604611149536,
+              "ci95": [
+                -0.1004858350242288,
+                0.08003252923964148
+              ]
+            },
+            "mlp_cost": {
+              "cost_saved_vs_linear": 0.06196383458452903,
+              "ci95": [
+                -0.03890725231727442,
+                0.13038778572210116
+              ]
+            },
+            "mlp_both": {
+              "cost_saved_vs_linear": 0.06468104672505359,
+              "ci95": [
+                -0.03469385921765793,
+                0.14741254066298812
+              ]
+            }
+          }
+        }
+      },
+      "published_baseline_audit": {
+        "success_max_absolute_difference": 0.0028071552515029907,
+        "cost_max_absolute_difference_cents": 9.560988984969043e-07,
+        "comparison": {
+          "accuracy_targets": [
+            0.5263611111111112,
+            0.5449520202020203,
+            0.5635429292929293,
+            0.5821338383838384,
+            0.6007247474747475,
+            0.6193156565656566,
+            0.6379065656565656,
+            0.6564974747474747,
+            0.6750883838383838,
+            0.6936792929292928,
+            0.7122702020202019,
+            0.730861111111111
+          ],
+          "bootstrap_valid": 500,
+          "arms": {
+            "linear": {
+              "cost_saved_vs_linear": 0.0,
+              "ci95": [
+                0.0,
+                0.0
+              ]
+            },
+            "published": {
+              "cost_saved_vs_linear": 0.0,
+              "ci95": [
+                -6.486097022992964e-05,
+                0.0
+              ]
+            }
+          }
+        }
+      },
+      "prediction_metrics": {
+        "linear": {
+          "oss20lo": {
+            "binomial_log_loss": 0.5200022089221811,
+            "cost_dollar_r2": 0.6275953789254833,
+            "first_draw_auc": 0.8644369329300836
+          },
+          "oss20md": {
+            "binomial_log_loss": 0.4756615137624465,
+            "cost_dollar_r2": 0.3527059132774343,
+            "first_draw_auc": 0.8288980509745127
+          },
+          "dsv4f": {
+            "binomial_log_loss": 0.3825295190544701,
+            "cost_dollar_r2": 0.505913266810982,
+            "first_draw_auc": 0.8923872180451128
+          },
+          "oss120md": {
+            "binomial_log_loss": 0.4778547087666155,
+            "cost_dollar_r2": 0.34523757195480353,
+            "first_draw_auc": 0.835832083958021
+          },
+          "oss120hi": {
+            "binomial_log_loss": 0.3896343349136236,
+            "cost_dollar_r2": 0.4772351796097082,
+            "first_draw_auc": 0.8864417053950293
+          }
+        },
+        "mlp": {
+          "oss20lo": {
+            "binomial_log_loss": 0.51431508017083,
+            "cost_dollar_r2": 0.5610911053992877,
+            "first_draw_auc": 0.8596335171677637
+          },
+          "oss20md": {
+            "binomial_log_loss": 0.4601321205496788,
+            "cost_dollar_r2": 0.23702083413714536,
+            "first_draw_auc": 0.853448275862069
+          },
+          "dsv4f": {
+            "binomial_log_loss": 0.3837424441799521,
+            "cost_dollar_r2": 0.4558578816635248,
+            "first_draw_auc": 0.8890977443609022
+          },
+          "oss120md": {
+            "binomial_log_loss": 0.465188836629192,
+            "cost_dollar_r2": 0.20908682687322944,
+            "first_draw_auc": 0.8547601199400299
+          },
+          "oss120hi": {
+            "binomial_log_loss": 0.40716361203541357,
+            "cost_dollar_r2": 0.3063781372602272,
+            "first_draw_auc": 0.8908870478884623
+          }
+        }
+      }
+    }
+  }
+}
