@@ -1,0 +1,226 @@
+{
+  "MMLU-Pro": {
+    "source": "baselines_simple.json",
+    "pool": "mmlupro_tensors [market]",
+    "cost_file": "cost_preds_probe_instruct.jsonl",
+    "headroom": 0.6514897101834438,
+    "headroom_ci": [
+      0.5522781285941817,
+      0.7121012892066151
+    ],
+    "gain": 0.3074530359973987,
+    "gain_ci": [
+      0.16317318811718065,
+      0.43156397253595413
+    ],
+    "n_test": 300
+  },
+  "LiveCodeBench": {
+    "source": "baselines_simple.json",
+    "pool": "pool_v2_tensors_5rung [market]",
+    "cost_file": "cost_preds_probe.jsonl",
+    "headroom": 0.4596485401543997,
+    "headroom_ci": [
+      0.387464251965735,
+      0.5110666456172195
+    ],
+    "gain": 0.35622276686086485,
+    "gain_ci": [
+      0.2712564701931722,
+      0.41944363080204766
+    ],
+    "n_test": 341
+  },
+  "Omni-MATH": {
+    "source": "baselines_simple.json",
+    "pool": "omni500_tensors [market]",
+    "cost_file": "cost_preds_probe_thinking.jsonl",
+    "headroom": 0.4423749449596637,
+    "headroom_ci": [
+      0.3184549006456749,
+      0.5349407642986282
+    ],
+    "gain": 0.21860350668317774,
+    "gain_ci": [
+      0.08877260995905915,
+      0.3349887461120348
+    ],
+    "n_test": 150
+  },
+  "TACO": {
+    "source": "head_to_head.json",
+    "pool": "taco_tensors_ha [market]",
+    "cost_file": "cost_preds_probe.jsonl",
+    "headroom": 0.36149248243004006,
+    "headroom_ci": [
+      0.24303761438011842,
+      0.4601905482831954
+    ],
+    "gain": 0.02129312404254735,
+    "gain_ci": [
+      -0.07839323003536125,
+      0.1259159532706927
+    ],
+    "n_test": 168
+  },
+  "CodeContests": {
+    "source": "baselines_simple.json",
+    "pool": "cc_tensors [market]",
+    "cost_file": "cost_preds_probe.jsonl",
+    "headroom": 0.2177836433453597,
+    "headroom_ci": [
+      0.136799169532934,
+      0.28970443423726633
+    ],
+    "gain": 0.020027103136806224,
+    "gain_ci": [
+      -0.06132991959503558,
+      0.09022453439592028
+    ],
+    "n_test": 267
+  },
+  "BigCodeBench": {
+    "source": "head_to_head.json",
+    "pool": "bcb_tensors_5r [market]",
+    "cost_file": "cost_preds_probe.jsonl",
+    "headroom": 0.2016585305961116,
+    "headroom_ci": [
+      0.1007428174963436,
+      0.298203105924486
+    ],
+    "gain": -0.03336097185302056,
+    "gain_ci": [
+      -0.15252878879668996,
+      0.11380225486015297
+    ],
+    "n_test": 421
+  },
+  "RouterBench": {
+    "source": "routerbench.json",
+    "pool": "routerbench_tensors [market]",
+    "cost_file": "cost_preds_market.jsonl",
+    "headroom": 0.10479351751562915,
+    "headroom_ci": [
+      0.0744663374183395,
+      0.12843178515587197
+    ],
+    "gain": 0.08501526641796531,
+    "gain_ci": [
+      0.054313281407512855,
+      0.11315471998903899
+    ],
+    "n_test": 1800
+  },
+  "cost_from_success_paired": {
+    "LCB": {
+      "difference_points": 1.4816866841258158,
+      "ci95": [
+        -1.3390749266243211,
+        4.305249666939778
+      ]
+    },
+    "Omni": {
+      "difference_points": 0.8223768643006002,
+      "ci95": [
+        -7.16556122533925,
+        8.988514433156714
+      ]
+    },
+    "MMLU-Pro": {
+      "difference_points": 21.51769322161099,
+      "ci95": [
+        8.521058713488829,
+        30.314447244744017
+      ]
+    }
+  },
+  "cost_estimator_comparison": {
+    "LCB": {
+      "Embedding ensemble": {
+        "source": "head_to_head.json",
+        "cost_file": "cost_preds_mixllm.jsonl",
+        "gain": 0.14053625454494378,
+        "ci95": [
+          0.053189846320891465,
+          0.20985376578923015
+        ]
+      },
+      "Prompt-feature GBM": {
+        "source": "head_to_head.json",
+        "cost_file": "cost_preds_gbm.jsonl",
+        "gain": 0.12306254663422944,
+        "ci95": [
+          0.00743999408421065,
+          0.21359775527655975
+        ]
+      },
+      "Shared prefill + ridge": {
+        "source": "head_to_head.json",
+        "cost_file": "cost_preds_probe.jsonl",
+        "gain": 0.35622276686086485,
+        "ci95": [
+          0.2712564701931722,
+          0.41944363080204766
+        ]
+      }
+    },
+    "Omni": {
+      "Embedding ensemble": {
+        "source": "baselines_lit.json",
+        "cost_file": "cost_preds_mixllm.jsonl",
+        "gain": 0.12453700301927606,
+        "ci95": [
+          -0.02366492558433201,
+          0.2559956878402316
+        ]
+      },
+      "Prompt-feature GBM": {
+        "source": "baselines_lit.json",
+        "cost_file": "cost_preds_gbm.jsonl",
+        "gain": 0.06642956586587734,
+        "ci95": [
+          -0.12234337331600476,
+          0.2122237606289733
+        ]
+      },
+      "Shared prefill + ridge": {
+        "source": "baselines_lit.json",
+        "cost_file": "cost_preds_probe_thinking.jsonl",
+        "gain": 0.21860350668317774,
+        "ci95": [
+          0.08877260995905915,
+          0.3349887461120348
+        ]
+      }
+    },
+    "MMLU-Pro": {
+      "Embedding ensemble": {
+        "source": "baselines_lit.json",
+        "cost_file": "cost_preds_mixllm.jsonl",
+        "gain": 0.03998068277774658,
+        "ci95": [
+          -0.046680179534601865,
+          0.14904921511283242
+        ]
+      },
+      "Prompt-feature GBM": {
+        "source": "baselines_lit.json",
+        "cost_file": "cost_preds_gbm.jsonl",
+        "gain": 0.0979817442425347,
+        "ci95": [
+          -0.0450824266834218,
+          0.2591571784601727
+        ]
+      },
+      "Shared prefill + ridge": {
+        "source": "baselines_lit.json",
+        "cost_file": "cost_preds_probe_instruct.jsonl",
+        "gain": 0.3074530359973987,
+        "ci95": [
+          0.16317318811718065,
+          0.43156397253595413
+        ]
+      }
+    }
+  }
+}
