@@ -161,26 +161,35 @@ if __name__ == "__main__":
 
 
 def fig_headline_zerorouter():
-    """Headline: ours vs ZeroRouter reproduced on each 5-model pool. ZeroRouter's configuration (D in {1,5}, 3 seeds, K in
-    {5,10,20}; 4B reader) is chosen on CALIBRATION and applied once to test (zr_best_ci.json); annotation = paired bootstrap of
-    ours - ZeroRouter on test at that configuration. Third bar: ZeroRouter with its own DistilBERT encoder, best K and D on test."""
-    ci = json.load(open(A / "zr_best_ci.json")); enc = json.load(open(A / "zr_encoder_eval.json")); pools = ["LCB", "Omni", "MMLU-Pro"]
+    """Headline, two panels. Left: cost saved vs median-length routing (averaged over the accuracy range both reach) for ours,
+    ZeroRouter with its configuration chosen on CALIBRATION (4B reader), and ZeroRouter with its own DistilBERT encoder; paired
+    ours - ZeroRouter [95% CI] annotated (zr_best_ci.json). Right: ZeroRouter's cost relative to ours at each accuracy, with a
+    95% paired-bootstrap band (zr_ratio_curve.json); above 1 = ZeroRouter more expensive."""
+    ci = json.load(open(A / "zr_best_ci.json")); enc = json.load(open(A / "zr_encoder_eval.json")); rc = json.load(open(A / "zr_ratio_curve.json"))
+    pools = ["LCB", "Omni", "MMLU-Pro"]; pc = {"LCB": C_OURS, "Omni": C_ORACLE, "MMLU-Pro": C_WARN}
     ours = [ci[p]["calibration-chosen"]["ours"] * 100 for p in pools]; zr = [ci[p]["calibration-chosen"]["zr"] * 100 for p in pools]
     own = [max(max(v[str(K)] for K in (5, 10, 20)) for k, v in enc[p].items() if "DistilBERT" in k) * 100 for p in pools]
-    x = np.arange(3); w = 0.26; fig, ax = plt.subplots(figsize=(7.2, 4.0))
-    ax.bar(x - w, ours, w, color=C_OURS, label="Ours (frozen 4B prefill: success + per-query cost)")
-    ax.bar(x, zr, w, color=C_ALT, label="ZeroRouter, configuration tuned on calibration")
-    ax.bar(x + w, own, w, color="#fbbf24", label="ZeroRouter, its own DistilBERT encoder (best on test)")
+    fig, (ax, bx) = plt.subplots(1, 2, figsize=(12.0, 4.1), gridspec_kw={"width_ratios": [1.05, 1]})
+    x = np.arange(3); w = 0.26
+    ax.bar(x - w, ours, w, color=C_OURS, label="Ours (frozen 4B prefill)")
+    ax.bar(x, zr, w, color=C_ALT, label="ZeroRouter, tuned on calibration")
+    ax.bar(x + w, own, w, color="#fbbf24", label="ZeroRouter, own DistilBERT encoder")
     for i, p in enumerate(pools):
         for dx, val, bold in ((-w, ours[i], True), (0, zr[i], False), (w, own[i], False)):
-            ax.text(x[i] + dx, val + 0.8, f"{val:.0f}%", ha="center", fontsize=9, color=INK, weight="bold" if bold else "normal")
+            ax.text(x[i] + dx, val + 0.8, f"{val:.0f}%", ha="center", fontsize=8.5, color=INK, weight="bold" if bold else "normal")
         d = ci[p]["calibration-chosen"]; lo, hi = d["ci"]
-        ax.text(x[i], max(ours[i], zr[i], own[i]) + 6.5, f"ours − ZR: {d['diff']:+.1f} pt\n95% CI [{lo:+.1f}, {hi:+.1f}]" + ("" if lo > 0 else "\n(not significant)"),
+        ax.text(x[i], max(ours[i], zr[i], own[i]) + 6.0, f"{d['diff']:+.1f} pt\n[{lo:+.1f}, {hi:+.1f}]" + ("" if lo > 0 else "\nn.s."),
                 ha="center", fontsize=8.3, color=INK if lo > 0 else MUTED)
-    ax.set_xticks(x); ax.set_xticklabels(pools, fontsize=10.5); ax.set_ylim(0, 60)
-    ax.set_ylabel("Cost saved vs median-length routing,\nat matched accuracy (%)")
-    ax.legend(frameon=False, fontsize=8.3, loc="upper right")
-    ax.set_title("Ours vs ZeroRouter (tuned) on a 5-model pool", loc="left", fontsize=10.5)
+    ax.set_xticks(x); ax.set_xticklabels(pools, fontsize=10.5); ax.set_ylim(0, 56)
+    ax.set_ylabel("Cost saved vs median-length routing (%)"); ax.legend(frameon=False, fontsize=8, loc="upper right")
+    ax.set_title("(a) Averaged over the accuracy range", loc="left", fontsize=10.5)
+    for p in pools:
+        r = rc[p]; a_ = np.array(r["acc"]) * 100
+        bx.fill_between(a_, r["lo"], r["hi"], color=pc[p], alpha=0.15, lw=0); bx.plot(a_, r["ratio"], "-", color=pc[p], lw=2, label=p)
+    bx.axhline(1, color=INK, lw=1); bx.set_xlabel("Test accuracy (%)"); bx.set_ylabel("ZeroRouter cost / our cost")
+    bx.text(0.02, 0.97, "above 1: ZeroRouter more expensive", transform=bx.transAxes, fontsize=8, color=MUTED, va="top")
+    bx.legend(frameon=False, fontsize=8.5, loc="upper right"); bx.set_title("(b) At each accuracy (95% paired band)", loc="left", fontsize=10.5)
+    fig.suptitle("Ours vs ZeroRouter (reproduced, tuned) on a 5-model reasoning pool", x=0.01, ha="left", fontsize=11.5)
     save(fig, "fig0_headline_vs_zerorouter.png")
 
 

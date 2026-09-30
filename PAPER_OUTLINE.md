@@ -175,8 +175,10 @@ Numbers come from `NEW_PATH.md` §4.A.4–4.A.36 (section in brackets). Figures:
   - Their stage 2: our 4B reader and, separately, their own fine-tuned DistilBERT + 11 linguistic features.
   - Their pricing: s = αᵀb → K bins → per-model mean length (K = 5 / 10 / 20; unstated in the paper).
   - Population variant: + N Open LLM Leaderboard models (their data source), N = 0 … 196.
-- **Headline figure (Figure 0):** `analysis/figures/fig0_headline_vs_zerorouter.png` — ours vs ZeroRouter with its
-  configuration tuned on calibration, paired CIs [4.A.36]
+- **Headline figure (Figure 0):** `analysis/figures/fig0_headline_vs_zerorouter.png` [4.A.36]
+  - (a) cost saved averaged over the accuracy range, ZeroRouter tuned on calibration, paired CIs.
+  - (b) ZeroRouter cost / our cost at each accuracy with a 95% paired band: LCB 1.06–1.41 (54–87%), MMLU-Pro 0.98–1.23
+    (57–81%), Omni 1.30 → 0.79 (53–73%). Our edge is in the low-to-mid accuracy range; it vanishes at the top.
 - **Figure 6:** `analysis/figures/fig6_zerorouter_component_swap.png`
 - **Table 4 (cost saved vs reference)**
 
@@ -290,7 +292,7 @@ Numbers come from `NEW_PATH.md` §4.A.4–4.A.36 (section in brackets). Figures:
 
 | # | File | Content |
 |---|---|---|
-| 0 | `analysis/figures/fig0_headline_vs_zerorouter.png` | Headline: ours vs tuned ZeroRouter, paired CIs |
+| 0 | `analysis/figures/fig0_headline_vs_zerorouter.png` | Headline: ours vs tuned ZeroRouter — averaged (a) and by accuracy (b) |
 | 1 | `analysis/figures/fig1_headroom.png` | Headroom by pool type |
 | 2 | `analysis/figures/fig2_capture_curve.png` | Capture vs predictor R², synthetic + real heads |
 | 3 | `analysis/figures/fig3_level_vs_differences.png` | Level-only vs differences-only headroom |
