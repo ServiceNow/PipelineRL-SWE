@@ -1413,3 +1413,8 @@ configuration chosen on CALIBRATION (D in {1,5} x 3 seeds x K in {5,10,20}; 4B r
 => The definitive ZeroRouter comparison: significant win on LCB only; MMLU-Pro +9 pt directional (CI touches 0); Omni tie. The
 component-swap mechanism (their pricing is the weak part) is unchanged. MMLU-Pro test n = 300; a larger test set would decide it.
 Headline figure: analysis/figures/fig0_headline_vs_zerorouter.png.
+- 4.A.36 addendum (accuracy range behind "matched accuracy"): the 12 targets span, for BOTH arms identically, LCB 52-89%, Omni
+  52-74%, MMLU-Pro 55-82% (test). Direct cost ratio ZeroRouter/ours at common accuracies: LCB x1.19 / 1.36 / 1.41 / 1.34 / 1.20 /
+  1.06 at 54 / 60 / 67 / 74 / 80 / 87%; Omni x1.16 / 1.13 / 1.05 / 1.02 / 1.00 / 0.79 at 53 / 57 / 61 / 65 / 69 / 73%; MMLU-Pro
+  x1.12 / 1.23 / 1.14 / 1.18 / 1.06 / 1.01 at 57 / 61 / 66 / 71 / 76 / 81%. Our edge is in the low-to-mid accuracy range and
+  vanishes at the top (everyone calls the strongest model); on Omni ZeroRouter is cheaper at the very top.
