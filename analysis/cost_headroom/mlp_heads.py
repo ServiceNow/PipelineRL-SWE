@@ -10,6 +10,7 @@ import copy
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -174,7 +175,40 @@ def deployable(curves_cal, curves_test, targets):
     return result
 
 
-def run(label, output, epochs):
+def train_one(label, output, epochs, task, config_index, seed):
+    """One independent GPU job per dataset/head/configuration/seed."""
+    name, act, _, _ = POOLS[label]
+    folder = R / name
+    dest = output / label / "training"
+    dest.mkdir(parents=True, exist_ok=True)
+    data = np.load(folder / "tensors.npz", allow_pickle=True)
+    ids = list(map(str, data["problem_ids"]))
+    pi = {p: i for i, p in enumerate(ids)}
+    sp = json.loads((folder / "split_manifest.json").read_text())
+    tr, ca = [np.array([pi[str(p)] for p in sp[k+"_problem_ids"]]) for k in ["train", "calibration"]]
+    valid = data["valid"].astype(bool)
+    n = valid.sum(2)
+    available = n > 0
+    Q = (data["final_outcome"].astype(bool) & valid).sum(2) / np.maximum(n, 1)
+    outm = np.where(valid, data["completion_tokens"], 0).sum(2) / np.maximum(n, 1)
+    ylog = np.log(np.maximum(outm, 1))
+    center = np.array([ylog[tr[available[tr, m]], m].mean() for m in range(Q.shape[1])])
+    scale = np.array([max(ylog[tr[available[tr, m]], m].std(), 1e-6) for m in range(Q.shape[1])])
+    Xraw = rich(R / act, ids)
+    X = StandardScaler().fit(Xraw[tr]).transform(Xraw).astype(np.float32)
+    y = Q if task == "success" else (ylog-center)/scale
+    weight = n if task == "success" else available.astype(float)
+    z, metadata = fit_mlp(torch.tensor(X, device="cuda"), y, weight, tr, ca, task, CONFIGS[config_index], seed, epochs)
+    stem = dest / f"{task}_config{config_index}_seed{seed}"
+    np.savez_compressed(str(stem)+".npz", logits=z, problem_ids=ids)
+    # Completion marker is written last, atomically, for the aggregation job.
+    temp = Path(str(stem)+".json.tmp")
+    temp.write_text(json.dumps(metadata, indent=2))
+    temp.replace(Path(str(stem)+".json"))
+    print("TRAINING DONE", stem, flush=True)
+
+
+def run(label, output, epochs, aggregate=False):
     name, act, current_cost, targets = POOLS[label]
     folder = R / name
     dest = output / label
@@ -199,7 +233,7 @@ def run(label, output, epochs):
     Cr = np.where(available, inp * pin + outm * pout, 1e9)
     Xraw = rich(R / act, ids)
     X = StandardScaler().fit(Xraw[tr]).transform(Xraw).astype(np.float32)
-    Xt = torch.tensor(X, device="cuda")
+    Xt = None if aggregate else torch.tensor(X, device="cuda")
     ylog = np.log(np.maximum(outm, 1))
     # Reconstruct the linear success arm with the same rich feature matrix.
     subprocess.run([sys.executable, "pipelinerl/swe/scripts/livecodebench/activation_content_preds.py",
@@ -219,8 +253,16 @@ def run(label, output, epochs):
         y = Q if task == "success" else (ylog-center)/scale
         weight = n if task == "success" else available.astype(float)
         options = []
-        for config in CONFIGS:
-            runs = [fit_mlp(Xt, y, weight, tr, ca, task, config, seed, epochs) for seed in SEEDS]
+        for config_index, config in enumerate(CONFIGS):
+            if aggregate:
+                runs = []
+                for seed in SEEDS:
+                    stem = dest / "training" / f"{task}_config{config_index}_seed{seed}"
+                    saved = np.load(str(stem)+".npz", allow_pickle=True)
+                    assert list(map(str, saved["problem_ids"])) == ids
+                    runs.append((saved["logits"], json.loads(Path(str(stem)+".json").read_text())))
+            else:
+                runs = [fit_mlp(Xt, y, weight, tr, ca, task, config, seed, epochs) for seed in SEEDS]
             options.append((np.mean([meta["calibration_loss"] for _, meta in runs]), config, runs))
         _, chosen, runs = min(options, key=lambda v: v[0])
         selections[task] = dict(config=chosen, runs=[meta for _, meta in runs],
@@ -266,7 +308,8 @@ def run(label, output, epochs):
     (dest / "results.json").write_text(json.dumps(result, indent=2))
     print(label, json.dumps(result["matched_accuracy"]), flush=True)
     del Xt
-    torch.cuda.empty_cache()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
     return result
 
 
@@ -274,17 +317,39 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--epochs", type=int, default=500)
+    parser.add_argument("--pool", choices=list(POOLS))
+    parser.add_argument("--task", choices=["success", "cost"])
+    parser.add_argument("--config-index", type=int, choices=range(len(CONFIGS)), default=0)
+    parser.add_argument("--seed", type=int, choices=SEEDS, default=0)
+    parser.add_argument("--aggregate", action="store_true")
+    parser.add_argument("--wait-seconds", type=int, default=7200)
     a = parser.parse_args()
-    assert torch.cuda.is_available(), "Use an eai GPU job"
+    if not a.aggregate:
+        assert torch.cuda.is_available(), "Use an eai GPU job"
     torch.set_num_threads(8)
     a.out.mkdir(parents=True, exist_ok=True)
+    if a.task:
+        if not a.pool:
+            parser.error("--task requires --pool")
+        train_one(a.pool, a.out, a.epochs, a.task, a.config_index, a.seed)
+        return
+    labels = [a.pool] if a.pool else list(POOLS)
     (a.out / "protocol.json").write_text(json.dumps(dict(configs=CONFIGS, seeds=SEEDS, epochs=a.epochs,
         learning_rate=1e-4, patience=50, pools=POOLS, success_loss="binomial BCE", cost_loss="train-standardized log-output MSE",
         selection="mean calibration loss across three seeds; epoch selected per seed", ensemble="average all three seeds",
         features="train-standardized concatenated mean and last readouts, all eight stored layers; no PCA"), indent=2))
+    if a.aggregate:
+        expected = [a.out / label / "training" / f"{task}_config{ci}_seed{seed}.json"
+                    for label in labels for task in ["success", "cost"] for ci in range(len(CONFIGS)) for seed in SEEDS]
+        deadline = time.monotonic() + a.wait_seconds
+        while any(not path.exists() for path in expected):
+            if time.monotonic() >= deadline:
+                raise TimeoutError("Missing training results: " + str([str(p) for p in expected if not p.exists()]))
+            print(f"Waiting: {sum(p.exists() for p in expected)}/{len(expected)} independent runs complete", flush=True)
+            time.sleep(30)
     result = {}
-    for label in POOLS:
-        result[label] = run(label, a.out, a.epochs)
+    for label in labels:
+        result[label] = run(label, a.out, a.epochs, aggregate=a.aggregate)
         (a.out / "results.json").write_text(json.dumps(result, indent=2))
     print("ALL DONE", flush=True)
 

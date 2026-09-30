@@ -38,6 +38,9 @@ Launch after committing and pushing:
 bash launchers/abstention/launch_mlp_heads.sh
 ```
 
-The launcher uses one eai GPU, eight CPUs, 64 GB CPU RAM, and a code snapshot.
+The launcher uses independent eai jobs for each dataset/head/width/seed
+(24 small GPU jobs, one GPU and eight CPUs each), separated by 15 seconds.
+A CPU aggregation job waits for completion markers before selecting settings
+and computing comparisons. All jobs use the same code snapshot.
 Each dataset writes selections, prediction arrays, paired comparisons, and
 calibration-selected operating points under the reported run directory.
