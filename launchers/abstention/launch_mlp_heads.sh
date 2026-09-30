@@ -18,6 +18,6 @@ for MLP_POOL in LCB Omni; do
   done
 done
 make job JOB_NAME="${MLP_JOB_NAME}_aggregate" ENV=pipeline-rl CONDA_EXE=/opt/conda/bin/conda \
-  GPU=0 CPU=8 CPU_MEM=64 SNAPSHOT=1 \
+  GPU=0 GPU_MEM=0 CPU=8 CPU_MEM=64 SNAPSHOT=1 \
   COMMAND="python -u analysis/cost_headroom/mlp_heads.py --out ${MLP_OUT} --aggregate"
 echo "Submitted independent runs and aggregation; results: ${MLP_OUT}"
