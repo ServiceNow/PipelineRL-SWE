@@ -1,7 +1,7 @@
 # Per-query cost for routing reasoning models: when it pays, why, and how cheaply
 
 Paper outline (bullets, not prose). Status 2026-09-30. Target: TMLR (analysis paper) + a 4-page workshop cut.
-Numbers come from `NEW_PATH.md` §4.A.4–4.A.35 (section in brackets). Figures: `analysis/figures/*.png`
+Numbers come from `NEW_PATH.md` §4.A.4–4.A.36 (section in brackets). Figures: `analysis/figures/*.png`
 (regenerate with `python analysis/figures/make_figures.py`).
 
 ---
@@ -14,8 +14,9 @@ Numbers come from `NEW_PATH.md` §4.A.4–4.A.35 (section in brackets). Figures:
   on LCB, Omni-MATH, MMLU-Pro (the last two pre-registered).
 - Why: hard problems are long for every model; the gain appears when that difficulty is legible from the prompt; on some
   tasks length tracks work required rather than difficulty.
-- Against shared-latent routing (ZeroRouter), reproduced on a realistic 5-model pool: its success predictions are fine, its
-  difficulty-derived pricing loses 17–27 pt (LCB) and 21–25 pt (MMLU-Pro).
+- Against shared-latent routing (ZeroRouter), reproduced on a realistic 5-model pool with its configuration tuned on
+  calibration: +17.6 pt on LCB (CI excludes 0), +9.3 on MMLU-Pro (n.s.), tie on Omni; its success predictions are fine, its
+  difficulty-derived pricing is the weak part.
 - New models onboard from 5–10 labelled examples; per-request budgets and single-submission cascades as deployment cases.
 
 ## 1. Introduction
@@ -174,6 +175,8 @@ Numbers come from `NEW_PATH.md` §4.A.4–4.A.35 (section in brackets). Figures:
   - Their stage 2: our 4B reader and, separately, their own fine-tuned DistilBERT + 11 linguistic features.
   - Their pricing: s = αᵀb → K bins → per-model mean length (K = 5 / 10 / 20; unstated in the paper).
   - Population variant: + N Open LLM Leaderboard models (their data source), N = 0 … 196.
+- **Headline figure (Figure 0):** `analysis/figures/fig0_headline_vs_zerorouter.png` — ours vs ZeroRouter with its
+  configuration tuned on calibration, paired CIs [4.A.36]
 - **Figure 6:** `analysis/figures/fig6_zerorouter_component_swap.png`
 - **Table 4 (cost saved vs reference)**
 
@@ -184,7 +187,9 @@ Numbers come from `NEW_PATH.md` §4.A.4–4.A.35 (section in brackets). Figures:
   | MMLU-Pro | 30.9 | 10–12 / 8–22 | ≤ 12 | 31–36 | 2–7 |
 
 - **Findings**
-  - Paired, 3 seeds: ours − ZeroRouter +17 to +27 (LCB), +21 to +25 (MMLU-Pro), CIs exclude 0; Omni +2 to +14, n.s. to borderline.
+  - DEFINITIVE (ZeroRouter's configuration chosen on calibration, paired) [4.A.36]: LCB +17.6 [+9.8, +24.9]; MMLU-Pro +9.3
+    [−2.6, +21.5] (n.s.); Omni +3.0 [−10.7, +16.6] (tie). Against its default configuration the gaps were larger (LCB
+    +17 to +27, MMLU-Pro +21 to +25) — report the tuned numbers.
   - The whole gap is the pricing (component swap); their success model is usable.
   - Dimension buys nothing at pool size; their own encoder is no better (latent barely readable from text: R² ≤ .26).
   - Population (5–53 leaderboard models, preview): no improvement (log-loss .59–.64 vs ours .519; pricing 1–12%); full
@@ -285,6 +290,7 @@ Numbers come from `NEW_PATH.md` §4.A.4–4.A.35 (section in brackets). Figures:
 
 | # | File | Content |
 |---|---|---|
+| 0 | `analysis/figures/fig0_headline_vs_zerorouter.png` | Headline: ours vs tuned ZeroRouter, paired CIs |
 | 1 | `analysis/figures/fig1_headroom.png` | Headroom by pool type |
 | 2 | `analysis/figures/fig2_capture_curve.png` | Capture vs predictor R², synthetic + real heads |
 | 3 | `analysis/figures/fig3_level_vs_differences.png` | Level-only vs differences-only headroom |
@@ -315,7 +321,7 @@ Numbers come from `NEW_PATH.md` §4.A.4–4.A.35 (section in brackets). Figures:
 | C12 | Router beats single-submission cascades incl. a perfect judge | [4.A.25, 4.A.27] | Solid on LCB |
 | C13 | Difficulty-only pricing ties where length is difficulty, loses ~19 pt where not | [4.A.20, 4.A.26, 4.A.28] | Solid on 3 pools |
 | C14 | Per-request budgets: +5–7.5 pt at fixed budget in the middle band | [4.A.29] | Solid (hard cap) |
-| C15 | Faithful ZeroRouter on a 5-model pool loses 17–27 (LCB) / 21–25 (MMLU-Pro); gap is pricing | [4.A.32–4.A.35] | Solid on 2 pools; population curve running |
+| C15 | Faithful ZeroRouter on a 5-model pool, its config tuned on calibration: we win +17.6 on LCB (CI > 0), +9.3 on MMLU-Pro (n.s.), tie on Omni; the gap is its pricing | [4.A.32–4.A.36] | Solid on LCB; directional on MMLU-Pro; population curve running |
 | C16 | Coding length readable beyond difficulty (TACO / BCB) | whole-dataset diagnostic | Solid at prediction level |
 
 ## TMLR readiness and remaining plan (assessment, 2026-09-30)
@@ -341,6 +347,7 @@ Numbers come from `NEW_PATH.md` §4.A.4–4.A.35 (section in brackets). Figures:
   | Omni test set small | State; CIs shown | Nice | — |
   | Missing RouteLLM / CARROT / GraphRouter | CARROT ≈ our MixLLM-style / kNN (say so) or add RouteLLM | Nice | free |
   | Cascade comparison LCB only | 137M scorers on Omni / MMLU-Pro | Nice | GPU job |
+  | ZeroRouter win significant on LCB only (MMLU-Pro n.s., test n=300) | Larger MMLU-Pro test set (more problems, one draw per model) | Nice | ~$5–10 |
 
 - **Verdict:** with APPS, AIME, a second family and a clean re-run of all tables → solid TMLR submission; without the second
   family and two-sided pre-registration → likely a revision request. ~1–2 days compute + scripting, ~$40–60, plus writing.

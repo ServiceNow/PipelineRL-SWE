@@ -1402,3 +1402,14 @@ Their stage 1 fitted on TRAIN questions with N Open LLM Leaderboard models (thei
 mostly small non-reasoning models (MMLU-Pro 11-59%, 5-shot loglikelihood), unlike our 60-83% reasoning pool -- their method needs
 a population LIKE your deployment pool. Full 196-model run submitted (eai zr_pop_050201).
 APPS full pool (one draw per route, ~$11) collecting: oss20md 72.8%, oss120md 79.1%, dsv4f 84.3%, oss120hi 87.4% (oss20lo 58%).
+
+### 4.A.36 CORRECTION: ours vs ZeroRouter with ITS configuration tuned (2026-09-30; `zr_best_ci.py`, zr_best_ci.json)
+4.A.33's "+21 to +25 pt on MMLU-Pro, CIs exclude 0" compared against ZeroRouter's DEFAULT configuration (K=10). With its
+configuration chosen on CALIBRATION (D in {1,5} x 3 seeds x K in {5,10,20}; 4B reader) and applied once to test, paired bootstrap:
+| pool | ours | ZeroRouter (calibration-chosen config) | ours - ZR [95% CI] | ZR best-on-test (upper bound) |
+| LCB | 36.0 | 18.5 (D5, K10) | **+17.6 [+9.8, +24.9]** | 19.3 -> +16.7 [+9.1, +23.9] |
+| Omni | 22.7 | 20.0 (D1, K10) | +3.0 [-10.7, +16.6] | 22.7 -> +0.7 |
+| MMLU-Pro | 30.9 | 21.6 (D5, K5) | +9.3 [-2.6, +21.5] | same config |
+=> The definitive ZeroRouter comparison: significant win on LCB only; MMLU-Pro +9 pt directional (CI touches 0); Omni tie. The
+component-swap mechanism (their pricing is the weak part) is unchanged. MMLU-Pro test n = 300; a larger test set would decide it.
+Headline figure: analysis/figures/fig0_headline_vs_zerorouter.png.

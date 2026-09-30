@@ -158,3 +158,31 @@ if __name__ == "__main__":
             f()
         except Exception as e:
             print(f"{f.__name__}: FAILED {type(e).__name__}: {e}")
+
+
+def fig_headline_zerorouter():
+    """Headline: ours vs ZeroRouter reproduced on each 5-model pool. ZeroRouter's configuration (D in {1,5}, 3 seeds, K in
+    {5,10,20}; 4B reader) is chosen on CALIBRATION and applied once to test (zr_best_ci.json); annotation = paired bootstrap of
+    ours - ZeroRouter on test at that configuration. Third bar: ZeroRouter with its own DistilBERT encoder, best K and D on test."""
+    ci = json.load(open(A / "zr_best_ci.json")); enc = json.load(open(A / "zr_encoder_eval.json")); pools = ["LCB", "Omni", "MMLU-Pro"]
+    ours = [ci[p]["calibration-chosen"]["ours"] * 100 for p in pools]; zr = [ci[p]["calibration-chosen"]["zr"] * 100 for p in pools]
+    own = [max(max(v[str(K)] for K in (5, 10, 20)) for k, v in enc[p].items() if "DistilBERT" in k) * 100 for p in pools]
+    x = np.arange(3); w = 0.26; fig, ax = plt.subplots(figsize=(7.2, 4.0))
+    ax.bar(x - w, ours, w, color=C_OURS, label="Ours (frozen 4B prefill: success + per-query cost)")
+    ax.bar(x, zr, w, color=C_ALT, label="ZeroRouter, configuration tuned on calibration")
+    ax.bar(x + w, own, w, color="#fbbf24", label="ZeroRouter, its own DistilBERT encoder (best on test)")
+    for i, p in enumerate(pools):
+        for dx, val, bold in ((-w, ours[i], True), (0, zr[i], False), (w, own[i], False)):
+            ax.text(x[i] + dx, val + 0.8, f"{val:.0f}%", ha="center", fontsize=9, color=INK, weight="bold" if bold else "normal")
+        d = ci[p]["calibration-chosen"]; lo, hi = d["ci"]
+        ax.text(x[i], max(ours[i], zr[i], own[i]) + 6.5, f"ours − ZR: {d['diff']:+.1f} pt\n95% CI [{lo:+.1f}, {hi:+.1f}]" + ("" if lo > 0 else "\n(not significant)"),
+                ha="center", fontsize=8.3, color=INK if lo > 0 else MUTED)
+    ax.set_xticks(x); ax.set_xticklabels(pools, fontsize=10.5); ax.set_ylim(0, 60)
+    ax.set_ylabel("Cost saved vs median-length routing,\nat matched accuracy (%)")
+    ax.legend(frameon=False, fontsize=8.3, loc="upper right")
+    ax.set_title("Ours vs ZeroRouter (tuned) on a 5-model pool", loc="left", fontsize=10.5)
+    save(fig, "fig0_headline_vs_zerorouter.png")
+
+
+if __name__ == "__main__":
+    fig_headline_zerorouter()
