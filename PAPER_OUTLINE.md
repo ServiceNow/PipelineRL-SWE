@@ -1,250 +1,138 @@
-# Paper outline: one prefill, a shared difficulty latent, and per-query cost in reasoning-model routing
+# Per-query cost for routing reasoning models: when it pays, why, and how cheaply
 
-Status: draft outline, 2026-09-29. All numbers come from `NEW_PATH.md` §4.A.4–4.A.35 (section given in brackets).
-Target: a TMLR analysis paper, plus a 4-page workshop cut (at the end of this file).
-Track B (verification) enters only as one measurement subsection.
+Paper outline (bullets, not prose). Status 2026-09-30. Target: TMLR (analysis paper) + a 4-page workshop cut.
+Numbers come from `NEW_PATH.md` §4.A.4–4.A.35 (section in brackets). Figures: `analysis/figures/*.png`
+(regenerate with `python analysis/figures/make_figures.py`).
 
 ---
 
-## 0. Thesis
+## Abstract (bullets)
+- Routers pick a model per query by trading predicted success against cost; almost all treat cost as a per-model constant.
+- For reasoning models, output length (hence cost) varies 10–90× across queries within one model.
+- Measurement: perfect per-query cost knowledge is worth 20–65% of cost at matched accuracy on reasoning pools, ~10% on chat.
+- Method: one frozen 4B prefill, linear read-outs for success and length per model; saves 22–36% vs the median-length rule
+  on LCB, Omni-MATH, MMLU-Pro (the last two pre-registered).
+- Why: hard problems are long for every model; the gain appears when that difficulty is legible from the prompt; on some
+  tasks length tracks work required rather than difficulty.
+- Against shared-latent routing (ZeroRouter), reproduced on a realistic 5-model pool: its success predictions are fine, its
+  difficulty-derived pricing loses 17–27 pt (LCB) and 21–25 pt (MMLU-Pro).
+- New models onboard from 5–10 labelled examples; per-request budgets and single-submission cascades as deployment cases.
 
-**A single cheap prefill (Qwen3-4B, frozen, linear read-outs) extracts a shared per-problem difficulty latent.
-That latent does three jobs across a whole pool of reasoning models:**
+## 1. Introduction
+- **Setting**
+  - Routing rule: argmax_m p_m(x)·V − c_m(x).
+  - Prior work: c_m(x) = price × median/mean length, "q-independent" (SWE-Router), "less critical" (Dekoninck et al.).
+  - Reasonable for chat models: few dozen output tokens; cost input-dominated (RouterBench: output 17–42% of the bill).
+  - Some routers do predict per-query cost (MixLLM, CARROT, GraphRouter, Route-To-Reason, ZeroRouter); none ablates it
+    against the constant, and CARROT reports only marginal gains on chat benchmarks.
+- **The shift**
+  - Reasoning models: output length varies 10–90× across problems within one model/setting; 81–96% of that variance is
+    between problems.
+- **Questions**
+  - Does per-query cost matter? When? What does it take to capture it? How cheaply can a new model be priced?
+- **Contributions**
+  1. Headroom measurement across 9 one-shot pools + 2 agentic sets; a principle for when per-query cost matters (Fig. 1).
+  2. A single-prefill router that prices each query; wins on code / math / knowledge; pre-registered out-of-sample calls;
+     baselines incl. a faithful ZeroRouter reproduction (Tables 2–4, Fig. 4, Fig. 6).
+  3. Mechanism: legible difficulty drives length; level vs differences; convex capture; R² ≠ routing value; work required
+     ≠ difficulty (Figs. 2, 3, 9).
+  4. Onboarding a new model from 5–10 examples against the shared structure (Fig. 5).
+  5. Deployment regimes: per-request budgets, abstention, single-submission cascades (Figs. 7, 8).
+  6. Scope: agents, caps, verification.
 
-1. **Route:** who can solve it.
-2. **Price:** how many tokens each model will spend on it. This is worth 20–30% of cost at matched accuracy. Most routers
-   treat cost as a per-model constant; the few that predict it per query never measured what it is worth.
-3. **Onboard:** a new model is added from ~5–10 labelled examples by fitting 1–3 parameters against the latent.
+## 2. Related work
+- **Constant or median cost:** 2603.20895 (prefill activations, median length — our reference rule); IRT-Router 2506.01048;
+  C3PO; 2602.09924 (prefill success probes, average cost); SWE-Router ("q-independent").
+- **Per-query cost predictors:** MixLLM 2502.18482; CARROT 2502.03261 (kNN / RoBERTa; marginal over constant on RouterBench /
+  SPROUT); GraphRouter 2410.03834; Route-To-Reason 2505.19435 (text-embedding MLP predicts reasoning-model length);
+  2509.09782; Dekoninck 2410.10347 ("less critical").
+- **Shared latents / cold start:** ZeroRouter 2601.06220 (IRT latent from ~200 models, cost = per-bin mean length,
+  ~200-anchor onboarding) — closest prior art, credited for the shared-latent framing; SCOPE 2601.22323; 2607.18253.
+- **Budget control:** R2-Router 2602.02823 (prompt-instructed length budgets); TALE-style self-estimates.
+- **Length / difficulty prediction:** EGTP / PLP 2602.11812; TRAIL; OUTLETS 2609.01068.
+- **Abort and reroute (agents):** SWE-Router 2607.00053; Fail-Fast 2608.03222; TACIT-Switch; EarlyEval 2609.02783.
+- **Cascades with a learned answer check:** FrugalGPT (per-tier DistilBERT scorer); AutoMix; 2504.19391; cascade routing
+  (Dekoninck); Cheap Verifiers, Large Blind Spots 2609.01345.
+- **Correctness probes:** Openia 2501.12934; AutoProbe 2510.02934; 2512.07404; 2606.14530; HSRM 2608.30841; 2512.22245.
+- **Positioning bullets**
+  - Per-query cost prediction exists; what is missing: a measurement of its value vs a constant, when it pays, cost read
+    from an LLM prefill, whether difficulty-only pricing suffices, low-shot onboarding, the router-vs-cascade result.
 
-The latent is "shared" in a measurable sense. For reasoning models, most variation in output length is between
-problems rather than between models (81–96% of variance). Hard problems are long for everyone, and the
-model-specific remainder is essentially unpredictable before generation.
-
-**Prior art for the framing (must be cited up front):** ZeroRouter (2601.06220) already builds a shared IRT difficulty
-latent that routes, prices each query (per-model mean output in the query's difficulty bin) and onboards new models from
-~200 anchors. Route-To-Reason, CARROT, GraphRouter and MixLLM also predict per-query cost. None of them measures whether
-per-query cost helps against a per-model constant, or when; none reads cost from an LLM prefill; none onboards from fewer
-than ~200 examples. Our paper is the measurement and the account, not the invention of the idea [4.A.26].
-
-What makes this a paper and not a trick:
-- **When:** the rule for when it pays was stated and pre-registered, then confirmed on 2 new datasets.
-- **Why:** difficulty drives length, and the prefill can read that difficulty.
-- **Where not:** non-reasoning pools, mixed-price agentic pools, and pools where difficulty is illegible.
-
-## 1. Claims ledger
-
-Status key: **Solid** means CI excludes 0 and the protocol is matched. **Directional** means the point estimate
-favours us but the CI touches 0. **Pending** means not yet run.
-
-| # | Claim | Evidence | Status |
-|---|---|---|---|
-| C1 | Per-query cost headroom is large for reasoning pools (20–65%) and small for non-reasoning pools (~10%) | 7 reasoning pools, RouterBench, agentic [4.A.4, 4.A.7, 4.A.14, 4.A.19] | Solid |
-| C2 | Headroom appears when within-model cost variation is large relative to between-model price gaps | Reasoning vs RouterBench; agentic open-only 25.7% vs all-13 8.5% [4.A.14] | Solid (3 regimes); the principle is an interpretation |
-| C3 | One 4B prefill captures most of that headroom where difficulty is legible: LCB 35.6%, Omni 21.9%, MMLU-Pro 30.7% vs the paper rule | [4.A.6, 4.A.9, 4.A.19] | Solid; Omni and MMLU-Pro were pre-registered |
-| C4 | A pre-registered screen (one cheap model × one prefill, R² ≥ .50) predicts whether a new dataset yields a gain | 2/2 confirmed; 5 calls pending [4.A.9, 4.A.12, 4.A.13, 4.A.19] | Solid but thin (n=2) |
-| C5 | It beats literature cost predictors (MixLLM-style, prompt-GBM) | LCB and MMLU-Pro significant; Omni directional [4.A.6, 4.A.20] | Solid / Directional |
-| C6 | Most of the value is the shared level ("hard is long for everyone"); on LCB and Omni it is recoverable from the success head alone | Level-only 10–36% [4.A.17]; from-success ties LCB/Omni [4.A.20] | Solid. This supports the single-latent framing |
-| C7 | Length is not just difficulty on MMLU-Pro: a dedicated cost read adds +21.5 pt over cost-from-success | [4.A.20] | Solid on one pool |
-| C8 | The model-specific part of cost resists every pre-generation predictor tried | ~12 nulls [4.A.11, 4.A.16, 4.A.17] | Solid as a negative |
-| C9 | Higher cost-prediction R² does not imply better routing | LCB prefix: R² .70–.86 but gain 34→26% [4.A.15] | Solid |
-| C10 | Onboarding: a new model's cost from 5 examples gives 96% of a trained head. Removing a strong model (deepseek-v4-flash; or gpt-oss-120b in a pool without deepseek) and re-adding it from ~10 examples restores most of the lost accuracy while still saving vs the reference; naive re-adding restores accuracy at a cost premium | [4.A.18 #2, #2.1, 4.A.21, 4.A.24] | Solid (offline, 3 pools × 2 pool variants) |
-| C11 | New families that are dominated by the pool are priced out correctly from ~10 examples (onboarding protects the router) | GLM / Nemotron / MiniMax on MMLU-Pro [4.A.19 #2.3] | Solid, but protective, not a gain |
-| C13 | Difficulty-only pricing (ZeroRouter-style bins, or cost read from the success head) matches a dedicated cost read where length is difficulty (LCB, Omni) and loses ~19 pt where it is not (MMLU-Pro) | [4.A.20, 4.A.26] | Solid on 3 pools; the MMLU-Pro case is one pool |
-| C14 | Under a per-query budget, per-query cost prediction buys +5–7.5 pt accuracy at a fixed budget in the middle band (constant rule needs up to 2.4–2.9× the budget there); averaged over budgets the advantage is similar to the average-cost regime | [4.A.29] | Solid for the hard cap on 3 pools; soft cap directional |
-| C15 | A faithful reproduction of ZeroRouter on a 5-model deployment pool loses 17–27 pt (LCB) and 21–25 pt (MMLU-Pro) of cost savings to us; on Omni it ties at best. The whole gap is its difficulty-derived pricing (component swap); its own encoder and a leaderboard model population do not rescue it | [4.A.32–4.A.35] | Solid on LCB and MMLU-Pro (3 seeds, K sweep, paired CIs, their encoder); population curve at 53 models, full 196 running |
-| C16 | Output length on whole coding datasets is readable from the prompt well beyond difficulty: true difficulty explains 8–10% of log-length variance on TACO and BCB, the probe 38–53% | coding diagnostic, whole datasets | Solid at the prediction level; no significant routing gain there (flat ladders); APPS pending |
-| C12 | With no verifier and one submission, the prefill router beats single-submission cascades with a learned answer judge, and even a cascade with a PERFECT judge: a cascade pays for the cheap attempt on every problem, the prefill skips it | LCB [4.A.25] | Solid on LCB (4B judge, FrugalGPT-style 137M judge, perfect judge); other pools pending |
-
-## 1b. Dataset coverage (the rounded set)
-
-| Domain | Pool | Status |
-|---|---|---|
-| Code | LCB (892) | Win: 35.6% vs the paper rule; main pool |
-| Code | APPS (1000, one draw per model) | **Pending**; pre-registered GAIN call (screen R² .61). Early accuracy ladder 58 / 73 / 79 / 84 / 87% |
-| Math | Omni-MATH-500 | Win: 21.9%, pre-registered and confirmed |
-| Knowledge / reasoning | MMLU-Pro (1000) | Win: 30.7%, pre-registered and confirmed; the work ≠ difficulty case |
-| Code, predicted not to pay | CodeContests, TACO, BCB | No gain, each explained by the rule (after the fact, not predicted) |
-| Chat, contrast | RouterBench | Headroom 10.5%, as predicted |
-| Agentic, contrast | SWE-rebench, nebius SWE-agent | Headroom 25.7% (open models) / 8.5% (mixed prices); not yet capturable |
-| Predicted NO GAIN, still to run | AIME (screen R² .13), BBEH (.28) | Needed so the pre-registration is two-sided |
-
-Qualifications: APPS is not a win until it lands; every confirmed pre-registered call so far was a GAIN call; all pools use the
-same five models (gpt-oss 20b/120b at two efforts + deepseek-v4-flash).
-
-## 2. Section-by-section outline
-
-### §1 Introduction
-- **Setup:**
-  - Routers choose argmax_m p_m(x)·V − c_m(x).
-  - Most prior work sets c_m(x) to a per-model constant: a price × median length, "q-independent" (SWE-Router), or
-    "less critical" (Dekoninck et al.). A few routers predict it per query (MixLLM, CARROT, GraphRouter, Route-To-Reason,
-    ZeroRouter), but none ablates it against the constant; CARROT reports only marginal gains on chat benchmarks.
-  - That was reasonable for chat models, where output is a few dozen tokens and cost is input-dominated (RouterBench:
-    output is 17–42% of the bill).
-- **The shift:** a reasoning model's output length varies 10–90× across problems within one model and setting, and
-  81–96% of that variance is between problems.
-- **Our claim (the thesis above):** one cheap prefill, one latent, three uses.
-- **Contributions:**
-  1. A headroom measurement across 9 one-shot pools and 2 agentic sets, with a principle for when per-query cost matters.
-  2. A single-prefill router that prices each query, with two pre-registered out-of-sample confirmations and baselines.
-  3. An account of why it works (legible difficulty drives length) and where it cannot: the model-specific remainder is
-     unpredictable, and R² is not routing value.
-  4. Onboarding a new model against the latent from ~5–10 examples.
-  5. The prefill "shortcut" vs cascades: with one submission and no verifier, the router beats FrugalGPT-style judge
-     cascades, even one with a perfect judge (C12).
-  6. Scope results: agentic step caps backfire; cross-model verification as a measurement.
-
-### §2 Setting and protocol
-- **Pools (one-shot):**
-  - LCB (892; 441/110/341), Omni-MATH-500 (500), MMLU-Pro (1000), CodeContests (700), TACO, BigCodeBench, SWE-Smith
-    reasoning.
-  - Routes: gpt-oss-20b low/med, deepseek-v4-flash, gpt-oss-120b med/high.
-  - 2–4 draws per route.
+## 3. Setting and protocol
+- **3.1 Pools** (Table 1; pool statistics table to build for Appendix A)
+  - LCB (892; 441/110/341), Omni-MATH-500 (500), MMLU-Pro (1000), CodeContests (700), TACO, BigCodeBench, SWE-Smith;
+    APPS (1000, pending).
+  - Routes: gpt-oss-20b low / medium, deepseek-v4-flash, gpt-oss-120b medium / high; 2–4 draws per route (APPS: 1).
   - OpenRouter market prices ($/M in/out): 0.018/0.09, 0.047/0.094, 0.15/0.6.
-- **Contrast pools:** RouterBench (11 chat models); SWE-rebench July 2026 (13 standalone agents × 5 runs); nebius
-  SWE-agent (3387 tasks × ~20 runs).
-- **Prefill:**
-  - Qwen3-4B-Instruct-2507 (Thinking on Omni, fixed by pre-registration).
-  - Frozen; rich activation features.
-  - Success head: per-route probe → p_m(x).
-  - Cost head: per-route plain RidgeCV → log output tokens. Cost = input×price_in + exp(pred)×price_out.
-- **Shared latent, operationally:**
-  - Level(x) = mean over routes of the predicted log length.
-  - Difficulty(x) = mean over routes of the success logit.
-  - Both are linear reads of the same activations.
-- **No abstention in any one-shot result:** every problem gets exactly one call; the frontier over V trades cheap routes
-  for accurate ones. The verifier-regime comparisons (§7, Track B) are the only places where a policy may stop or abstain.
-- **Reference rule:** input + median train output (arXiv 2603.20895).
-  - Headroom = oracle per-problem cost vs the reference, at matched accuracy.
-  - Gain = learned vs the reference.
-  - Capture = gain / headroom.
-- **Evaluation:**
-  - Test frontiers over V, then the convex hull.
-  - Cost ratio averaged over the accuracy band shared by all arms.
-  - Paired bootstrap over test problems, with identical resamples per arm.
-  - Deployable variant: operating point chosen on calibration and applied once to test.
-- **Pre-registration rule (committed before data):**
-  - Screen = gpt-oss-20b-low × 1 plus the prefill.
-  - Probe 5-fold CV log-output R² ≥ .50 → GAIN (≥ 10%, CI > 0); ≤ .35 → NO GAIN; otherwise no call.
+  - Contrast sets: RouterBench (11 chat models); SWE-rebench July 2026 (13 agents × 5 runs); nebius SWE-agent (3387 tasks).
+- **3.2 Router**
+  - Frozen Qwen3-4B-Instruct-2507 prefill (Thinking on Omni, fixed by pre-registration); rich activations.
+  - Success head per route → p_m(x); cost head per route (plain RidgeCV → log output tokens) → c_m(x).
+  - Shared structure: level(x) = mean predicted log length; difficulty(x) = mean success logit.
+- **3.3 Reference and metrics**
+  - Reference: input + median train output (2603.20895).
+  - Headroom = oracle per-problem cost vs reference at matched accuracy; gain = ours vs reference; capture = gain / headroom.
+  - Test frontiers over V, convex hull, cost ratio over the shared accuracy band; paired bootstrap over test problems.
+  - Deployable variant: operating point chosen on calibration, applied once to test.
+  - No abstention in one-shot results unless stated (§9.2).
+- **3.4 Pre-registration rule** (committed before data)
+  - Screen: gpt-oss-20b-low × 1 + the prefill; probe 5-fold CV log-length R² ≥ .50 → GAIN (≥ 10%, CI > 0); ≤ .35 → NO GAIN.
   - Headroom ≥ 15% predicted for any reasoning pool.
 
-### §3 How much is per-query cost worth? (headroom)
-Table 1: headroom [95% CI], market prices [4.A.4, 4.A.7, 4.A.9, 4.A.14, 4.A.19].
+## 4. How much is per-query cost worth? (headroom)
+- **Figure 1:** `analysis/figures/fig1_headroom.png`
+- **Table 1 (headroom, market prices)** [4.A.4, 4.A.7, 4.A.9, 4.A.14, 4.A.19]
 
-| Pool | Headroom |
-|---|---|
-| MMLU-Pro | 65.1% [55.2, 71.2] |
-| LCB | 47.3% [39.7, 52.9] |
-| Omni | 44.2% [31.8, 53.5] |
-| TACO | 36.1% [24.9, 46.0] |
-| LCB, gpt-oss only | 30.8% |
-| CodeContests | 21.8% |
-| BCB | 20.2% |
-| SWE-Smith | 14.2% (n.s.) |
-| RouterBench (chat) | 10.5% [7.4, 12.8] |
-| Agentic SWE-rebench, 7 open models (~10× price range) | 25.7% [6.3, 40.6] |
-| Agentic SWE-rebench, all 13 (~190× price range) | 8.5% (n.s.) |
+  | Pool | Headroom |
+  |---|---|
+  | MMLU-Pro | 65.1% [55.2, 71.2] |
+  | LCB | 47.3% [39.7, 52.9] |
+  | Omni | 44.2% [31.8, 53.5] |
+  | TACO | 36.1% [24.9, 46.0] |
+  | CodeContests | 21.8% |
+  | BCB | 20.2% |
+  | SWE-Smith | 14.2% (n.s.) |
+  | RouterBench (chat) | 10.5% [7.4, 12.8] |
+  | Agentic, 7 open models (~10× price range) | 25.7% [6.3, 40.6] |
+  | Agentic, all 13 (~190× price range) | 8.5% (n.s.) |
 
-- **Principle (C2):** per-query cost pays when within-model variation is large relative to price gaps. Reasoning
-  models are high on both counts; chat is low on within-model variation; mixed-price agent pools are dominated by
-  price gaps.
-- Agentic variance shares: model 74 / task 15 / interaction 6 / run 4. Within-model ICC is .69–.92, so per-task
-  cost is stable.
+- **Principle:** per-query cost pays when within-model variation is large relative to price gaps.
+  - Reasoning: high within-model variation; chat: low; mixed-price agents: dominated by price gaps.
+  - Agentic variance shares: model 74 / task 15 / interaction 6 / run 4; within-model ICC .69–.92.
 
-### §4 One prefill prices the pool (main result)
-- Table 2: gain vs the reference at matched accuracy [95% CI] and deployable cost ratios.
+## 5. One prefill prices the pool (main results)
+- **Table 2 (gain vs reference at matched accuracy; deployable cost ratios)** [4.A.8, 4.A.9, 4.A.12, 4.A.19]
 
   | Pool | Gain | Deployable | Note |
   |---|---|---|---|
   | LCB | 35.6% [27.1, 41.9] | 0.63 / 0.67 / 0.73 at 70 / 75 / 80% | |
-  | Omni | 21.9% [8.9, 33.5] | 0.70 / 0.73 at 60 / 65%; same cost +2–3 pt accuracy at 70–75% | pre-registered |
+  | Omni | 21.9% [8.9, 33.5] | 0.70 / 0.73 at 60 / 65%; same cost +2–3 pt at 70–75% | pre-registered |
   | MMLU-Pro | 30.7% [16.3, 43.2] | 0.39–0.58 at 57–72% | pre-registered |
+  | APPS | pending | | pre-registered GAIN |
 
-- **Table 3: baselines**, ours minus baseline, paired [4.A.20, 4.A.6]:
+- **Table 3 (baselines; ours minus baseline, paired where bracketed)** [4.A.6, 4.A.20, 4.A.26]
 
   | Baseline | LCB | Omni | MMLU-Pro |
   |---|---|---|---|
   | Mean-per-model constant | +34.3 | +23.3 | +29.5 |
   | Single best model | +39.3 | +42.0 | +25.3 |
-  | MixLLM-style (embeddings → MLP / RF / kNN) | +21.5 | +9.4 [−4.4, 24.2] | +26.7 [12.4, 40.2] |
+  | MixLLM-style | +21.5 | +9.4 [−4.4, 24.2] | +26.7 [12.4, 40.2] |
   | Prompt-feature GBM | +23.3 | +15.2 [−1.4, 34.1] | +20.9 [3.8, 33.3] |
   | Cost from the success head | +1.5 [−1.3, 4.3] | +0.8 [−7.2, 9.0] | +21.5 [8.5, 30.3] |
-  | ZeroRouter-style difficulty bins, K=5 / 10 (on our prefill latent: an upper bound for theirs) | +3.7 [0.1, 7.4] / +1.8 (n.s.) | −0.1 / +3.5 (n.s.) | +19.6 [7.8, 32.7] / +19.1 [7.6, 31.6] |
+  | ZeroRouter-style bins on our difficulty (K=5 / 10) | +3.7 [0.1, 7.4] / +1.8 | −0.1 / +3.5 | +19.6 [7.8, 32.7] / +19.1 |
 
-  - Rows without brackets are point differences of separately reported gains. The baselines' own gains vs the
-    reference: mean-constant 1.3 / −1.4 / 1.2; single best model −3.7 / −20.1 / +5.4; LCB MixLLM-style 14.1 [5.3, 21.0];
-    LCB GBM 12.3 [0.7, 21.4].
-  - **TODO:** paired CIs for those rows (decompose.py now saves the draws).
-- **Pre-registration scorecard (Fig. 4):**
-  - Confirmed GAIN: Omni, MMLU-Pro.
-  - Pending GAIN: APPS .61, K&K .61, SuperGPQA .58.
-  - Pending NO GAIN: AIME .13, BBEH .28.
-  - No call: OlympiadBench .48.
-  - Excluded: ZebraLogic (the public solutions are redacted; the grader passed placeholders).
-  - Report the exclusion openly.
-- **RouterBench (their benchmark):** probe 8.5% vs MixLLM-style 8.1% vs GBM 7.0% of 10.5%. We're at least as good,
-  but there's little headroom to separate predictors.
+  - Unbracketed rows are differences of separately reported gains → re-run paired (see the plan at the end).
+  - RouterBench (their benchmark): probe 8.5% vs MixLLM-style 8.1% vs GBM 7.0% of 10.5% — low headroom, predictors converge.
+- **Pre-registration (Figure 4):** `analysis/figures/fig4_preregistration.png`
+  - Confirmed GAIN: Omni (screen .67 → 21.9%), MMLU-Pro (.65 → 30.7%).
+  - Pending GAIN: APPS .61 (running), K&K .61, SuperGPQA .58. Pending NO GAIN: AIME .13, BBEH .28. No call: OlympiadBench .48.
+  - Excluded: ZebraLogic (public solutions redacted; grader passed placeholders) — report openly.
 
-- **Abstention adds nothing when a wrong answer costs nothing** [4.A.23]: letting the router skip problems saves
-  0.1 / −7.0 (n.s.) / 0.0% on LCB / Omni / MMLU-Pro. The cheapest route costs ~0.008¢ and solves about half the
-  problems, so skipping never pays. (Penalised-error settings, λ > 0, are out of scope.)
-- **ZeroRouter, reproduced on our pools (Table 3d)** [4.A.32–4.A.35]. Their stage 1 (D-dim 2PL IRT; MAP instead of their
-  SVI) fitted on the pool's own outcomes; stage 2 with our 4B reader and, separately, their own DistilBERT + 11 linguistic
-  features; their bin-lookup pricing. Cost saved vs the paper rule at matched accuracy:
-
-  | Pool | Ours | ZeroRouter (4B reader, D=1 / 5, best K) | ZeroRouter (own DistilBERT) | Their success + our cost | Our success + their pricing |
-  |---|---|---|---|---|---|
-  | LCB | 36.0 | 9–10 / 19 | ≤ 13 | 27–36 | 4–17 |
-  | Omni | 22.7 | 20–23 / 12–19 | ≤ 13 | 19–25 | 10–17 |
-  | MMLU-Pro | 30.9 | 10–12 / 8–22 | ≤ 12 | 31–36 | 2–7 |
-
-  - Paired, 3 seeds: ours − ZeroRouter = +17 to +27 pt on LCB and +21 to +25 on MMLU-Pro (CIs exclude 0); Omni +2 to +14,
-    not significant to borderline. Seeds move results ≤ 3 pt.
-  - Dimension (D = 1 → 20) buys nothing at pool size; their own encoder does no better than the 4B reader.
-  - With 5–53 Open LLM Leaderboard models added to stage 1 (their data source), nothing improves: success log-loss
-    .59–.64 vs our .519, their pricing 1–12% (full 196-model curve running). Those models are unlike a reasoning pool,
-    which is the point: the method needs a population like your deployment pool.
-  - Onboarding head-to-head: ours ahead by +10 [5, 19] / +6 [4, 8] pt at k = 10 / 50 on LCB, +8–10 / +7 on MMLU-Pro,
-    about even on Omni. By model: ours much better on deepseek-v4-flash, worse on the cheapest route.
-  - Framing: a deployment pool has ~5 models; nobody fits a 200-model population on their own workload.
-- **Per-query budgets ("at most $X per request"; Table 3c)** [4.A.29]. Hard cap enforced with max_tokens (an overrun fails);
-  arms differ only in the length model (constant = each model's train distribution; ours = the probe's per-query shift +
-  empirical residuals):
-  - At a fixed budget in the band that matters, ours gains +5.7 pt (LCB, 0.20¢), +7.5 pt (Omni, 0.054¢) and +5.5 pt
-    (MMLU-Pro, 0.017¢) over the constant rule, CIs > 0.
-  - The constant rule needs up to 2.4–2.9× the budget there, but only 1.1–1.3× averaged over all budgets. That's
-    similar to the average-cost regime, not larger: at tight budgets everyone is forced to the cheapest model, and at loose
-    ones everything fits.
-  - Soft cap (no truncation), at a matched 10% violation rate: +2–5 pt, with smaller overshoots (directional, no CIs).
-  - Method note: a log-normal length model loses to constant on MMLU-Pro. Under a hard cap the tails matter, so use
-    empirical residuals.
-- **Vs single-submission cascades (Table 3b; LCB)** [4.A.25]. No verifier, one submission, each tier call is one real
-  draw; cost saved vs our router at matched accuracy (negative = more expensive than the router):
-
-  | Arm | Cost vs our router |
-  |---|---|
-  | Paper rule | −64.4% [−89, −41] |
-  | Cascade, 4B judge (FrugalGPT-style thresholds; judge charged uncached / cached) | −48.9% / −47.1% |
-  | Hybrid: router picks the entry tier, 4B judge escalates | +0.7% [0.0, 5.5] |
-  | Cascade with a PERFECT judge (ceiling) | −18.6% [−39, −1] |
-  | Cascade, fine-tuned 137M judge (FrugalGPT scorer in the code setting, one per tier) | −25.1% [−45.4, −5.2] |
-  | Hybrid with the 137M judge | +2.1% [0.4, 8.6] |
-
-  - The frozen 4B probe beats the fine-tuned 137M on AUC on every tier (.91 vs .87 on cheap code, .84–.86 vs .76–.80
-    on strong code) with no gradient training [4.A.27].
-  - The 4B judge is a frozen probe on "problem + code + Is this solution correct?". Test AUC .91 on gpt-oss-20b code
-    (within-problem .80) but .83–.86 on strong-model code (within-problem .57–.66). It costs ~16% of a gpt-oss-20b-low
-    call uncached, ~7% cached.
-  - Protocol is generous to the cascades (~1000 plans vs the router's 60 V values).
-  - Message: the prefill's value is the shortcut. Knowing which tier to call beats checking the cheap tier's answer, even
-    with a perfect checker, because the check still pays for the cheap attempt.
-
-### §5 Why it works, and when (the shared latent)
-- **5.1 Hard is long for everyone.**
-  - Between-problem variance share is 81–96%.
-  - Within a problem-route, failed runs are not longer than solved ones (×0.83–1.25), so length is a property of
-    the problem (ICC .85–.95), not of failing [4.A.10].
-- **5.2 The rule's two inputs.** Non-circular link and legibility (Table 4) [4.A.15]:
+## 6. Why it works, and when
+- **6.1 Hard is long for everyone** [4.A.10]
+  - Between-problem variance share 81–96%; within a problem-route, failed runs are not longer than solved ones (×0.83–1.25).
+  - Length is a property of the problem (ICC .85–.95), not of failing.
+- **6.2 The rule's two inputs** (Table 5) [4.A.15]
 
   | Pool | Difficulty → length | Prefill reads difficulty | Gain |
   |---|---|---|---|
@@ -254,68 +142,65 @@ Table 1: headroom [95% CI], market prices [4.A.4, 4.A.7, 4.A.9, 4.A.14, 4.A.19].
   | TACO | .08 | .32 | no: not difficulty-driven |
   | BCB | .10 | .09 | no: not difficulty-driven |
 
-  - External labels (LCB tier, Omni rating) agree.
-  - A metadata-only head (tier + platform) gets 24.7% of LCB's 46% headroom.
-- **5.3 The capture curve is convex (Fig. 2).**
-  - Synthetic calibrated heads at controlled R²: ≈ 0 below ~.3, most headroom only above ~.5.
-  - Real heads sit on the curve when plotted against dollar R²; dollar calibration adds nothing [4.A.4, 4.A.8].
-  - Mechanism: a decision flips only when the cost error is smaller than the utility margin between routes.
-- **5.4 Level vs differences (Fig. 3)** [4.A.17]:
+  - Metadata-only head (tier + platform) gets 24.7% of LCB's 46% headroom.
+- **6.3 Convex capture (Figure 2):** `analysis/figures/fig2_capture_curve.png` [4.A.4, 4.A.8]
+  - Synthetic calibrated heads: ≈ 0 below R² ~.3, most headroom only above ~.5.
+  - Mechanism: a decision flips only when the cost error is smaller than the utility margin.
+  - Caption caveat: real-head x-values are the head's mean test R²; the synthetic axis is log-length R² (check axes match).
+- **6.4 Level vs differences (Figure 3):** `analysis/figures/fig3_level_vs_differences.png` [4.A.17]
+  - True level alone: LCB 35.6, Omni 21.0, CC 12.7, BCB 9.8, TACO −1.9; differences alone: 36.5 / 41.1 / 19.3 / 15.2 / 30.0.
+  - Our savings come mostly through the level (LCB 33.3 of 35.6; Omni 18.6 of 21.0).
+- **6.5 Success and cost: one latent or two?** [4.A.20, 4.A.26, 4.A.28]
+  - Cost from the success head ties the dedicated cost read on LCB / Omni; loses 19–22 pt on MMLU-Pro.
+  - MMLU-Pro (Figure 9): `analysis/figures/fig9_mmlupro_length_drivers.png`
+    - Even TRUE difficulty explains little of length (R² .19 vs .46–.51 on Omni / LCB).
+    - Subject closes half the routing gap (9.2% → 22.3%, probe 30.7%); source / option count add nothing.
+    - Remainder is item-level WORK REQUIRED (multi-quantity calculations and multi-part "explain" questions long; recall
+      and one-formula plug-ins short); probe's extra signal correlates .64 with the true residual.
+  - Coding, whole datasets (no subsetting): true difficulty explains 8–10% of length on TACO / BCB, the probe 38–53%;
+    CodeContests is difficulty-driven (.41 vs .44). Routing gains there n.s. (flat ladders). APPS pending.
+  - Line for the paper: price by work required, not by difficulty; they coincide on LCB / Omni, come apart on MMLU-Pro.
+- **6.6 The model-specific remainder is unpredictable** [4.A.11, 4.A.16, 4.A.17]
+  - Nulls on between-route differences: prefixes (hand-crafted, 4B-read); Thinking / Base / own-model prefills;
+    fine-tuned 137M readers (single, joint); entropy scalars; self-estimated budgets (Spearman .12); prompted probing;
+    rating reader (6.4k labels); low-rank / kNN / pooled heads; selective use; dollar calibration.
+  - Justifies one offset per model in onboarding.
+- **6.7 R² is not routing value** [4.A.15]
+  - LCB prefix: R² .70–.86 → gain 26.1% (free) / 8.9% (charged) vs 35.6% without; R² gains sit on easy problems.
 
-  | Pool | True level alone | True differences alone | Full |
-  |---|---|---|---|
-  | LCB | 35.6 | 36.5 | 46 |
-  | Omni | 21.0 | 41.1 | 44 |
-  | CodeContests | 12.7 | 19.3 | 22 |
-  | BCB | 9.8 | 15.2 | 20 |
-  | TACO | −1.9 | 30.0 | 36 |
+## 7. Comparison with shared-latent routing (ZeroRouter)
+- **Setup** [4.A.30, 4.A.32–4.A.35]
+  - Their stage 1: D-dim 2PL IRT (MAP instead of SVI) on the pool's own train outcomes; D = 1, 2, 5, 20.
+  - Their stage 2: our 4B reader and, separately, their own fine-tuned DistilBERT + 11 linguistic features.
+  - Their pricing: s = αᵀb → K bins → per-model mean length (K = 5 / 10 / 20; unstated in the paper).
+  - Population variant: + N Open LLM Leaderboard models (their data source), N = 0 … 196.
+- **Figure 6:** `analysis/figures/fig6_zerorouter_component_swap.png`
+- **Table 4 (cost saved vs reference)**
 
-  - Our savings come mostly through the level: LCB 33.3 of 35.6, Omni 18.6 of 21.0.
-  - This is the single-latent result: the latent already carries most of what is capturable.
-- **5.5 Success and cost are (mostly) one latent.**
-  - Cost inferred from the success head ties the dedicated cost read on LCB and Omni.
-  - It loses by 21.5 pt on MMLU-Pro, where the from-success log-length R² is .14–.36 vs the probe's .20–.66 [4.A.20].
-  - Framing: one representation, two linear read-outs. Usually one direction suffices; on MMLU-Pro length needs its own
-    direction [4.A.28]:
-    - Even TRUE difficulty explains little of MMLU-Pro length (R² .19 vs .46–.51 on Omni / LCB), so it is not a weak
-      success head.
-    - Subject closes half the routing gap (9.2% → 22.3%, probe 30.7%); source and option count add nothing.
-    - The rest is item-level WORK REQUIRED: multi-quantity engineering calculations and multi-part "explain and
-      distinguish" questions run long; fill-in-the-blank recall and one-formula plug-ins run short, whatever their
-      difficulty. The probe's extra signal correlates .64 with the true residual.
-    - Paper line: price by work required, not by difficulty. They coincide on LCB / Omni and come apart on MMLU-Pro.
-  - Honest statement: routers that already have a prefill success head get much of this for free. Our contribution
-    is showing it, measuring it, and saying when a separate read-out is needed.
-- **5.6 The model-specific remainder is unpredictable** (C8). Table of nulls on between-route differences:
-  - Prefixes (hand-crafted and 4B-read)
-  - Thinking / Base / own-model prefills
-  - Fine-tuned 137M readers (single and joint)
-  - Entropy scalars
-  - Self-estimated budgets (difference Spearman .12)
-  - Prompted probing
-  - A rating reader trained on 6.4k free labels
-  - Low-rank / kNN / pooled heads
-  - Selective use
-  - Dollar calibration
+  | Pool | Ours | ZeroRouter (4B reader, D=1 / 5, best K) | ZeroRouter (own DistilBERT) | Their success + our cost | Our success + their pricing |
+  |---|---|---|---|---|---|
+  | LCB | 36.0 | 9–10 / 19 | ≤ 13 | 27–36 | 4–17 |
+  | Omni | 22.7 | 20–23 / 12–19 | ≤ 13 | 19–25 | 10–17 |
+  | MMLU-Pro | 30.9 | 10–12 / 8–22 | ≤ 12 | 31–36 | 2–7 |
 
-  The prompt-side ceiling appears to be real. This is also why the latent is the right abstraction: it holds what
-  is predictable.
-- **5.7 R² is not routing value (C9).**
-  - LCB prefix: R² .70–.86 → gain 26.1% (free) / 8.9% (charged) vs 35.6% without it.
-  - The R² gains sit on easy problems that finish inside the prefix; on hard, decision-relevant problems the key
-    routes get worse [4.A.15].
-  - Takeaway: evaluate cost predictors by routing value, not R².
+- **Findings**
+  - Paired, 3 seeds: ours − ZeroRouter +17 to +27 (LCB), +21 to +25 (MMLU-Pro), CIs exclude 0; Omni +2 to +14, n.s. to borderline.
+  - The whole gap is the pricing (component swap); their success model is usable.
+  - Dimension buys nothing at pool size; their own encoder is no better (latent barely readable from text: R² ≤ .26).
+  - Population (5–53 leaderboard models, preview): no improvement (log-loss .59–.64 vs ours .519; pricing 1–12%); full
+    196-model curve running. Those models are unlike a reasoning pool.
+- **Differentiation bullets**
+  1. Cost read directly, not derived from success parameters (they lose even where length tracks difficulty).
+  2. Work required ≠ difficulty (MMLU-Pro; coding at the prediction level).
+  3. No model population needed; a deployment pool has ~5 models; nobody fits 200 models on their own workload.
+  4. Onboarding from 5–10 examples vs ~200 anchors (§8).
+  5. Budgets need the per-query length distribution, not a per-bin mean (§9.1).
 
-### §6 Onboarding a new model against the latent
-- **Method:**
-  - Cost: shared level + a per-model offset, 1 parameter.
-  - Success: logistic in the shared difficulty, 2 parameters.
-  - Both are fitted on k labelled problems; the prefill and all other heads are untouched.
-- **6.1 Hold out each route, then re-add it** [4.A.18].
-  - Cost only, k=5: LCB 34.5 vs 36.0 full (96%); Omni 26.5 vs 28.7.
-  - Cost + success, k=5: LCB 29.5, Omni 24.0; naive (median + base rate) −4.7 / ~15.
-- **6.2 Remove a genuinely useful model, then add it back (Table 5)** [4.A.21, corrected in 4.A.24]. Gain vs the
-  reference; max reachable test accuracy in brackets:
+## 8. Onboarding new models
+- **Method:** cost = shared level + 1 offset; success = logistic in the shared difficulty (2 params); fitted on k examples.
+- **Figure 5:** `analysis/figures/fig5_onboarding.png` (ours vs ZeroRouter-style vs naive, k = 5 … 200)
+- **8.1 Hold out each route, re-add it** [4.A.18]: cost only, k=5: LCB 34.5 vs 36.0 full (96%); Omni 26.5 vs 28.7.
+- **8.2 Remove a useful model, re-add it** [4.A.21, corrected 4.A.24]; gain (max reachable accuracy)
 
   | Pool | Full | Without dsv4f | Onboard k=10 | Naive k=10 |
   |---|---|---|---|---|
@@ -323,12 +208,8 @@ Table 1: headroom [95% CI], market prices [4.A.4, 4.A.7, 4.A.9, 4.A.14, 4.A.19].
   | Omni | 28.7 (74.3) | −25.0 (69.4) | 19.1 (73.6) | −14.9 (73.9) |
   | MMLU-Pro | 30.9 (82.1) | −22.1 (73.4) | 29.0 (80.7) | −16.1 (80.9) |
 
-  - Read "without" with its max accuracy: its gain covers only the accuracies it can still reach.
-  - Re-adding restores the lost accuracy either way; onboarding does it while saving 19–29%, naive re-adding at a
-    15–19% cost premium over the reference.
-  - dsv4f is the hardest case (largest model-specific share).
-- **6.3 The same test without deepseek (Table 5b)** [4.A.24]. Pool = gpt-oss only (4 routes). Hold out gpt-oss-120b
-  (both efforts) and re-add it from the same k problems:
+  - Read "without" with its max accuracy (its gain covers only reachable accuracies).
+- **8.3 Pool without deepseek; remove and re-add gpt-oss-120b** [4.A.24]
 
   | Pool | Full | Without gpt-oss-120b | Onboard k=10 / 50 | Naive k=10 |
   |---|---|---|---|---|
@@ -336,171 +217,143 @@ Table 1: headroom [95% CI], market prices [4.A.4, 4.A.7, 4.A.9, 4.A.14, 4.A.19].
   | Omni | 18.9 (69.4) | max 62.7 | 10.5 (66.0) / 11.6 (66.1) | −7.8 (64.5) |
   | MMLU-Pro | 13.3 (73.4) | max 62.4 | 15.7 (72.0) / 17.4 (72.6) | −20.2 (71.5) |
 
-  - Removing gpt-oss-120b costs 7–21 points of reachable accuracy.
-  - From 10 examples, onboarding recovers most of that accuracy and still saves 8–16%; naive re-adding costs 8–45% more
-    than the reference.
-  - Without deepseek the pools are shallower: full-head gains are 13–21% vs 29–36%.
-- **6.4 Predicting onboarding loss:** the loss tracks each model's model-specific share of cost variance
-  (.14–.22 → 4–14 pt; ≤ .07 → 0–4 pt) [4.A.18 #2.2]. How far a model deviates from the latent says how cheaply it can
-  be added.
-- **6.5 A genuinely new family** (GLM-4.7-flash, Nemotron-3-super, MiniMax-M2.5 on MMLU-Pro) [4.A.19 #2.3].
-  - All three are dominated by the pool.
-  - Onboarded at k=10: 30.0% vs 30.9% base; naive: −12.3%.
-  - The latent protects the router from newcomers that look good on average.
-- **Caveats to state:**
-  - For the cheapest route (oss20lo), naive success onboarding beats the 2-parameter fit.
-  - Removing oss20md improves the router on Omni and MMLU-Pro (its heads mislead).
-  - No test yet in which a genuinely new model lowers cost.
+- **8.4 Head-to-head with ZeroRouter's onboarding** [4.A.31, 4.A.33]
+  - Ours − ZeroRouter: LCB +10 [5, 19] (k=10) / +6 [4, 8] (k=50); MMLU-Pro +8–10 / +7; Omni ≈ 0.
+  - By model: ours much better on deepseek-v4-flash (+9 to +31); worse on the cheapest route (−3 to −19).
+- **8.5 Predicting onboarding loss** [4.A.18 #2.2]: tracks each model's model-specific cost-variance share.
+- **8.6 A genuinely new family** [4.A.19 #2.3]: GLM-4.7-flash, Nemotron-3-super, MiniMax-M2.5 on MMLU-Pro — all dominated;
+  onboarded k=10: 30.0% vs 30.9% base; naive −12.3% (protection, not gain).
+- **Caveats:** cheapest route better with naive success onboarding; removing oss20md improves Omni / MMLU-Pro; no test yet
+  where a genuinely new model lowers cost.
 
-### §7 Scope: agents, caps, verification
-- **Agentic predictability** [4.A.14, 4.A.15]:
-  - Issue-text prefill → per-task mean log cost R² .29 (nebius, 3387 tasks), still rising with more tasks. It is ~0 on
-    SWE-rebench's 111 tasks (data-starved).
-  - A partial trajectory read by the 4B: own-run .28, cross-model .16.
-  - All are below the ~.5 threshold, so no routing claim.
-- **Caps closed** [4.A.18]:
-  - One-shot per-query token caps are neutral.
-  - Agentic per-task step caps are −22.3% [−25.5, −19.7] vs one global cap. In agents, long means failing, so a
-    better length estimate grants doomed runs more budget.
-- **Verification measurement** [4.B]:
-  - A cheap cross-model test writer (dsv4f) is 33–42% cheaper than self-verification at matched accuracy.
-  - Tests pay only above route-once accuracy (~52%).
-  - Per-instance writer choice has no demonstrated value (pre-registered NO GO).
-  - One paragraph or an appendix.
+## 9. Deployment regimes
+- **9.1 Per-request budgets ("at most $X per query")** [4.A.29]
+  - **Figure 7:** `analysis/figures/fig7_per_query_budget.png`
+  - Hard cap (max_tokens enforces X; overrun fails): +5.7 pt (LCB, 0.20¢), +7.5 (Omni, 0.054¢), +5.5 (MMLU-Pro, 0.017¢) over
+    the constant rule, CIs > 0.
+  - Constant rule needs up to 2.4–2.9× the budget in the middle band; 1.1–1.3× averaged over budgets.
+  - Soft cap (no truncation) at matched 10% violation rate: +2–5 pt, smaller overshoots (directional).
+  - Method note: log-normal length model loses to constant on MMLU-Pro; use empirical residuals (tails matter).
+- **9.2 Abstention** [4.A.23]
+  - When wrong answers cost nothing, skipping adds nothing (0.1 / −7.0 n.s. / 0.0%): the cheapest route is nearly free.
+  - Penalised errors (λ > 0) out of scope.
+- **9.3 Single-submission cascades (no verifier)** [4.A.25, 4.A.27]
+  - **Figure 8:** `analysis/figures/fig8_cascades.png`
+  - Cost vs our router at matched accuracy (LCB): FrugalGPT-style 137M judge −25.1% [−45, −5]; 4B judge −48.9%; PERFECT
+    judge −18.6% [−39, −1]; router + judge +0.7 / +2.1%.
+  - A cascade pays for the cheap attempt on every problem; the prefill skips it (the "shortcut").
+  - Frozen 4B judge beats the fine-tuned 137M on AUC on every tier (.91 vs .87 cheap code; .84–.86 vs .76–.80 strong code).
+- **9.4 With a free verifier** [4.A.2, 4.A.22]
+  - Fixed cascade ≈ planning; the prefill buys +3–4 pt at 80–85% on LCB.
+  - A perfect shared latent would beat the cascade by 40–45% (stopping rule, not reordering); ours reads it at R² .42 vs
+    ~.75 break-even.
 
-### §8 Related work
-Group by what each assumes about cost.
+## 10. Scope: agents, caps, verification
+- **Agents** [4.A.14, 4.A.15]: issue-text prefill → per-task log cost R² .29 (3387 tasks, still rising); partial trajectory
+  read by the 4B: own .28, cross-model .16; below the ~.5 threshold → no routing claim.
+- **Caps** [4.A.18]: self-chosen one-shot token caps neutral; agentic per-task step caps −22.3% vs a global cap.
+- **Verification** [4.B]: a cheap cross-model test writer is 33–42% cheaper than self-verification; per-instance writer
+  choice has no value (pre-registered NO GO). Appendix.
 
-| Group | Papers |
-|---|---|
-| Constant or median cost | 2603.20895; IRT-Router 2506.01048; C3PO; 2602.09924; SWE-Router ("q-independent") |
-| Per-query cost predictors on chat benchmarks | MixLLM 2502.18482; 2509.09782; Dekoninck 2410.10347 ("less critical") |
-| Budget control | R2-Router 2602.02823 (prompt-instructed budgets, own bench); TALE-style self-estimates |
-| Length / difficulty prediction | EGTP / PLP 2602.11812; TRAIL; OUTLETS 2609.01068 |
-| Abort and reroute | SWE-Router 2607.00053; Fail-Fast 2608.03222; TACIT-Switch; EarlyEval 2609.02783 |
-| Cold start / shared latents | ZeroRouter 2601.06220 (IRT latent, per-query cost by difficulty bin, ~200-anchor onboarding); IRT-Router; SCOPE 2601.22323; 2607.18253 |
-| Per-query cost predictors | MixLLM 2502.18482; CARROT 2502.03261; GraphRouter 2410.03834; Route-To-Reason 2505.19435; ZeroRouter |
-| Cascades with a learned answer check | FrugalGPT (per-tier fine-tuned DistilBERT scorer); AutoMix (prompted self-verification + POMDP); bi-directional cascading with proxy confidence 2504.19391 (small model's own hidden states); Dekoninck 2410.10347 (cascade routing); Cheap Verifiers, Large Blind Spots 2609.01345 (cheap verifiers miss more as students get stronger) |
-| Correctness probes on hidden states | Openia 2501.12934, AutoProbe 2510.02934, 2512.07404, 2606.14530 (code; mostly the generator's own states, sample selection); HSRM 2608.30841 (best-of-N); judge probes 2512.22245 (calibration) |
+## 11. Limitations
+- Every confirmed pre-registered call is a GAIN call (AIME / BBEH not yet run).
+- All pools use the same five models (gpt-oss 20b / 120b × two efforts + deepseek-v4-flash).
+- APPS: one draw per model (deviation from the pre-registered design); pending.
+- Work ≠ difficulty reaches routing on one pool (MMLU-Pro); coding evidence at the prediction level only.
+- ZeroRouter reproduction fills unstated details (K, 11 features, stage-2 loss, MAP vs SVI); no released code; leaderboard
+  population unlike a reasoning pool.
+- Small test sets (Omni 150, LCB 341); offline replay only; market prices change (principle is price-relative).
+- Onboarding pools share a family; the other families tried were dominated.
+- Cascade comparison LCB only.
+- Agentic predictability below threshold.
 
-**Done (4.A.26):** ZeroRouter is the closest to §6 (onboarding from ~200 anchors; ours from 5–10). IRT-Router's cold
-start for new models is weak (one model tested). A head-to-head onboarding baseline against ZeroRouter's anchor fit at
-k = 5–200 is still to do.
+## 12. Conclusion (bullets)
+- Per-query cost matters for reasoning models (20–65% headroom) and is predictable where difficulty — or work — is legible.
+- One frozen prefill captures it; difficulty-derived pricing does not.
+- A 5–10 example onboarding recipe and a single-prefill "shortcut" that beats cascades.
 
-**Positioning (after the targeted check, 4.A.26):** per-query cost prediction in routers exists: MixLLM, CARROT (kNN /
-RoBERTa; only "marginal" gains over a constant on RouterBench / SPROUT), GraphRouter, Route-To-Reason (text-embedding MLP
-predicts reasoning-model output length), and ZeroRouter (difficulty-bin lookup on a shared IRT latent, onboarding from ~200
-anchors). Prefill-probe routers (2602.09924, 2603.20895) and IRT-Router use per-model constant costs. What nobody reports:
-- an ablation of per-query cost against a per-model constant at matched accuracy, or a headroom measurement;
-- when it pays (reasoning vs chat vs agents) and a rule that predicts it, tested out of sample;
-- cost read from an LLM prefill;
-- whether difficulty-only pricing is enough (we show: yes on LCB / Omni, no on MMLU-Pro);
-- onboarding from 5–10 examples;
-- the router-vs-cascade shortcut result.
-Frame the paper as "per-query cost for reasoning-model routing: when it pays, why, and how cheaply", with ZeroRouter
-credited for the shared-latent framing.
+## Appendices (planned)
+- **A.** Pool statistics (n, draws, accuracy ladder, output p90/p10, prices).
+- **B.** Table of nulls (§6.6).
+- **C.** ZeroRouter reproduction details: choices, sensitivity (K, D, seeds, encoder, population).
+- **D.** Protocol details: hulls, bands, paired bootstrap, deployable selection.
+- **E.** Agentic and verification details.
 
-**Method differentiation from ZeroRouter [4.A.30]:**
-1. Price by work required, not difficulty: their length is a lookup on a scalar of the success parameters (s = αᵀb), so
-   it cannot price easy-but-laborious items. Evidence so far: MMLU-Pro (−19 pt for difficulty-only pricing). Needs a
-   coding pool too (planned).
-2. Their 20-D IRT latent needs a population of models; the version a 5-model pool supports is 1-D. (Softened after
-   4.A.31: that 1-D version, fitted on only 4 models, is competitive.)
-3. Onboarding head-to-head at matched k (4.A.31; 1-D ZeroRouter-style with our prefill features, same anchors): ours wins
-   on LCB (+7–9 pt mean over held-out routes, k = 5–200) and MMLU-Pro (+5–9 pt), loses on Omni at k ≥ 10 (−1 to −3; −4
-   to −5 vs their D-optimal anchors). The pattern follows where difficulty-bin pricing breaks (model-specific cost on
-   LCB, work ≠ difficulty on MMLU-Pro). No CIs yet.
-4. Frozen 4B prefill vs fine-tuned DistilBERT (our frozen 4B already beats a fine-tuned 137M on cost and judging).
-5. Budgets need the per-query length distribution, not a per-bin mean (C14).
-6. **ZeroRouter reproduced on our 5-model pools (4.A.32):** its latent gains nothing from dimension (D = 1 → 20), and a
-   component swap puts the whole gap on the COST side: their success model + our cost head ≈ ours on all three pools,
-   our success model + their bin-lookup pricing collapses (LCB 4–17%, Omni 10–14%, MMLU-Pro 2–7% vs ours 36 / 23 / 31%).
-   This is the cleanest differentiation we have: success routing is commoditised; per-query cost is where the method
-   matters. Hardened (4.A.33; 3 seeds, K = 5/10/20, paired CIs): ours beats ZeroRouter by 17–27 pt on LCB and 21–25 pt
-   on MMLU-Pro (CIs exclude 0), ties on Omni at their best bin count; onboarding better on LCB and MMLU-Pro, tie on Omni.
-   Framing: a deployment pool has ~5 models; nobody fits a 200-model population on their own workload.
-Acknowledge: with a large model population their stage 1 gets a lot of free supervision for success prediction (to test:
-population-size curve on MMLU-Pro with Open LLM Leaderboard data, ~19 GB for 50 models, ~75 GB for 200). CARROT's marginal gain on chat benchmarks is predicted by our principle (C2).
+---
 
-### §9 Limitations (write plainly)
-- Two confirmed pre-registrations; 5 decisive calls pending.
-- The dedicated-cost-read advantage over from-success rests on one pool (MMLU-Pro).
-- Small test sets (Omni 150, LCB 341). Deployable CIs are wide.
-- Pools lean on gpt-oss and dsv4f. The new-family test added only dominated models.
-- Everything is offline replay on stored draws; there are no live deployment numbers.
-- Market prices change. The principle (C2) is price-relative, which helps.
-- Agentic predictability is below threshold. The agentic headroom exists, but it is not captured.
-- The cascade comparison (C12) is LCB only so far.
-- Onboarding pools share a model family (gpt-oss); the only other families tried were dominated.
-- The shared-latent framing is not new (ZeroRouter); our novelty is measurement, mechanism and the cheap regime.
-- ZeroRouter reproduction: details the paper leaves unstated are our choices (bin count K swept; the 11 linguistic features;
-  stage-2 loss; MAP instead of SVI); no released code. The leaderboard population is unlike a reasoning pool.
-- APPS uses one draw per model (the other pools 2–4); the pre-registration assumed Omni's design. Reported as a deviation.
-- Every confirmed pre-registered call so far is a GAIN call (AIME / BBEH NO-GAIN calls not yet run).
+## Figures (current files)
 
-## 3. Figures and tables
-1. **Fig. 1:** headroom bars, grouped reasoning / chat / agentic-open / agentic-mixed, with CIs (C1, C2).
-2. **Fig. 2:** capture curves (synthetic, gain vs dollar R²) with real heads overlaid; LCB, Omni, MMLU-Pro above the
-   knee, CC / TACO / BCB below.
-3. **Fig. 3:** level vs differences stacked bars per pool (true components vs what our predictor captures).
-4. **Fig. 4:** pre-registration scorecard: screen R² on x, realised gain on y, thresholds .35 / .50 drawn, calls
-   marked before/after.
-5. **Fig. 5:** onboarding curves vs k (onboard vs naive vs full vs without), 3 pools, with max reachable accuracy
-   marked; both pool variants (with and without deepseek).
-6. **Fig. 6:** the R² ≠ routing panel: R² rises, gain falls (LCB prefix), split by easy vs hard problems.
-7. **Fig. 7:** router vs single-submission cascades (4B judge, 137M judge, perfect judge, hybrid): cost vs accuracy on LCB.
-8. **Fig. 8:** ZeroRouter component swap (their success × our cost, our success × their pricing) per pool, and the
-   population-size curve (N = 0 … 196 leaderboard models).
-9. Tables 1–5 as above; an appendix table of nulls; an appendix table of all pool statistics (n, draws, accuracy
-   ladder, output p90/p10, prices).
+| # | File | Content |
+|---|---|---|
+| 1 | `analysis/figures/fig1_headroom.png` | Headroom by pool type |
+| 2 | `analysis/figures/fig2_capture_curve.png` | Capture vs predictor R², synthetic + real heads |
+| 3 | `analysis/figures/fig3_level_vs_differences.png` | Level-only vs differences-only headroom |
+| 4 | `analysis/figures/fig4_preregistration.png` | Pre-registration scorecard |
+| 5 | `analysis/figures/fig5_onboarding.png` | Onboarding vs k: ours / ZeroRouter-style / naive |
+| 6 | `analysis/figures/fig6_zerorouter_component_swap.png` | ZeroRouter component swap |
+| 7 | `analysis/figures/fig7_per_query_budget.png` | Accuracy vs per-request budget |
+| 8 | `analysis/figures/fig8_cascades.png` | Router vs single-submission cascades |
+| 9 | `analysis/figures/fig9_mmlupro_length_drivers.png` | What explains MMLU-Pro length |
 
-## 4. TMLR readiness and what remains (assessment, 2026-09-30)
+- To add: population-size curve (N = 0 … 196) once the job finishes; APPS rows; pool statistics table.
 
-TMLR accepts on two criteria, not on novelty: claims supported by accurate, convincing evidence, and interest to some part of
-its audience.
-- **Interest: yes.** Cost-aware routing of reasoning models is active and practical; we answer a question nobody has
-  (does per-query cost matter, when, why), and the ZeroRouter reproduction is a concrete, falsifiable counterpoint.
-- **Evidence already strong:** headroom across 9 one-shot pools + 2 agentic sets with a principle; wins on 3 pools across
-  code / math / knowledge, 2 pre-registered; baselines (paper rule, MixLLM-style, GBM, cost-from-success, single best,
-  FrugalGPT-style cascades, faithful ZeroRouter with component swaps); a mechanism with many supporting nulls; one protocol
-  (matched accuracy, paired bootstrap, calibration-chosen operating points).
+## Claims ledger (planning)
 
-What a reviewer would push on, and the fix:
-
-| Risk | Fix | Must / nice | Cost |
+| # | Claim | Evidence | Status |
 |---|---|---|---|
-| Pre-registration confirmed only on the GAIN side | Run AIME (predicted NO GAIN) | Must | ~$15–20 |
-| APPS pending | Finish; report whichever way it goes | Must | running (~$11) |
-| One model family in every pool | One pool with a second family (e.g. Qwen3 / GLM open reasoning models) | Strongly recommended | ~$15–30 |
-| Some baseline rows are unpaired point differences; some tables from older scripts | Re-run every table from one script per table, all paired | Must | free |
-| Deployable (calibration-chosen) numbers exist only for LCB / Omni / MMLU-Pro | Extend to all headline pools | Must | free |
-| ZeroRouter details unstated in the paper | Document our choices; sensitivity done (K, D, seeds, encoder, population) | Must (writing) | free |
-| Offline replay only | State as a limitation; optionally a small live run on one pool | Nice | small |
-| Omni test set small (150) | State it; CIs shown | Nice | — |
-| Well-known routers missing (RouteLLM, CARROT, GraphRouter) | CARROT's cost predictor ≈ our MixLLM-style / kNN baselines (say so), or add RouteLLM | Nice | free |
-| Cascade comparison LCB only | 137M scorers on Omni / MMLU-Pro answers | Nice | GPU job |
+| C1 | Headroom large for reasoning (20–65%), small for chat (~10%) | [4.A.4, 4.A.7, 4.A.14, 4.A.19] | Solid |
+| C2 | Headroom when within-model variation is large relative to price gaps | [4.A.14] | Solid (3 regimes); interpretation |
+| C3 | One 4B prefill captures most headroom where difficulty is legible (LCB 35.6, Omni 21.9, MMLU-Pro 30.7) | [4.A.6, 4.A.9, 4.A.19] | Solid; 2 pre-registered |
+| C4 | Pre-registered screen predicts gain | 2/2 confirmed; 6 pending | Solid but thin, one-sided |
+| C5 | Beats literature cost predictors | [4.A.6, 4.A.20] | Solid (LCB, MMLU-Pro) / directional (Omni) |
+| C6 | Most value is the shared level; recoverable from the success head on LCB / Omni | [4.A.17, 4.A.20] | Solid |
+| C7 | Dedicated cost read adds +21.5 pt over cost-from-success on MMLU-Pro | [4.A.20] | Solid, one pool |
+| C8 | Model-specific remainder unpredictable | [4.A.11, 4.A.16, 4.A.17] | Solid negative |
+| C9 | R² ≠ routing value | [4.A.15] | Solid |
+| C10 | Onboarding from 5–10 examples restores a removed model's accuracy while saving vs the reference | [4.A.18, 4.A.21, 4.A.24] | Solid (3 pools × 2 variants) |
+| C11 | Dominated newcomers priced out from ~10 examples | [4.A.19 #2.3] | Solid, protective |
+| C12 | Router beats single-submission cascades incl. a perfect judge | [4.A.25, 4.A.27] | Solid on LCB |
+| C13 | Difficulty-only pricing ties where length is difficulty, loses ~19 pt where not | [4.A.20, 4.A.26, 4.A.28] | Solid on 3 pools |
+| C14 | Per-request budgets: +5–7.5 pt at fixed budget in the middle band | [4.A.29] | Solid (hard cap) |
+| C15 | Faithful ZeroRouter on a 5-model pool loses 17–27 (LCB) / 21–25 (MMLU-Pro); gap is pricing | [4.A.32–4.A.35] | Solid on 2 pools; population curve running |
+| C16 | Coding length readable beyond difficulty (TACO / BCB) | whole-dataset diagnostic | Solid at prediction level |
 
-**Verdict:** with APPS, AIME, a second model family and a clean re-run of all tables, this is a solid TMLR submission (an
-analysis paper with a clear, well-evidenced thesis). Without the second family and the two-sided pre-registration, the likely
-response is a request for them, which TMLR typically handles as a revision. Remaining effort: about 1–2 days of compute and
-scripting, ~$40–60 API spend, plus writing.
+## TMLR readiness and remaining plan (assessment, 2026-09-30)
+- **Criteria:** claims supported by accurate, convincing evidence; interest to part of the audience (not novelty).
+- **Interest:** yes — practical question nobody has answered; falsifiable counterpoint to ZeroRouter.
+- **Evidence already strong:** headroom + principle; 3 wins across domains (2 pre-registered); broad baselines incl. faithful
+  reproduction; mechanism with supporting nulls; one protocol.
+- **Dataset coverage**
+  - Code: LCB (win), APPS (pending, pre-registered GAIN); math: Omni (win, pre-registered); knowledge: MMLU-Pro (win,
+    pre-registered; work ≠ difficulty); code negatives explained by the rule: CodeContests, TACO, BCB; chat contrast:
+    RouterBench; agentic contrast; predicted NO GAIN still to run: AIME, BBEH.
+- **Reviewer risks and fixes**
 
-Older to-do items still open: onboarding baselines (k-shot own heads; cost-only / success-only ablations); a positive new-model
-test (a newcomer cheaper or better than part of the pool, ~$2–5); figures.
+  | Risk | Fix | Must / nice | Cost |
+  |---|---|---|---|
+  | Pre-registration confirmed only on the GAIN side | Run AIME (predicted NO GAIN) | Must | ~$15–20 |
+  | APPS pending | Finish; report either way | Must | running (~$11) |
+  | One model family | One pool with a second family (Qwen3 / GLM open reasoning models) | Strongly recommended | ~$15–30 |
+  | Unpaired baseline rows; tables from older scripts | Re-run every table from one script per table, all paired | Must | free |
+  | Deployable numbers only for 3 pools | Extend to all headline pools | Must | free |
+  | ZeroRouter details unstated | Document choices; sensitivity done | Must (writing) | free |
+  | Offline replay only | Limitation; optional small live run | Nice | small |
+  | Omni test set small | State; CIs shown | Nice | — |
+  | Missing RouteLLM / CARROT / GraphRouter | CARROT ≈ our MixLLM-style / kNN (say so) or add RouteLLM | Nice | free |
+  | Cascade comparison LCB only | 137M scorers on Omni / MMLU-Pro | Nice | GPU job |
 
-## 5. Workshop cut (4 pages)
-- **Title:** "The Price Isn't Constant: One Prefill Prices a Pool of Reasoning Models."
-- **Content:**
-  - §1 intro (½ page)
-  - Headroom (Fig. 1)
-  - Main result + baselines + pre-registration (Table 2 / 3, Fig. 4)
-  - Why: legible difficulty + level vs differences (Table 4, Fig. 3)
-  - Onboarding in one paragraph (Table 5 condensed)
-  - One sentence + Table 3b row: the prefill router beats even a perfect-judge single-submission cascade
-  - Limitations
-- **Drop:** agentic, caps, verification, the nulls table (one sentence each).
+- **Verdict:** with APPS, AIME, a second family and a clean re-run of all tables → solid TMLR submission; without the second
+  family and two-sided pre-registration → likely a revision request. ~1–2 days compute + scripting, ~$40–60, plus writing.
+- **Older open items:** onboarding baselines (k-shot own heads; cost-only / success-only ablations); a positive new-model test
+  (~$2–5); final figures.
+
+## Workshop cut (4 pages)
+- Title: "The Price Isn't Constant: One Prefill Prices a Pool of Reasoning Models."
+- Content: intro (½ page); headroom (Fig. 1); main result + baselines + pre-registration (Tables 2–3, Fig. 4); why (Table 5,
+  Fig. 3); ZeroRouter component swap (Fig. 6); onboarding in one paragraph; one line on cascades; limitations.
+- Drop: agents, caps, verification, nulls table (one sentence each).
 
 ## Title options
-- One Prefill Prices the Pool: Difficulty-Driven Per-Query Cost in Reasoning-Model Routing
+- Per-Query Cost for Routing Reasoning Models: When It Pays, Why, and How Cheaply
 - The Price Isn't Constant: Per-Query Cost for Routing Reasoning Models
-- Hard Is Long for Everyone: A Shared Difficulty Latent for Routing, Pricing and Onboarding LLMs
+- Price by Work, Not Difficulty: Per-Query Cost in Reasoning-Model Routing
