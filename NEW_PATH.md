@@ -1390,3 +1390,15 @@ Routing gain vs the paper rule, K = 5 / 10 / 20 (ours: LCB 36.0, Omni 22.7, MMLU
 => With its own encoder ZeroRouter is at best 13% (LCB), 13% (Omni), 12% (MMLU-Pro) -- equal to or below the 4B-reader version
 (the Omni tie at K=20 in 4.A.33 disappears: 12.0%). Their success head + our cost head is again ~ours (27-36%). Conclusion unchanged
 and stronger: at deployment-pool size the method's pricing is the failure, and its own reader does not rescue it.
+
+### 4.A.35 ZeroRouter with a model POPULATION (preview, 53 leaderboard models; 2026-09-30; `zr_population.py`)
+Their stage 1 fitted on TRAIN questions with N Open LLM Leaderboard models (their data source; per-question MMLU-Pro outcomes,
+`leaderboard_mmlupro.py`, 196 models downloaded) + our 5 pool models; stage 2 = 4B reader. MMLU-Pro, ours 30.9%, log-loss .519:
+| N | success log-loss | zr best-K | our success + zr cost | zr success + our cost |
+| 0 | .59-.63 | 10-22% | 2-7% | 32-34% |
+| 5-20 | .59-.64 | 7-19% | 2-12% | 30-34% |
+| 50-53 | .60-.62 | 9-14% | 1-5% | 32-33% |
+=> Population data does not rescue it: success prediction does not improve, pricing stays broken. Caveat: leaderboard models are
+mostly small non-reasoning models (MMLU-Pro 11-59%, 5-shot loglikelihood), unlike our 60-83% reasoning pool -- their method needs
+a population LIKE your deployment pool. Full 196-model run submitted (eai zr_pop_050201).
+APPS full pool (one draw per route, ~$11) collecting: oss20md 72.8%, oss120md 79.1%, dsv4f 84.3%, oss120hi 87.4% (oss20lo 58%).
