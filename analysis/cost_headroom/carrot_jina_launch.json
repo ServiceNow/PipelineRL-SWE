@@ -1,0 +1,13 @@
+{
+  "snapshot_revision": "5002393",
+  "state_at_submission": "QUEUING",
+  "variant": "CARROT-style-Jina-137M",
+  "output_root": "/mnt/llmd/results/exps/aristides/reason/carrot_jina_20261001",
+  "jobs": {
+    "LCB": "351a97a7-afef-46f1-a9d5-a16e78c78139",
+    "Omni": "c475fd1b-6d79-4eb2-8ad6-9e94b3661ed4",
+    "MMLU-Pro": "a4ee481f-4b92-4ad5-9f50-69005b28050d"
+  },
+  "api_calls": 0,
+  "pending": "GPU scheduling, fine-tuning, and original-split evaluation"
+}
