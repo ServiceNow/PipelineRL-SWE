@@ -1572,3 +1572,16 @@ six direct matched-accuracy contrasts and1,000 paired bootstrap draws. External
 prediction integration reproduces all six completed LCB point estimates exactly.
 Three single-GPU snapshot jobs; saved heads permit fresh expansion evaluation.
 Original-split outputs only; new generation samples stay held out. No API calls.
+
+### 4.A.44 Jev preliminary success pilot (2026-10-01)
+User authorized a small Jev experiment following pricing estimate, then
+explicitly requested success prediction with cost held constant. Frozen
+100-per-dataset test sample, seed20261001, five correctness nouls per request;
+300 total calls to pinned typesafe/jev-1.13. State includes only problem,
+grading rule, model/effort descriptions and training-only aggregate accuracy
+priors; no golds/generated answers/test labels. Same median TRAIN output
+length pricing for all success arms; compare ours, Jev and constant base rates.
+No new target generations or cost questions. $1 cumulative spend guard;
+usage recorded and successful calls skipped on resume. Protocol and frozen
+manifest in jev_pilot_20261001. Exploratory 100-problem subsets,1,000 paired
+problem bootstrap; predictor metrics expected-draw Brier/logloss.
