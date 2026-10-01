@@ -6,16 +6,16 @@
 \def\confName{NOWAI}
 \def\confYear{2026}
 \begin{document}
-\title{One Prefill Prices a Pool of Reasoning Models\\Supplementary Material}
+\title{Predicting Reasoning-Model Costs from Shared Prefill Activations\\Supplementary Material}
 \author{Anonymous authors}
 \maketitle
 
-\section{Available and Captured Savings}
-Figure~\ref{fig:headroom} reports the empirical oracle opportunity alongside learned savings. Headroom is defined relative to the same median-output reference, with success predictions held fixed. Each pool uses its own shared accuracy band. Contrast pools have different models and prices, so the comparison is descriptive. Oracle output lengths are estimated from repeated generations and have sampling error.
+\section{Oracle and Predicted Cost Savings}
+Figure~\ref{fig:headroom} reports savings under empirical oracle costs alongside savings under predicted costs. Headroom is defined relative to the same median-output reference, with success predictions held fixed. Each pool uses its own shared accuracy band. Contrast pools have different models and prices, so the comparison is descriptive. Oracle output lengths are estimated from repeated generations and have sampling error.
 \begin{figure*}[t]
 \centering
 \includegraphics[width=.60\textwidth]{figures/headroom_and_capture.pdf}
-\caption{Available savings can remain uncaptured. Oracle and predicted costs replace median output length with success predictions held fixed. Whiskers are paired 95\% problem-bootstrap intervals. Oracle headroom alone does not establish a learnable routing signal.}
+\caption{Oracle and predicted cost savings. Oracle and predicted costs replace median output length with success predictions held fixed. Whiskers are paired 95\% problem-bootstrap intervals. Savings under oracle costs do not imply savings under predicted costs.}
 \label{fig:headroom}
 \end{figure*}
 
@@ -43,7 +43,7 @@ MMLU-Pro & 1,000 & $+$23.8 [12.5, 33.0] \\
 \caption{Ours minus calibration-selected ZeroRouter reimplementation, in percentage points of savings versus median pricing. Intervals are 95\% paired percentile bootstrap intervals conditional on fitted heads, omitting training variability.}
 \end{table}
 
-This uses one shuffled partition (seed 17), larger training fractions, and random rather than original splits; LiveCodeBench's original split is temporal. The 1,000-resample bootstrap fixes predictions and omits dependence from overlapping training sets. It does not establish three algorithm-level significant wins. Individual Omni fold effects range from $-4.2$ to $+30.2$ points. The original fixed-split comparison remains distinct.
+This uses one shuffled partition (seed 17), larger training fractions, and random rather than original splits; LiveCodeBench's original split is temporal. The 1,000-resample bootstrap fixes predictions and omits dependence from overlapping training sets. These intervals do not account for training variability and therefore do not establish statistical significance for the full fitting procedure on all three datasets. Individual Omni fold effects range from $-4.2$ to $+30.2$ points. The original fixed-split comparison remains distinct.
 
 On the original test sets, generation-resampling standard deviations are 1.72, 3.72 and 2.69 percentage points for LiveCodeBench, Omni and MMLU-Pro, versus 3.72, 6.82 and 6.00 for problem-only resampling. These empirical distributions do not identify population variance components: problem resampling already contains noisy observed means. The original Omni 90\% difference interval [$-8.1$, $+14.2$] does not establish equivalence within $\pm5$ points.
 

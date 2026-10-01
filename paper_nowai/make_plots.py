@@ -101,7 +101,7 @@ def cost_ablation():
     ax.axvline(0, color=GREY, ls=":", lw=.9)
     ax.grid(axis="x")
     ax.set_xlabel("Extra savings from dedicated cost head (pp)", fontsize=8)
-    ax.set_title("(a) Cost cannot always be read from success", fontsize=8.5, loc="left", pad=10)
+    ax.set_title("(a) Dedicated vs. success-derived costs", fontsize=8.5, loc="left", pad=10)
     manifest["cost_from_success_paired"] = deltas
     ax = axs[1]
     x = np.arange(3)
@@ -127,7 +127,7 @@ def cost_ablation():
     ax.set_ylim(0, 60)
     ax.grid(axis="y")
     ax.set_ylabel("Cost saved vs median rule (%)", fontsize=8)
-    ax.set_title("(b) Hold success fixed; compare cost estimators", fontsize=8.1, loc="left", pad=10)
+    ax.set_title("(b) Cost-estimator comparison", fontsize=8.1, loc="left", pad=10)
     ax.legend(loc="upper left", frameon=False, fontsize=6.8, ncol=1)
     manifest["cost_estimator_comparison"] = comparison
     fig.subplots_adjust(wspace=.4)

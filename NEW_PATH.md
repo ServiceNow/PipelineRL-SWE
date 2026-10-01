@@ -1525,3 +1525,12 @@ outcomes are not incorporated. Headroom, additional controls, prospective
 screening and exploratory cross-fitting move to `supplement.tex/pdf`, with
 explicit conditional-CI caveats. Main PDF is four pages including references;
 supplement two pages. The MLP comparison remains outside this paper.
+
+### 4.A.41 Paper prose revision (2026-10-01)
+User requested less formulaic and deliberately catchy wording. Retitled the
+paper "Predicting Reasoning-Model Costs from Shared Prefill Activations" and
+revised the abstract, introduction, results headings, conclusion, and figure
+captions into descriptive academic prose. Updated supplementary wording and
+figure panel titles, regenerated Markdown and figures, and recompiled PDFs.
+Methods, numeric results, comparisons, and uncertainty qualifications remain
+unchanged. Main paper remains four pages including references; supplement two.

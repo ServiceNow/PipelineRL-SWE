@@ -1,4 +1,4 @@
-# One Prefill Prices a Pool of Reasoning Models
+# Predicting Reasoning-Model Costs from Shared Prefill Activations
 
 A four-page academic manuscript in the uploaded NOWAI template, including references. Authors are placeholders.
 
@@ -15,7 +15,7 @@ The workshop draft centers on one frozen prefill predicting costs across a pool 
 ## Figures
 
 - [Figure 1: shared-prefill overview and controlled savings](figures/shared_prefill_overview.png): [vector PDF](figures/shared_prefill_overview.pdf)
-- [Supplement: available versus captured savings](figures/headroom_and_capture.png): [vector PDF](figures/headroom_and_capture.pdf)
+- [Supplement: oracle and predicted cost savings](figures/headroom_and_capture.png): [vector PDF](figures/headroom_and_capture.pdf)
 - [Cost signal and estimator comparisons](figures/cost_signal_ablation.png): [vector PDF](figures/cost_signal_ablation.pdf)
 - [Computed values and provenance](figures/data_manifest.json)
 
@@ -60,3 +60,6 @@ each cost estimator's savings and interval, with paired contrasts in the text.
 ZeroRouter is labeled a reimplementation, Omni differences are inconclusive,
 and the end-to-end difference estimates use plug-in effects rather than
 bootstrap means. No running expansion result has entered this draft.
+
+The prose, headings, and figure captions use descriptive academic wording. The
+style revision leaves the methods, numerical results, and uncertainty claims unchanged.
