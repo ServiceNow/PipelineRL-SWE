@@ -1503,3 +1503,9 @@ preserve the primary comparison's intended mixture; also report unweighted.
 The prior launch attempt was rejected by automatic approval review because
 setup/estimate was not explicit permission for paid submission. No jobs have
 launched. Revised plan supersedes the earlier multi-draw plan and guards.
+
+4.A.39 launch: user explicitly approved the revised plan. Both jobs RUNNING
+on 2026-10-01, snapshot 746a80a; MMLU job 73fe00f5-4310-411b-b509-775f0b60bd8b,
+Omni job d1cd0673-3817-4a89-9544-3094edeb607f. Initial generation responses
+confirmed, no initial API errors; collection incomplete. Exact status and
+output root in expansion_20261001/launch_status.json.

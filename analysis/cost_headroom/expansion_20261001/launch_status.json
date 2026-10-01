@@ -1,0 +1,22 @@
+{
+  "snapshot_revision": "746a80acbf28e162203f25bd22d727be6d8acf2e",
+  "output_root": "/mnt/llmd/results/exps/aristides/reason/math_expand_20261001",
+  "user_approval": "yes, launch the revised.",
+  "jobs": {
+    "mmlupro": {
+      "id": "73fe00f5-4310-411b-b509-775f0b60bd8b",
+      "name": "math_expand_20261001_mmlupro",
+      "new_problems": 6500,
+      "expected_calls": 32500,
+      "spend_guard_usd": 35
+    },
+    "omni500": {
+      "id": "d1cd0673-3817-4a89-9544-3094edeb607f",
+      "name": "math_expand_20261001_omni500",
+      "new_problems": 1000,
+      "expected_calls": 5000,
+      "spend_guard_usd": 25
+    }
+  },
+  "observed_initial_state": "Both RUNNING; generation responses confirmed; collection incomplete."
+}

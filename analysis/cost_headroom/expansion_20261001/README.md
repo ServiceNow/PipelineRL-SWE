@@ -87,7 +87,8 @@ other consumption. No credential is saved here.
 
 ## Submission status
 
-The original submission attempt was blocked by automatic approval review,
-which requires explicit approval for paid API calls. Neither original nor
-resized jobs has launched. The revised one-draw plan supersedes the original
-4/3/3/2/2 plan and its $100 combined guards.
+The user explicitly approved the revised jobs, and both were submitted on
+2026-10-01 from snapshot `746a80a`. Both reached RUNNING and saved initial
+generation responses. Collection is incomplete. Job IDs and exact settings
+are recorded in `launch_status.json`. The revised one-draw plan supersedes
+the original 4/3/3/2/2 plan and its $100 combined guards.
