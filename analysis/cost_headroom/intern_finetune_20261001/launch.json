@@ -1,0 +1,20 @@
+{
+  "snapshot_revision": "f910b80442233155737be09581738fe2d33a9ba6",
+  "output_root": "/mnt/llmd/results/exps/aristides/reason/intern_finetune_20261001",
+  "api_calls": 0,
+  "jobs": {
+    "LCB": {
+      "id": "3e84da1b-335b-4e87-a055-6cc66d2cf707",
+      "state_at_last_check": "QUEUED"
+    },
+    "Omni": {
+      "id": "70d412b8-9968-44f6-a2f6-675dfb7c972c",
+      "state_at_last_check": "QUEUED"
+    },
+    "MMLU-Pro": {
+      "id": "df2ce134-988a-4bf8-ac13-1abfa4f9359d",
+      "state_at_last_check": "QUEUING"
+    }
+  },
+  "pending": "GPU scheduling, LoRA training, calibration selection and both routing controls"
+}
