@@ -1615,3 +1615,18 @@ ours stronger on LCB/Omni. MMLU Jev strongly overpredicts lengths. No prompt
 tuning/calibration or paper edits. Manifest and derived predictions/results
 versioned, raw response JSONL retained locally. This does not test fine-tuned
 or calibrated Jev; current untrained prompted cost predictor is unpromising.
+
+### 4.A.46 Jev success + our cost replay (2026-10-01)
+User authorized hybrid replay, no new API calls. Same frozen100/pool test
+subsets, stored Jev success probabilities, fixed our learned prefill costs.
+Primary hybrid vs our full router direct cost savings: LCB-25.9%
+[-49.7,-3.3],Omni+0.8%[-17.1,15.8],MMLU-9.2%[-34.6,15.3]. Hybrid worse
+on LCB, others inconclusive; no established improvement. Previous median-cost
+Jev success point advantages do not persist with learned cost. Cost-head
+swap median->ours with Jev success fixed gives LCB15.1%[-3.7,30.1],
+Omni-0.2%[-16.6,17.9],MMLU12.3%[-6.1,35.3], all inconclusive. Existing
+our-success learned-cost and median-cost success contrasts reproduce earlier
+pilot points exactly. 1,000 paired problem bootstrap, all valid draws,
+conditional/descriptive pair-specific frontier bands; no tuning/calibration.
+Code/protocol and results in jev_hybrid_20261001; raw success response hash
+and derived probability vectors saved. Keep current full router, no paper edit.
