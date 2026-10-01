@@ -116,9 +116,27 @@ def run(args, label):
     c_ours = read_predictions(folder/costfile, ids, 'expected_costs', m)*100
     meta = {str(r['problem_id']):r for r in map(json.loads, (folder/'problems.jsonl').open())}
     texts = [str(meta[p]['problem_statement']) for p in ids]
-    x = embeddings(texts, ids, out)
-    p_carrot, pspec = fit_knn(x, q, tr)
-    l_carrot, cspec = fit_knn(x, length, tr)
+    variant = 'CARROT-KNN-SBERT'
+    encoder = MODEL
+    if getattr(args, 'candidate', None):
+        z = np.load(args.candidate, allow_pickle=False)
+        if z['problem_ids'].tolist() != ids or z['model_slots'].tolist() != slots:
+            raise ValueError('Candidate prediction IDs/route order mismatch')
+        p_carrot = z['carrot_success']; l_carrot = z['carrot_output_tokens']
+        if p_carrot.shape != q.shape or l_carrot.shape != length.shape:
+            raise ValueError('Candidate prediction shape mismatch')
+        if not np.isfinite(p_carrot).all() or not np.isfinite(l_carrot).all():
+            raise ValueError('Non-finite candidate prediction')
+        if (p_carrot < 0).any() or (p_carrot > 1).any() or (l_carrot < 0).any():
+            raise ValueError('Candidate probabilities/lengths out of range')
+        variant = args.variant
+        encoder = str(z['encoder'])
+        pspec = {'source': str(args.candidate), 'task': 'success'}
+        cspec = {'source': str(args.candidate), 'task': 'cost'}
+    else:
+        x = embeddings(texts, ids, out)
+        p_carrot, pspec = fit_knn(x, q, tr)
+        l_carrot, cspec = fit_knn(x, length, tr)
     c_carrot = (inp*pin + l_carrot*pout)*100
     mean_cost = (inp*pin + length[tr].mean(0)*pout)*100
     median_length = np.asarray([np.median(t['completion_tokens'][tr,j][valid[tr,j]]) for j in range(m)])
@@ -154,12 +172,12 @@ def run(args, label):
     np.savez_compressed(out/'predictions.npz', problem_ids=np.asarray(ids), model_slots=np.asarray(slots),
                         train_indices=tr,test_indices=te,carrot_success=p_carrot,
                         carrot_output_tokens=l_carrot,carrot_cost_dollars=c_carrot/100)
-    report = {'pool':label,'source_pool':name,'upstream_commit':UPSTREAM,'variant':'CARROT-KNN-SBERT',
-              'embedding_model':MODEL,'n_train':len(tr),'n_test':len(te),'success_knn':pspec,'cost_knn':cspec,
+    report = {'pool':label,'source_pool':name,'upstream_commit':UPSTREAM,'variant':variant,
+              'embedding_model':encoder,'n_train':len(tr),'n_test':len(te),'success_knn':pspec,'cost_knn':cspec,
               'route_log_length_r2':dict(zip(slots,[float(r2_score(np.log(np.maximum(length[te,j],1)),
                                                        np.log(np.maximum(l_carrot[te,j],1)))) for j in range(m)])),
               'comparisons':comparisons,
-              'protocol':'All valid draw means; raw output-token regression; original frozen train/test splits; training-only 5-fold k selection; paired problem bootstrap conditional on fitted predictors; each contrast uses its own common band and reports direct geometric-mean cost savings, not differences of separately normalized gains; generation spend excludes encoder overhead.'}
+              'protocol':'All valid draw means; raw output-token regression; original frozen train/test splits; predictor fitting/selection recorded separately; paired problem bootstrap conditional on fitted predictors; each contrast uses its own common band and reports direct geometric-mean cost savings, not differences of separately normalized gains; generation spend excludes encoder overhead.'}
     (out/'results.json').write_text(json.dumps(report,indent=2)+'\n')
     return report
 
@@ -170,8 +188,11 @@ def main():
     parser.add_argument('--out', type=Path,required=True)
     parser.add_argument('--bootstrap',type=int,default=1000)
     parser.add_argument('--seed',type=int,default=0)
+    parser.add_argument('--candidate',type=Path,help='ID-aligned external predictor NPZ')
+    parser.add_argument('--variant',default='CARROT-style-Jina-137M')
     args=parser.parse_args()
     if args.bootstrap<1:parser.error('--bootstrap must be positive')
+    if args.candidate and args.pool == 'all':parser.error('--candidate requires one --pool')
     for label in (POOLS if args.pool=='all' else [args.pool]):run(args,label)
 
 if __name__=='__main__':main()

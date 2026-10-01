@@ -1560,3 +1560,15 @@ its success fixed: 1.7% [-0.8,5.0],9.7% [-1.8,21.2],26.3% [9.3,36.5].
 The MMLU cost estimator is competitive; no universal superiority claim. These
 are pair-specific direct cost ratios, not existing table's differences of
 median-normalized savings. Expansion examples remain excluded; no API calls.
+
+### 4.A.43 CARROT-style trained Jina-137M comparator (2026-10-01)
+User requested our 137M encoder for the trained CARROT-family comparator.
+`carrot_jina.py` fine-tunes separate success/cost encoders, BCE on valid-draw
+success means and MSE on train-standardized raw output lengths; no log/smearing
+postprocessing. Existing calibration selects task checkpoints. Six epochs,
+seed42, lr2e-5, batch8, maxlen1024. This is an ADAPTED CARROT-style baseline,
+not a RoBERTa reproduction; adaptations in CARROT_JINA_PROTOCOL.md. Reuses
+six direct matched-accuracy contrasts and1,000 paired bootstrap draws. External
+prediction integration reproduces all six completed LCB point estimates exactly.
+Three single-GPU snapshot jobs; saved heads permit fresh expansion evaluation.
+Original-split outputs only; new generation samples stay held out. No API calls.
