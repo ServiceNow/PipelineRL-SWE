@@ -42,7 +42,7 @@ def main():
     (out/'problems.jsonl').write_text(''.join(json.dumps(x,ensure_ascii=False)+'\n' for x in oldprobs+newprobs))
     (out/'split_manifest.json').write_text((R/oldname/'split_manifest.json').read_text())
     (out/'expansion_manifest.json').write_text(json.dumps({'dataset':label,'n_new':n,'new_problem_ids':[t['problem_id'] for t in tasks],
-       'stratum_weights':plan['evaluation_stratum_weights'] if label=='mmlupro' else None,
+       'stratum_weights':plan['evaluation_stratum_weights'],
        'policy':'Original train/calibration IDs only. Expansion examples are held out and not added to either split.'},indent=2)+'\n')
     print(json.dumps({'dataset':label,'old':len(oldids),'new':n,'valid_new':int(dct['valid'][len(oldids):].sum()),'out':str(out)}),flush=True)
 if __name__=='__main__':main()

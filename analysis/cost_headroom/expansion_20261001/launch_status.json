@@ -18,5 +18,33 @@
       "spend_guard_usd": 25
     }
   },
-  "observed_initial_state": "Both RUNNING; generation responses confirmed; collection incomplete."
+  "observed_initial_state": "Both RUNNING; generation responses confirmed; collection incomplete.",
+  "latest_audit_2026_10_01": {
+    "mmlupro": {
+      "state": "RUNNING",
+      "valid_calls": 32499,
+      "expected_calls": 32500,
+      "remaining": 1,
+      "complete_marker": false
+    },
+    "omni500": {
+      "state": "RUNNING",
+      "valid_calls": 5000,
+      "expected_calls": 5000,
+      "complete_marker": true
+    }
+  },
+  "prefill_jobs": {
+    "mmlupro": {
+      "id": "19b856e2-b683-4389-9055-877f8769c7c9",
+      "state": "RUNNING",
+      "feature_file_written": true
+    },
+    "omni500": {
+      "id": "06d06518-c164-42d5-abe0-c7fe975d821e",
+      "state": "SUCCEEDED",
+      "feature_file_written": true
+    }
+  },
+  "evaluation": "Frozen readout and fresh fixed-policy scripts are prepared. Run only when the target dataset has COMPLETE.json and its prefill NPZ."
 }

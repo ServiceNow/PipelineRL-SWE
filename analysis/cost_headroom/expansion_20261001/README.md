@@ -89,6 +89,8 @@ other consumption. No credential is saved here.
 
 The user explicitly approved the revised jobs, and both were submitted on
 2026-10-01 from snapshot `746a80a`. Both reached RUNNING and saved initial
-generation responses. Collection is incomplete. Job IDs and exact settings
-are recorded in `launch_status.json`. The revised one-draw plan supersedes
-the original 4/3/3/2/2 plan and its $100 combined guards.
+generation responses. At the latest audit, Omni-MATH has all 5,000 valid calls
+and `COMPLETE.json`; MMLU-Pro has 32,499/32,500 and is still running. Job IDs,
+prefill status, and exact settings are recorded in `launch_status.json`. The
+revised one-draw plan supersedes the original 4/3/3/2/2 plan and its $100
+combined guards.

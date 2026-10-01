@@ -1696,11 +1696,24 @@ under fixed_policy_20261001; report selected grid boundary explicitly. Fresh
 expansion evaluation supersedes as strongest evidence.
 
 ### 4.A.50 Expansion feature extraction preparation (2026-10-01)
-Generation retry audit: MMLU-Pro32498/32500,Omni4994/5000. Explicitly resumed
-both previously authorized jobs; retries currently RUNNING and append-only.
+Generation retry audit: Omni-MATH5,000/5,000 complete; MMLU-Pro32,499/32,500,
+one valid response unresolved. Explicitly resumed both previously authorized
+jobs; append-only retries remain active.
 Answer-free raw-problem Qwen prefill inputs for all frozen task IDs prepared,
 hashes in expansion_prefills_20261001 manifests. Submit separate Instruct
 (MMLU-Pro) and Thinking (Omni) Qwen3-4B extraction jobs, matching original
 feature route and eight-layer last/mean representation. Frozen readouts to
 remain fitted on old train/calibration only. Fresh MMLU weighted/unweighted and
 Omni difficulty-stratified estimates planned.
+
+### 4.A.51 Fresh evaluation pipeline (2026-10-01)
+Omni Qwen3-4B Thinking prefill succeeded; MMLU-Pro Instruct prefill file was
+written and its job is finalizing. Added tensor builder/readout runner to append
+expansion outcomes/features while retaining original train/calibration IDs;
+readout selection stays on original calibration only. Fresh results use one
+route per problem at the frozen V with paired problem bootstrap, MMLU subject
+weights/unweighted and Omni difficulty weights. Since the historical selected V
+hit the grid ceiling, also report fixed-V sensitivity at $0.0001/$0.001/$0.01
+per correct. Outcome-swept frontier remains secondary/descriptive. CPU launcher
+is guarded on collection COMPLETE and prefill NPZ; launch when both prerequisites
+finish.
