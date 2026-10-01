@@ -2,7 +2,7 @@
 
 ## Abstract
 
-Reasoning-model routers must estimate generation cost before choosing a model, yet output lengths vary across queries. We estimate route-specific costs from the prefill activations of a frozen 4B encoder. Linear cost readouts use the same representation as the success predictor and require no target-model computation before route selection. On the original test sets, query-dependent pricing saves 35.6% on LiveCodeBench, 21.9% on Omni-MATH-500, and 30.7% on MMLU-Pro relative to median-length pricing on descriptive, outcome-swept accuracy–cost frontiers. A separate evaluation on 7,500 newly collected problems tests a calibration-selected fixed policy: generation spending falls by 9–13% on MMLU-Pro and Omni-MATH, with accuracy differences below 0.3 percentage points. The fresh MMLU-Pro frontier does not show a gain, so the evidence supports benefits at some operating points rather than across the full accuracy range. On additional coding datasets, predicted costs do not produce statistically significant savings despite headroom under oracle costs.
+Reasoning-model routers must estimate generation cost before choosing a model, yet output lengths vary substantially across queries. We estimate route-specific costs from the prefill activations of a frozen 4B encoder. Linear cost readouts use the same representation as the success predictor and require no target-model computation before route selection. Holding success predictions fixed, query-dependent pricing saves 35.6% on LiveCodeBench, 21.9% on Omni-MATH-500, and 30.7% on MMLU-Pro relative to median-length pricing at matched accuracy. Adapted embedding and prompt-feature estimators have lower point estimates, although the differences on Omni are inconclusive. On MMLU-Pro, dedicated cost readouts add 21.5 percentage points over pricing derived from predicted success. On additional coding datasets, oracle costs reduce spending, but predicted costs do not produce statistically significant savings. The benefit of cost prediction therefore varies across datasets.
 
 ## Introduction
 
@@ -88,18 +88,6 @@ The embedding baseline averages per-route MLP, random-forest, and nearest-neighb
 
 We regress log output length on the success heads' predicted logits and their squares, keeping success predictions fixed in routing. This control saves 34.1% on LiveCodeBench and 21.0% on Omni, with inconclusive differences from dedicated cost readouts (Figure 2). On MMLU-Pro it saves 9.2%, versus 30.7% for the dedicated head: a paired advantage of 21.5 points [8.5, 30.3].
 
-### Fresh fixed-policy evaluation.
-
-We fit readouts using only the original training problems and select their calibration parameters on the original calibration problems, then evaluate on 6,500 new MMLU-Pro problems and 1,000 new Omni-MATH problems. We keep the original calibration-selected V=$1 per correct answer fixed. At this operating point, learned costs reduce spend by 9–13%, with accuracy differences below 0.3 points (Table 2). The selected V lies at the upper edge of the original calibration grid. The outcome-swept frontiers are mixed: median costs do better on MMLU-Pro, while learned costs do better on Omni-MATH. These secondary frontiers use evaluation outcomes to choose mixtures over a different, lower shared accuracy range; they are descriptive and do not establish the value of a separately selected deployment policy.
-
-| Fresh evaluation (problems) | Mean generation cost, learned / median ($/problem) | Fixed-V savings (95% CI) | Accuracy difference, pp (95% CI) | Outcome-swept frontier savings (95% CI) |
-| --- | ---: | ---: | ---: | ---: |
-| MMLU-Pro, subject weighted (6,500) | 0.001142 / 0.001313 | 13.0% [11.1, 14.9] | -0.29 [-0.58, -0.01] | — |
-| MMLU-Pro, unweighted (6,500) | 0.001131 / 0.001303 | 13.3% [11.3, 15.3] | -0.26 [-0.54, 0.02] | -33.4% [-44.5, -23.6] |
-| Omni-MATH, difficulty weighted (1,000) | 0.003310 / 0.003647 | 9.2% [4.9, 13.9] | -0.20 [-0.50, 0.00] | 14.2% [6.8, 21.0] |
-
-**Table 2. Evaluation on new problems.** Readouts are fit using original training problems and calibration parameters selected on original calibration problems; V=$1 per correct answer is fixed from the original calibration. No expansion outcomes are used for fitting or selection. CIs use paired problem bootstraps (2,000 resamples for fixed V, 1,000 for frontiers). MMLU-Pro estimates are subject-weighted and unweighted; Omni-MATH is difficulty-weighted. The outcome-swept frontier is unweighted, spans a lower shared accuracy band, and uses evaluation outcomes to select mixtures; it is descriptive. Costs are mean generation dollars per problem, learned / median. The fixed V is at the upper edge of its original search grid.
-
 On MMLU-Pro, empirical outcome-based difficulty explains little of log length (mean $R^2\approx .19$). Adding subject labels to success-derived pricing raises savings to 22.3%, accounting for roughly 60% of the difference from the dedicated cost head. This suggests that subject variation partly explains the improvement. We do not measure whether differences in required reasoning account for the remaining variation.
 
 ### Comparison with ZeroRouter.
@@ -112,11 +100,11 @@ CodeContests ([AlphaCode / CodeContests](https://arxiv.org/abs/2203.07814)), TAC
 
 ## Discussion and Limitations
 
-The method estimates costs for several target models from one encoder, using training output-length labels for each route. Our pools cover five configurations from two model families. The adapted estimators do not reproduce complete MixLLM or CARROT routers, and CARROT's exact estimators are not evaluated. Bootstrap intervals omit training and calibration-selection uncertainty; empirical oracle lengths also have sampling error. Replay evaluates stored generations. The original and supplementary matched-accuracy frontiers allow mixtures chosen using evaluation outcomes, whereas the expansion evaluation tests one calibration-selected operating point. Encoder overhead is excluded from incremental generation savings. The fixed-policy results cover only two datasets; more model families and independently selected operating points are needed to establish broader generalization.
+The method estimates costs for several target models from one encoder, using training output-length labels for each route. Our pools cover five configurations from two model families. The adapted estimators do not reproduce complete MixLLM or CARROT routers, and CARROT's exact estimators are not evaluated. Bootstrap intervals omit training and calibration-selection uncertainty; empirical oracle lengths also have sampling error. Replay evaluates stored generations, and matched-accuracy frontiers allow mixtures chosen using evaluation outcomes. Encoder overhead is excluded from incremental generation savings. Larger held-out samples, broader model families, and calibration-selected operating points would strengthen the evidence.
 
 ## Conclusion
 
-We estimate reasoning-model costs from the same frozen prefill features used to predict success. On three original test sets, linear cost readouts reduce spending on descriptive matched-accuracy frontiers. On new MMLU-Pro and Omni-MATH problems, a frozen operating point lowers generation costs by 9–13% with small accuracy differences, although fresh frontier results are mixed. Other coding datasets show no statistically significant benefit from predicted costs. Cost prediction can improve routing, but its benefit depends on the dataset and operating point.
+We estimate reasoning-model costs from the same frozen prefill features used to predict success. Linear cost readouts reduce generation spending by 22–36% relative to median-length pricing on three datasets. On MMLU-Pro, they also improve on costs inferred from success predictions. The additional coding datasets show no statistically significant benefit from predicted costs, even when oracle costs reduce spending. These results support using separate cost predictions in some routing settings, while leaving their generalization across datasets and model families unresolved.
 
 ## References
 

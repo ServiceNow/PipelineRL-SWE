@@ -9,8 +9,9 @@ if [[ ! -f "${ROOT}/math_expand_20261001/${READOUT_DATASET}/COMPLETE.json" ]]; t
   echo "Expansion collection is not complete for ${READOUT_DATASET}" >&2
   exit 2
 fi
-if [[ ! -f "${ROOT}/expansion_prefills_20261001/${READOUT_DATASET}_prefill.npz" ]]; then
+if [[ ! -f "${ROOT}/expansion_prefills_verified_20261001/${READOUT_DATASET}_prefill.npz" ]]; then
   echo "Prefill extraction is not complete for ${READOUT_DATASET}" >&2
   exit 2
 fi
+export OPENBLAS_NUM_THREADS=8 OMP_NUM_THREADS=8
 python -u analysis/cost_headroom/run_expanded_readouts.py --dataset "${READOUT_DATASET}"

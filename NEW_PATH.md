@@ -1741,3 +1741,7 @@ analysis/cost_headroom/expanded_eval_20261001/.
 Intern-Decision LoRA jobs completed for LCB and Omni; MMLU-Pro fine-tuning is
 still running (job df2ce134-988a-4bf8-ac13-1abfa4f9359d). These are exploratory
 and not part of the paper results above.
+
+
+### 4.A.53 Correction: expansion comparison invalidated (2026-10-01)
+Section 4.A.52 and its fresh 13%/-33% results are withdrawn. The expansion encoder inputs omitted the original solving wrappers and MMLU answer options, and its cost fitter used calibration/target selection absent from the paper head. These are pipeline mismatches, not evidence of distribution shift. Generations remain valid and need no recollection. Corrected extraction uses full original prompt format, gates on 32 original-prompt anchor replays, and reconstructs archived train-only RidgeCV costs (max relative error 1.06e-6). Primary comparison: policies/mixes selected for the historical accuracy-target grid on original calibration; fixed on fresh problems; paired problem bootstrap for both achieved accuracy differences and spend. Include train-median and train-mean cost arms with the same success predictor. Fresh numerical claims removed from paper pending corrected results.

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ANCHOR_DATASET=$1
-ANCHOR_ROOT=/mnt/llmd/results/exps/aristides/reason/prefill_anchor_20261001
+ANCHOR_ROOT=/mnt/llmd/results/exps/aristides/reason/prefill_anchor_verified_20261001
 mkdir -p "${ANCHOR_ROOT}"
 exec > >(tee -a "${ANCHOR_ROOT}/${ANCHOR_DATASET}.log") 2>&1
 export HF_HUB_DISABLE_IMPLICIT_TOKEN=1
@@ -11,11 +11,11 @@ from pathlib import Path
 import numpy as np
 label, out = sys.argv[1], Path(sys.argv[2])
 root = Path('/mnt/llmd/results/exps/aristides/reason')
-folder = root / ('mmlupro_tensors' if label == 'mmlupro' else 'omni500_tensors')
-rows = [json.loads(line) for line in (folder/'problems.jsonl').read_text().splitlines()]
+source = root / f'{label}_probe_prompts.jsonl'
+rows = [json.loads(line) for line in source.read_text().splitlines()]
 rng = np.random.default_rng(20261001)
 selected = sorted(rng.choice(len(rows), 32, replace=False))
-(out/f'{label}_prompts.jsonl').write_text(''.join(json.dumps(dict(problem_id=rows[i]['problem_id'], prompt=rows[i]['problem_statement']))+'\n' for i in selected))
+(out/f'{label}_prompts.jsonl').write_text(''.join(json.dumps(dict(problem_id=rows[i]['problem_id'], prompt=rows[i]['prompt']))+'\n' for i in selected))
 PY
 ANCHOR_MODEL=Qwen/Qwen3-4B-Instruct-2507
 if [[ ${ANCHOR_DATASET} == omni500 ]]; then ANCHOR_MODEL=Qwen/Qwen3-4B-Thinking-2507; fi

@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 
 R = Path('/mnt/llmd/results/exps/aristides/reason')
-EXP = R / 'expansion_prefills_20261001'
+EXP = R / 'expansion_prefills_verified_20261001'
 OUT = R / 'expanded_eval_20261001'
 REPO = Path(__file__).resolve().parents[2]
 
@@ -36,6 +36,9 @@ def combine_features(label):
             raise ValueError(f'Feature metadata differs: {key}')
     out = {}
     for key in old.files:
+        # Rich heads consume mean+last only; omit duplicate/unused readouts.
+        if key in ('pre','content_last','content_mean'):
+            continue
         if key == 'problem_ids':
             out[key] = np.asarray(old_ids + new_ids, dtype=str)
         elif key in new.files and old[key].ndim > 0 and new[key].ndim > 0 and old[key].shape[0] == len(old_ids) and new[key].shape[0] == len(new_ids):
@@ -44,14 +47,15 @@ def combine_features(label):
             out[key] = np.concatenate([old[key], new[key]], axis=0)
         else:
             out[key] = old[key]
-    missing = set(old.files) - set(out)
+    missing = set(old.files) - set(out) - {'pre', 'content_last', 'content_mean'}
     if missing:
         raise ValueError(f'Failed to assemble feature keys: {missing}')
     folder = OUT / label
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / 'prefill_combined.npz'
     tmp = folder / 'prefill_combined.tmp.npz'
-    np.savez_compressed(tmp, **out)
+    # Compression was the dominant previous CPU delay; these are local working features.
+    np.savez(tmp, **out)
     tmp.replace(path)
     return path, len(old_ids), len(new_ids)
 
@@ -72,24 +76,11 @@ def main():
     scripts = REPO / 'pipelinerl/swe/scripts/livecodebench'
     run([sys.executable, scripts / 'activation_content_preds.py', '--activations', feature,
          '--rich', '--tensors-dir', tensor_dir, '--select-C', '--out', success])
-    pool = 'MMLU-Pro' if label == 'mmlupro' else 'Omni'
-    # Match price labels in the existing decomposition artifacts, preserving the
-    # original per-route input/output prices used by the frozen cost readout.
-    sys.path.insert(0, str(REPO / 'analysis/cost_headroom'))
-    from carrot_compare import POOLS
-    price_path = R / POOLS[pool][0] / 'prices.json'
-    price_data = json.loads(price_path.read_text()) if price_path.exists() else {}
-    from decompose import MK
-    prices = dict(MK)
-    prices.update(price_data)
-    slots = [str(x) for x in np.load(folder / 'tensors.npz', allow_pickle=True)['model_slots']]
-    io = []
-    for slot in slots:
-        pin, pout = prices[slot]
-        io.append(f'{slot}={pin}/{pout}')
-    run([sys.executable, scripts / 'activation_cost_preds.py', '--activations', feature,
-         '--rich', '--tensors-dir', tensor_dir, '--select-alpha', '--in-out-prices', ','.join(io), '--out', cost])
-    run([sys.executable, 'analysis/cost_headroom/evaluate_expanded_fixed_policy.py', '--dataset', label])
+    run([sys.executable, 'analysis/cost_headroom/reconstruct_paper_cost_heads.py', '--dataset', label])
+    cost = folder / 'paper_cost_preds.jsonl'
+    run([sys.executable, 'analysis/cost_headroom/evaluate_expanded_fixed_policy.py', '--dataset', label,
+         '--cost-file',cost.name,'--output-file','verified_fixed_policy_results.json'])
+    run([sys.executable, 'analysis/cost_headroom/evaluate_expanded_calibrated_policies.py', '--dataset', label])
     manifest = {'dataset': label, 'old_features': n_old, 'fresh_features': n_new,
                 'combined_features': n_old + n_new, 'features': str(feature),
                 'success_predictions': str(success), 'cost_predictions': str(cost),
