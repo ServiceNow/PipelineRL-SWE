@@ -1643,3 +1643,8 @@ stored valid generation draws, descriptive conditional frontiers. Zero API
 calls; isolatedPython3.12 plus pinned upstream dependencies, no truncation,
 public anonymous download avoids expired ambient HF OAuth. Frozenmanifest,
 protocol and scripts in analysis/cost_headroom/intern_decision_20261001.
+4.A.47 launched from snapshot1c5b8d58503d1fe4eb5cb6428f954750b9db8cc7,
+job8d1272ac-7aec-4e38-a07a-a7ece98e85b4; verifiedQUEUED at submission.
+One32GB GPU,8CPU,48GB RAM. Persistent outputroot recorded in launch.json.
+Published pinned dependency releases checked available; actual inference
+awaits scheduling. No success/result claim yet.
