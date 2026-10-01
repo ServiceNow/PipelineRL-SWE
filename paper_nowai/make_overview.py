@@ -45,4 +45,6 @@ b.set_xticks(x,labels,fontsize=8);b.tick_params(axis='x',length=0,pad=5);b.set_x
 b.set_ylabel('Generation cost saved (%)',fontsize=8,labelpad=3)
 fig.text(.49,.055,'Against median-length pricing at matched accuracy; whiskers: paired 95% bootstrap CIs.',ha='center',fontsize=7,color=GREY)
 for suffix in ['pdf','png','svg']:fig.savefig(HERE/'figures'/f'shared_prefill_overview.{suffix}',dpi=250,bbox_inches='tight',pad_inches=.07)
+svg=HERE/'figures/shared_prefill_overview.svg'
+svg.write_text('\n'.join(line.rstrip() for line in svg.read_text().splitlines())+'\n')
 print('Saved shared_prefill_overview.pdf/png/svg')
