@@ -54,6 +54,8 @@ not a deployment policy chosen in advance. Encoder overhead is excluded.
 ## Reproduction and outputs
 
 ```bash
+CARROT_PYTHON=/home/toolkit/.conda/envs/pipeline-rl/bin/python3 LOCAL=1 bash launchers/abstention/launch_carrot_compare.sh
+# For snapshot cluster submission:
 SUBMIT=1 bash launchers/abstention/launch_carrot_compare.sh
 ```
 
@@ -69,3 +71,11 @@ neighbor counts/CV scores, per-route prediction diagnostics, and `results.json`.
 The setup smoke run uses five resamples solely to check execution; report only
 the full 1,000-resample jobs. Expanded evaluation remains pending completion of
 collections, feature extraction, and problem-weight handling.
+
+## Execution record
+
+Initial three cluster submissions exited during startup with no usable scheduler
+logs. The full experiment was run locally using the verified environment and
+all 1,000 resamples. The runner now persists startup and runtime logs under
+`logs/` and the launcher also supports `LOCAL=1`. Local results are the primary
+artifacts; no successful remote execution is claimed.

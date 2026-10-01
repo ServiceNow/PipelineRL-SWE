@@ -1,0 +1,15 @@
+{
+  "state": "completed",
+  "execution": "local CPU",
+  "code_revision": "fdd10dc232c9edbedd320c50ba7f9489111dd425",
+  "upstream_commit": "3e6acff6aecf4cbcb8f31a118d04c799c2ea1655",
+  "output_root": "/mnt/llmd/results/exps/aristides/reason/carrot_compare_20261001",
+  "bootstrap_resamples": 1000,
+  "api_calls": 0,
+  "cluster_attempts": {
+    "LCB": "f868c832-8af8-4af3-8306-901a47d7c5d1",
+    "Omni": "ea231754-f851-4aa1-ab83-72eebb2f630b",
+    "MMLU-Pro": "f88078a4-29f2-4096-8835-86933185ba6b"
+  },
+  "cluster_attempt_state": "failed during startup; no usable logs"
+}

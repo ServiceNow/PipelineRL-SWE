@@ -1549,3 +1549,14 @@ Protocol: CARROT_PROTOCOL.md. Launcher: launch_carrot_compare.sh. Isolated
 sentence-transformers dependency; CPU inference disables unused DeepSpeed
 integration to avoid Triton GPU initialization. LCB end-to-end five-bootstrap
 smoke completed; its intervals are not reportable experiment results.
+4.A.42 execution: all original-split comparisons completed locally with 1,000
+paired resamples after three cluster submissions failed during startup without
+usable logs. Results and execution IDs: `carrot_results/`. Runner now persists
+startup logs and launcher supports local execution. Full-router direct savings
+vs CARROT-KNN-SBERT: LCB 20.2% [11.0,26.9], Omni 19.9% [6.3,32.3], MMLU 5.2%
+[-12.5,20.5]. With OUR success fixed, ours vs CARROT costs: 33.6% [26.4,40.3],
+14.0% [1.7,24.2],14.4% [-0.3,26.6]. CARROT cost vs mean-length constant with
+its success fixed: 1.7% [-0.8,5.0],9.7% [-1.8,21.2],26.3% [9.3,36.5].
+The MMLU cost estimator is competitive; no universal superiority claim. These
+are pair-specific direct cost ratios, not existing table's differences of
+median-normalized savings. Expansion examples remain excluded; no API calls.
