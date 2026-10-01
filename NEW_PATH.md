@@ -1662,3 +1662,18 @@ paired CIs; no equivalence claim, calibration or fine-tuning performed.
 Derived probability vectors, execution metadata, report and full bootstrap
 results copied into versioned protocol folder; raw responses persist at
 /mnt/llmd/results/exps/aristides/reason/intern_decision_20261001/responses.jsonl.
+
+### 4.A.48 Intern success fine-tuning (2026-10-01)
+User authorized fine-tuning; clarified both success comparison controls.
+Primary OUR costs fixed for fine-tunedIntern-vs-OUR success heads; median-cost
+control secondary, plus Brier/logloss and pilot fine-tuned-vs-untuned. Separate
+LoRA adapters per originalpool, originaltrain441/275/550, calibration110/75/150,
+full originaltest341/150/300. Expansion collections untouched. Published
+five-noul decision format, BCE on candidate margin/fixedpublishedtemperature
+against valid-draw means. Rank16 alpha32 dropout.05, languageattention/MLP
+only, lr1e-4,5epochs,accum8,micro1,seed42; epoch0 is calibrationcandidate.
+Choose minimum calibrationNLL, never test outcomes. Saveadapter/calprobs for
+fresh expansion.1,000 pairedproblem bootstrap, allroutes/draws retained;
+originaltestexploratory, conditionalone-seed intervals, no overhead pricing.
+Zero API spending; three48GB-GPU snapshotjobs with isolatedPython3.12 and
+pinnedupstreamruntime+peft0.21.2. Protocol and hashes frozen before launch.
