@@ -21,14 +21,14 @@
   "observed_initial_state": "Both RUNNING; generation responses confirmed; collection incomplete.",
   "latest_audit_2026_10_01": {
     "mmlupro": {
-      "state": "RUNNING",
-      "valid_calls": 32499,
+      "state": "SUCCEEDED",
+      "valid_calls": 32500,
       "expected_calls": 32500,
-      "remaining": 1,
-      "complete_marker": false
+      "remaining": 0,
+      "complete_marker": true
     },
     "omni500": {
-      "state": "RUNNING",
+      "state": "SUCCEEDED",
       "valid_calls": 5000,
       "expected_calls": 5000,
       "complete_marker": true
@@ -36,16 +36,16 @@
   },
   "prefill_jobs": {
     "mmlupro": {
-      "id": "19b856e2-b683-4389-9055-877f8769c7c9",
+      "id": "84233665-3f17-4fc4-93a3-df855104a1fd",
       "state": "RUNNING",
-      "feature_file_written": true
+      "feature_file_written": false
     },
     "omni500": {
-      "id": "06d06518-c164-42d5-abe0-c7fe975d821e",
-      "state": "SUCCEEDED",
-      "feature_file_written": true
+      "id": "febadeea-f58e-4ddd-ae7a-00496332ab69",
+      "state": "RUNNING",
+      "feature_file_written": false
     }
   },
   "prefill_note": "The first successful prefill files used a different system prompt from the original cached activations. Those files are invalidated; rerun with the original 'You are a helpful assistant.' prompt before analysis.",
-  "evaluation": "Frozen readout and fresh fixed-policy scripts are prepared. Run only when the target dataset has COMPLETE.json and matching prefill NPZ."
+  "evaluation": "Frozen readout and fresh fixed-policy scripts are prepared. Initial integration attempts exposed and fixed plan-schema and prefill-prompt mismatches; no fresh evaluation results are valid yet. Rerun only after matching prefill NPZs are written."
 }
