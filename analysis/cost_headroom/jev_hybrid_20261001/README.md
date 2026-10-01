@@ -1,0 +1,5 @@
+# Jev hybrid replay protocol
+
+User requested Jev success plus our cost head. Reuse the frozen 100-per-dataset success pilot probabilities and original splits. No paid requests. Primary comparison: Jev success + our learned costs versus our success + the same learned costs. Secondary: learned versus median costs with Jev success fixed. Also retain our learned-cost effect and original median-cost success contrast. No prompt, calibration, hyperparameter or model changes. Report direct generation-spend savings at matched accuracy over pair-specific shared convex-hull frontier bands, 1,000 paired problem bootstrap draws, seed0. All routes and valid draws retained together per problem. Exploratory conditional analysis, not deployment-policy validation. No predictor overhead in generation spending.
+
+Run `/home/toolkit/.conda/envs/pipeline-rl/bin/python3 analysis/cost_headroom/jev_hybrid_replay.py`. Source success manifest and raw-response hash saved with results; derived success predictions versioned for reproducibility.
