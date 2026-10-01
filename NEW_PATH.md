@@ -1534,3 +1534,18 @@ captions into descriptive academic prose. Updated supplementary wording and
 figure panel titles, regenerated Markdown and figures, and recompiled PDFs.
 Methods, numeric results, comparisons, and uncertainty qualifications remain
 unchanged. Main paper remains four pages including references; supplement two.
+
+### 4.A.42 Dedicated CARROT-KNN-SBERT comparison (2026-10-01)
+User requested setup of the pending CARROT comparison. Reference inspected at
+somerstep/CARROT revision 3e6acff6aecf4cbcb8f31a118d04c799c2ea1655.
+`carrot_compare.py` reproduces the upstream local SBERT variant (MiniLM-L12-v2,
+cosine uniform kNN, separate multi-output success/raw-length regression,
+training-only five-fold R2 selection of k). No API calls. Original LCB/Omni/
+MMLU splits; all-valid-draw labels; cost-only, full-router, constant-cost and
+pricing-swap contrasts with 1,000 paired problem bootstrap samples. Direct
+cost-ratio effects over pair-specific common bands differ from existing
+median-normalized difference summaries; do not interchange table metrics.
+Protocol: CARROT_PROTOCOL.md. Launcher: launch_carrot_compare.sh. Isolated
+sentence-transformers dependency; CPU inference disables unused DeepSpeed
+integration to avoid Triton GPU initialization. LCB end-to-end five-bootstrap
+smoke completed; its intervals are not reportable experiment results.
