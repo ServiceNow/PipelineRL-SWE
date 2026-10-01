@@ -1683,3 +1683,24 @@ Omni70d412b8-9968-44f6-a2f6-675dfb7c972c(verifiedQUEUED),
 MMLUdf2ce134-988a-4bf8-ac13-1abfa4f9359d(verifiedQUEUING).
 All await scheduling; no completed fine-tuning/result claim yet. Launchmetadata
 versioned next to frozen protocol. No additional API calls authorized/needed.
+
+### 4.A.49 Fixed operating-point check (2026-10-01)
+Calibration selected V by mean validation utility of OUR success+cost router,
+then froze V and routed once per untouched original-test problem. Compare learned
+vs median costs holding OUR probabilities and V fixed; paired problem bootstrap
+2,000 reps. Selected V hit grid ceiling 100 cents ($1)/correct on all pools.
+Test: LCB cost savings+3.0%[0.4,6.0],accuracyΔ+0.01pp[-0.23,+0.23];
+Omni+0.8%[-0.4,3.1],accuracyΔ+0.33pp[0,+1.0]; MMLU exactly0 at fixed V.
+Historical test already explored, so not confirmatory. Fixed policy results saved
+under fixed_policy_20261001; report selected grid boundary explicitly. Fresh
+expansion evaluation supersedes as strongest evidence.
+
+### 4.A.50 Expansion feature extraction preparation (2026-10-01)
+Generation retry audit: MMLU-Pro32498/32500,Omni4994/5000. Explicitly resumed
+both previously authorized jobs; retries currently RUNNING and append-only.
+Answer-free raw-problem Qwen prefill inputs for all frozen task IDs prepared,
+hashes in expansion_prefills_20261001 manifests. Submit separate Instruct
+(MMLU-Pro) and Thinking (Omni) Qwen3-4B extraction jobs, matching original
+feature route and eight-layer last/mean representation. Frozen readouts to
+remain fitted on old train/calibration only. Fresh MMLU weighted/unweighted and
+Omni difficulty-stratified estimates planned.
