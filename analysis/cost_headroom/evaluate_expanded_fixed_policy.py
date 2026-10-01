@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 from carrot_compare import POOLS,read_predictions,curve_arrays,compare_pair
 from jev_pilot import load_pool
-from decompose import R
+from decompose import R, hull, cost_at
 OUT=Path('/mnt/llmd/results/exps/aristides/reason/expanded_eval_20261001')
 VREPORT=Path('analysis/cost_headroom/fixed_policy_20261001/results.json')
 
@@ -78,17 +78,33 @@ def main():
           'learned_mean_generation_cost_usd':float(cl_v.mean()/100),'median_mean_generation_cost_usd':float(cm_v.mean()/100),
           'cost_savings':float(1-cl_v.mean()/cm_v.mean()),'cost_savings_ci95':np.percentile(sb_cost,[2.5,97.5]).tolist()}
     front={}
-    # Supplementary outcome-swept matched-accuracy frontier, same metric as original.
+    # Two-arm frontier used by pairwise baseline contrasts; explicitly distinguish
+    # it from the paper's three-arm (learned/median/oracle) common-band metric.
     arms={'learned':(p,c),'median':(p,median)};curves={k:curve_arrays(pp,cc,q,paid,np.arange(n)) for k,(pp,cc) in arms.items()}
     pt,band=compare_pair(curves,'learned','median',np.arange(n));bs2=[bootrng.integers(0,n,n) for _ in range(1000)]
     fb=np.asarray([compare_pair(curves,'learned','median',b)[0] for b in bs2]);finite=np.isfinite(fb)
     front={'direct_savings':pt,'accuracy_band':band,'ci95':np.percentile(fb[finite],[2.5,97.5]).tolist() if finite.any() else None,'valid_bootstrap':int(finite.sum())}
+    curves['oracle']=curve_arrays(p,paid,q,paid,np.arange(n))
+    def historical_frontier(indices):
+        hs={arm:hull(zip(spending[:,indices].mean(1),accuracy[:,indices].mean(1)))
+            for arm,(accuracy,spending) in curves.items()}
+        lo=max(h[0][1] for h in hs.values());hi=min(h[-1][1] for h in hs.values())
+        if hi<=lo:return np.nan,[lo,hi]
+        targets=np.linspace(lo+.05*(hi-lo),hi-.05*(hi-lo),12)
+        learned=np.asarray([cost_at(hs['learned'],x) for x in targets])
+        baseline=np.asarray([cost_at(hs['median'],x) for x in targets])
+        return float(1-np.exp(np.mean(np.log(learned/baseline)))),[float(targets[0]),float(targets[-1])]
+    hp,hband=historical_frontier(np.arange(n))
+    hb=np.asarray([historical_frontier(b)[0] for b in bs2]);hf=np.isfinite(hb)
+    historical={'direct_savings':hp,'accuracy_band':hband,
+      'ci95':np.percentile(hb[hf],[2.5,97.5]).tolist() if hf.any() else None,
+      'valid_bootstrap':int(hf.sum()),'band_definition':'Common reachable learned/median/oracle band, trim 5% at either end, geometric mean cost ratio at 12 equally spaced accuracies; original paper metric; descriptive outcome-selected mixtures.'}
     report={'dataset':pool,'n_fresh':n,'problem_ids':[ids[i] for i in newidx],'selected_V_dollars_per_correct':V/100,
       'learned_cost_policy':{'accuracy':acc['learned'],'mean_generation_cost_usd':spend['learned']},
       'median_cost_policy':{'accuracy':acc['median'],'mean_generation_cost_usd':spend['median']},
       'learned_savings_vs_median':point,'cost_savings_ci95':np.percentile(bcost,[2.5,97.5]).tolist(),
       'accuracy_delta':float((ql-qm).mean()),'accuracy_delta_ci95':np.percentile(bacc,[2.5,97.5]).tolist(),
-      'frontier_supplementary':front,'stratum_weighted':weighted,
+      'frontier_supplementary':front,'original_metric_frontier_supplementary':historical,'stratum_weighted':weighted,
       'fixed_V_sensitivity_dollars_per_correct':sensitivity,
       'cost_prediction_file':str(cfile),
       'protocol':'Fresh expansion only. Heads fitted using original training/calibration data and V fixed from original calibration; expansion labels used only for evaluation. Routing at a calibration-selected fixed V, one route/problem; weighted/unweighted estimates, paired problem bootstrap. Frontier is secondary/descriptive and uses evaluation outcomes. No model/readout fitting on expansion labels.'}
