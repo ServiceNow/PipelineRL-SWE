@@ -1630,3 +1630,16 @@ pilot points exactly. 1,000 paired problem bootstrap, all valid draws,
 conditional/descriptive pair-specific frontier bands; no tuning/calibration.
 Code/protocol and results in jev_hybrid_20261001; raw success response hash
 and derived probability vectors saved. Keep current full router, no paper edit.
+
+### 4.A.47 Intern-Decision-4B success pilot (2026-10-01)
+User requested closest open Jev counterpart and authorized trying Intern.
+Same frozen300 Jev test questions, unchanged state and training-only priors.
+Pin HF revision0e5e6aa7d6d750e2b1504ba11a8136cb58aeb3cd, published inference
+and defaulttemperature1.99241824; no test calibration. One local GPU forward
+per problem scores5 routes. Primary our prefill costs fixed for Intern-vs-ours
+and Intern-vs-Jev success comparisons. Secondary median-cost comparisons and
+cost-head effect with Intern fixed. 1000 paired problem bootstrap, unchanged
+stored valid generation draws, descriptive conditional frontiers. Zero API
+calls; isolatedPython3.12 plus pinned upstream dependencies, no truncation,
+public anonymous download avoids expired ambient HF OAuth. Frozenmanifest,
+protocol and scripts in analysis/cost_headroom/intern_decision_20261001.
