@@ -104,7 +104,24 @@ The embedding baseline averages per-route MLP, random-forest, and nearest-neighb
 We regress log output length on the success heads' predicted logits and their squares, keeping success predictions fixed in routing. This control saves 34.1\% on LiveCodeBench and 21.0\% on Omni, with inconclusive differences from dedicated cost readouts (\cref{fig:cost}). On MMLU-Pro it saves 9.2\%, versus 30.7\% for the dedicated head: a paired advantage of 21.5 points [8.5, 30.3].
 
 \paragraph{Fresh fixed-policy evaluation.}
-We apply the original readouts and calibration-selected $V=1$ dollar per correct answer, without refitting, to 6,500 new MMLU-Pro problems and 1,000 new Omni-MATH problems. Against median-length costs, the learned-cost policy reduces mean generation spend by 13.0\% on MMLU-Pro (95\% paired problem-bootstrap CI [11.1, 14.9]) and 9.2\% on Omni-MATH (CI [4.9, 13.9]). The design-weighted MMLU-Pro accuracy difference is $-0.29$ percentage points (CI [$-0.58$, $-0.01$]); Omni-MATH is $-0.20$ points ([$-0.50$, 0.00]). The unweighted MMLU-Pro accuracy interval includes zero. This operating point was selected on calibration data and lies at the upper edge of the original $V$ grid. As a secondary check, outcome-swept frontiers on the fresh sample show negative savings for learned costs on MMLU-Pro ($-33.4$\%) and 14.2\% savings on Omni-MATH over their shared accuracy bands. These frontiers use evaluation outcomes to choose mixtures and cover a different, lower shared accuracy range; they are descriptive, not independent deployment-policy tests. The contrast cautions against treating the original frontier gains as uniform across operating points.
+We apply the original readouts and calibration-selected $V=1$ dollar per correct answer, without refitting, to 6,500 new MMLU-Pro problems and 1,000 new Omni-MATH problems. At this operating point, learned costs reduce spend by 9--13\%, with accuracy differences below 0.3 points (\cref{tab:fresh}). The selected $V$ lies at the upper edge of the original calibration grid. The outcome-swept frontiers are mixed: median costs do better on MMLU-Pro, while learned costs do better on Omni-MATH. These secondary frontiers use evaluation outcomes to choose mixtures over a different, lower shared accuracy range; they are descriptive and do not establish the value of a separately selected deployment policy.
+
+\begin{table*}[t]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{lrrrr}
+\toprule
+Fresh set ($n$) & \shortstack{Mean cost ($/problem)\\learned / median} & \shortstack{Fixed-$V$ savings, \%\\[95\% CI]} & \shortstack{Accuracy difference, pp\\[95\% CI]} & \shortstack{Frontier savings, \%\\[95\% CI]} \\
+\midrule
+MMLU-Pro, subject weighted (6,500) & $0.001142 / 0.001313$ & 13.0 [11.1, 14.9] & $-0.29$ [$-0.58$, $-0.01$] & -- \\
+MMLU-Pro, unweighted (6,500) & $0.001131 / 0.001303$ & 13.3 [11.3, 15.3] & $-0.26$ [$-0.54$, 0.02] & $-33.4$ [$-44.5$, $-23.6$] \\
+Omni-MATH, difficulty weighted (1,000) & $0.003310 / 0.003647$ & 9.2 [4.9, 13.9] & $-0.20$ [$-0.50$, 0.00] & 14.2 [6.8, 21.0] \\
+\bottomrule
+\end{tabular}
+\caption{\textbf{Evaluation on new problems.} Fixed-policy rows use the original readouts and calibration-selected $V=1$ dollar per correct answer; no expansion outcomes were used for fitting or selection. CIs use paired problem bootstraps (2,000 resamples for fixed $V$, 1,000 for frontiers). MMLU-Pro estimates are subject-weighted and unweighted; Omni-MATH is difficulty-weighted. The outcome-swept frontier is unweighted, spans a lower shared accuracy band, and uses evaluation outcomes to select mixtures; it is descriptive. Costs are mean generation dollars per problem, listed learned / median. The fixed $V$ is at the upper edge of its original search grid.}
+\label{tab:fresh}
+\end{table*}
 
 On MMLU-Pro, empirical outcome-based difficulty explains little of log length (mean $R^2\approx .19$). Adding subject labels to success-derived pricing raises savings to 22.3\%, accounting for roughly 60\% of the difference from the dedicated cost head. This suggests that subject variation partly explains the improvement. We do not measure whether differences in required reasoning account for the remaining variation.
 
