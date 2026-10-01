@@ -11,9 +11,11 @@ def main():
     source=R/'math_expand_20261001'/label;out=R/'expanded_eval_20261001'/label;out.mkdir(parents=True,exist_ok=True)
     status=source/'COMPLETE.json'
     if not status.exists():raise RuntimeError('Generation expansion has no COMPLETE.json')
-    plan=json.loads((source/'collection_plan.json').read_text());tasks=[json.loads(x) for x in (Path('analysis/cost_headroom/expansion_20261001')/f'{label}_tasks.jsonl').read_text().splitlines()]
+    collection=json.loads((source/'collection_plan.json').read_text())
+    plan=json.loads(Path('analysis/cost_headroom/expansion_20261001/plan.json').read_text())
+    tasks=[json.loads(x) for x in (Path('analysis/cost_headroom/expansion_20261001')/f'{label}_tasks.jsonl').read_text().splitlines()]
     n=len(tasks);old=np.load(R/oldname/'tensors.npz',allow_pickle=True);oldids=[str(x) for x in old['problem_ids']];slots=[str(x) for x in old['model_slots']]
-    if n!=plan['estimates'][label]['new_problems']:raise ValueError('Wrong expansion size')
+    if n!=collection['estimates'][label]['new_problems'] or n!=plan['estimates'][label]['new_problems']:raise ValueError('Wrong expansion size')
     rows={s:{} for s in slots}
     for j,s in enumerate(slots):
         f=source/f'{s}_d0.jsonl'
