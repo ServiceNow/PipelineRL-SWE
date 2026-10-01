@@ -15,125 +15,107 @@
 \maketitle
 
 \begin{abstract}
-Reasoning models generate long, query-dependent outputs, making model-average length an unreliable basis for pricing individual requests. We predict the costs of an entire reasoning-model pool from one frozen 4B encoder's prefill activations. Linear output-length heads reuse the representation used for success prediction; the target models need not expose their activations or run before selection. Holding success predictions fixed, this cross-model cost readout saves 35.6\% on LiveCodeBench, 21.9\% on Omni-MATH, and 30.7\% on MMLU-Pro relative to median-length pricing at matched accuracy. It yields larger savings than our embedding-based and prompt-feature estimators on these pools, although the differences on Omni-MATH are inconclusive. A dedicated cost head adds 21.5 percentage points over success-derived pricing on MMLU-Pro, where subject and required work carry cost information beyond correctness probability. Other coding pools have substantial oracle headroom but no significant learned gain. One shared prefill can therefore price heterogeneous reasoning routes effectively, with workload-dependent limits.
+Reasoning-model routers must estimate generation cost before choosing a model, yet output lengths vary substantially across queries. We predict costs across a reasoning-model pool from one frozen 4B encoder's prefill activations. Per-route linear cost readouts reuse the representation used for success prediction, without requiring target-model activations or generation before dispatch. Holding success predictions fixed, query-dependent pricing saves 35.6\% on LiveCodeBench, 21.9\% on Omni-MATH-500, and 30.7\% on MMLU-Pro relative to median-length pricing at matched accuracy. Adapted embedding and prompt-feature estimators capture less of this value, with inconclusive differences on Omni. On MMLU-Pro, dedicated cost readouts add 21.5 percentage points over pricing derived from predicted success. Other coding pools have oracle headroom but no significant learned gain. These results support shared-prefill cost prediction as a routing component whose value depends on the workload.
 \end{abstract}
 
 \section{Introduction}
-A router choosing among reasoning models must estimate both answer quality and generation cost. Token prices are known, but reasoning-trace lengths vary greatly across queries. A model that is cheap on average may be expensive on a particular problem. Predicting query--model costs before generation can change which model offers the best trade-off.
+Reasoning-model routing requires predicting both correctness and generation cost before choosing a model. Token rates are known, but reasoning-trace lengths depend on the query. A model that is cheap on average may be expensive on a particular problem. Query-dependent pricing can therefore change which route offers the best trade-off.
 
-Learned cost is already part of routing. MixLLM predicts output length from query embeddings~\cite{mixllm}; CARROT uses embedding-based nearest neighbors or a fine-tuned RoBERTa encoder to estimate cost and accuracy~\cite{carrot}. CARROT also compares against constant pricing and reports marginal improvements on its benchmarks. The architectural question we study is whether \emph{one frozen generative model's prefill can price an entire pool of reasoning models} and provide more useful routing signals than our implemented text-based estimators.
+Prefill routers estimate correctness from prompt activations. The prefill-router architecture of Varshney et al.~\cite{prefill} explicitly defers output-length prediction and prices outputs using median training length. We investigate whether the same kind of representation can also predict output lengths across a pool of reasoning models. One frozen 4B encoder processes the query; per-route linear readouts estimate success and cost before dispatch (\cref{fig:overview}). Cost prediction adds readouts to an existing prefill router without another encoder pass.
 
-We attach per-route output-length heads to the same prefill representation used for success prediction. One 4B encoder processes the query; simple ridge readouts estimate the costs of other models and effort settings. This requires neither target-model activations nor a target generation before choosing the route. For an existing prefill router, cost prediction adds readouts without another encoder pass.
-
-Our contribution combines this cross-model cost readout with a controlled evaluation: success predictions and the routing objective stay fixed while pricing changes. Three reasoning workloads yield 22--36\% savings against median-length pricing. Dedicated cost heads are especially useful on MMLU-Pro, where subject and item-level work provide information beyond success probability. Oracle headroom and negative coding results identify limits: available savings need not be predictable from the prompt.
+We evaluate this cost signal by holding success predictions and the routing objective fixed while changing pricing. Three workloads yield 22--36\% savings against median-length pricing. A dedicated readout is especially useful on MMLU-Pro, where predicted success leaves useful cost information unexplained. Oracle headroom and negative coding results establish the method's limits.
 
 \paragraph{Related work.}
-SharedTrunkNet uses encoder--target decoupling to predict other models' correctness from prefill activations, but prices outputs by median training length~\cite{prefill}. We extend this architecture with cross-model cost readouts. Activation-based length prediction also exists for inference scheduling~\cite{alps,egtp}; our focus is one shared encoder pricing multiple reasoning routes before dispatch. CARROT's shared representation and separate cost/performance outputs are close architecturally~\cite{carrot}; we use frozen generative activations with linear readouts. ZeroRouter derives length from item-response difficulty bins~\cite{zerorouter}; we test whether pricing needs information beyond the success signal.
+Learned cost is established in routing: MixLLM predicts output length from query embeddings~\cite{mixllm}, and CARROT estimates cost and performance using embedding-based nearest neighbors or a shared fine-tuned RoBERTa encoder~\cite{carrot}. Activation-based length prediction also supports inference scheduling~\cite{alps,egtp}. Our focus is frozen generative prefill features for pricing multiple reasoning routes through simple readouts. ZeroRouter derives length from item-response difficulty bins~\cite{zerorouter}; we examine whether pricing benefits from information beyond predicted success.
 
-\begin{figure}[t]
+\begin{figure*}[t]
 \centering
-\includegraphics[width=\linewidth]{figures/headroom_and_capture.pdf}
-\caption{\textbf{Available savings need not be captured.} Oracle and predicted cost replace median output length with the success head held fixed. Whiskers show 95\% paired-bootstrap intervals. Reasoning pools have 20--65\% oracle headroom, but learned gains vary substantially; the chat contrast has less headroom. Each pool uses its own shared accuracy band.}
-\label{fig:headroom}
-\end{figure}
+\includegraphics[width=\textwidth]{figures/shared_prefill_overview.pdf}
+\caption{\textbf{One prefill. Five prices. One generation.} (a) A frozen encoder supplies shared features to per-route success and cost readouts before one route is selected. Each route supplies training labels, but its activations and generation are unnecessary before dispatch. (b) Holding success predictions fixed, predicted costs reduce generation spend relative to median-length pricing at matched accuracy. Whiskers show paired 95\% bootstrap intervals; common encoder overhead is excluded.}
+\label{fig:overview}
+\end{figure*}
 
 \section{Cross-Model Cost from One Prefill}
-For query $x$ and route $m$, let $p_m(x)$ be the probability of a correct answer and $c_m(x)$ its expected generation cost. A route denotes a model and a fixed reasoning-effort setting. The router selects
+For query $x$ and route $m$, let $p_m(x)$ be the probability of correctness and $c_m(x)$ the expected generation cost. A route is a model with a fixed reasoning-effort setting. We select one route before generation:
 \begin{equation}
 m^*(x;V)=\arg\max_m\{V\hat p_m(x)-\hat c_m(x)\},
 \label{eq:route}
 \end{equation}
-where $V$ controls the value assigned to a correct answer. We commit to one route before generation, with no correctness verifier or fallback call.
+where $V$ sets the value of a correct answer. There is no verifier or fallback call.
 
 \paragraph{Shared features, separate readouts.}
-A frozen Qwen3-4B encoder processes the prompt once. We concatenate mean-pooled and last-token activations from eight stored layers, then standardize features using training statistics. The Instruct-2507 encoder is used on LiveCodeBench and MMLU-Pro; the Thinking-2507 variant is fixed for Omni-MATH. Each route has a regularized logistic success head, fitted to valid draw outcomes and Platt calibrated on held-out data. A separate ridge head predicts the log of mean output tokens from the same representation. Its regularization is selected using training-only cross-validation. Each cost head is trained on its target route's output lengths; no zero-shot transfer to unseen models is assumed. The heads share features without forcing success and length through a common scalar latent.
+We concatenate mean-pooled and last-token activations from eight stored layers of a frozen Qwen3-4B encoder and standardize using training statistics. The Instruct-2507 encoder is used on LiveCodeBench and MMLU-Pro; Thinking-2507 is fixed for Omni. Both readouts are regularized linear models. Logistic success heads use a binomial likelihood over valid draws and held-out Platt calibration. Ridge cost heads fit squared error in log mean output length, with training-only cross-validation for regularization. The different losses match correctness outcomes and continuous lengths. Success-head penalty selection and Platt calibration use the first draw. Each cost head needs output-length labels from its target route; zero-shot transfer to unseen models is not assumed.
 
 \paragraph{From length to price.}
-Let $\hat\ell_m(x)$ denote predicted output tokens after exponentiating the log-length prediction, applying a training-residual smearing correction, and matching the route's training mean. For input tokens $n_m^{\rm in}(x)$ and input/output rates $r_m^{\rm in},r_m^{\rm out}$ in dollars per million tokens,
+We exponentiate predicted log length, apply training-residual smearing, and match the route's training mean. For predicted output tokens $\hat\ell_m(x)$, input tokens $n_m^{\rm in}(x)$, and input/output rates in dollars per million,
 \begin{equation}
 \hat c_m(x)=\frac{r_m^{\rm in}n_m^{\rm in}(x)+r_m^{\rm out}\hat\ell_m(x)}{10^6}.
 \label{eq:cost}
 \end{equation}
-Input length is observed before generation. The reference replaces $\hat\ell_m(x)$ with the median valid training output length for route $m$. The empirical oracle uses the problem--route's mean observed output length. Only the oracle sees evaluation output lengths when deciding; all arms are charged observed tokens after their routing decisions are fixed.
+The reference substitutes median valid training output length. The empirical oracle substitutes mean observed problem--route output length. Only the oracle uses evaluation lengths when selecting a route; every arm is charged observed tokens after its decisions are fixed.
 
 \section{Experimental Protocol}
-Our main pools cover coding (LiveCodeBench~\cite{lcb}, 892 problems), olympiad math (an Omni-MATH~\cite{omni} subset, 500), and knowledge/reasoning (MMLU-Pro~\cite{mmlupro}, 1,000). Train/calibration/test counts are 441/110/341, 275/75/150, and 550/150/300, respectively. Their five routes are gpt-oss-20b at low and medium effort, deepseek-v4-flash, and gpt-oss-120b at medium and high effort. We retain repeated valid draws: approximately 16/12/8/6/3 per route on LiveCodeBench and 4/3/3/2/2 on the other main pools. Correctness and cost for each problem--route are estimated from these draws. We also analyze CodeContests~\cite{codecontests}, TACO~\cite{taco}, BigCodeBench~\cite{bigcodebench}, and the 11-model RouterBench~\cite{routerbench} chat pool. Contrast pools use their recorded configurations, rather than necessarily the main five-route pool.
+The main pools contain 892 LiveCodeBench problems~\cite{lcb}, all 500 Omni-MATH-500 problems from Omni-MATH~\cite{omni}, and a subject-stratified 1,000-question MMLU-Pro subset~\cite{mmlupro}. Train/calibration/test counts are 441/110/341, 275/75/150, and 550/150/300. The five routes are gpt-oss-20b at low/medium effort, deepseek-v4-flash, and gpt-oss-120b at medium/high effort. Approximately 16/12/8/6/3 valid draws per route are retained on LiveCodeBench and 4/3/3/2/2 on the other pools. Correctness and cost are estimated from all valid draws; generations are not treated as independent test problems.
 
 \paragraph{Pricing and controls.}
-All main comparisons use recorded market rates: input/output dollars per million tokens are 0.018/0.09 for gpt-oss-20b, 0.04704/0.09408 for deepseek-v4-flash, and 0.15/0.60 for gpt-oss-120b. Prices are held fixed across arms. The prefill is common to the success-only and success-plus-cost router; reported savings isolate target generation spend. They are incremental savings for an existing prefill router, rather than a claim that deploying the encoder is free.
+We hold the recorded market rates fixed across arms: input/output dollars per million are 0.018/0.09 for gpt-oss-20b, 0.04704/0.09408 for deepseek-v4-flash, and 0.15/0.60 for gpt-oss-120b. Reported savings isolate target generation spend. The encoder pass is common to success-only and success-plus-cost routing, so these are incremental savings for an existing prefill router. Training and calibration exclude test problems.
 
 \paragraph{Matched-accuracy evaluation.}
-We sweep $V$, construct test accuracy--cost frontiers, and allow randomized mixtures between convex-hull points. For 12 equally spaced targets in the interior of the accuracy range shared by the compared arms, savings are
+We sweep $V$, construct test accuracy--cost frontiers, and allow randomized mixtures between convex-hull points. Let $C_{\rm arm}(a)$ denote cost at accuracy $a$. Savings against median pricing are
 \begin{equation}
 G=1-\exp\!\left[\frac{1}{12}\sum_{j=1}^{12}
-\log\frac{C_{\rm arm}(a_j)}{C_{\rm median}(a_j)}\right].
+\log\frac{C_{\rm arm}(a_j)}{C_{\rm median}(a_j)}\right],
 \label{eq:gain}
 \end{equation}
-Oracle $G$ is headroom; learned $G$ is captured savings. We use 500 paired bootstrap resamples of test problems, keeping all routes and draws of a problem together. These are descriptive test-frontier comparisons: their operating points are not prospectively selected. Separate calibration-selected checks evaluate deployment, with achieved test accuracy reported independently.
-
-\begin{figure*}[t]
-\centering
-\includegraphics[width=\textwidth]{figures/cost_signal_ablation.pdf}
-\caption{\textbf{Prefill activations supply useful cross-model cost signals.} (a) Added savings over cost derived from success; whiskers are paired 95\% intervals. (b) Our shared-prefill heads versus adapted embedding and prompt-feature estimators, with success predictions held fixed. Bars show point estimates; paired differences are reported in the text. Panels show percentage-point differences and absolute percentage savings, respectively.}
-\label{fig:cost}
-\end{figure*}
-
-\section{Results: Cross-Model Pricing and Its Limits}
-\paragraph{One shared prefill captures substantial savings.}
-Changing only pricing reduces target generation spend by 22--36\% on the three main pools (\cref{tab:main}), with all three paired intervals excluding zero. The learned heads capture approximately 47--78\% of their oracle headroom (46.0 / 44.2 / 65.1\%; \cref{fig:headroom}). Savings arise without replacing the success architecture or changing the routing objective.
+using 12 targets over the interior 5--95\% of the accuracy band shared by the estimator, median reference, and empirical oracle. Each estimator's band can differ; paired differences below compare these savings summaries. Oracle $G$ measures available headroom. We use 500 paired problem bootstrap resamples, keeping all routes and draws of a problem together. Intervals condition on fitted heads. These descriptive frontiers do not measure a deployment operating point chosen before evaluation. The separate end-to-end ZeroRouter comparison uses 1,000 resamples and its own comparison bands.
 
 \begin{table*}[t]
 \centering
 \footnotesize
-\setlength{\tabcolsep}{4pt}
+\setlength{\tabcolsep}{5pt}
 \begin{tabular}{lrrr}
 \toprule
-Baseline (its own gain: LCB / Omni / MMLU-Pro) & LCB & Omni & MMLU-Pro \\
+Cost estimator & LiveCodeBench & Omni-MATH-500 & MMLU-Pro \\
 \midrule
-Ours (gain vs.\ median rule) & 35.6 [27.1, 41.9] & 21.9 [8.9, 33.5] & 30.7 [16.3, 43.2] \\
-Mean per-model constant (1.3 / $-$1.4 / 1.2) & $+$34.3$^\dagger$ & $+$23.3$^\dagger$ & $+$29.5$^\dagger$ \\
-Single best model ($-$3.7 / $-$20.1 / 5.4) & $+$39.3$^\dagger$ & $+$42.0$^\dagger$ & $+$25.3$^\dagger$ \\
-MixLLM-style embedding ensemble (14.1 / 12.5 / 4.0) & $+$21.5$^\dagger$ & $+$9.4 [$-$4.4, 24.2] & $+$26.7 [12.4, 40.2] \\
-Prompt-feature GBM (12.3 / 6.6 / 9.8) & $+$23.3$^\dagger$ & $+$15.2 [$-$1.4, 34.1] & $+$20.9 [3.8, 33.3] \\
-Cost from the success head (34.1 / 21.0 / 9.2) & $+$1.5 [$-$1.3, 4.3] & $+$0.8 [$-$7.2, 9.0] & $+$21.5 [8.5, 30.3] \\
-ZeroRouter-style bins on our difficulty, K\,=\,5 (32.2 / 21.7 / 10.9) & $+$3.7 [0.1, 7.4] & $-$0.1 [$-$12.1, 10.7] & $+$19.6 [7.8, 32.7] \\
-ZeroRouter-style bins on our difficulty, K\,=\,10 (34.0 / 17.9 / 13.3) & $+$1.8 [$-$1.6, 5.1] & $+$3.5 [$-$8.2, 14.9] & $+$19.1 [7.6, 31.6] \\
-ZeroRouter faithful, tuned on calibration (18.5 / 20.0 / 21.6) & $+$17.6 [9.8, 24.9] & $+$3.0 [$-$10.7, 16.6] & $+$9.3 [$-$2.6, 21.5] \\
-ZeroRouter faithful, own DistilBERT encoder (12.7 / 13.0 / 12.1) & $+$23.2$^\dagger$ & $+$9.8$^\dagger$ & $+$18.8$^\dagger$ \\
+Embedding ensemble (MixLLM-style) & 14.1 [5.3, 21.0] & 12.5 [$-$2.4, 25.6] & 4.0 [$-$4.7, 14.9] \\
+Prompt-feature GBM & 12.3 [0.7, 21.4] & 6.6 [$-$12.2, 21.2] & 9.8 [$-$4.5, 25.9] \\
+Cost from success predictions & 34.1 [24.7, 40.9] & 21.0 [6.6, 33.7] & 9.2 [$-$2.2, 24.6] \\
+Shared-prefill cost readouts (ours) & 35.6 [27.1, 41.9] & 21.9 [8.9, 33.5] & 30.7 [16.3, 43.2] \\
 \bottomrule
 \end{tabular}
-\caption{Canonical baselines at matched accuracy (test): ours minus the baseline's cost saved vs.\ the median-length rule (baseline's own gain in parentheses); brackets are paired 95\% intervals; $\dagger$ = unpaired differences of reported gains. ``Bins on our difficulty'' is ZeroRouter-style bin pricing on our shared-difficulty signal; ``faithful'' reproduces ZeroRouter's IRT stage with configuration chosen on calibration (ZR rows use that comparison's band: ours 36.0 / 22.7 / 30.9).}
+\caption{\textbf{Change pricing, hold success fixed.} Cost savings $G$ (\%) against median-length pricing; brackets give 95\% paired-problem bootstrap intervals for each estimator. Bands are defined per estimator as described in the protocol; these are not percentage savings directly against another learned estimator. Embedding and prompt-feature baselines are adaptations. Significance of estimator differences requires the paired contrasts reported in the text.}
 \label{tab:main}
 \end{table*}
 
-\paragraph{Comparison with text-based estimators.}
-Our embedding baseline averages per-route MLP, random-forest, and nearest-neighbor regressors on jina-code embeddings, adapting MixLLM's predictor family. A gradient-boosted baseline uses prompt length, numbers, examples, constraints, and keyword counts. Both predict log output length with the same training split and price conversion as our heads; they are adapted estimators, not reproductions of complete published routers. \Cref{tab:main} gives savings and paired differences: on MMLU-Pro, paired advantages are 26.7 points [12.4, 40.2] and 20.9 [3.8, 33.3]; on Omni they are inconclusive (9.4 [$-4.4$, 24.2] and 15.2 [$-1.4$, 34.1]). The representation improves routing on important workloads without a uniform superiority claim.
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/cost_signal_ablation.pdf}
+\caption{\textbf{Cost information beyond success.} (a) Added savings from dedicated cost readouts over cost inferred from success predictions, with paired 95\% intervals. (b) Estimator savings with success predictions held fixed. Panels report percentage-point differences and absolute percentage savings, respectively. Bars in (b) are point estimates; \cref{tab:main} gives intervals.}
+\label{fig:cost}
+\end{figure*}
 
-\paragraph{Large variation is an opportunity, not a guarantee.}
-\Cref{fig:headroom} exposes substantial headroom on TACO (36.1\%), CodeContests (21.8\%), and BigCodeBench (20.2\%), but learned gains of 2.1\%, 2.0\%, and $-3.3\%$ have intervals spanning zero; RouterBench's headroom is only 10.5\%. Reasoning workloads can benefit considerably more from query-dependent pricing than this chat contrast, yet reasoning alone does not imply a learnable improvement.
+\section{Results}
+\paragraph{One prefill provides useful cross-model prices.}
+Changing only pricing saves 35.6\% on LiveCodeBench, 21.9\% on Omni, and 30.7\% on MMLU-Pro; all three intervals exclude zero (\cref{tab:main}). These gains capture approximately 78\%, 49\%, and 47\% of empirical oracle headroom (46.0\%, 44.2\%, and 65.1\%).
 
-The opportunity depends on variation \emph{relative to model price gaps}. If one model is much cheaper on nearly every query, refining output length rarely changes the selected route. Large within-model variation makes cost prediction potentially consequential; its relevance still depends on the pool's prices and success trade-offs.
+The embedding baseline averages per-route MLP, random-forest, and nearest-neighbor regressors on jina-code embeddings, adapting MixLLM's predictor family. The GBM uses prompt length, numbers, examples, constraints, and keyword counts. Both fit log output length using the same training split and price conversion. On MMLU-Pro, paired advantages over these estimators are 26.7 points [12.4, 40.2] and 20.9 [3.8, 33.3]. On Omni, the differences are inconclusive: 9.4 [$-4.4$, 24.2] and 15.2 [$-1.4$, 34.1]. These adaptations do not isolate representation choice from encoder size and regression design.
 
-\paragraph{Difficulty explains some, but not all, useful cost variation.}
-On LiveCodeBench and Omni-MATH, hard problems tend to require long outputs across routes. Between-problem differences account for most log-length variance, and within a problem, unsuccessful draws are not systematically longer than successful ones. Prompt features can therefore predict a shared length level before generation.
+\paragraph{Does cost need information beyond success?}
+We regress log output length on the success heads' predicted logits and their squares, keeping success predictions fixed in routing. This control saves 34.1\% on LiveCodeBench and 21.0\% on Omni, with inconclusive differences from dedicated cost readouts (\cref{fig:cost}). On MMLU-Pro it saves only 9.2\%, versus 30.7\% for the dedicated head: a paired advantage of 21.5 points [8.5, 30.3].
 
-To ask whether cost needs its own readout, we price each route using a regression on the success heads' predicted logits and their squares. This cost-from-success control retains the same success predictions in routing. Its savings are 34.1\% on LiveCodeBench and 21.0\% on Omni, not significantly different from the dedicated cost head. On MMLU-Pro it captures only 9.2\%, versus 30.7\% with a dedicated readout: a paired difference of 21.5 percentage points [8.5, 30.3] (\cref{fig:cost}). Here even empirical outcome-based difficulty explains little of log length (mean $R^2\approx .19$). Subject-aware pricing raises savings to 22.3\%, suggesting that domain and required work contain cost information beyond probability of success. We interpret required work as a plausible mechanism, not a directly measured causal variable.
+On MMLU-Pro, empirical outcome-based difficulty explains little of log length (mean $R^2\approx .19$). Adding subject to success-derived pricing raises savings to 22.3\%, recovering roughly 60\% of its gap to the full cost probe. Domain variation supplies useful cost information; required work is a plausible interpretation rather than a measured causal variable.
 
+\paragraph{Compatibility with another success architecture.}
+Our ZeroRouter reimplementation uses its item-response model and difficulty-bin pricing~\cite{zerorouter}, with MAP instead of SVI and frozen 4B features for latent prediction. Dimension, seed, and bin count are selected on calibration. Our end-to-end advantage is 17.5 points [9.8, 24.9] on LiveCodeBench, with inconclusive differences on MMLU-Pro ($+9.3$ [$-2.6$, 21.5]) and Omni ($+2.8$ [$-10.7$, 16.6]). Holding its success predictions fixed, substituting our cost heads raises savings from 18.5 to 35.5\%, 20.0 to 22.0\%, and 21.6 to 32.4\%, respectively. These descriptive swaps show that our pricing composes with a second success architecture; this is a deployment-pool reimplementation rather than its original population-scale experiment.
 
-
-\paragraph{Complementary to another success architecture.}
-We reproduce ZeroRouter's item-response success model and difficulty-bin pricing~\cite{zerorouter} on our deployment pools, using MAP rather than SVI and frozen 4B features for latent prediction, with dimension, seed, and bin count selected on calibration. End to end, it trails our router by 17.6 points [9.8, 24.9] on LiveCodeBench, with an inconclusive $+9.3$ [$-2.6$, 21.5] on MMLU-Pro and a tie on Omni (\cref{tab:main}). Component swaps locate the difference in pricing rather than success estimation: holding ZeroRouter's success model fixed, replacing its pricing with our cost heads raises savings from 18.5 to 35.5\% on LiveCodeBench, 20.0 to 22.0\% on Omni, and 21.6 to 32.4\% on MMLU-Pro. Our pricing composes with a second success architecture; the swaps are descriptive point estimates.
-
-\paragraph{Prospective evidence.}
-A pre-registered screen used one gpt-oss-20b-low draw and five-fold cross-validated log-length $R^2$ to predict at least 10\% savings with an interval excluding zero when $R^2\geq .50$. Omni and MMLU-Pro scores of .67 and .65 correctly predicted gains. Both completed calls predicted gains; negative calls remain untested.
+\paragraph{Headroom does not ensure a learned improvement.}
+CodeContests~\cite{codecontests}, TACO~\cite{taco}, and BigCodeBench~\cite{bigcodebench} have oracle headroom of 21.8\%, 36.1\%, and 20.2\%, yet learned gains of 2.0\%, 2.1\%, and $-3.3\%$ have intervals spanning zero. RouterBench's chat pool~\cite{routerbench} has only 10.5\% headroom. These contrast pools differ in models, prices, and accuracy ladders. They demonstrate workload-dependent limits, not a controlled causal effect of reasoning. Additional controls and the headroom plot appear in the supplement.
 
 \section{Discussion and Limitations}
-The method separates the model providing the representation from the models being priced. Cost labels remain necessary per route, but query encoding is shared. MMLU-Pro suggests a particular benefit on heterogeneous workloads: adding subject to success-derived pricing recovers roughly 60\% of its gap to the full cost probe. This supports a contribution from domain variation, not a causal explanation of its large headroom. Item-level cost information remains after subject and difficulty are accounted for.
-
-Our main pools share five configurations from two model families. The text-based comparisons use adapted estimators; we do not evaluate CARROT's exact KNN or fine-tuned RoBERTa implementation. Encoder size, task adaptation, and regression design differ, so these comparisons do not isolate activations alone. Contrast pools differ in candidate models, accuracy ladders, and prices, so their differences are descriptive. Evaluations replay stored draws rather than a live deployed router; empirical oracle costs have sampling error. Bootstrap intervals condition on fitted heads and exclude training and calibration selection uncertainty. Omni has only 150 test problems. Generation savings exclude the common encoder overhead, and deployment-selected operating points can achieve different test accuracies. The ZeroRouter comparison studies a deployment-sized reimplementation, not its original population-scale setting. Finally, the two completed prospective tests cover only predicted gains. Broader model families and prospective negative cases would strengthen generality.
+One encoder can supply prices for several target models, but per-route cost labels remain necessary. Our pools cover five configurations from two model families. The adapted estimators do not reproduce complete MixLLM or CARROT routers, and CARROT's exact estimators are not evaluated. Bootstrap intervals omit training and calibration-selection uncertainty; empirical oracle lengths also have sampling error. Replay evaluates stored generations, and matched-accuracy frontiers allow mixtures chosen using evaluation outcomes. Encoder overhead is excluded from incremental generation savings. Larger held-out samples, broader model families, and calibration-selected operating points would strengthen the evidence.
 
 \section{Conclusion}
-One frozen prefill can price a pool of reasoning models: per-route linear cost heads save 22--36\% on three workloads while reusing the success encoder. Our implemented text-based estimators capture less of this value. Dedicated pricing is especially useful when success probability does not explain required work, but substantial oracle headroom can remain uncaptured. Cross-model prefill cost prediction is therefore a practical routing component with explicit workload-dependent limits.
+One frozen prefill can supply success and cost predictions for a reasoning-model pool. Linear cost readouts save 22--36\% on three workloads while reusing the success encoder. Dedicated cost information is particularly useful on heterogeneous MMLU-Pro, where success-derived pricing captures less of the available value. Substantial oracle headroom can remain uncaptured on other workloads. Shared-prefill cost prediction offers a practical addition to reasoning-model routing with explicit empirical limits.
 
 \balance
 {\small

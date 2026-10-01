@@ -112,7 +112,7 @@ def cost_ablation():
              ("MMLU-Pro", "baselines_lit.json", "mmlupro_tensors", "cost_preds_probe_instruct.jsonl")]
     series = [("cost_preds_mixllm.jsonl", ORANGE, "Embedding ensemble"),
               ("cost_preds_gbm.jsonl", GREY, "Prompt-feature GBM"),
-              (None, BLUE, "Shared prefill + ridge")]
+              (None, BLUE, "Prefill cost readouts")]
     for j, (cost, color, label) in enumerate(series):
         vals = []
         for pool_label, filename, pool, ours_cost in specs:

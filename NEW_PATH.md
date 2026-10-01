@@ -1509,3 +1509,19 @@ on 2026-10-01, snapshot 746a80a; MMLU job 73fe00f5-4310-411b-b509-775f0b60bd8b,
 Omni job d1cd0673-3817-4a89-9544-3094edeb607f. Initial generation responses
 confirmed, no initial API errors; collection incomplete. Exact status and
 output root in expansion_20261001/launch_status.json.
+
+### 4.A.40 Paper revision: shared-prefill contribution and four-page layout (2026-10-01)
+User approved the editorial recommendations and requested the text update.
+`paper_nowai/main.tex`, synchronized Markdown and compiled PDF now foreground
+one frozen prefill supplying route-specific success and cost readouts. New
+Figure 1 combines architecture with controlled pricing savings; both branches
+have task labels (Success readouts / Cost readouts). Methods explains logistic
+binomial likelihood versus ridge squared error in log mean length. Main table
+has four cost estimators with their own gains/CIs instead of mixed difference
+rows. ZeroRouter is a reimplementation; Omni is inconclusive, not equivalent.
+ZeroRouter point differences are plug-in effects (+17.5/+2.8/+9.3), rather than
+bootstrap means. Original fixed-split results remain primary; new collection
+outcomes are not incorporated. Headroom, additional controls, prospective
+screening and exploratory cross-fitting move to `supplement.tex/pdf`, with
+explicit conditional-CI caveats. Main PDF is four pages including references;
+supplement two pages. The MLP comparison remains outside this paper.

@@ -154,7 +154,7 @@
           0.21359775527655975
         ]
       },
-      "Shared prefill + ridge": {
+      "Prefill cost readouts": {
         "source": "head_to_head.json",
         "cost_file": "cost_preds_probe.jsonl",
         "gain": 0.35622276686086485,
@@ -183,7 +183,7 @@
           0.2122237606289733
         ]
       },
-      "Shared prefill + ridge": {
+      "Prefill cost readouts": {
         "source": "baselines_lit.json",
         "cost_file": "cost_preds_probe_thinking.jsonl",
         "gain": 0.21860350668317774,
@@ -212,7 +212,7 @@
           0.2591571784601727
         ]
       },
-      "Shared prefill + ridge": {
+      "Prefill cost readouts": {
         "source": "baselines_lit.json",
         "cost_file": "cost_preds_probe_instruct.jsonl",
         "gain": 0.3074530359973987,

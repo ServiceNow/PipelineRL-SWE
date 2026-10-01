@@ -7,13 +7,15 @@ A four-page academic manuscript in the uploaded NOWAI template, including refere
 - [Compiled four-page paper](main.pdf)
 - [Filled Markdown draft](PAPER_DRAFT.md)
 - [LaTeX source](main.tex)
+- [Supplementary material](supplement.pdf): [source](supplement.tex)
 - [Original project outline](PAPER_OUTLINE.md)
 
-The workshop draft centers on one frozen prefill predicting costs across a pool of reasoning models. It compares our cost heads with adapted embedding and prompt-feature estimators, then uses headroom and success-derived pricing to explain where the approach helps. It omits the MLP comparison, onboarding, cascades, and pending experiments. The original outline is preserved separately.
+The workshop draft centers on one frozen prefill predicting costs across a pool of reasoning models. It compares our cost heads with adapted embedding and prompt-feature estimators, then uses headroom and success-derived pricing to explain where the approach helps. The main paper omits the MLP comparison, onboarding, cascades, and pending collection results. A separate two-page supplement records headroom, additional controls, screening, and exploratory cross-fitting with its uncertainty caveats. The original outline is preserved separately.
 
 ## Figures
 
-- [Available versus captured savings](figures/headroom_and_capture.png): [vector PDF](figures/headroom_and_capture.pdf)
+- [Figure 1: shared-prefill overview and controlled savings](figures/shared_prefill_overview.png): [vector PDF](figures/shared_prefill_overview.pdf)
+- [Supplement: available versus captured savings](figures/headroom_and_capture.png): [vector PDF](figures/headroom_and_capture.pdf)
 - [Cost signal and estimator comparisons](figures/cost_signal_ablation.png): [vector PDF](figures/cost_signal_ablation.pdf)
 - [Computed values and provenance](figures/data_manifest.json)
 
@@ -21,6 +23,8 @@ Regenerate figures with Python, NumPy, and Matplotlib:
 
 ```bash
 python make_plots.py
+python make_overview.py
+python make_markdown.py
 ```
 
 The `data/` directory contains the selected rows from the project's saved `analysis/cost_headroom/` analyses, including bootstrap draws used for the paired cost-from-success differences. These snapshots reproduce the plotted summaries; they are not the raw benchmark generations or a complete experiment rerun. The script also supports using the repository analyses when no bundled data directory exists.
@@ -31,6 +35,7 @@ Upload the source ZIP to Overleaf, or compile locally:
 
 ```bash
 latexmk -pdf main.tex
+latexmk -pdf supplement.tex
 ```
 
 Alternatively, use `tectonic main.tex`. The PDF was compiled with Tectonic 0.17.0 and visually checked at four pages. Required template files and figure PDFs are included. `PaperForReview.tex` is a compatibility entry point that includes `main.tex`.
@@ -46,3 +51,12 @@ Alternatively, use `tectonic main.tex`. The PDF was compiled with Tectonic 0.17.
 
 - The estimator baselines are adaptations, not complete MixLLM or CARROT reproductions. Omni estimator differences are inconclusive; no uniform superiority claim is made.
 - Activation-based length prediction is credited to ALPS and EGTP; the contribution is shared-prefill cross-model pricing and its controlled routing evaluation.
+
+## Current revision
+
+The main PDF compiles to four pages; the supplement compiles to two. Figure 1
+uses parallel Success readouts / Cost readouts labels. The main table reports
+each cost estimator's savings and interval, with paired contrasts in the text.
+ZeroRouter is labeled a reimplementation, Omni differences are inconclusive,
+and the end-to-end difference estimates use plug-in effects rather than
+bootstrap means. No running expansion result has entered this draft.
