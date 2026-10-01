@@ -1,7 +1,7 @@
 {
-  "job_id": "8d1272ac-7aec-4e38-a07a-a7ece98e85b4",
-  "snapshot_revision": "1c5b8d58503d1fe4eb5cb6428f954750b9db8cc7",
-  "state_at_last_check": "QUEUED",
+  "job_id": "9ddbdc06-0589-4948-9216-ab17e1bb3289",
+  "snapshot_revision": "355101e955b5a2d8d88e2363445cabdcf19cd61d",
+  "state_at_last_check": "QUEUING",
   "model": "internlm/Intern-Decision-4B",
   "model_revision": "0e5e6aa7d6d750e2b1504ba11a8136cb58aeb3cd",
   "output_root": "/mnt/llmd/results/exps/aristides/reason/intern_decision_20261001",
@@ -10,5 +10,10 @@
   "gpu": 1,
   "gpu_mem_gb": 32,
   "api_calls": 0,
-  "pending": "GPU scheduling, runtime/model setup, predictions and paired replay"
+  "pending": "GPU scheduling, runtime/model setup, predictions and paired replay",
+  "previous_job": {
+    "job_id": "8d1272ac-7aec-4e38-a07a-a7ece98e85b4",
+    "state": "FAILED",
+    "reason": "Missing sklearn dependency before inference"
+  }
 }
