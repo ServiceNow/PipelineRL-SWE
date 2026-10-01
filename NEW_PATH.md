@@ -1648,3 +1648,7 @@ job8d1272ac-7aec-4e38-a07a-a7ece98e85b4; verifiedQUEUED at submission.
 One32GB GPU,8CPU,48GB RAM. Persistent outputroot recorded in launch.json.
 Published pinned dependency releases checked available; actual inference
 awaits scheduling. No success/result claim yet.
+4.A.47 startup failure: job8d1272ac completed dependency setup but failed before
+model download/inference because shared carrot_compare imports scikit-learn.
+Added scikit-learn to isolated runtime dependencies; no predictions collected.
+Relaunch with corrected snapshot, same frozen manifest and model protocol.
