@@ -1719,3 +1719,25 @@ hit the grid ceiling, also report fixed-V sensitivity at $0.0001/$0.001/$0.01
 per correct. Outcome-swept frontier remains secondary/descriptive. CPU launcher
 is guarded on collection COMPLETE and prefill NPZ; launch when both prerequisites
 finish.
+
+### 4.A.52 Fresh expanded evaluation complete (2026-10-01)
+Both collections, corrected-prompt prefills, and frozen-readout evaluations have
+completed. New evaluation data: 6,500 MMLU-Pro problems and 1,000 Omni-MATH
+problems; all original train/calibration readouts and calibration-selected
+V=$1/correct were kept fixed. At this one operating point, learned costs reduce
+mean generation spend by 13.0% (design-weighted problem-bootstrap CI
+[11.1,14.9]) on MMLU-Pro and 9.2% (CI [4.9,13.9]) on Omni-MATH. Weighted accuracy
+deltas are -0.29pp ([-0.58,-0.01]) and -0.20pp ([-0.50,0.00]); the unweighted
+MMLU-Pro accuracy CI crosses zero. The selected V was at the upper edge of the
+original grid. Secondary outcome-swept frontiers disagree by dataset: learned
+costs have -33.4% savings on fresh MMLU-Pro and +14.2% on Omni-MATH. These
+frontiers use evaluation outcomes to select mixtures over a lower common
+accuracy range and are descriptive; report them separately from the fixed-policy
+result. This is mixed evidence against a general frontier-wide claim, while
+providing held-out support at the selected operating point on two datasets.
+Results and protocol are summarized under
+analysis/cost_headroom/expanded_eval_20261001/.
+
+Intern-Decision LoRA jobs completed for LCB and Omni; MMLU-Pro fine-tuning is
+still running (job df2ce134-988a-4bf8-ac13-1abfa4f9359d). These are exploratory
+and not part of the paper results above.

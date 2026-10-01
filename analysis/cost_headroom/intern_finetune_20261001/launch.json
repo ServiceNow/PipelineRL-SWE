@@ -5,16 +5,16 @@
   "jobs": {
     "LCB": {
       "id": "3e84da1b-335b-4e87-a055-6cc66d2cf707",
-      "state_at_last_check": "QUEUED"
+      "state_at_last_check": "SUCCEEDED"
     },
     "Omni": {
       "id": "70d412b8-9968-44f6-a2f6-675dfb7c972c",
-      "state_at_last_check": "QUEUED"
+      "state_at_last_check": "SUCCEEDED"
     },
     "MMLU-Pro": {
       "id": "df2ce134-988a-4bf8-ac13-1abfa4f9359d",
-      "state_at_last_check": "QUEUING"
+      "state_at_last_check": "RUNNING"
     }
   },
-  "pending": "GPU scheduling, LoRA training, calibration selection and both routing controls"
+  "pending": "MMLU-Pro fine-tuning and its routing evaluation"
 }

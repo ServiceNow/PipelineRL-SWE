@@ -1,0 +1,292 @@
+{
+  "mmlupro": {
+    "dataset": "MMLU-Pro",
+    "n_fresh": 6500,
+    "selected_V_dollars_per_correct": 1.0,
+    "learned_cost_policy": {
+      "accuracy": 0.7723076923076924,
+      "mean_generation_cost_usd": 0.0011305934662892308
+    },
+    "median_cost_policy": {
+      "accuracy": 0.7749230769230769,
+      "mean_generation_cost_usd": 0.0013034402241969229
+    },
+    "learned_savings_vs_median": 0.13260812018762635,
+    "cost_savings_ci95": [
+      0.11290855749073433,
+      0.15335112286148758
+    ],
+    "accuracy_delta": -0.0026153846153846153,
+    "accuracy_delta_ci95": [
+      -0.005384615384615384,
+      0.00015384615384615385
+    ],
+    "frontier_supplementary": {
+      "direct_savings": -0.3335324071572905,
+      "accuracy_band": [
+        0.6282,
+        0.764723076923077
+      ],
+      "ci95": [
+        -0.4450171746046345,
+        -0.23622273660839122
+      ],
+      "valid_bootstrap": 1000
+    },
+    "stratum_weighted": {
+      "learned_cost_accuracy": 0.7703648582753451,
+      "median_cost_accuracy": 0.7733080168234162,
+      "learned_mean_generation_cost_usd": 0.0011424729503364244,
+      "median_mean_generation_cost_usd": 0.0013128622765561785,
+      "learned_savings_vs_median": 0.12978461584463297,
+      "cost_savings_ci95": [
+        0.11118992790073948,
+        0.14888951820286492
+      ],
+      "accuracy_delta": -0.0029431585480711453,
+      "accuracy_delta_ci95": [
+        -0.0057712194302861845,
+        -8.385838443677138e-05
+      ],
+      "target_stratum_weights": {
+        "biology": 0.072,
+        "business": 0.072,
+        "chemistry": 0.072,
+        "computer science": 0.072,
+        "economics": 0.072,
+        "engineering": 0.072,
+        "health": 0.071,
+        "history": 0.071,
+        "law": 0.071,
+        "math": 0.071,
+        "other": 0.071,
+        "philosophy": 0.071,
+        "physics": 0.071,
+        "psychology": 0.071
+      },
+      "sample_counts": {
+        "biology": 497,
+        "business": 497,
+        "chemistry": 497,
+        "computer science": 337,
+        "economics": 497,
+        "engineering": 497,
+        "health": 490,
+        "history": 310,
+        "law": 490,
+        "math": 490,
+        "other": 490,
+        "philosophy": 427,
+        "physics": 490,
+        "psychology": 491
+      }
+    },
+    "fixed_V_sensitivity_dollars_per_correct": {
+      "0.0001": {
+        "learned_accuracy": 0.6206153846153846,
+        "median_accuracy": 0.6206153846153846,
+        "accuracy_delta": 0.0,
+        "accuracy_delta_ci95": [
+          0.0,
+          0.0
+        ],
+        "learned_mean_generation_cost_usd": 3.517267225846154e-05,
+        "median_mean_generation_cost_usd": 3.516065723076923e-05,
+        "cost_savings": -0.0003417179495095457,
+        "cost_savings_ci95": [
+          -0.0007474745312567532,
+          -5.458216977327626e-05
+        ]
+      },
+      "0.001": {
+        "learned_accuracy": 0.6235384615384615,
+        "median_accuracy": 0.6867692307692308,
+        "accuracy_delta": -0.06323076923076923,
+        "accuracy_delta_ci95": [
+          -0.06969615384615385,
+          -0.05692307692307692
+        ],
+        "learned_mean_generation_cost_usd": 3.6081007901538455e-05,
+        "median_mean_generation_cost_usd": 8.73241662276923e-05,
+        "cost_savings": 0.5868153174522218,
+        "cost_savings_ci95": [
+          0.5506384864488753,
+          0.6180113458457936
+        ]
+      },
+      "0.01": {
+        "learned_accuracy": 0.7003076923076923,
+        "median_accuracy": 0.7627692307692308,
+        "accuracy_delta": -0.062461538461538464,
+        "accuracy_delta_ci95": [
+          -0.07046153846153846,
+          -0.05430769230769231
+        ],
+        "learned_mean_generation_cost_usd": 0.0002054428774153846,
+        "median_mean_generation_cost_usd": 0.0008506170940430768,
+        "cost_savings": 0.7584778405535069,
+        "cost_savings_ci95": [
+          0.7461134777210952,
+          0.7705283508793775
+        ]
+      },
+      "1": {
+        "learned_accuracy": 0.7723076923076924,
+        "median_accuracy": 0.7749230769230769,
+        "accuracy_delta": -0.0026153846153846153,
+        "accuracy_delta_ci95": [
+          -0.005384615384615384,
+          0.00015384615384615385
+        ],
+        "learned_mean_generation_cost_usd": 0.0011305934662892308,
+        "median_mean_generation_cost_usd": 0.0013034402241969229,
+        "cost_savings": 0.13260812018762635,
+        "cost_savings_ci95": [
+          0.11290855749073433,
+          0.15335112286148758
+        ]
+      }
+    },
+    "protocol": "Fresh expansion only primary. Original frozen train/cal heads and V; expansion labels used only for evaluation. Routing at a calibration-selected fixed V, one route/problem; weighted/unweighted MMLU estimates, paired problem bootstrap. Frontier is secondary/descriptive and uses evaluation outcomes. No model/readout retraining on expansion labels."
+  },
+  "omni500": {
+    "dataset": "Omni",
+    "n_fresh": 1000,
+    "selected_V_dollars_per_correct": 1.0,
+    "learned_cost_policy": {
+      "accuracy": 0.69,
+      "mean_generation_cost_usd": 0.0033104472496799995
+    },
+    "median_cost_policy": {
+      "accuracy": 0.692,
+      "mean_generation_cost_usd": 0.00364679799912
+    },
+    "learned_savings_vs_median": 0.09223180157528998,
+    "cost_savings_ci95": [
+      0.04971273589188388,
+      0.139894633338257
+    ],
+    "accuracy_delta": -0.002,
+    "accuracy_delta_ci95": [
+      -0.005,
+      0.0
+    ],
+    "frontier_supplementary": {
+      "direct_savings": 0.14189876397377177,
+      "accuracy_band": [
+        0.43729999999999997,
+        0.6767
+      ],
+      "ci95": [
+        0.06791772859630506,
+        0.21045469282088114
+      ],
+      "valid_bootstrap": 1000
+    },
+    "stratum_weighted": {
+      "learned_cost_accuracy": 0.6900000000000001,
+      "median_cost_accuracy": 0.6920000000000001,
+      "learned_mean_generation_cost_usd": 0.0033104472496800004,
+      "median_mean_generation_cost_usd": 0.00364679799912,
+      "learned_savings_vs_median": 0.09223180157528976,
+      "cost_savings_ci95": [
+        0.0493242445306159,
+        0.13899746555560663
+      ],
+      "accuracy_delta": -0.0020000000000000018,
+      "accuracy_delta_ci95": [
+        -0.0050000000000000044,
+        0.0
+      ],
+      "target_stratum_weights": {
+        "8": 0.074,
+        "4": 0.262,
+        "5": 0.248,
+        "7": 0.072,
+        "6": 0.118,
+        "2": 0.142,
+        "9": 0.038,
+        "1": 0.042,
+        "10": 0.004
+      },
+      "sample_counts": {
+        "8": 74,
+        "4": 262,
+        "5": 248,
+        "7": 72,
+        "6": 118,
+        "2": 142,
+        "9": 38,
+        "1": 42,
+        "10": 4
+      }
+    },
+    "fixed_V_sensitivity_dollars_per_correct": {
+      "0.0001": {
+        "learned_accuracy": 0.426,
+        "median_accuracy": 0.419,
+        "accuracy_delta": 0.007,
+        "accuracy_delta_ci95": [
+          0.002,
+          0.013
+        ],
+        "learned_mean_generation_cost_usd": 0.00014310154319999998,
+        "median_mean_generation_cost_usd": 0.000141488028,
+        "cost_savings": -0.011403899134137419,
+        "cost_savings_ci95": [
+          -0.020021917173533865,
+          -0.003898385914762817
+        ]
+      },
+      "0.001": {
+        "learned_accuracy": 0.432,
+        "median_accuracy": 0.549,
+        "accuracy_delta": -0.117,
+        "accuracy_delta_ci95": [
+          -0.139,
+          -0.09497500000000014
+        ],
+        "learned_mean_generation_cost_usd": 0.00015073917408,
+        "median_mean_generation_cost_usd": 0.00046841247072,
+        "cost_savings": 0.6781913729830937,
+        "cost_savings_ci95": [
+          0.6399966313572061,
+          0.7120761918706823
+        ]
+      },
+      "0.01": {
+        "learned_accuracy": 0.637,
+        "median_accuracy": 0.679,
+        "accuracy_delta": -0.042,
+        "accuracy_delta_ci95": [
+          -0.057,
+          -0.029
+        ],
+        "learned_mean_generation_cost_usd": 0.0008310400790399999,
+        "median_mean_generation_cost_usd": 0.0011438981663999999,
+        "cost_savings": 0.27350169494947796,
+        "cost_savings_ci95": [
+          0.22889942778902472,
+          0.31763606230419866
+        ]
+      },
+      "1": {
+        "learned_accuracy": 0.69,
+        "median_accuracy": 0.692,
+        "accuracy_delta": -0.002,
+        "accuracy_delta_ci95": [
+          -0.005,
+          0.0
+        ],
+        "learned_mean_generation_cost_usd": 0.0033104472496799995,
+        "median_mean_generation_cost_usd": 0.00364679799912,
+        "cost_savings": 0.09223180157528998,
+        "cost_savings_ci95": [
+          0.04971273589188388,
+          0.139894633338257
+        ]
+      }
+    },
+    "protocol": "Fresh expansion only primary. Original frozen train/cal heads and V; expansion labels used only for evaluation. Routing at a calibration-selected fixed V, one route/problem; weighted/unweighted MMLU estimates, paired problem bootstrap. Frontier is secondary/descriptive and uses evaluation outcomes. No model/readout retraining on expansion labels."
+  }
+}
