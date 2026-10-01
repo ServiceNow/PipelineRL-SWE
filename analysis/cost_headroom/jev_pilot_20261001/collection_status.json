@@ -1,0 +1,8 @@
+{
+  "valid_calls": 300,
+  "expected_calls": 300,
+  "guard_spend_usd": 0.016132283999999997,
+  "complete": true,
+  "errors_this_run": 0,
+  "budget_or_error_stop": false
+}

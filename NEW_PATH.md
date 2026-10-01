@@ -1585,3 +1585,13 @@ No new target generations or cost questions. $1 cumulative spend guard;
 usage recorded and successful calls skipped on resume. Protocol and frozen
 manifest in jev_pilot_20261001. Exploratory 100-problem subsets,1,000 paired
 problem bootstrap; predictor metrics expected-draw Brier/logloss.
+4.A.44 completion: 300/300 Jev requests succeeded, no retries/errors, recorded
+spend $0.016132284. Resolved model typesafe/jev-1.13-20260917. Protocol/request
+manifest was committed before the first call; prompt unchanged throughout.
+Same median-length costs for both success predictors. Direct Jev savings vs
+our heads: LCB+13.6%[-6.3,27.5],Omni+22.9%[-6.9,39.2],MMLU-15.0%[-44.9,2.3];
+all three intervals include zero. Jev vs training-base-rate router on Omni
++31.6%[14.9,47.1]. Our heads have lower Brier/logloss point estimates on all
+three pilot subsets; Jev underpredicts average correctness. Report and full
+bootstrap samples in jev_pilot_20261001. All contrasts conditional/descriptive,
+100 problems each, no prompt selection or calibration. Cost buckets untested.

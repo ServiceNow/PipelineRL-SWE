@@ -190,7 +190,7 @@ def analyze(a,manifest):
         curves={k:curve_arrays(p,d['median'],d['q'],d['paid'],ii) for k,p in arms.items()}
         rng=np.random.default_rng(0);resamples=[rng.integers(0,len(ii),len(ii)) for _ in range(1000)]
         contrasts={}
-        for left,right in [('ours','jev'),('jev','training_base_rate')]:
+        for left,right in [('jev','ours'),('ours','jev'),('jev','training_base_rate')]:
             point,band=compare_pair(curves,left,right,np.arange(len(ii)))
             boot=np.asarray([compare_pair(curves,left,right,b)[0] for b in resamples]);finite=np.isfinite(boot)
             contrasts[left+'_vs_'+right]={'direct_cost_saved':point,'band':band,
