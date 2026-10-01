@@ -43,7 +43,7 @@ def load_pool(label):
     p=read_predictions(folder/'content_preds.jsonl',ids,'p_successes',len(slots))
     cost=read_predictions(folder/costfile,ids,'expected_costs',len(slots))*100
     meta={str(r['problem_id']):r for r in map(json.loads,(folder/'problems.jsonl').open())}
-    return dict(ids=ids,slots=slots,tr=tr,te=te,q=q,p=p,cost=cost,paid=paid,median=med,meta=meta)
+    return dict(ids=ids,slots=slots,tr=tr,te=te,q=q,p=p,cost=cost,paid=paid,median=med,meta=meta,length=length,inp=inp,pin=pin,pout=pout)
 
 
 def prepare(a):
@@ -90,7 +90,7 @@ def parse_response(response,slots):
     return values
 
 
-async def collect(a,manifest):
+async def collect(a,manifest,response_parser=parse_response,value_key="p_successes"):
     lock=(a.out/'collector.lock').open('w');fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
     path=a.out/'responses.jsonl';done=set();spent=0.
     if path.exists():
@@ -129,7 +129,7 @@ async def collect(a,manifest):
                                     error='HTTP '+str(result.status)
                                     retry=result.status==429 or result.status>=500
                                 else:
-                                    probabilities=parse_response(response,request['model_slots']);status='ok'
+                                    probabilities=response_parser(response,request['model_slots']);status='ok'
                         except (aiohttp.ClientError,asyncio.TimeoutError) as exc:
                             error=type(exc).__name__;retry=True
                         except (ValueError,KeyError,TypeError) as exc:
@@ -145,7 +145,7 @@ async def collect(a,manifest):
                         if not isinstance(cost,(int,float)) or not math.isfinite(cost) or cost<0:
                             cost=ceiling;status='error';error='Invalid usage.cost';probabilities=None
                         row={'pool':request['pool'],'problem_id':request['problem_id'],'status':status,
-                             'attempt':attempt+1,'p_successes':probabilities,'charged_usd':float(cost),
+                             'attempt':attempt+1,value_key:probabilities,'charged_usd':float(cost),
                              'elapsed_seconds':time.time()-started,'http_status':http_status,'error':error,
                              'model':response.get('model') if isinstance(response,dict) else None,
                              'response':response}

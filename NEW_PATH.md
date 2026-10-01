@@ -1595,3 +1595,13 @@ all three intervals include zero. Jev vs training-base-rate router on Omni
 three pilot subsets; Jev underpredicts average correctness. Report and full
 bootstrap samples in jev_pilot_20261001. All contrasts conditional/descriptive,
 100 problems each, no prompt selection or calibration. Cost buckets untested.
+
+### 4.A.45 Jev cost-bucket follow-up (2026-10-01)
+User requested "try the cost?". Same frozen 100 test problems per dataset as
+success pilot, 300 calls with five route-specific choice questions each.
+Training-only quintile bins and arithmetic representative output lengths,
+probability-weighted mean prediction; fixed OUR success heads for all cost
+contrasts. Exact input costs, recorded route prices, all valid draw labels.
+Compare Jev costs against median, mean and our prefill costs with 1,000 paired
+problem bootstraps. $1 cumulative guard, no new target generations. Manifest
+and protocol frozen before cost API calls; exploratory, no test calibration.
