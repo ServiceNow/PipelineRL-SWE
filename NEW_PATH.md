@@ -1707,8 +1707,10 @@ remain fitted on old train/calibration only. Fresh MMLU weighted/unweighted and
 Omni difficulty-stratified estimates planned.
 
 ### 4.A.51 Fresh evaluation pipeline (2026-10-01)
-Omni Qwen3-4B Thinking prefill succeeded; MMLU-Pro Instruct prefill file was
-written and its job is finalizing. Added tensor builder/readout runner to append
+Initial Qwen3-4B prefill files used a system prompt that differed from the
+cached feature metadata (`expert competitive programmer` vs `helpful assistant`).
+Invalidated those files and updated extraction to match the original prompt;
+both no-cost prefill jobs are being rerun. Added tensor builder/readout runner to append
 expansion outcomes/features while retaining original train/calibration IDs;
 readout selection stays on original calibration only. Fresh results use one
 route per problem at the frozen V with paired problem bootstrap, MMLU subject

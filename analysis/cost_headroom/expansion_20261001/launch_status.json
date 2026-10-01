@@ -46,5 +46,6 @@
       "feature_file_written": true
     }
   },
-  "evaluation": "Frozen readout and fresh fixed-policy scripts are prepared. Run only when the target dataset has COMPLETE.json and its prefill NPZ."
+  "prefill_note": "The first successful prefill files used a different system prompt from the original cached activations. Those files are invalidated; rerun with the original 'You are a helpful assistant.' prompt before analysis.",
+  "evaluation": "Frozen readout and fresh fixed-policy scripts are prepared. Run only when the target dataset has COMPLETE.json and matching prefill NPZ."
 }

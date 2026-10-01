@@ -12,4 +12,5 @@ export PYTHONPATH="/mnt/llmd/results/exps/aristides/envs/accel:${PYTHONPATH:-}"
 /home/toolkit/.conda/envs/vllm-env/bin/python -u pipelinerl/swe/scripts/livecodebench/pool_activation_probe.py \
   --phase extract --model "${PREFILL_MODEL}" --route-label "${PREFILL_DATASET}_expansion" \
   --prompts-file "${PREFILL_OUT}/${PREFILL_DATASET}_prompts.jsonl" \
-  --activations "${PREFILL_OUT}/${PREFILL_DATASET}_prefill.npz" --max-len 8192
+  --activations "${PREFILL_OUT}/${PREFILL_DATASET}_prefill.npz" --max-len 8192 \
+  --system-prompt "You are a helpful assistant."

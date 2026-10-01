@@ -18,7 +18,7 @@ def prepare(label):
     if not path.exists():path.write_text(text)
     meta={'dataset':label,'task_sha256':hashlib.sha256(src.read_bytes()).hexdigest(),'prompt_sha256':digest,
           'n':len(rows),'model':{'mmlupro':'Qwen/Qwen3-4B-Instruct-2507','omni500':'Qwen/Qwen3-4B-Thinking-2507'}[label],
-          'system_prompt':'pool_activation_probe.py default SYSTEM','readout':'same eight relative layers, last/mean, as frozen paper features',
+          'system_prompt':'You are a helpful assistant. (matched to original cached feature metadata)','readout':'same eight relative layers, last/mean, as frozen paper features',
           'limit_tokens':8192,'request_fields':'problem_id and raw problem text only; no answers, generation outputs or split labels'}
     (OUT/f'{label}_manifest.json').write_text(json.dumps(meta,indent=2)+'\n')
     print(json.dumps(meta),flush=True)
