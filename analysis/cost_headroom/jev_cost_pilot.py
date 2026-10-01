@@ -76,7 +76,7 @@ def analyze(a,manifest):
         curves={k:curve_arrays(d['p'],c,d['q'],d['paid'],ii) for k,c in costs.items()}
         rng=np.random.default_rng(0);bs=[rng.integers(0,len(ii),len(ii)) for _ in range(1000)]
         contrasts={}
-        for left,right in [('jev','median'),('jev','training_mean'),('jev','ours'),('ours','median')]:
+        for left,right in [('jev','median'),('jev','training_mean'),('jev','ours'),('ours','jev'),('ours','median')]:
             point,band=compare_pair(curves,left,right,np.arange(len(ii)))
             boot=np.asarray([compare_pair(curves,left,right,b)[0] for b in bs]);valid=boot[np.isfinite(boot)]
             contrasts[left+'_vs_'+right]={'direct_cost_saved':point,'band':band,'ci95':np.percentile(valid,[2.5,97.5]).tolist() if len(valid) else None,'valid_bootstrap':len(valid),'bootstrap':boot.tolist()}
@@ -94,6 +94,9 @@ def analyze(a,manifest):
     for label,d in result['pools'].items():lines.append('| '+label+' | '+' | '.join(fmt(d['contrasts'][k]) for k in ['jev_vs_median','jev_vs_training_mean','jev_vs_ours'])+' |')
     status=json.loads((a.out/'collection_status.json').read_text())
     lines+=['',f"Collection: {status['valid_calls']}/{status['expected_calls']} calls; recorded API spend ${status['guard_spend_usd']:.9f}.",'','Exploratory reuse of the success-pilot test subset; cost prompt and bins frozen before cost calls, with no tuning or calibration on test outcomes. Intervals condition on fitted predictors and use pair-specific shared accuracy bands. API prediction overhead excluded from generation savings. Bucket expectations are bounded by training bucket means and may miss extreme tails. This tests a prompted, untrained Jev predictor with training aggregate priors; it is not a trained cost head. Raw responses are retained locally in responses.jsonl; manifest and derived predictions/results are saved.']
+    lines+=['','Our cost head vs Jev (same success predictions):','','| Dataset | Our generation cost savings vs Jev |','|---|---|']
+    for label,d in result['pools'].items():lines.append('| '+label+' | '+fmt(d['contrasts']['ours_vs_jev'])+' |')
+    lines+=['','Jev shows no clear gain over either constant-length baseline on these subsets. Our cost head outperforms Jev on LCB and Omni under this conditional paired analysis; MMLU-Pro is inconclusive. This does not rule out trained or calibrated Jev variants.']
     (a.out/'REPORT.md').write_text('\n'.join(lines)+'\n')
 
 def main():

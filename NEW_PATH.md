@@ -1605,3 +1605,13 @@ contrasts. Exact input costs, recorded route prices, all valid draw labels.
 Compare Jev costs against median, mean and our prefill costs with 1,000 paired
 problem bootstraps. $1 cumulative guard, no new target generations. Manifest
 and protocol frozen before cost API calls; exploratory, no test calibration.
+4.A.45 completion: 300/300 cost calls succeeded, zero errors, $0.042466284.
+Resolved typesafe/jev-1.13-20260917. Jev vs median savings LCB+5.8%
+[-11.0,16.2],Omni-0.8%[-7.6,5.8],MMLU-12.6%[-39.4,10.2]; no clear gains.
+OUR cost head vs Jev, OUR success fixed: LCB37.4%[24.1,45.7],
+Omni20.4%[5.5,31.8],MMLU18.1%[-7.8,36.9]. Exploratory conditional paired
+intervals,100 problems each. Jev raw-token R² mostly near zero or negative;
+ours stronger on LCB/Omni. MMLU Jev strongly overpredicts lengths. No prompt
+tuning/calibration or paper edits. Manifest and derived predictions/results
+versioned, raw response JSONL retained locally. This does not test fine-tuned
+or calibrated Jev; current untrained prompted cost predictor is unpromising.
