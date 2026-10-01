@@ -1,0 +1,23 @@
+{
+  "fixed_reconstruction_pp": {
+    "LCB": {
+      "ours_difference": -4.973799150320701e-14,
+      "zr_difference": 6.750155989720952e-14
+    },
+    "Omni": {
+      "ours_difference": 1.0658141036401503e-14,
+      "zr_difference": -2.1316282072803006e-14
+    },
+    "MMLU-Pro": {
+      "ours_difference": 3.197442310920451e-14,
+      "zr_difference": 0.0
+    }
+  },
+  "row_space_check": {
+    "max_probability_difference": 0.00015454156594318924,
+    "max_relative_cost_difference": 3.680762862279252e-07,
+    "direct_ridge_alpha": 31622.776601683796,
+    "reduced_ridge_alpha": 31622.776601683796
+  },
+  "minimum_valid_draws": 1
+}

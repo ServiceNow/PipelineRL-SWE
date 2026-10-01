@@ -1,0 +1,27 @@
+{
+  "base_commit": "071d1f9eaff151b6655d52cff9a25df3e157d7ec",
+  "python": "3.11.14",
+  "numpy": "1.26.4",
+  "scipy": "1.17.0",
+  "sklearn": "1.9.0",
+  "torch": "2.6.0+cu124",
+  "data": {
+    "LCB": {
+      "minimum_draws": 1,
+      "invalid_first_draws": 8,
+      "problems": 892
+    },
+    "Omni": {
+      "minimum_draws": 1,
+      "invalid_first_draws": 6,
+      "problems": 500
+    },
+    "MMLU-Pro": {
+      "minimum_draws": 1,
+      "invalid_first_draws": 10,
+      "problems": 1000
+    }
+  },
+  "script_sha256": "7a9a2a7635378f1d094293cd5a364c308cb042ad50d0f9820405afa77b5655d7",
+  "protocol_sha256": "41421f1d64c458895edf0c3a5b7f70a879219d76ef5fba48c955340696164c13"
+}

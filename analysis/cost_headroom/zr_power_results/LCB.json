@@ -1,0 +1,77 @@
+{
+  "fixed": {
+    "original_bands": {
+      "ours_pp": 35.97774802114089,
+      "zr_pp": 18.461878415788803,
+      "difference_pp": 17.515869605352087,
+      "ci95_pp": [
+        10.295230849402211,
+        24.589902854875586
+      ],
+      "ci90_pp": [
+        11.440108398370285,
+        23.4352265084492
+      ],
+      "bootstrap_sd_pp": 3.7189473588255053,
+      "one_sided_centered_bootstrap_p": 0.000999000999000999
+    },
+    "common_band": {
+      "ours_pp": 36.25211717800316,
+      "zr_pp": 18.461878415788803,
+      "difference_pp": 17.79023876221436,
+      "ci95_pp": [
+        10.871186446991054,
+        24.886112367717725
+      ],
+      "ci90_pp": [
+        11.816468666988087,
+        23.808056081891753
+      ],
+      "bootstrap_sd_pp": 3.6679924981573504,
+      "one_sided_centered_bootstrap_p": 0.000999000999000999
+    }
+  },
+  "fixed_configuration": "D5|s1|K10",
+  "uncertainty_diagnostic": {
+    "problem_only_sd_pp": 3.7189473588255053,
+    "generation_only_sd_pp": 1.7225140952533442,
+    "nested_total_sd_pp": 4.233609854775576,
+    "nested_mean_inner_variance_pp2": 3.0173176228697285,
+    "nested_variance_of_outer_means_pp2": 15.569522464075012,
+    "warning": "Descriptive resampling variances, not identified population variance components."
+  },
+  "crossfit_conditional": {
+    "original_bands": {
+      "ours_pp": 35.96947346209778,
+      "zr_pp": 17.604430405412906,
+      "difference_pp": 18.365043056684872,
+      "ci95_pp": [
+        14.104677114718934,
+        22.646939713911056
+      ],
+      "ci90_pp": [
+        14.531772565762806,
+        21.61671744191598
+      ],
+      "bootstrap_sd_pp": 2.1879307744659084,
+      "one_sided_centered_bootstrap_p": 0.000999000999000999
+    },
+    "common_band": {
+      "ours_pp": 35.96947346209778,
+      "zr_pp": 17.604430405412906,
+      "difference_pp": 18.365043056684872,
+      "ci95_pp": [
+        14.104677114718934,
+        22.646939713911056
+      ],
+      "ci90_pp": [
+        14.531772565762806,
+        21.61671744191598
+      ],
+      "bootstrap_sd_pp": 2.187808143582554,
+      "one_sided_centered_bootstrap_p": 0.000999000999000999
+    }
+  },
+  "crossfit_warning": "Conditional bootstrap omits training variability and fold dependence; does not establish algorithm-level significance.",
+  "elapsed_seconds": 90.98241329193115
+}

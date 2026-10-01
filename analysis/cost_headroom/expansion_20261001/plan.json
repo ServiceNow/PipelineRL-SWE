@@ -1,0 +1,157 @@
+{
+  "mmlupro_source": "TIGER-Lab/MMLU-Pro cached test split",
+  "mmlupro_cache_fingerprint": "4a877cfe76aea81c",
+  "omni_source": "KbsdJames/Omni-MATH",
+  "omni_revision": "40ba231d8f16e29ecd40e6407e2c8640145a8f62",
+  "omni_source_sha256": "7c87be8ee41ac7c7a597ef5a5500e84bd2b639a85a06db3da7f69bf9a32ef168",
+  "seed": 20261001,
+  "draws": {
+    "oss20lo": 4,
+    "oss20md": 3,
+    "dsv4f": 3,
+    "oss120md": 2,
+    "oss120hi": 2
+  },
+  "price_caps_per_million": {
+    "oss20lo": [
+      0.04,
+      0.15
+    ],
+    "oss20md": [
+      0.04,
+      0.15
+    ],
+    "dsv4f": [
+      0.14,
+      0.28
+    ],
+    "oss120md": [
+      0.15,
+      0.6
+    ],
+    "oss120hi": [
+      0.15,
+      0.6
+    ]
+  },
+  "evaluation": "All new problems are held-out evaluation. Preserve existing training/calibration splits and configuration choices; no significance-based stopping.",
+  "estimates": {
+    "mmlupro": {
+      "new_problems": 2000,
+      "existing_problems": 1000,
+      "combined_problems": 3000,
+      "calls": 28000,
+      "source_rows": 12032,
+      "excluded_existing_rows": 1058,
+      "excluded_source_duplicates": 329,
+      "eligible_rows": 10645,
+      "sample_sha256": "ee8512fe07b5a8a1a8e9b971fb1000dc12fe0d6599cf41255d11ea0fc07a1d76",
+      "strata_counts": {
+        "biology": 144,
+        "business": 144,
+        "chemistry": 144,
+        "computer science": 144,
+        "economics": 144,
+        "engineering": 144,
+        "health": 142,
+        "history": 142,
+        "law": 142,
+        "math": 142,
+        "other": 142,
+        "philosophy": 142,
+        "physics": 142,
+        "psychology": 142
+      },
+      "routes": {
+        "oss20lo": {
+          "calls": 8000,
+          "mean_prompt_tokens": 279.8814697265625,
+          "mean_completion_tokens": 372.62091064453125,
+          "price_cap_estimate_usd": 0.5367071630859375
+        },
+        "oss20md": {
+          "calls": 6000,
+          "mean_prompt_tokens": 280.11700439453125,
+          "mean_completion_tokens": 1289.45703125,
+          "price_cap_estimate_usd": 1.2277394091796876
+        },
+        "dsv4f": {
+          "calls": 6000,
+          "mean_prompt_tokens": 234.95912170410156,
+          "mean_completion_tokens": 4345.6337890625,
+          "price_cap_estimate_usd": 7.498030427856446
+        },
+        "oss120md": {
+          "calls": 4000,
+          "mean_prompt_tokens": 281.5312805175781,
+          "mean_completion_tokens": 888.0380249023438,
+          "price_cap_estimate_usd": 2.300210028076172
+        },
+        "oss120hi": {
+          "calls": 4000,
+          "mean_prompt_tokens": 281.3333435058594,
+          "mean_completion_tokens": 3526.614501953125,
+          "price_cap_estimate_usd": 8.632674810791016
+        }
+      },
+      "estimated_usd_at_provider_price_caps": 20.19536183898926,
+      "planning_usd_with_25pct_buffer": 25.244202298736575
+    },
+    "omni500": {
+      "new_problems": 1000,
+      "existing_problems": 500,
+      "combined_problems": 1500,
+      "calls": 14000,
+      "source_rows": 4428,
+      "excluded_existing_rows": 503,
+      "excluded_source_duplicates": 18,
+      "eligible_rows": 3907,
+      "sample_sha256": "8af834d924c68d8f1a6e8bafe945755a601d4acbda4d2c3a2ebfbc23274d24ac",
+      "strata_counts": {
+        "8": 74,
+        "4": 262,
+        "5": 248,
+        "7": 72,
+        "6": 118,
+        "2": 142,
+        "9": 38,
+        "1": 42,
+        "10": 4
+      },
+      "routes": {
+        "oss20lo": {
+          "calls": 4000,
+          "mean_prompt_tokens": 168.17300415039062,
+          "mean_completion_tokens": 1524.406982421875,
+          "price_cap_estimate_usd": 0.9415518701171876
+        },
+        "oss20md": {
+          "calls": 3000,
+          "mean_prompt_tokens": 167.70733642578125,
+          "mean_completion_tokens": 8644.9892578125,
+          "price_cap_estimate_usd": 3.9103700463867184
+        },
+        "dsv4f": {
+          "calls": 3000,
+          "mean_prompt_tokens": 140.64222717285156,
+          "mean_completion_tokens": 17738.373046875,
+          "price_cap_estimate_usd": 14.9593030947876
+        },
+        "oss120md": {
+          "calls": 2000,
+          "mean_prompt_tokens": 170.14100646972656,
+          "mean_completion_tokens": 4482.51513671875,
+          "price_cap_estimate_usd": 5.430060466003418
+        },
+        "oss120hi": {
+          "calls": 2000,
+          "mean_prompt_tokens": 169.96478271484375,
+          "mean_completion_tokens": 16936.78515625,
+          "price_cap_estimate_usd": 20.37513162231445
+        }
+      },
+      "estimated_usd_at_provider_price_caps": 45.61641709960937,
+      "planning_usd_with_25pct_buffer": 57.020521374511716
+    }
+  }
+}

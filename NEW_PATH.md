@@ -1441,3 +1441,54 @@ effect is positive across seeds, but uncertain. Calibration-selected deployment
 rows show no consistent dominance (see raw results; achieved test accuracies differ).
 This tests head architecture on our rich features, not the prefill-router paper's
 PCA and layer-selection pipeline. No implication that every MLP is inferior.
+
+### 4.A.38 Free ZeroRouter uncertainty and cross-fitting follow-up (2026-09-30)
+User authorized the free analyses first. Protocol `analysis/cost_headroom/ZR_POWER_PROTOCOL.md`;
+implementation `zr_power.py`, report/figure and raw artifacts in `zr_power_results/`.
+All local CPU work; no new generations or API spending. Original per-arm fixed-split
+savings reconstruct to numerical precision. Effects below are plug-in percentage-point
+differences in savings versus median-output routing, not bootstrap means.
+
+| pool | original fixed split [95% CI] | five-fold cross-fit [conditional 95% interval] |
+| --- | --- | --- |
+| LCB | +17.5 [+10.3, +24.6] | +18.4 [+14.1, +22.6] |
+| Omni | +2.8 [-10.4, +16.7] | +13.8 [+6.5, +21.6] |
+| MMLU-Pro | +9.3 [-2.0, +20.6] | +23.8 [+12.5, +33.0] |
+
+Both methods refit per fold, with inner calibration only for configuration selection.
+Intervals condition on fitted heads; overlapping training folds and omitted training
+variance prevent algorithm-level significance claims. Cross-fitting uses larger training
+sets and random splits (LCB original split is temporal). Only one partition (seed17).
+Fold effects: LCB +19.9/+22.7/+11.7/+12.9/+26.3; Omni +25.6/+11.4/-4.2/+1.7/+30.2;
+MMLU-Pro +1.8/+26.5/+43.2/+31.9/+13.1. Shared-three-arm accuracy-band sensitivity
+preserves conclusions. Keep original fixed split primary; CV is supporting evidence.
+
+Generation-only bootstrap SD is 1.72/3.72/2.69 pp (LCB/Omni/MMLU-Pro), versus
+problem-only 3.72/6.82/6.00 pp. Generation noise is noticeable. Nested resampling is a
+diagnostic, not an identified population variance decomposition; problem resampling
+already contains noisy empirical means. Additional draws cannot be dismissed from
+output ICC alone, and this analysis does not estimate their marginal value.
+
+Exploratory equal-weight Stouffer combination on original fixed splits: one-sided
+p=.00194; individual centered-bootstrap p=.001/.371/.057. Pooled directional evidence
+does not establish three dataset-specific wins. Omni +/-5 pp equivalence fails:
+original 90% CI [-8.1,+14.2], normal-approximation TOST p=.372. Cross-fit equivalence
+also fails (90% [+7.4,+20.3]). Do not describe the original Omni result as equivalent.
+If a separate MMLU-Pro win is needed, prioritize untouched additional problems; no
+paid follow-up launched. Full-feature/reduced-row-space fit checked on Omni fold0,
+route0: max probability delta .000155, max relative cost delta 3.7e-7, same ridge alpha.
+
+### 4.A.39 Held-out MMLU-Pro and full Omni-MATH expansion (2026-10-01)
+User requested collection jobs, cost estimate and an OpenRouter balance check.
+Frozen plan and manifests: `analysis/cost_headroom/expansion_20261001/`;
+preparer `prepare_expansion.py`, collector `collect_expansion.py`, launcher
+`launchers/abstention/launch_math_expansion.sh`. New held-out evaluation:
+2,000 MMLU-Pro and 1,000 full Omni-MATH questions, retaining old sample's
+subject/difficulty proportions and excluding ID/normalized-text overlaps.
+Existing train/calibration sets and configuration choices stay fixed for the
+primary follow-up. Same five routes, original 4/3/3/2/2 valid draws, 64k cap.
+42,000 calls. API estimate at provider price ceilings: MMLU $20.20, Omni
+$45.62, total $65.81; 25% buffer total $82.26. Guards $30/$70. GPU feature
+extraction/cluster compute are separate. Key has $150.03 remaining of $700
+allowance at preparation; credentials never printed or committed. Full
+Omni benchmark version is pinned; MMLU reuses existing cached version.

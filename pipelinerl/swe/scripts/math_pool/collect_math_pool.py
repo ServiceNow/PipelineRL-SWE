@@ -96,11 +96,13 @@ def _grade_task(t, r):
     return grade(text, t["answer"])
 
 
-async def call(session, key, route, prompt, sem, max_tokens):
+async def call(session, key, route, prompt, sem, max_tokens, provider_max_price=None):
     model, extra, temp, top_p = ROUTES[route]
     body = {"model": model, "max_tokens": max_tokens, "temperature": temp, "top_p": top_p,
             "messages": [{"role": "user", "content": prompt}],
             "provider": {"ignore": IGNORE, "require_parameters": True}, **extra}
+    if provider_max_price is not None:
+        body["provider"]["max_price"] = provider_max_price
     err = None
     for attempt in range(4):
         try:
@@ -111,7 +113,8 @@ async def call(session, key, route, prompt, sem, max_tokens):
             ch = d["choices"][0]; msg = ch["message"]; u = d.get("usage", {})
             return dict(content=msg.get("content") or "", reasoning=msg.get("reasoning") or "",
                         prompt_tokens=u.get("prompt_tokens", 0), completion_tokens=u.get("completion_tokens", 0),
-                        finish_reason=ch.get("finish_reason"), provider=d.get("provider"), error=None)
+                        finish_reason=ch.get("finish_reason"), provider=d.get("provider"), error=None,
+                        generation_id=d.get("id"), usage_cost=u.get("cost"))
         except Exception as e:
             err = f"{type(e).__name__}: {e}"[:200]; await asyncio.sleep(5 * (attempt + 1))
     return dict(content="", reasoning="", prompt_tokens=0, completion_tokens=0, finish_reason="error", provider=None, error=err)

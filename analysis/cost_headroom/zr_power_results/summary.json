@@ -1,0 +1,275 @@
+{
+  "datasets": {
+    "LCB": {
+      "fixed": {
+        "original_bands": {
+          "ours_pp": 35.97774802114089,
+          "zr_pp": 18.461878415788803,
+          "difference_pp": 17.515869605352087,
+          "ci95_pp": [
+            10.295230849402211,
+            24.589902854875586
+          ],
+          "ci90_pp": [
+            11.440108398370285,
+            23.4352265084492
+          ],
+          "bootstrap_sd_pp": 3.7189473588255053,
+          "one_sided_centered_bootstrap_p": 0.000999000999000999
+        },
+        "common_band": {
+          "ours_pp": 36.25211717800316,
+          "zr_pp": 18.461878415788803,
+          "difference_pp": 17.79023876221436,
+          "ci95_pp": [
+            10.871186446991054,
+            24.886112367717725
+          ],
+          "ci90_pp": [
+            11.816468666988087,
+            23.808056081891753
+          ],
+          "bootstrap_sd_pp": 3.6679924981573504,
+          "one_sided_centered_bootstrap_p": 0.000999000999000999
+        }
+      },
+      "fixed_configuration": "D5|s1|K10",
+      "uncertainty_diagnostic": {
+        "problem_only_sd_pp": 3.7189473588255053,
+        "generation_only_sd_pp": 1.7225140952533442,
+        "nested_total_sd_pp": 4.233609854775576,
+        "nested_mean_inner_variance_pp2": 3.0173176228697285,
+        "nested_variance_of_outer_means_pp2": 15.569522464075012,
+        "warning": "Descriptive resampling variances, not identified population variance components."
+      },
+      "crossfit_conditional": {
+        "original_bands": {
+          "ours_pp": 35.96947346209778,
+          "zr_pp": 17.604430405412906,
+          "difference_pp": 18.365043056684872,
+          "ci95_pp": [
+            14.104677114718934,
+            22.646939713911056
+          ],
+          "ci90_pp": [
+            14.531772565762806,
+            21.61671744191598
+          ],
+          "bootstrap_sd_pp": 2.1879307744659084,
+          "one_sided_centered_bootstrap_p": 0.000999000999000999
+        },
+        "common_band": {
+          "ours_pp": 35.96947346209778,
+          "zr_pp": 17.604430405412906,
+          "difference_pp": 18.365043056684872,
+          "ci95_pp": [
+            14.104677114718934,
+            22.646939713911056
+          ],
+          "ci90_pp": [
+            14.531772565762806,
+            21.61671744191598
+          ],
+          "bootstrap_sd_pp": 2.187808143582554,
+          "one_sided_centered_bootstrap_p": 0.000999000999000999
+        }
+      },
+      "crossfit_warning": "Conditional bootstrap omits training variability and fold dependence; does not establish algorithm-level significance.",
+      "elapsed_seconds": 90.98241329193115
+    },
+    "Omni": {
+      "fixed": {
+        "original_bands": {
+          "ours_pp": 22.729585283916897,
+          "zr_pp": 19.963765354279474,
+          "difference_pp": 2.7658199296374253,
+          "ci95_pp": [
+            -10.448817057132329,
+            16.712839257677434
+          ],
+          "ci90_pp": [
+            -8.097987369681578,
+            14.158136715325611
+          ],
+          "bootstrap_sd_pp": 6.821638623568274,
+          "one_sided_centered_bootstrap_p": 0.3706293706293706
+        },
+        "common_band": {
+          "ours_pp": 22.729585283916897,
+          "zr_pp": 19.963765354279474,
+          "difference_pp": 2.7658199296374253,
+          "ci95_pp": [
+            -10.448817057132329,
+            16.72591435913813
+          ],
+          "ci90_pp": [
+            -8.100050868913103,
+            14.094013365294492
+          ],
+          "bootstrap_sd_pp": 6.826324352305064,
+          "one_sided_centered_bootstrap_p": 0.37162837162837165
+        }
+      },
+      "fixed_configuration": "D1|s2|K10",
+      "uncertainty_diagnostic": {
+        "problem_only_sd_pp": 6.821638623568274,
+        "generation_only_sd_pp": 3.7197373497192574,
+        "nested_total_sd_pp": 7.19033486428213,
+        "nested_mean_inner_variance_pp2": 14.578371681155977,
+        "nested_variance_of_outer_means_pp2": 40.18745447248827,
+        "warning": "Descriptive resampling variances, not identified population variance components."
+      },
+      "crossfit_conditional": {
+        "original_bands": {
+          "ours_pp": 13.441936797988197,
+          "zr_pp": -0.34547316521340576,
+          "difference_pp": 13.787409963201602,
+          "ci95_pp": [
+            6.495796695629728,
+            21.566201714312637
+          ],
+          "ci90_pp": [
+            7.446540005004382,
+            20.34629868898323
+          ],
+          "bootstrap_sd_pp": 3.9371746010337008,
+          "one_sided_centered_bootstrap_p": 0.000999000999000999
+        },
+        "common_band": {
+          "ours_pp": 13.441936797988197,
+          "zr_pp": -0.34219607523360285,
+          "difference_pp": 13.7841328732218,
+          "ci95_pp": [
+            6.495796695629728,
+            21.566370121579386
+          ],
+          "ci90_pp": [
+            7.466277262908536,
+            20.397732877637978
+          ],
+          "bootstrap_sd_pp": 3.9407780493282214,
+          "one_sided_centered_bootstrap_p": 0.000999000999000999
+        }
+      },
+      "crossfit_warning": "Conditional bootstrap omits training variability and fold dependence; does not establish algorithm-level significance.",
+      "elapsed_seconds": 68.91153836250305
+    },
+    "MMLU-Pro": {
+      "fixed": {
+        "original_bands": {
+          "ours_pp": 30.894010898272505,
+          "zr_pp": 21.61164490458377,
+          "difference_pp": 9.282365993688735,
+          "ci95_pp": [
+            -1.9765605664971964,
+            20.634474711555463
+          ],
+          "ci90_pp": [
+            -0.4850371376588801,
+            19.02258119886731
+          ],
+          "bootstrap_sd_pp": 6.0035034066459305,
+          "one_sided_centered_bootstrap_p": 0.056943056943056944
+        },
+        "common_band": {
+          "ours_pp": 30.894010898272505,
+          "zr_pp": 21.61164490458377,
+          "difference_pp": 9.282365993688735,
+          "ci95_pp": [
+            -2.0918779366996425,
+            20.558224599358955
+          ],
+          "ci90_pp": [
+            -0.617298262283296,
+            18.838187091202176
+          ],
+          "bootstrap_sd_pp": 6.019390222981479,
+          "one_sided_centered_bootstrap_p": 0.055944055944055944
+        }
+      },
+      "fixed_configuration": "D5|s0|K5",
+      "uncertainty_diagnostic": {
+        "problem_only_sd_pp": 6.0035034066459305,
+        "generation_only_sd_pp": 2.692910704951199,
+        "nested_total_sd_pp": 6.4949497935692735,
+        "nested_mean_inner_variance_pp2": 7.065028014187209,
+        "nested_variance_of_outer_means_pp2": 36.67353370534151,
+        "warning": "Descriptive resampling variances, not identified population variance components."
+      },
+      "crossfit_conditional": {
+        "original_bands": {
+          "ours_pp": 35.500683993941806,
+          "zr_pp": 11.728577844819277,
+          "difference_pp": 23.77210614912253,
+          "ci95_pp": [
+            12.470408084365493,
+            32.98720669270405
+          ],
+          "ci90_pp": [
+            14.076650095380288,
+            31.728011671000928
+          ],
+          "bootstrap_sd_pp": 5.348230230482694,
+          "one_sided_centered_bootstrap_p": 0.000999000999000999
+        },
+        "common_band": {
+          "ours_pp": 35.500683993941806,
+          "zr_pp": 11.880341390081217,
+          "difference_pp": 23.62034260386059,
+          "ci95_pp": [
+            12.316277494655782,
+            32.94984520058204
+          ],
+          "ci90_pp": [
+            13.823967809967717,
+            31.625722304114742
+          ],
+          "bootstrap_sd_pp": 5.380592073175389,
+          "one_sided_centered_bootstrap_p": 0.000999000999000999
+        }
+      },
+      "crossfit_warning": "Conditional bootstrap omits training variability and fold dependence; does not establish algorithm-level significance.",
+      "elapsed_seconds": 87.17892718315125
+    }
+  },
+  "exploratory_stouffer": {
+    "original_bands": {
+      "individual_p": {
+        "LCB": 0.000999000999000999,
+        "Omni": 0.3706293706293706,
+        "MMLU-Pro": 0.056943056943056944
+      },
+      "z": 2.8877217112317264,
+      "one_sided_p": 0.0019402151129237274
+    },
+    "common_band": {
+      "individual_p": {
+        "LCB": 0.000999000999000999,
+        "Omni": 0.37162837162837165,
+        "MMLU-Pro": 0.055944055944055944
+      },
+      "z": 2.8912756532859474,
+      "one_sided_p": 0.0019184071162752193
+    }
+  },
+  "omni_equivalence": {
+    "fixed": {
+      "margin_pp": 5,
+      "ci90_pp": [
+        -8.097987369681578,
+        14.158136715325611
+      ],
+      "percentile_equivalent": false,
+      "normal_approximation_tost_p": 0.37163969332390234
+    },
+    "crossfit_conditional": {
+      "margin_pp": 5,
+      "ci90_pp": [
+        7.446540005004382,
+        20.34629868898323
+      ],
+      "percentile_equivalent": false,
+      "normal_approximation_tost_p": 0.9871894651635962
+    }
+  }
+}
