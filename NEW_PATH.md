@@ -1652,3 +1652,13 @@ awaits scheduling. No success/result claim yet.
 model download/inference because shared carrot_compare imports scikit-learn.
 Added scikit-learn to isolated runtime dependencies; no predictions collected.
 Relaunch with corrected snapshot, same frozen manifest and model protocol.
+4.A.47 completion: replacement job9ddbdc06 SUCCEEDED;300/300 predictions and
+1,000 paired bootstrap evaluations per contrast completed. Zero API spending.
+Intern success vs OUR success with OUR costs fixed: LCB-25.8%[-45.0,+0.2],
+Omni+1.1%[-16.3,+14.1],MMLU-10.1%[-34.9,+12.4]. None excludes zero.
+Intern vs Jev same OUR costs: LCB+3.5%[-7.7,15.3],Omni-0.3%[-7.4,5.2],
+MMLU-0.8%[-14.7,10.4], all inconclusive. Descriptive100/pool, conditional
+paired CIs; no equivalence claim, calibration or fine-tuning performed.
+Derived probability vectors, execution metadata, report and full bootstrap
+results copied into versioned protocol folder; raw responses persist at
+/mnt/llmd/results/exps/aristides/reason/intern_decision_20261001/responses.jsonl.
