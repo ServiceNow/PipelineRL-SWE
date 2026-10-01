@@ -1,0 +1,32 @@
+{
+  "date": "2026-10-01",
+  "prefill_commit": "c0c2415",
+  "scoring_commit": "1746820",
+  "jobs": {
+    "mmlupro_prefill": "e06c5620-31b9-46c2-9668-c6b6f51227f7",
+    "omni500_prefill": "aba530b6-e343-460f-a96f-b215275c7abe",
+    "mmlupro_scoring": "93fe399e-be56-4b2b-ac68-bec2592a4d67",
+    "omni500_scoring": "7dfae84a-b465-478e-917a-96a507ac9c2e"
+  },
+  "anchor_replays": {
+    "mmlupro": {
+      "n": 32,
+      "relative_feature_rms": 0.0,
+      "max_relative_forecast_error": 0.0,
+      "passed": true
+    },
+    "omni500": {
+      "n": 32,
+      "relative_feature_rms": 0.0,
+      "max_relative_forecast_error": 0.0,
+      "passed": true
+    }
+  },
+  "output_root": "/mnt/llmd/results/exps/aristides/reason/expanded_eval_20261001",
+  "outputs": [
+    "verified_fixed_policy_results.json",
+    "paper_calibrated_policy_results.json"
+  ],
+  "status_at_recording": "Corrected extraction running; CPU scoring waits for complete verified archives. Old results.json invalidated.",
+  "additional_openrouter_calls": 0
+}
