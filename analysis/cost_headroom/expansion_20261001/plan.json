@@ -6,11 +6,11 @@
   "omni_source_sha256": "7c87be8ee41ac7c7a597ef5a5500e84bd2b639a85a06db3da7f69bf9a32ef168",
   "seed": 20261001,
   "draws": {
-    "oss20lo": 4,
-    "oss20md": 3,
-    "dsv4f": 3,
-    "oss120md": 2,
-    "oss120hi": 2
+    "oss20lo": 1,
+    "oss20md": 1,
+    "dsv4f": 1,
+    "oss120md": 1,
+    "oss120hi": 1
   },
   "price_caps_per_million": {
     "oss20lo": [
@@ -37,71 +37,87 @@
   "evaluation": "All new problems are held-out evaluation. Preserve existing training/calibration splits and configuration choices; no significance-based stopping.",
   "estimates": {
     "mmlupro": {
-      "new_problems": 2000,
+      "new_problems": 6500,
       "existing_problems": 1000,
-      "combined_problems": 3000,
-      "calls": 28000,
+      "combined_problems": 7500,
+      "calls": 32500,
       "source_rows": 12032,
       "excluded_existing_rows": 1058,
       "excluded_source_duplicates": 329,
       "eligible_rows": 10645,
-      "sample_sha256": "ee8512fe07b5a8a1a8e9b971fb1000dc12fe0d6599cf41255d11ea0fc07a1d76",
+      "sample_sha256": "033f509509d975a4ac527a756a2b0b4270d8df9073a90d40a058dadb056b5e48",
       "strata_counts": {
-        "biology": 144,
-        "business": 144,
-        "chemistry": 144,
-        "computer science": 144,
-        "economics": 144,
-        "engineering": 144,
-        "health": 142,
-        "history": 142,
-        "law": 142,
-        "math": 142,
-        "other": 142,
-        "philosophy": 142,
-        "physics": 142,
-        "psychology": 142
+        "biology": 497,
+        "business": 497,
+        "chemistry": 497,
+        "computer science": 337,
+        "economics": 497,
+        "engineering": 497,
+        "health": 490,
+        "history": 310,
+        "law": 490,
+        "math": 490,
+        "other": 490,
+        "philosophy": 427,
+        "physics": 490,
+        "psychology": 491
+      },
+      "evaluation_stratum_weights": {
+        "biology": 0.072,
+        "business": 0.072,
+        "chemistry": 0.072,
+        "computer science": 0.072,
+        "economics": 0.072,
+        "engineering": 0.072,
+        "health": 0.071,
+        "history": 0.071,
+        "law": 0.071,
+        "math": 0.071,
+        "other": 0.071,
+        "philosophy": 0.071,
+        "physics": 0.071,
+        "psychology": 0.071
       },
       "routes": {
         "oss20lo": {
-          "calls": 8000,
+          "calls": 6500,
           "mean_prompt_tokens": 279.8814697265625,
           "mean_completion_tokens": 372.62091064453125,
-          "price_cap_estimate_usd": 0.5367071630859375
+          "price_cap_estimate_usd": 0.4360745700073242
         },
         "oss20md": {
-          "calls": 6000,
+          "calls": 6500,
           "mean_prompt_tokens": 280.11700439453125,
           "mean_completion_tokens": 1289.45703125,
-          "price_cap_estimate_usd": 1.2277394091796876
+          "price_cap_estimate_usd": 1.3300510266113281
         },
         "dsv4f": {
-          "calls": 6000,
+          "calls": 6500,
           "mean_prompt_tokens": 234.95912170410156,
           "mean_completion_tokens": 4345.6337890625,
-          "price_cap_estimate_usd": 7.498030427856446
+          "price_cap_estimate_usd": 8.122866296844483
         },
         "oss120md": {
-          "calls": 4000,
+          "calls": 6500,
           "mean_prompt_tokens": 281.5312805175781,
           "mean_completion_tokens": 888.0380249023438,
-          "price_cap_estimate_usd": 2.300210028076172
+          "price_cap_estimate_usd": 3.737841295623779
         },
         "oss120hi": {
-          "calls": 4000,
+          "calls": 6500,
           "mean_prompt_tokens": 281.3333435058594,
           "mean_completion_tokens": 3526.614501953125,
-          "price_cap_estimate_usd": 8.632674810791016
+          "price_cap_estimate_usd": 14.0280965675354
         }
       },
-      "estimated_usd_at_provider_price_caps": 20.19536183898926,
-      "planning_usd_with_25pct_buffer": 25.244202298736575
+      "estimated_usd_at_provider_price_caps": 27.654929756622316,
+      "planning_usd_with_25pct_buffer": 34.5686621957779
     },
     "omni500": {
       "new_problems": 1000,
       "existing_problems": 500,
       "combined_problems": 1500,
-      "calls": 14000,
+      "calls": 5000,
       "source_rows": 4428,
       "excluded_existing_rows": 503,
       "excluded_source_duplicates": 18,
@@ -118,40 +134,56 @@
         "1": 42,
         "10": 4
       },
+      "evaluation_stratum_weights": {
+        "8": 0.074,
+        "4": 0.262,
+        "5": 0.248,
+        "7": 0.072,
+        "6": 0.118,
+        "2": 0.142,
+        "9": 0.038,
+        "1": 0.042,
+        "10": 0.004
+      },
       "routes": {
         "oss20lo": {
-          "calls": 4000,
+          "calls": 1000,
           "mean_prompt_tokens": 168.17300415039062,
           "mean_completion_tokens": 1524.406982421875,
-          "price_cap_estimate_usd": 0.9415518701171876
+          "price_cap_estimate_usd": 0.2353879675292969
         },
         "oss20md": {
-          "calls": 3000,
+          "calls": 1000,
           "mean_prompt_tokens": 167.70733642578125,
           "mean_completion_tokens": 8644.9892578125,
-          "price_cap_estimate_usd": 3.9103700463867184
+          "price_cap_estimate_usd": 1.303456682128906
         },
         "dsv4f": {
-          "calls": 3000,
+          "calls": 1000,
           "mean_prompt_tokens": 140.64222717285156,
           "mean_completion_tokens": 17738.373046875,
-          "price_cap_estimate_usd": 14.9593030947876
+          "price_cap_estimate_usd": 4.986434364929199
         },
         "oss120md": {
-          "calls": 2000,
+          "calls": 1000,
           "mean_prompt_tokens": 170.14100646972656,
           "mean_completion_tokens": 4482.51513671875,
-          "price_cap_estimate_usd": 5.430060466003418
+          "price_cap_estimate_usd": 2.715030233001709
         },
         "oss120hi": {
-          "calls": 2000,
+          "calls": 1000,
           "mean_prompt_tokens": 169.96478271484375,
           "mean_completion_tokens": 16936.78515625,
-          "price_cap_estimate_usd": 20.37513162231445
+          "price_cap_estimate_usd": 10.187565811157224
         }
       },
-      "estimated_usd_at_provider_price_caps": 45.61641709960937,
-      "planning_usd_with_25pct_buffer": 57.020521374511716
+      "estimated_usd_at_provider_price_caps": 19.427875058746334,
+      "planning_usd_with_25pct_buffer": 24.28484382343292
     }
-  }
+  },
+  "job_spend_guards_usd": {
+    "mmlupro": 35,
+    "omni500": 25
+  },
+  "combined_spend_target_usd": 60
 }

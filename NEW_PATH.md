@@ -1492,3 +1492,14 @@ $45.62, total $65.81; 25% buffer total $82.26. Guards $30/$70. GPU feature
 extraction/cluster compute are separate. Key has $150.03 remaining of $700
 allowance at preparation; credentials never printed or committed. Full
 Omni benchmark version is pinned; MMLU reuses existing cached version.
+
+4.A.39 revision: user prioritized distinct new problems over repeated draws,
+then requested a $60 total target to reserve funds for later collection.
+Prepared replacement: 6,500 MMLU-Pro + 1,000 Omni, one draw per each of five
+routes (37,500 calls). Price-ceiling estimates $27.65+$19.43=$47.08;
+25% buffer $58.85; job guards $35+$25=$60. All new examples remain held-out.
+Some small MMLU subjects reach capacity; recorded original-subject weights
+preserve the primary comparison's intended mixture; also report unweighted.
+The prior launch attempt was rejected by automatic approval review because
+setup/estimate was not explicit permission for paid submission. No jobs have
+launched. Revised plan supersedes the earlier multi-draw plan and guards.
