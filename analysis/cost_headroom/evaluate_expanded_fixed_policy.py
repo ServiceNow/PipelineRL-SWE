@@ -9,7 +9,10 @@ OUT=Path('/mnt/llmd/results/exps/aristides/reason/expanded_eval_20261001')
 VREPORT=Path('analysis/cost_headroom/fixed_policy_20261001/results.json')
 
 def main():
-    ap=argparse.ArgumentParser();ap.add_argument('--dataset',choices=['mmlupro','omni500'],required=True);a=ap.parse_args()
+    ap=argparse.ArgumentParser();ap.add_argument('--dataset',choices=['mmlupro','omni500'],required=True)
+    ap.add_argument('--cost-file',default='cost_preds.jsonl')
+    ap.add_argument('--output-file',default='fixed_policy_results.json')
+    a=ap.parse_args()
     label=a.dataset;pool='MMLU-Pro' if label=='mmlupro' else 'Omni';folder=OUT/label.replace('-','_');t=np.load(folder/'tensors.npz',allow_pickle=True)
     ids=[str(x) for x in t['problem_ids']];slots=[str(x) for x in t['model_slots']];probs=[json.loads(x) for x in (folder/'problems.jsonl').read_text().splitlines()]
     old=load_pool(pool);n_old=len(old['ids']);newidx=np.arange(n_old,len(ids));n=len(newidx);v=t['valid'][newidx].astype(bool);cnt=v.sum(2)
@@ -23,7 +26,7 @@ def main():
     pin=np.asarray([rates[s][0] for s in slots])/1e6;pout=np.asarray([rates[s][1] for s in slots])/1e6
     paid=(inp*pin+length*pout)*100
     z=np.load(folder/'prefill_combined.npz',allow_pickle=True);pids=[str(x) for x in z['problem_ids']]
-    pfile=folder/'success_preds.jsonl';cfile=folder/'cost_preds.jsonl'
+    pfile=folder/'success_preds.jsonl';cfile=folder/a.cost_file
     if not pfile.exists() or not cfile.exists():raise RuntimeError('Frozen readouts have not been run')
     p=read_predictions(pfile,ids,'p_successes',len(slots))[newidx]
     c=read_predictions(cfile,ids,'expected_costs',len(slots))[newidx]*100
@@ -87,7 +90,8 @@ def main():
       'accuracy_delta':float((ql-qm).mean()),'accuracy_delta_ci95':np.percentile(bacc,[2.5,97.5]).tolist(),
       'frontier_supplementary':front,'stratum_weighted':weighted,
       'fixed_V_sensitivity_dollars_per_correct':sensitivity,
-      'protocol':'Fresh expansion only primary. Original frozen train/cal heads and V; expansion labels used only for evaluation. Routing at a calibration-selected fixed V, one route/problem; weighted/unweighted MMLU estimates, paired problem bootstrap. Frontier is secondary/descriptive and uses evaluation outcomes. No model/readout retraining on expansion labels.'}
-    (folder/'fixed_policy_results.json').write_text(json.dumps(report,indent=2)+'\n')
+      'cost_prediction_file':str(cfile),
+      'protocol':'Fresh expansion only. Heads fitted using original training/calibration data and V fixed from original calibration; expansion labels used only for evaluation. Routing at a calibration-selected fixed V, one route/problem; weighted/unweighted estimates, paired problem bootstrap. Frontier is secondary/descriptive and uses evaluation outcomes. No model/readout fitting on expansion labels.'}
+    (folder/a.output_file).write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps({k:v for k,v in report.items() if k not in ['problem_ids','mmlu_stratum_weights']}),flush=True)
 if __name__=='__main__':main()

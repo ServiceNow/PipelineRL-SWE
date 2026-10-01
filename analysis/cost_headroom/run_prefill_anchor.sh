@@ -3,6 +3,8 @@ set -euo pipefail
 ANCHOR_DATASET=$1
 ANCHOR_ROOT=/mnt/llmd/results/exps/aristides/reason/prefill_anchor_20261001
 mkdir -p "${ANCHOR_ROOT}"
+exec > >(tee -a "${ANCHOR_ROOT}/${ANCHOR_DATASET}.log") 2>&1
+export HF_HUB_DISABLE_IMPLICIT_TOKEN=1
 python - "${ANCHOR_DATASET}" "${ANCHOR_ROOT}" <<'PY'
 import json, sys
 from pathlib import Path
