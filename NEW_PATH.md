@@ -1876,3 +1876,11 @@ model AND their pricing), (D, K) chosen on original calibration.
 => On fresh data with real prices, ours beats every baseline with CIs excluding 0, except cost-from-success on Omni (+3.2, n.s.) --
 exactly the pattern predicted by the mechanism (Omni length ~ difficulty; MMLU-Pro length = work, +14 pt). Pending on GPU (no API):
 Intern-Decision success on fresh Omni/MMLU-Pro; MiniLM (CARROT kNN) and jina (MixLLM-style) embeddings for those baselines.
+
+### 4.A.45 Intern-Decision on FRESH Omni (2026-10-02; `intern_fresh_infer.py`, `intern_fresh_eval.py`; GPU, no API spend)
+Fine-tuned Intern-Decision-4B LoRA (adapters selected on original calibration, no fresh labels) vs our prefill success readout,
+1,000 fresh Omni problems, billed prices, same costs for both. Log-loss ours .490 vs Intern .496 (n.s.); AUC Intern higher on the
+strong routes (dsv4f .819 vs .808, oss120md .834 vs .821, oss120hi .847 vs .838). Routing: Intern success saves **+11.2% [+5.5,
++17.1]** vs ours with OUR costs, +24.7% [+17.5, +30.2] with median costs. => The original-test Omni lead (+15.9%) replicates on fresh
+data. Best Omni system = Intern success + our cost readout: success and cost predictors are complementary. MMLU-Pro (where
+Intern's original-test log-loss was significantly worse) pending.
