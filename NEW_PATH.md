@@ -1891,3 +1891,13 @@ MMLU-Pro targets .65/.75/.85 -> 21.2 [11.7, 26.6] / 27.4 [19.5, 32.2] / 7.7 [3.8
 7.5 [-3.1, 13.0] / 4.8 [-3.8, 9.0]%. Our calibration-selected points cost 0-2% more than our own fresh frontier at equal accuracy
 (Omni .70: 8%). => deployable == frontier at matched accuracy within ~1-2 pt; the gap in Table 2 was accuracy mismatch + position on
 the curve (savings shrink near the top). Added as a column to the 4-pager's Table 2.
+- 4.A.45 addendum (fresh MMLU-Pro, 6,500): Intern-Decision log-loss .512 vs ours .496 (ours better, [-.020, -.011]); AUC lower on every
+  route; routing with OUR costs: Intern costs 12.3% MORE [+6.6, +18.8]. => Intern helps on Omni (+11.2%), hurts on MMLU-Pro.
+
+### 4.A.47-48 launched (2026-10-02 15:30 ET)
+- Representation x head grid (`rep_head_grid.py`; eai rep_head_grid_193356): {4B prefill, Qwen3-Embedding-8B, jina 137M, MiniLM} x
+  {ridge, CARROT kNN, MixLLM ensemble}, fresh sets, billed prices, encoder passes priced for every arm (4B pass for all; other encoders
+  extra). Embeddings in expanded_eval_20261001/<ds>/text_embeddings.npz.
+- Second model family (`collect_second_family.py`; eai second_family_193327): Qwen3-32B + GLM-4.7-flash on MMLU-Pro original
+  train+cal (700) + the 2,000 pinned fresh problems; pilot $0.33 (Qwen3-32B 90% / $0.0041 per call, GLM 76% / $0.0047); est. $24,
+  guard $25. Omni skipped: Qwen3-32B hits its output cap on 65% of Omni problems (pilot) and both would cost ~$32 more.
