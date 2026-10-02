@@ -1859,3 +1859,20 @@ Routing over providers:
 => NOT found: per-query joint routing over (model x effort x provider) endpoints; predicted per-query cost that is
 endpoint-specific; shared problem-level readouts + per-endpoint offsets for onboarding new / drifted providers from ~10-50 labels;
 evidence that providers of one model are "same model + offset" per query (our agreement .90-.96, length corr .83-.95).
+
+### 4.A.43 All cost baselines on the FRESH sets at BILLED prices (2026-10-02; `fresh_baselines.py`, fresh_baselines.json)
+One protocol: heads/estimators fitted on original train only, realized cost = billed usage_cost, predictions priced at effective
+billed $/M; test frontier on fresh problems; DIRECT comparison = cost saved by ours at matched accuracy over the band both reach;
+paired problem bootstrap (300). Unweighted. ZeroRouter = full reproduction (stage-1 IRT on the 5 routes, 4B reader, their success
+model AND their pricing), (D, K) chosen on original calibration.
+| arm | Omni (1,000): saved vs median | ours saves vs it | MMLU-Pro (6,500): saved vs median | ours saves vs it |
+| ours (frozen 4B cost readout) | +27.8% [+20.3, +33.1] | -- | +23.1% [+18.1, +26.8] | -- |
+| median length (paper rule) | 0 | +27.8 [+20.3, +33.1] | 0 | +23.1 [+18.1, +26.8] |
+| mean length | -0.7 | +28.2 [+22.4, +33.6] | +3.3 | +20.5 [+16.7, +23.6] |
+| cost from success head | +25.8 | +3.2 [-1.7, +7.7] | +10.5 | **+14.1 [+11.4, +16.6]** |
+| ZeroRouter-style bins (our difficulty) | +18.6 | **+11.6 [+5.2, +16.2]** | +11.9 | **+12.7 [+7.8, +16.1]** |
+| prompt-feature GBM | +9.8 | **+20.3 [+11.8, +26.5]** | +5.7 | **+18.4 [+12.2, +21.7]** |
+| ZeroRouter (full repro) | +11.9 | **+18.0 [+9.0, +24.7]** | +4.5 | **+19.3 [+15.5, +22.6]** |
+=> On fresh data with real prices, ours beats every baseline with CIs excluding 0, except cost-from-success on Omni (+3.2, n.s.) --
+exactly the pattern predicted by the mechanism (Omni length ~ difficulty; MMLU-Pro length = work, +14 pt). Pending on GPU (no API):
+Intern-Decision success on fresh Omni/MMLU-Pro; MiniLM (CARROT kNN) and jina (MixLLM-style) embeddings for those baselines.
