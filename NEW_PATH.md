@@ -1787,3 +1787,16 @@ Prediction test (shared dsv4f readouts, fitted with NO provider info; offsets on
 => Supports the paper framing "route over endpoints (model x effort x provider) with shared problem-level structure + per-endpoint
 offsets; new / drifted endpoints onboard from ~10 labels" (same mechanism as new-model onboarding 4.A.18/4.A.21 and drift fix 4.A.37).
 Limit: provider ROUTING cannot be evaluated offline (~1 dsv4f draw per provider per problem); needs a pinned collection (paid).
+
+### 4.A.39 Billed prices, provider-routing literature, provider pilot launched (2026-10-02)
+- **Billed per-call cost exists** for the fresh collection (`usage_cost` in math_expand_20261001 rows). Effective billed $/M out
+  (least squares): dsv4f OpenInference 0.12, StreamLake 0.09, Baidu 0.11, GMICloud/DeepInfra 0.18, DigitalOcean 0.20, others
+  0.27-0.28; gpt-oss-120b 0.17-0.60 (most volume DeepInfra/CoreWeave 0.17, Crusoe 0.25, Mancer 0.30, BaseTen 0.50); gpt-oss-20b
+  0.13-0.14. OpenInference's listing has since risen to $1.60/M (Oct 2) -> prices move within days. Our analysis assumed
+  oss20 0.018/0.09, dsv4f 0.047/0.094, oss120 0.15/0.60: gpt-oss-120b is billed ~2-3x CHEAPER than assumed on average and
+  gpt-oss-20b ~1.5x DEARER -> the real price ladder is flatter than the one we modelled. Re-price all fresh results with billed costs.
+- **Literature**: provider variance measured (2605.02821); provider routing for a FIXED model (2609.37902, FACET: per-(provider x
+  task) feasibility certification, realized costs, layered beneath a model router). Not found: joint per-query routing over
+  (model x provider) endpoints with predicted per-query cost, or onboarding a new provider via shared readouts + offset.
+- **Pilot launched** (eai provider_pilot_20261002_062906; `collect_provider_pilot.py`): dsv4f pinned (only=[P], no fallbacks) to
+  StreamLake / GMICloud / DigitalOcean on 2,000 fresh MMLU-Pro + 1,000 APPS; est. ~$13, guard $18; smoke test OK.
