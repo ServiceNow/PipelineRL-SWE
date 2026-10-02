@@ -62,6 +62,7 @@ All estimators are fitted on original training problems only and evaluated on th
 \centering
 \footnotesize
 \setlength{\tabcolsep}{3pt}
+\resizebox{\columnwidth}{!}{%
 \begin{tabular}{lrr}
 \toprule
 Cost saved by ours vs. & Omni-MATH ($n$=1,000) & MMLU-Pro ($n$=6,500) \\
@@ -73,7 +74,7 @@ ZeroRouter (reimplemented) & 18.0 [9.0, 24.7] & 19.3 [15.5, 22.6] \\
 Difficulty bins & 11.6 [5.2, 16.2] & 12.7 [7.8, 16.1] \\
 Cost from success predictions & 3.2 [$-$1.7, 7.7] & 14.1 [11.4, 16.6] \\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 \caption{\textbf{Fresh problems, billed costs.} Cost saved (\%) by prefill cost readouts relative to each estimator at matched accuracy, with 95\% paired bootstrap intervals. ZeroRouter: item-response latent fitted on the five routes, 4B features, its own success model and bin pricing, configuration chosen on calibration. Difficulty bins: ten quantile bins of mean predicted success logit.}
 \label{tab:fresh}
 \end{table}
@@ -82,6 +83,7 @@ Cost from success predictions & 3.2 [$-$1.7, 7.7] & 14.1 [11.4, 16.6] \\
 \centering
 \footnotesize
 \setlength{\tabcolsep}{3pt}
+\resizebox{\columnwidth}{!}{%
 \begin{tabular}{lrrr}
 \toprule
 Fresh set & Cal. target & Savings, \% & $\Delta$ accuracy, pp \\
@@ -93,7 +95,7 @@ Omni-MATH & 0.65 & 15.3 [7.1, 22.9] & $+1.80$ [$-0.10$, $+3.70$] \\
  & 0.70 & 16.8 [12.3, 21.4] & $-1.70$ [$-3.20$, $-0.20$] \\
  & 0.75 & 12.7 [8.4, 17.2] & $-1.60$ [$-2.80$, $-0.40$] \\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 \caption{\textbf{Deployable policies.} Policies chosen on original calibration for each accuracy target and applied once to fresh problems; learned versus median-length pricing, billed costs, paired bootstrap (2,000). Fresh accuracy need not equal the target.}
 \label{tab:policies}
 \end{table}
