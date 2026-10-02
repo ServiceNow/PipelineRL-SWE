@@ -1833,3 +1833,29 @@ Realized cost = billed usage_cost; predictions and calibration priced at effecti
 | Omni, BILLED | **+28.2% [+20.3, +33.2]** | +15.3 / +16.8 / +12.7%; acc +1.80 / -1.70 / -1.60 |
 => The headline survives real prices with tight CIs. Under billed prices every calibrated target saves money; accuracy differences
 remain operating-point dependent. (Unweighted; Codex's tables use stratum weights.)
+
+### 4.A.44 Literature: provider variance and routing over provider endpoints (2026-10-02, detailed search)
+Measurement / audits (variance is well documented -- not our claim):
+- 2605.02821 (Li et al., May 2026, AI Ping): 29 providers, DeepSeek/Qwen/Kimi/GLM/MiniMax; latency, throughput, context, protocol,
+  errors, price; prices anchored near official, performance not; counterfactual provider routing (-37.8% cost Qwen3-32B); NOT
+  OpenRouter, no accuracy or per-query length.
+- 2604.21083 (Lin et al., IMC '26): gateways incl. OpenRouter; response length, reasoning tokens, accuracy, billing/token accounting,
+  silent substitution/downgrade.
+- Model-equality testing (Gao et al., ICLR 2025): 11/31 Llama endpoints serve a different distribution; audits of substitution:
+  2504.04715, AgentProv 2609.00052, IRIS 2607.20860 (gateway routing dilution), rank-based uniformity test 2506.06975.
+- Practice: Artificial Analysis per-provider gpt-oss-120b accuracy (GPQA x16, AIME25 x32): AIME25 93.3% to 36.7% across providers;
+  Willison; 16x eval; OpenRouter "Exacto" (provider variance acknowledged); Kimi Vendor Verifier (Moonshot); LessWrong "not pinning
+  your OpenRouter provider might invalidate your research" (CoT-legibility result overturned; up to 16.6 pt shifts);
+  AMindToThink/openrouter_reliable_research_search prior-work list; Epoch "why benchmarking is hard".
+- Our own code already notes a mechanism (collect_lcb_trajectories.py): some dsv4f endpoints (OpenInference, DigitalOcean) skip
+  reasoning unless reasoning.enabled is sent.
+Routing over providers:
+- 2609.37902 (He et al., Sep 29 2026): provider selection for a FIXED model via a public multi-provider aggregator, 6 models (DeepSeek,
+  Gemma, Llama, Mistral), GSM8K/MMLU/HumanEval; output length varies median 1.35x / max 3.04x across providers; price uncorrelated
+  with accuracy (rho +0.05); routing per (provider x task) facet (cheapest provider within 5 pt of best, >= 90% availability),
+  FACET online certification + drift detection; -50% median cost, -63.7% live. Stacked beneath a model router (RouteLLM).
+- Self-hosted joint model/instance routing (RouteBalance 2606.17949, BOute 2602.10729): replicas of a model are identical; per-query
+  length prediction used for load, not provider quality.
+=> NOT found: per-query joint routing over (model x effort x provider) endpoints; predicted per-query cost that is
+endpoint-specific; shared problem-level readouts + per-endpoint offsets for onboarding new / drifted providers from ~10-50 labels;
+evidence that providers of one model are "same model + offset" per query (our agreement .90-.96, length corr .83-.95).
