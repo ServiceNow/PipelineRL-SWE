@@ -1745,3 +1745,26 @@ and not part of the paper results above.
 
 ### 4.A.53 Correction: expansion comparison invalidated (2026-10-01)
 Section 4.A.52 and its fresh 13%/-33% results are withdrawn. The expansion encoder inputs omitted the original solving wrappers and MMLU answer options, and its cost fitter used calibration/target selection absent from the paper head. These are pipeline mismatches, not evidence of distribution shift. Generations remain valid and need no recollection. Corrected extraction uses full original prompt format, gates on 32 original-prompt anchor replays, and reconstructs archived train-only RidgeCV costs (max relative error 1.06e-6). Primary comparison: policies/mixes selected for the historical accuracy-target grid on original calibration; fixed on fresh problems; paired problem bootstrap for both achieved accuracy differences and spend. Include train-median and train-mean cost arms with the same success predictor. Fresh numerical claims removed from paper pending corrected results.
+
+### 4.A.37 CI diagnosis, Intern-Decision check, and PROVIDER DRIFT on deepseek-v4-flash (2026-10-02; Claude)
+Context: Codex expanded MMLU-Pro (+6,500) and Omni (+1,000) fresh problems (one draw per route) and built the NOWAI 4-pager
+(paper_nowai/); see its commits 3b51d2f..35a8b63.
+- **Intern-Decision-4B (fine-tuned) vs our prefill success readout, prediction quality on original test** (Intern test_predictions):
+  log-loss ours/Intern LCB .387/.410 (ours better, borderline), Omni .449/.430 (n.s.), MMLU-Pro .519/.547 (ours better,
+  Δ -.029 [-.050, -.007]). AUC on strong routes: Omni Intern .90/.91 vs ours .86/.88 (dsv4f, oss120hi) -> explains its Omni routing
+  win; elsewhere no better. Not a general win; settle Omni on the fresh set (inference only, no API spend).
+- **Net-utility metric** (`utility_metric_check.py`: U(V) = mean[V*correct - spend], same V for both arms, V range fixed on
+  calibration): relative precision NOT better than savings-at-matched-accuracy (CI half-width / effect: LCB .25 vs .21, Omni .42
+  vs .56, MMLU-Pro .64 vs .44). The only real lever for tight CIs is more test problems (fresh sets: ±4-9 pt).
+- **Provider drift.** On fresh data the learned cost head overprices dsv4f (predicted/realized 1.37 MMLU-Pro, 1.23 Omni; dsv4f
+  fresh MMLU-Pro log-length R2 -0.29 vs +0.20 on original test); all other routes within ±8%. Cause: OpenRouter served dsv4f mostly
+  from OpenInference in the fresh run (64% MMLU-Pro, 72% Omni), a provider absent from the original pools, which writes about half the
+  tokens at equal accuracy (MMLU-Pro median 465 vs StreamLake 969; acc .859 vs .857). Providers already differed 2-3x within the
+  original pools (MMLU-Pro mean output Relace 9.9k vs GMICloud 2.8k) -> hidden label noise and a deployment drift risk.
+- **One-offset recalibration from k fresh examples** (`drift_reoffset.py`; both arms get the same k: ours rescales dsv4f by the
+  ratio of means, median recomputes the dsv4f median; k problems excluded from evaluation; 10 draws): dsv4f calibration 1.37 ->
+  1.19 / 1.02 / 0.99 (k = 10 / 50 / 200) on MMLU-Pro, 1.23 -> 1.16 / 1.03 / 1.04 on Omni. Net-utility gain over median pricing
+  (avg over the calibration V range): MMLU-Pro +6.4% -> +7.6 / +14.4 / +15.7%; Omni +20.8% -> +25.0 / +25.2 / +22.1% (point estimates,
+  no CIs yet). Note: a MEAN-LOG offset overcorrects (calibration 0.43-0.51) because predictions are means of right-skewed lengths.
+  Fixed-target policies (chosen with original costs) swing in savings vs accuracy after recalibration -- another reason the
+  per-target table is hard to read.
