@@ -1,0 +1,75 @@
+\begin{thebibliography}{10}\itemsep=-1pt
+
+\bibitem{omni}
+Bofei Gao, Feifan Song, Zhe Yang, et~al.
+\newblock {Omni-MATH: A Universal Olympiad Level Mathematic Benchmark For Large
+  Language Models}, 2024.
+\newblock arXiv:2410.07985.
+
+\bibitem{routerbench}
+Qitian~Jason Hu, Jacob Bieker, Xiuyu Li, et~al.
+\newblock {RouterBench: A Benchmark for Multi-LLM Routing System}, 2024.
+\newblock arXiv:2403.12031.
+
+\bibitem{lcb}
+Naman Jain, King Han, Alex Gu, et~al.
+\newblock {LiveCodeBench: Holistic and Contamination Free Evaluation of Large
+  Language Models for Code}, 2024.
+\newblock arXiv:2403.07974.
+
+\bibitem{taco}
+Rongao Li, Jie Fu, Bo-Wen Zhang, et~al.
+\newblock {TACO: Topics in Algorithmic COde generation dataset}, 2023.
+\newblock arXiv:2312.14852.
+
+\bibitem{codecontests}
+Yujia Li, David Choi, Junyoung Chung, et~al.
+\newblock {Competition-Level Code Generation with AlphaCode}, 2022.
+\newblock arXiv:2203.07814.
+
+\bibitem{alps}
+Glen Messenger.
+\newblock {ALPS: Activation-Based Length Prediction for Intelligent LLM
+  Inference Scheduling}, 2026.
+\newblock Zenodo. doi:10.5281/zenodo.19078431.
+
+\bibitem{carrot}
+Seamus Somerstep, Felipe~Maia Polo, Allysson Flavio~Melo de Oliveira, et~al.
+\newblock {CARROT: A Cost Aware Rate Optimal Router}, 2025.
+\newblock arXiv:2502.03261.
+
+\bibitem{prefill}
+Tanay Varshney, Annie Surla, Michelle Xu, et~al.
+\newblock {LLM Router: Rethinking Routing with Prefill Activations}, 2026.
+\newblock arXiv:2603.20895.
+
+\bibitem{mixllm}
+Xinyuan Wang, Yanchi Liu, Wei Cheng, et~al.
+\newblock {MixLLM: Dynamic Routing in Mixed Large Language Models}, 2025.
+\newblock arXiv:2502.18482.
+
+\bibitem{mmlupro}
+Yubo Wang, Xueguang Ma, Ge Zhang, et~al.
+\newblock {MMLU-Pro: A More Robust and Challenging Multi-Task Language
+  Understanding Benchmark}, 2024.
+\newblock arXiv:2406.01574.
+
+\bibitem{egtp}
+Huanyi Xie, Yubin Chen, Liangyu Wang, et~al.
+\newblock {Predicting LLM Output Length via Entropy-Guided Representations},
+  2026.
+\newblock arXiv:2602.11812.
+
+\bibitem{zerorouter}
+Cheng Yan, Wuyang Zhang, Zhiyuan Ning, et~al.
+\newblock {Breaking Model Lock-in: Cost-Efficient Zero-Shot LLM Routing via a
+  Universal Latent Space}, 2026.
+\newblock arXiv:2601.06220.
+
+\bibitem{bigcodebench}
+Terry~Yue Zhuo, Minh~Chien Vu, Jenny Chim, et~al.
+\newblock {BigCodeBench: Benchmarking Code Generation with Diverse Function
+  Calls and Complex Instructions}, 2025.
+\newblock arXiv:2406.15877.
+
+\end{thebibliography}

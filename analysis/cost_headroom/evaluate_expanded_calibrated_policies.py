@@ -16,10 +16,18 @@ TARGETS = [0.60, 0.65, 0.70, 0.75, 0.80, 0.85]
 VALUES = np.geomspace(1e-5, 100, 400)  # cents per correct answer, historical grid
 
 
-def policy(p, cost, q, paid, target):
+def policy(p, cost, q, paid, target, deterministic=False):
     choices = (VALUES[:, None, None] * p[None] - cost[None]).argmax(2)
     rows = np.arange(len(p))[None]
     accuracy, spending = q[rows, choices].mean(1), paid[rows, choices].mean(1)
+    if deterministic:
+        eligible = np.flatnonzero(accuracy >= target - 1e-12)
+        if not len(eligible):
+            return None
+        i = int(eligible[np.argmin(spending[eligible])])
+        return dict(V_cents=[float(VALUES[i]), float(VALUES[i])], upper_weight=0.0,
+                    calibration_target=target, calibration_accuracy=float(accuracy[i]),
+                    calibration_mean_cost_cents=float(spending[i]), policy_type='deterministic')
     h = hull(zip(spending, accuracy))
     if not h[0][1] <= target <= h[-1][1]:
         return None
@@ -34,7 +42,7 @@ def policy(p, cost, q, paid, target):
     weight = ((target-edges[0][1]) / (edges[1][1]-edges[0][1])
               if edges[1][1] > edges[0][1] else 0.0)
     return dict(V_cents=[float(VALUES[i]) for i in indices],
-                upper_weight=float(weight), calibration_target=target)
+                upper_weight=float(weight), calibration_target=target, policy_type='randomized')
 
 
 def outcomes(p, cost, q, paid, selected):
@@ -48,6 +56,7 @@ def outcomes(p, cost, q, paid, selected):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--dataset', choices=['mmlupro', 'omni500'], required=True)
+    ap.add_argument('--policy-type', choices=['randomized', 'deterministic'], default='randomized')
     a = ap.parse_args()
     label = 'MMLU-Pro' if a.dataset == 'mmlupro' else 'Omni'
     name, cost_file = POOLS[label]
@@ -106,7 +115,8 @@ def main():
         return sum(float(weights[s])*float(x[(sample or groups)[s]].mean()) for s in groups)
     results = {}
     for target in TARGETS:
-        selected = {arm:policy(p[ca],c[ca],q[ca],paid[ca],target) for arm,c in costs.items()}
+        selected = {arm:policy(p[ca],c[ca],q[ca],paid[ca],target,
+                              deterministic=a.policy_type=='deterministic') for arm,c in costs.items()}
         observed = {arm:outcomes(p[fresh],costs[arm][fresh],q[fresh],paid[fresh],config)
                     for arm,config in selected.items() if config is not None}
         arms = {}
@@ -128,11 +138,17 @@ def main():
                     accuracy_delta_ci95=np.percentile(boot_accuracy,[2.5,97.5]).tolist())
         results[str(target)] = dict(arms=arms, comparisons=comparisons,
                                     unreachable_on_calibration=[arm for arm,v in selected.items() if v is None])
-    report = dict(dataset=label, n_fresh=len(fresh), targets=TARGETS,
+    report = dict(dataset=label, n_fresh=len(fresh), targets=TARGETS, policy_type=a.policy_type,
                   original_success_prediction_max_absolute_discrepancy=discrepancy,
                   cost_reconstruction=reconstruction, results=results,
-                  protocol='Historical target grid reused; policy Vs and mixture weights selected only on original calibration. Same success scores and realized market spending for all arms. Median and mean length references fitted on original training only. Fresh outcomes used solely for achieved accuracy/cost and 2,000 paired stratified problem-bootstrap CIs. No accuracy-equivalence claim merely from non-significance. Repair after fresh outcomes were seen, so report transparently as a corrected follow-up, not a new preregistration.')
-    (folder/'paper_calibrated_policy_results.json').write_text(json.dumps(report,indent=2)+'\n')
+                  protocol=('Historical target grid reused. '+
+                    ('Select the cheapest single-V policy meeting each accuracy target on original calibration; no randomized routing. This deterministic follow-up was specified after the randomized fresh results were observed, in response to a request for a simpler deployable policy; all reachable targets are reported.'
+                     if a.policy_type=='deterministic' else
+                     'Policy Vs and mixture weights selected only on original calibration.')+
+                    ' Same success scores and realized market spending for all arms. Median and mean length references fitted on original training only. Fresh outcomes used solely for achieved accuracy/cost and 2,000 paired stratified problem-bootstrap CIs. No accuracy-equivalence claim merely from non-significance. Pointwise intervals, no multiplicity adjustment; training and calibration held fixed. Report transparently as a corrected follow-up, not a new preregistration.'))
+    filename=('paper_deterministic_policy_results.json' if a.policy_type=='deterministic'
+              else 'paper_calibrated_policy_results.json')
+    (folder/filename).write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps(report),flush=True)
 
 

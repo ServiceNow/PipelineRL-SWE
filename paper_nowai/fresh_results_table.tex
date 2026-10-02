@@ -1,0 +1,24 @@
+\begin{table*}[t]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{lrrrrrr}
+\toprule
+Fresh set & \shortstack{Cal. target\\\%} & \shortstack{Fresh acc.\\ours, \%} & \shortstack{$\Delta$ acc. vs median\\pp [95\% CI]} & \shortstack{Savings vs median\\\% [95\% CI]} & \shortstack{$\Delta$ acc. vs mean\\pp [95\% CI]} & \shortstack{Savings vs mean\\\% [95\% CI]} \\
+\midrule
+MMLU-Pro & 60 & 61.90 & $+0.00 [+0.00, +0.00]$ & $0.0 [0.0, 0.0]$ & $+0.00 [+0.00, +0.00]$ & $0.0 [0.0, 0.0]$ \\
+MMLU-Pro & 65 & 64.23 & $-0.33 [-0.97, +0.31]$ & $28.8 [22.5, 34.7]$ & $-0.76 [-1.41, -0.16]$ & $27.0 [23.6, 30.6]$ \\
+MMLU-Pro & 70 & 66.80 & $-1.67 [-2.51, -0.88]$ & $47.2 [42.5, 51.3]$ & $-0.33 [-1.08, +0.45]$ & $33.9 [29.3, 38.4]$ \\
+MMLU-Pro & 75 & 73.45 & $+1.29 [+0.35, +2.25]$ & $31.1 [25.6, 36.3]$ & $+1.66 [+0.81, +2.54]$ & $31.2 [25.7, 36.4]$ \\
+MMLU-Pro & 80 & 76.93 & $-1.28 [-2.11, -0.42]$ & $29.3 [24.9, 33.5]$ & $-1.99 [-2.77, -1.25]$ & $32.7 [28.8, 36.4]$ \\
+MMLU-Pro & 85 & 84.47 & $+0.33 [-0.01, +0.68]$ & $-5.1 [-7.0, -3.3]$ & $+3.17 [+2.61, +3.73]$ & $-15.3 [-17.6, -12.9]$ \\
+\midrule
+Omni-MATH & 60 & 56.40 & $+0.90 [-1.20, +2.90]$ & $29.4 [22.0, 36.4]$ & $+0.40 [-1.70, +2.40]$ & $34.3 [27.4, 40.4]$ \\
+Omni-MATH & 65 & 58.70 & $+0.10 [-1.70, +2.00]$ & $24.9 [17.3, 31.6]$ & $+0.00 [-1.90, +1.90]$ & $29.2 [22.6, 35.4]$ \\
+Omni-MATH & 70 & 62.90 & $-0.70 [-2.20, +0.80]$ & $16.0 [11.2, 20.9]$ & $-1.80 [-3.30, -0.30]$ & $19.6 [14.8, 24.4]$ \\
+Omni-MATH & 75 & 68.10 & $-0.10 [-0.90, +0.70]$ & $3.3 [0.8, 6.0]$ & $+1.80 [+0.70, +2.90]$ & $-5.3 [-8.6, -2.1]$ \\
+\bottomrule
+\end{tabular}
+\caption{\textbf{Fresh deterministic policies.} MMLU-Pro has 6,500 new problems and Omni-MATH has 1,000. For each target, each arm selects the cheapest single-$V$ policy reaching at least that accuracy on original calibration. Every query receives one answer; no routing randomization or abstention is used. Fresh accuracy need not equal the target or reference accuracy. Positive accuracy differences and savings favor learned costs. All reachable targets are shown. Intervals are pointwise paired stratified percentile bootstraps (2,000 resamples), conditional on the fitted heads and calibrated policies. Generation spending excludes encoder overhead.}
+\label{tab:fresh}
+\end{table*}

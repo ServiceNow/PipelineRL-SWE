@@ -1,0 +1,23 @@
+\begin{table*}[t]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{lrrrrrr}
+\toprule
+Fresh set & \shortstack{Cal. target\\\%} & \shortstack{Fresh acc.\\ours, \%} & \shortstack{$\Delta$ acc. vs median\\pp [95\% CI]} & \shortstack{Savings vs median\\\% [95\% CI]} & \shortstack{$\Delta$ acc. vs mean\\pp [95\% CI]} & \shortstack{Savings vs mean\\\% [95\% CI]} \\
+\midrule
+MMLU-Pro & 65 & 63.75 & $-0.27 [-0.75, +0.21]$ & $26.2 [20.5, 31.7]$ & $-0.54 [-1.02, -0.07]$ & $21.5 [18.5, 24.7]$ \\
+MMLU-Pro & 70 & 66.86 & $-0.92 [-1.68, -0.23]$ & $41.9 [37.5, 45.9]$ & $-0.50 [-1.18, +0.19]$ & $36.3 [32.3, 40.0]$ \\
+MMLU-Pro & 75 & 72.62 & $+1.07 [+0.16, +1.94]$ & $31.5 [26.4, 36.5]$ & $+1.57 [+0.80, +2.33]$ & $27.0 [21.9, 32.0]$ \\
+MMLU-Pro & 80 & 76.90 & $+0.40 [-0.36, +1.18]$ & $25.1 [20.7, 29.2]$ & $+0.74 [+0.09, +1.41]$ & $22.5 [18.2, 26.8]$ \\
+MMLU-Pro & 85 & 82.77 & $+0.45 [-0.01, +0.97]$ & $4.9 [2.3, 7.4]$ & $+1.49 [+0.98, +2.01]$ & $-2.5 [-5.3, 0.4]$ \\
+\midrule
+Omni-MATH & 60 & 55.64 & $+1.67 [+0.13, +3.28]$ & $33.0 [27.8, 38.1]$ & $+1.82 [+0.28, +3.39]$ & $32.5 [27.3, 37.4]$ \\
+Omni-MATH & 65 & 58.16 & $+0.09 [-1.48, +1.65]$ & $34.7 [29.3, 39.8]$ & $+0.27 [-1.31, +1.86]$ & $34.3 [28.9, 39.4]$ \\
+Omni-MATH & 70 & 62.41 & $+0.24 [-1.11, +1.61]$ & $16.6 [11.7, 21.4]$ & $+0.45 [-0.88, +1.84]$ & $16.0 [11.2, 21.0]$ \\
+Omni-MATH & 75 & 68.00 & $+1.55 [+0.57, +2.61]$ & $-2.8 [-5.9, 0.1]$ & $+1.97 [+0.94, +3.05]$ & $-5.1 [-8.4, -2.1]$ \\
+\bottomrule
+\end{tabular}
+\caption{\textbf{Fresh randomized-policy sensitivity.} MMLU-Pro has 6,500 new problems and Omni-MATH has 1,000. Two-$V$ mixtures and their probabilities are selected on original calibration to attain each target and then frozen. Entries evaluate mixture-expected outcomes; fresh accuracies need not match. Positive accuracy differences and savings favor learned costs. All reachable targets are shown. Intervals are pointwise paired stratified percentile bootstraps (2,000 resamples), conditional on the fitted heads and calibrated policies. Generation spending excludes encoder overhead.}
+\label{tab:randomized}
+\end{table*}

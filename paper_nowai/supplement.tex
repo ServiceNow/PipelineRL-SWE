@@ -10,6 +10,17 @@
 \author{Anonymous authors}
 \maketitle
 
+\section{Fresh Evaluation and Randomized Sensitivity}
+The main paper plots deterministic accuracy--cost points and evaluates a single-$V$ policy per calibration target. Calibration accuracy is a minimum constraint, not a guarantee of matching fresh accuracy. MMLU-Pro includes all six historical targets; Omni-MATH's 80\% and 85\% targets are unreachable on calibration. All predictions, prices, and success scores are held fixed across cost arms.
+
+For comparison, Table~\ref{tab:randomized} freezes mixtures of two $V$ policies selected on original calibration to attain the target exactly. One policy is sampled per query; it selects one route and produces one answer. Reported accuracy and spending are the mixture's expected outcomes, evaluated analytically from stored generations. This is not abstention or interpolation using fresh labels. A finite randomized deployment run would have additional routing randomization noise. The deterministic follow-up was specified after these sensitivity results were examined, so it is reported as an exploratory follow-up with the entire reachable grid, not a new preregistration.
+
+\input{fresh_randomized_table}
+
+Re-extracting 32 original full prompts per dataset reproduced all stored mean/last features exactly. Reconstructed cost forecasts match archived predictions within $1.1\times10^{-6}$ relative error. Success-score reconstruction differences on original problems are at most $6.5\times10^{-4}$ on MMLU-Pro and $2.8\times10^{-3}$ on Omni; policy selection uses archived original-calibration scores. Expansion prompts initially omitted solving wrappers and MMLU answer options, and an initial cost fitter differed from the paper head. Those results were withdrawn. Corrected full prompts and train-only RidgeCV were used for every fresh result reported here. The repair occurred after fresh outcomes had been observed.
+
+An independent reimplementation of the paired, stratified bootstrap reproduced all cost-saving and accuracy-difference interval endpoints within $5\times10^{-15}$. Both policies use the same problem resample; ratios of weighted mean costs are recomputed in each replicate. Intervals condition on fitted predictors and calibration decisions, assume independence within strata, and are pointwise without multiplicity adjustment. An interval crossing zero does not establish equivalence or noninferiority. Weights reproduce the predeclared original subject/difficulty distribution, not an arbitrary deployment population.
+
 \section{Oracle and Predicted Cost Savings}
 Figure~\ref{fig:headroom} reports savings under empirical oracle costs alongside savings under predicted costs. Headroom is defined relative to the same median-output reference, with success predictions held fixed. Each pool uses its own shared accuracy band. Contrast pools have different models and prices, so the comparison is descriptive. Oracle output lengths are estimated from repeated generations and have sampling error.
 \begin{figure*}[t]
@@ -53,5 +64,5 @@ A pre-registered screen used one gpt-oss-20b-low draw and five-fold cross-valida
 \section{Head Training and Uncertainty}
 Success heads use a binomial logistic likelihood over all valid draws. Penalty selection and Platt calibration retain the legacy first-draw target, including treating an invalid first draw as failure; all-draw likelihoods and evaluation exclude invalid draws. Cost heads fit log mean output length using ridge regression and training-only regularization selection, then apply smearing and training-mean matching. Shared features do not require the same likelihood for both targets.
 
-All main-paper results use original collected pools. Newly launched held-out collections are not included. Common encoder overhead is excluded from generation savings. A deployment comparison should report achieved accuracy, total cost including encoding, and operating points selected before evaluation.
+Original-test frontier and learned-baseline comparisons use the original pools; fresh deterministic and randomized results use only the 7,500 expansion problems. Other learned cost estimators have not been evaluated on the expansion. Common encoder overhead is excluded. Complete deployment costs and uncertainty over retraining remain unmeasured.
 \end{document}
