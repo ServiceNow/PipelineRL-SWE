@@ -12,7 +12,7 @@ input/output prices (input exact). Writes <pool>/cost_preds_<method>.jsonl for d
              no target-space selection, no floor) -- the apples-to-apples version of our head.
   ownprefill TRAIL / EGTP-style: each route's OWN prefill activations (LCB: gpt-oss-20b / 120b readouts; dsv4f keeps the
              scout's, no dsv4f activations exist).
-Usage: python baseline_cost_heads.py <pool> <scout_activations.npz> [--own route=path.npz,...]
+Usage: python baseline_cost_heads.py <pool> <scout_activations.npz> [--own route=path.npz,...] [--only probe,gbm]
 """
 import json, re, sys, numpy as np
 from pathlib import Path
@@ -74,10 +74,12 @@ def main():
     texts = [str(meta[p].get("problem_statement", "")) for p in pids]
     sp = json.load(open(D / "split_manifest.json")); tr = np.array([pi[str(p)] for p in sp["train_problem_ids"]])
     te = np.array([pi[str(p)] for p in sp["test_problem_ids"]])
-    feats = {"mixllm": embed(texts, D / "emb_jina_code.npy"), "gbm": np.array([text_features(s) for s in texts], float),
-             "probe": rich(act, pids)}
+    only = sys.argv[sys.argv.index("--only") + 1].split(",") if "--only" in sys.argv else ["mixllm", "gbm", "probe"]
+    builders = {"mixllm": lambda: embed(texts, D / "emb_jina_code.npy"), "gbm": lambda: np.array([text_features(s) for s in texts], float),
+                "probe": lambda: rich(act, pids)}
+    feats = {k: builders[k]() for k in only}
     if own:
-        feats["ownprefill"] = {s: rich(own[s], pids) if s in own else feats["probe"] for s in S}
+        feats["ownprefill"] = {s: rich(own[s], pids) if s in own else rich(act, pids) for s in S}
     report = {}
     for meth, F in feats.items():
         C = np.zeros((len(pids), len(S))); r2s = []

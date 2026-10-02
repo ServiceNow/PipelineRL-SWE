@@ -1800,3 +1800,36 @@ Limit: provider ROUTING cannot be evaluated offline (~1 dsv4f draw per provider 
   (model x provider) endpoints with predicted per-query cost, or onboarding a new provider via shared readouts + offset.
 - **Pilot launched** (eai provider_pilot_20261002_062906; `collect_provider_pilot.py`): dsv4f pinned (only=[P], no fallbacks) to
   StreamLake / GMICloud / DigitalOcean on 2,000 fresh MMLU-Pro + 1,000 APPS; est. ~$13, guard $18; smoke test OK.
+
+### 4.A.40 APPS full pool: pre-registered GAIN NOT confirmed (2026-10-02; apps_tensors, apps.json)
+1,000 problems, ONE draw per route (deviation: pre-registration assumed 4/3/3/2/2), split 618 train+cal / 382 test. Accuracy
+oss20lo 59.1 / oss20md 75.3 / dsv4f 83.5 / oss120md 81.1 / oss120hi 86.6%. Instruct-probe log-length R2 .55-.70.
+Headroom 31.9% [17.5, 42.0] (>= 15% predicted: CONFIRMED). Probe gain vs paper rule 14.3% [-2.3, 23.6]: point estimate >= 10% but
+the CI includes 0 -> the pre-registered GAIN call FAILS its criterion (directional). Cost-from-success 13.3%, ZeroRouter-style bins
+13.2%, prompt GBM -8.4% (probe - GBM +20.8 [+2.4, +41.2]), mean constant -0.9%. Pre-registration tally: GAIN Omni, MMLU-Pro
+confirmed; APPS directional, not confirmed; AIME, BBEH (NO GAIN), K&K, SuperGPQA not run.
+
+### 4.A.41 Provider-routing pilot results (2026-10-02; provider_pilot_20261002, $11.26; `provider_routing.py`)
+dsv4f pinned to StreamLake / GMICloud / DigitalOcean on 1,995 fresh MMLU-Pro + 957 APPS problems (all routes present).
+- Providers ARE "the same model + offset": correct-answer agreement .93-.96 (MMLU-Pro) / .90-.91 (APPS) vs .73-.78 if independent;
+  log-length correlation across problems .83-.95. Per-query provider-specific signal is small.
+- Providers differ in level: APPS accuracy GMICloud .898 / StreamLake .847 / DigitalOcean .828 / unpinned .794; billed cost per call
+  1.0 / 5.0 / 2.3 / 3.2 m$; GMICloud writes x1.5 longer. MMLU-Pro: accuracy .847-.855 (equal), cost .32-.74 m$.
+- Routing (shared prefill readouts + per-provider offsets fitted on held-out FIT problems; billed prices), cost saved vs unpinned at
+  matched accuracy: APPS endpoints router (all 3 providers as routes) +20.0% [+10.7, +27.9] and max accuracy 89.5% (vs 85.3%
+  unpinned); best fixed provider StreamLake +22.4% [+12.5, +30.7] (max acc 86.2%). MMLU-Pro: endpoints +2.3% [-4.9, +7.7]; best fixed
+  StreamLake +6.0% [-1.5, +11.5]; DigitalOcean -23.7%.
+=> Where providers differ (code), treating (model x provider) as endpoints with shared readouts + offsets gets the cheap
+provider's savings AND the accurate provider's top accuracy; where they don't (MMLU-Pro), nothing to gain. Most of the value is
+level (pin the right provider), not per-query provider choice.
+
+### 4.A.42 Billed re-pricing of the fresh-set result (2026-10-02; `billed_reprice.py`)
+Realized cost = billed usage_cost; predictions and calibration priced at effective billed $/M (gpt-oss-120b ~2.5x cheaper, gpt-oss-20b
+~1.5x dearer than the list prices we assumed). Learned cost vs median-length pricing, fresh problems:
+| | test-frontier savings (shared band) | calibration-selected policies, targets .65-.85 (savings / acc diff) |
+| MMLU-Pro (6,500), assumed | +23.9% [+19.5, +27.4] | +30.0 / +48.1 / +32.8 / +30.1 / -5.0%; acc -0.45 / -1.91 / +0.97 / -1.52 / +0.28 |
+| MMLU-Pro, BILLED | **+23.2% [+18.5, +26.9]** | +17.2 / +29.0 / +17.1 / +19.3 / +12.1%; acc +0.51 / +0.23 / +3.18 / +1.32 / -1.11 |
+| Omni (1,000), assumed | +23.4% [+17.5, +29.6] | +24.9 / +16.0 / +3.3% (.65-.75) |
+| Omni, BILLED | **+28.2% [+20.3, +33.2]** | +15.3 / +16.8 / +12.7%; acc +1.80 / -1.70 / -1.60 |
+=> The headline survives real prices with tight CIs. Under billed prices every calibrated target saves money; accuracy differences
+remain operating-point dependent. (Unweighted; Codex's tables use stratum weights.)
