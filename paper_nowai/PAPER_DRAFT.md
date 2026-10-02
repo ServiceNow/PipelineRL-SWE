@@ -2,130 +2,101 @@
 
 ## Abstract
 
-Reasoning-model routers must estimate generation cost before choosing a model, yet output lengths vary across queries. We estimate route-specific costs from the prefill activations of a frozen 4B encoder, sharing features with the success predictor. Linear cost readouts require no target-model computation before route selection. We evaluate deterministic routing curves and calibration-selected policies on 6,500 new MMLU-Pro and 1,000 new Omni-MATH problems. Against training-median costs, a 75% calibration target on MMLU-Pro gives 31.1% lower spending and 1.29 points higher fresh accuracy. A 65% target on Omni gives 24.9% lower spending with an uncertain accuracy difference. Other targets show accuracy–cost tradeoffs. Original-test comparisons with alternative estimators provide mixed evidence. The benefit depends on the dataset and operating point.
+Routers choose a model per query by trading predicted correctness against cost, but most price each model at a constant, although a reasoning model's output length varies by an order of magnitude across queries. We predict route-specific output length from the prefill activations of a frozen 4B encoder that already supplies the success predictions, using one linear readout per route. On 6,500 new MMLU-Pro and 1,000 new Omni-MATH problems, priced at the costs actually billed, predicted costs reduce spending at matched accuracy by 23.1% and 27.8% relative to median-length pricing. They also beat every alternative estimator we evaluated, including a reimplementation of ZeroRouter, with paired intervals excluding zero; the one exception is cost read off the success predictions on Omni-MATH, where length tracks difficulty. Deployed models drift: the same model served by different providers differs in output length and price. Treating each provider as the same model plus one offset, re-fitted from 50 calls, corrects a 37% overestimate after an unannounced provider shift, and routing over pinned providers saves 20% on APPS.
 
 ## Introduction
 
-Reasoning-model routing requires predicting both correctness and generation cost before choosing a model. Token rates are known, but reasoning-trace lengths depend on the query. A model that is cheap on average may be expensive on a particular problem. Estimating query-specific output length may change the selected route.
+Routing reasoning models requires predicting both correctness and cost before generation. Token rates are published; the number of tokens is not. A model that is cheap on average can be expensive on a particular problem, and the outputs of the models we study vary 10–90$\times$ across problems.
 
-Prefill routers estimate correctness from prompt activations. The prefill-router architecture of Varshney et al. ([Prefill router](https://arxiv.org/abs/2603.20895)) explicitly defers output-length prediction and prices outputs using median training length. We use these representations to predict output lengths for multiple reasoning models. A frozen 4B encoder processes the query, and per-route linear readouts estimate success and cost before route selection (Figure 1). Cost prediction adds readouts to an existing prefill router without another encoder pass.
+Prefill routers predict correctness from a small encoder's prompt activations; the prefill router of Varshney et al. ([Prefill router](https://arxiv.org/abs/2603.20895)) explicitly prices outputs at median training length. We read output length from the same activations (Figure 1). Cost prediction adds one linear readout per route to an existing prefill router, without another encoder pass.
 
-We compare cost estimators while holding success predictions and the routing objective fixed. On 7,500 new problems, policies selected using the original calibration sets reduce spending at several operating points. We report the full reachable target grid and both cost and accuracy differences. Original-test frontiers compare alternative estimators; additional coding pools show that oracle cost savings need not translate into savings from predicted costs.
+We contribute: (i) evidence on fresh problems and billed prices that prefill cost readouts reduce spending at matched accuracy and outperform text-embedding, prompt-feature, difficulty-bin and success-derived cost estimators; (ii) a mechanism: success-derived pricing suffices where output length tracks difficulty and fails where it does not; (iii) a deployment finding: the same model's endpoints drift, and the shared readouts absorb this with one offset per endpoint.
 
 ### Related work.
 
-Prior routers have used learned cost estimates: MixLLM predicts output length from query embeddings ([MixLLM](https://arxiv.org/abs/2502.18482)), and CARROT estimates cost and performance using embedding-based nearest neighbors or a shared fine-tuned RoBERTa encoder ([CARROT](https://arxiv.org/abs/2502.03261)). Activation-based length prediction also supports inference scheduling ([ALPS](https://doi.org/10.5281/zenodo.19078431), [Entropy-guided length prediction](https://arxiv.org/abs/2602.11812)). We instead estimate costs for multiple reasoning routes from frozen generative prefill features using linear readouts. ZeroRouter derives length from item-response difficulty bins ([ZeroRouter](https://arxiv.org/abs/2601.06220)); we compare this approach with separate cost prediction.
+MixLLM predicts output length from query embeddings ([MixLLM](https://arxiv.org/abs/2502.18482)); CARROT estimates cost with embedding nearest neighbours or a fine-tuned RoBERTa ([CARROT](https://arxiv.org/abs/2502.03261)); ZeroRouter prices queries by item-response difficulty bins ([ZeroRouter](https://arxiv.org/abs/2601.06220)). Activation-based length prediction also supports scheduling ([ALPS](https://doi.org/10.5281/zenodo.19078431), [Entropy-guided length prediction](https://arxiv.org/abs/2602.11812)). Hosted open-weight models vary across providers in accuracy, length and price ([Same model, not the same service](https://arxiv.org/abs/2605.02821), [API gateway consistency](https://arxiv.org/abs/2604.21083), [Model equality testing](https://arxiv.org/abs/2410.20247)); FACET routes among providers of a fixed model per (provider, task) using measured outcomes ([Market-aware provider routing (FACET)](https://arxiv.org/abs/2609.37902)). We instead route per query over endpoints of several models with predicted, endpoint-specific costs.
 
 ![shared prefill overview](figures/shared_prefill_overview.png)
 
-**Shared prefill and fresh routing curves.** (a) One frozen encoder supplies per-route success and cost readouts. (b) Fresh accuracy versus recorded spending for deterministic policies over the fixed $V$ grid. Lines connect observed operating points; they do not require randomized routing. Circles mark learned-cost policies selected on original calibration. Table 1 reports cost and accuracy differences with pointwise intervals. Encoder overhead is excluded.
+**Shared prefill readouts and fresh routing curves.** (a) One frozen encoder supplies per-route success and cost readouts. (b) Fresh accuracy versus spending for the deterministic policies of the $V$ grid; circles mark policies selected on original calibration. Curves use list prices; Table 1, Table 2 use billed costs. Encoder overhead is excluded.
 
 ## Cost Prediction and Routing
 
-For query $x$ and route $m$, let $p_m(x)$ be the probability of correctness and $c_m(x)$ the expected generation cost. A route is a model with a fixed reasoning-effort setting. We select one route before generation:
+For query $x$ and route $m$ (a model at a fixed reasoning effort, served by an endpoint), let $p_m(x)$ be the probability of a correct answer and $c_m(x)$ the expected generation cost. One route is chosen before generation,
 
 $$
 m^*(x;V)=\arg\max_m\{V\hat p_m(x)-\hat c_m(x)\},
 $$
 
-where $V$ sets the value of a correct answer. A larger $V$ favors predicted correctness; a smaller $V$ gives cost more influence. Accuracy changes through the selected route, not abstention: every query receives an answer. There is no verifier or fallback call.
+where $V$ is the value of a correct answer; sweeping $V$ trades accuracy for cost. Every query is answered once, with no verifier or fallback.
 
-### Features and prediction heads.
+### Readouts.
 
-We concatenate mean-pooled and last-token activations from eight stored layers of a frozen Qwen3-4B encoder and standardize using training statistics. The Instruct-2507 encoder is used on LiveCodeBench and MMLU-Pro; Thinking-2507 is fixed for Omni. Both readouts are regularized linear models. Logistic success heads use a binomial likelihood over valid draws and held-out Platt calibration. Ridge cost heads fit squared error in log mean output length, with training-only cross-validation for regularization. The different losses match correctness outcomes and continuous lengths. Success-head penalty selection and Platt calibration use the first draw. Each cost head needs output-length labels from its target route; zero-shot transfer to unseen models is not assumed.
+We concatenate mean and last-token activations from eight layers of a frozen Qwen3-4B (Instruct-2507; Thinking-2507 on Omni), standardized on training data. Success readouts are L2-regularized logistic regressions with held-out Platt calibration; cost readouts are ridge regressions of log mean output length, regularized by training-only cross-validation. Predicted length is exponentiated with residual smearing and matched to the route's training mean, then priced: $\hat c_m(x)=r_m^{\rm in}n^{\rm in}_m(x)+r_m^{\rm out}\hat\ell_m(x)$.
 
-### Generation cost estimation.
+### Endpoint offsets.
 
-We exponentiate predicted log length, apply training-residual smearing, and match the route's training mean. For predicted output tokens $\hat\ell_m(x)$, input tokens $n_m^{\rm in}(x)$, and input/output rates in dollars per million,
-
-$$
-\hat c_m(x)=\frac{r_m^{\rm in}n_m^{\rm in}(x)+r_m^{\rm out}\hat\ell_m(x)}{10^6}.
-$$
-
-The constant references substitute median valid training output length or mean problem–route training length. The empirical oracle substitutes observed problem–route mean length. Only the oracle uses evaluation lengths when selecting a route; all arms pay observed tokens after decisions are fixed.
+An endpoint of an already-modelled route (a new provider, or a provider whose behaviour changed) reuses the route's readouts with one multiplicative length offset, the ratio of observed to predicted mean output over $k$ labelled calls, and its own price.
 
 ## Experimental Protocol
 
-The main pools contain 892 LiveCodeBench problems ([LiveCodeBench](https://arxiv.org/abs/2403.07974)), all 500 Omni-MATH-500 problems from Omni-MATH ([Omni-MATH](https://arxiv.org/abs/2410.07985)), and a subject-stratified 1,000-question MMLU-Pro subset ([MMLU-Pro](https://arxiv.org/abs/2406.01574)). Train/calibration/test counts are 441/110/341, 275/75/150, and 550/150/300. The five routes are gpt-oss-20b at low/medium effort, deepseek-v4-flash, and gpt-oss-120b at medium/high effort. Approximately 16/12/8/6/3 valid draws per route are retained on LiveCodeBench and 4/3/3/2/2 on the other pools. Correctness and cost are estimated from all valid draws; generations are not treated as independent test problems.
+The routes are gpt-oss-20b at low and medium effort, deepseek-v4-flash, and gpt-oss-120b at medium and high effort, called through OpenRouter. Original pools: 892 LiveCodeBench ([LiveCodeBench](https://arxiv.org/abs/2403.07974)), 500 Omni-MATH-500 ([Omni-MATH](https://arxiv.org/abs/2410.07985)) and 1,000 subject-stratified MMLU-Pro ([MMLU-Pro](https://arxiv.org/abs/2406.01574)) problems with 2–16 draws per route; train/calibration/test splits are 441/110/341, 275/75/150 and 550/150/300. Fresh sets: 6,500 MMLU-Pro and 1,000 Omni-MATH problems disjoint from the original pools (one draw per route), collected after all readouts were fitted.
 
-### Pricing and controls.
+### Prices.
 
-We hold the recorded market rates fixed across arms: input/output dollars per million are 0.018/0.09 for gpt-oss-20b, 0.04704/0.09408 for deepseek-v4-flash, and 0.15/0.60 for gpt-oss-120b. Reported savings isolate target generation spend. The encoder pass is common to success-only and success-plus-cost routing, so these are incremental savings for an existing prefill router. Training and calibration exclude test problems.
+Realized cost is the cost billed for each call. Predictions are priced at each model's effective billed rate, fitted on the fresh calls (USD per million output tokens: 0.13 for gpt-oss-20b, 0.12 for deepseek-v4-flash, 0.26 for gpt-oss-120b). These differ from the list prices by up to 2.3$\times$.
 
-### Matched-accuracy evaluation.
+### Evaluation.
 
-Each $V$ gives a deterministic policy and an observed accuracy–cost point. Fresh plots show these points directly. For the original descriptive frontiers, we also consider randomly sampling one of two policies per query. This gives their weighted mean accuracy and cost; the lower convex envelope contains the cheapest combinations. Mixture weights on those frontiers use evaluation outcomes. Let $C_{\rm arm}(a)$ denote frontier cost at accuracy $a$. Savings against median pricing are
+All estimators are fitted on original training problems only and evaluated on the fresh problems with the same success predictions. Each $V$ on a dense grid gives a deterministic policy and an observed (cost, accuracy) point. Comparing two cost estimators $a,b$, we interpolate each one's cost at 12 accuracies spanning the interior 90% of the range both reach and report $1-\exp(\overline{\log C_a/C_b})$, the cost saved by $a$ at matched accuracy. Intervals are percentile intervals from paired problem bootstraps (300 resamples), keeping each problem's routes together. Separately, deployable policies select the cheapest $V$ reaching each accuracy target on original calibration and are applied once to the fresh problems.
 
-$$
-G=1-\exp\left[\frac{1}{12}\sum_{j=1}^{12}
-\log\frac{C_{\rm arm}(a_j)}{C_{\rm median}(a_j)}\right],
-$$
+| Cost saved by ours vs. | Omni-MATH ($n$=1,000) | MMLU-Pro ($n$=6,500) |
+| --- | ---: | ---: |
+| Training-median length | 27.8 [20.3, 33.1] | 23.1 [18.1, 26.8] |
+| Training-mean length | 28.2 [22.4, 33.6] | 20.5 [16.7, 23.6] |
+| Prompt-feature GBM | 20.3 [11.8, 26.5] | 18.4 [12.2, 21.7] |
+| ZeroRouter (reimplemented) | 18.0 [9.0, 24.7] | 19.3 [15.5, 22.6] |
+| Difficulty bins | 11.6 [5.2, 16.2] | 12.7 [7.8, 16.1] |
+| Cost from success predictions | 3.2 [−1.7, 7.7] | 14.1 [11.4, 16.6] |
 
-using 12 targets over the interior 5–95% of the band shared by the estimator, median reference, and oracle. Estimator bands can differ; differences in $G$ compare these summaries rather than direct savings at identical accuracies. Oracle $G$ measures headroom. We use 500 paired problem bootstrap resamples, retaining each problem's routes and draws together. These outcome-selected frontiers are descriptive. CARROT and ZeroRouter contrasts use 1,000 resamples; CARROT pairs share one accuracy band.
+**Table 1.** **Fresh problems, billed costs.** Cost saved (%) by prefill cost readouts relative to each estimator at matched accuracy, with 95% paired bootstrap intervals. ZeroRouter: item-response latent fitted on the five routes, 4B features, its own success model and bin pricing, configuration chosen on calibration. Difficulty bins: ten quantile bins of mean predicted success logit.
 
-### Fresh calibration-selected policies.
-
-We collect one generation per route on 6,500 disjoint MMLU-Pro and 1,000 disjoint Omni-MATH problems. Fitting and selection use original training/calibration data. Full solving prompts, including answer choices, match original encoder inputs. For each arm and historical target in $\{.60,.65,.70,.75,.80,.85\}$, we select the cheapest single-$V$ policy reaching at least the target accuracy on original calibration. We freeze it for fresh evaluation and report all reachable targets. No abstention or routing randomization is used. Fresh accuracy need not equal the calibration target. For savings $1-\bar C_{\rm learned}/\bar C_{\rm reference}$ and accuracy differences, 2,000 paired bootstraps resample problems within subject/difficulty strata, retaining planned weights. Percentile intervals are pointwise and conditional on fitted heads and policies, without multiplicity adjustment. An accuracy interval crossing zero does not establish equivalence. Calibration-selected two-policy mixtures are a supplementary sensitivity analysis.
-
-| Fresh set | Cal. target % | Fresh acc. ours, % | $Δ$ acc. vs median pp [95% CI] | Savings vs median % [95% CI] | $Δ$ acc. vs mean pp [95% CI] | Savings vs mean % [95% CI] |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| MMLU-Pro | 60 | 61.90 | $+0.00 [+0.00, +0.00]$ | $0.0 [0.0, 0.0]$ | $+0.00 [+0.00, +0.00]$ | $0.0 [0.0, 0.0]$ |
-| MMLU-Pro | 65 | 64.23 | $-0.33 [-0.97, +0.31]$ | $28.8 [22.5, 34.7]$ | $-0.76 [-1.41, -0.16]$ | $27.0 [23.6, 30.6]$ |
-| MMLU-Pro | 70 | 66.80 | $-1.67 [-2.51, -0.88]$ | $47.2 [42.5, 51.3]$ | $-0.33 [-1.08, +0.45]$ | $33.9 [29.3, 38.4]$ |
-| MMLU-Pro | 75 | 73.45 | $+1.29 [+0.35, +2.25]$ | $31.1 [25.6, 36.3]$ | $+1.66 [+0.81, +2.54]$ | $31.2 [25.7, 36.4]$ |
-| MMLU-Pro | 80 | 76.93 | $-1.28 [-2.11, -0.42]$ | $29.3 [24.9, 33.5]$ | $-1.99 [-2.77, -1.25]$ | $32.7 [28.8, 36.4]$ |
-| MMLU-Pro | 85 | 84.47 | $+0.33 [-0.01, +0.68]$ | $-5.1 [-7.0, -3.3]$ | $+3.17 [+2.61, +3.73]$ | $-15.3 [-17.6, -12.9]$ |
-| Omni-MATH | 60 | 56.40 | $+0.90 [-1.20, +2.90]$ | $29.4 [22.0, 36.4]$ | $+0.40 [-1.70, +2.40]$ | $34.3 [27.4, 40.4]$ |
-| Omni-MATH | 65 | 58.70 | $+0.10 [-1.70, +2.00]$ | $24.9 [17.3, 31.6]$ | $+0.00 [-1.90, +1.90]$ | $29.2 [22.6, 35.4]$ |
-| Omni-MATH | 70 | 62.90 | $-0.70 [-2.20, +0.80]$ | $16.0 [11.2, 20.9]$ | $-1.80 [-3.30, -0.30]$ | $19.6 [14.8, 24.4]$ |
-| Omni-MATH | 75 | 68.10 | $-0.10 [-0.90, +0.70]$ | $3.3 [0.8, 6.0]$ | $+1.80 [+0.70, +2.90]$ | $-5.3 [-8.6, -2.1]$ |
-
-**Table 1.** **Fresh deterministic policies.** MMLU-Pro has 6,500 new problems and Omni-MATH has 1,000. For each target, each arm selects the cheapest single-$V$ policy reaching at least that accuracy on original calibration. Every query receives one answer; no routing randomization or abstention is used. Fresh accuracy need not equal the target or reference accuracy. Positive accuracy differences and savings favor learned costs. All reachable targets are shown. Intervals are pointwise paired stratified percentile bootstraps (2,000 resamples), conditional on the fitted heads and calibrated policies. Generation spending excludes encoder overhead.
-
-| Cost estimator | LiveCodeBench | Omni-MATH-500 | MMLU-Pro |
+| Fresh set | Cal. target | Savings, % | $Δ$ accuracy, pp |
 | --- | ---: | ---: | ---: |
-| Embedding ensemble (MixLLM-style) | 14.1 [5.3, 21.0] | 12.5 [−2.4, 25.6] | 4.0 [−4.7, 14.9] |
-| Prompt-feature GBM | 12.3 [0.7, 21.4] | 6.6 [−12.2, 21.2] | 9.8 [−4.5, 25.9] |
-| Cost from success predictions | 34.1 [24.7, 40.9] | 21.0 [6.6, 33.7] | 9.2 [−2.2, 24.6] |
-| Shared-prefill cost readouts (ours) | 35.6 [27.1, 41.9] | 21.9 [8.9, 33.5] | 30.7 [16.3, 43.2] |
+| MMLU-Pro | 0.65 | 17.2 [9.8, 23.9] | $+0.51$ [$-0.15$, $+1.18$] |
+|  | 0.75 | 17.1 [10.2, 23.6] | $+3.18$ [$+2.11$, $+4.19$] |
+|  | 0.85 | 12.1 [9.0, 15.4] | $-1.11$ [$-1.49$, $-0.69$] |
+| Omni-MATH | 0.65 | 15.3 [7.1, 22.9] | $+1.80$ [$-0.10$, $+3.70$] |
+|  | 0.70 | 16.8 [12.3, 21.4] | $-1.70$ [$-3.20$, $-0.20$] |
+|  | 0.75 | 12.7 [8.4, 17.2] | $-1.60$ [$-2.80$, $-0.40$] |
 
-**Table 2.** **Original-test frontier summaries.** Savings $G$ (%) against median-length pricing, with pointwise 95% paired-problem bootstrap intervals. Each estimator has its own band; these are not direct savings against another learned estimator. Embedding and prompt-feature baselines are adaptations.
+**Table 2.** **Deployable policies.** Policies chosen on original calibration for each accuracy target and applied once to fresh problems; learned versus median-length pricing, billed costs, paired bootstrap (2,000). Fresh accuracy need not equal the target.
 
 ## Results
 
-### Fresh policy comparisons.
+### Fresh problems.
 
-Table 1 reports accuracy and savings against both constants. On MMLU-Pro at the 75% calibration target, learned costs save 31.1% [25.6, 36.3] against median pricing and 31.2% [25.7, 36.4] against mean pricing; accuracy differences are $+1.29$ [$+0.35$, $+2.25$] and $+1.66$ [$+0.81$, $+2.54$] points. On Omni at the 65% target, savings are 24.9% [17.3, 31.6] and 29.2% [22.6, 35.4], with accuracy differences $+0.10$ [$-1.70$, $+2.00$] and 0.00 [$-1.90$, $+1.90$]. These intervals are pointwise. MMLU-Pro's 70% and 80% targets lose accuracy against median pricing; its 85% target spends more. Omni's accuracy differences are generally uncertain, and the 70% target loses accuracy against mean pricing. We make no uniform or accuracy-equivalence claim.
+At matched accuracy, prefill cost readouts spend 23.1% less than median-length pricing on MMLU-Pro and 27.8% less on Omni-MATH (Table 1). They also spend 18–20% less than a full ZeroRouter reimplementation and 18–20% less than a prompt-feature model. Calibration-selected policies save 12–29% at every target; their accuracy differences range from $-1.7$ to $+3.2$ points, depending on the operating point (Table 2).
 
-### Cost-estimator comparison.
+### When success predictions suffice.
 
-Replacing median-length estimates with predicted costs saves 35.6% on LiveCodeBench, 21.9% on Omni, and 30.7% on MMLU-Pro; all three intervals exclude zero (Table 2). These savings are approximately 78%, 49%, and 47% of the savings under empirical oracle costs (46.0%, 44.2%, and 65.1%).
+Reading cost off the success predictions (a ridge regression of log length on success logits) ties the dedicated readout on Omni-MATH but loses 14.1 points on MMLU-Pro. On Omni-MATH, output length tracks difficulty. On MMLU-Pro, even empirical difficulty explains little of log length ($R^2\approx .19$), while subject labels recover roughly 60% of the gap. The prefill encodes length information beyond difficulty, and that information pays where difficulty and length come apart.
 
-The embedding baseline averages MLP, random-forest, and nearest-neighbor regressors on jina-code embeddings, adapting MixLLM's predictor family. The GBM uses prompt length, numbers, examples, constraints, and keywords. Both fit training log lengths. On MMLU-Pro, paired differences in $G$ are 26.7 points [12.4, 40.2] and 20.9 [3.8, 33.3]; on Omni they are inconclusive: 9.4 [$-4.4$, 24.2] and 15.2 [$-1.4$, 34.1]. These compare summaries over potentially different bands, not direct spending ratios at identical accuracy. Encoder size and regression design also differ.
+### Endpoints drift.
 
-### Costs inferred from success predictions.
+On the fresh collection, the readouts overestimated deepseek-v4-flash's cost by 37% (MMLU-Pro) and 23% (Omni-MATH); all other routes were within 8%. The aggregator had moved most of these calls to a provider absent from the original data, which writes about half as many tokens at equal accuracy. Re-fitting one length offset from 50 fresh calls restores calibration (predicted/realized 1.02 and 1.03). To test routing over providers, we pinned deepseek-v4-flash to three providers on 1,995 fresh MMLU-Pro and 957 APPS problems. Providers agree on correctness for 90–96% of problems, against 73–78% if independent, and their output lengths correlate at .83–.95: an endpoint is close to its model plus an offset. On APPS, where providers differ in accuracy (83–90%) and cost (up to 5$\times$), routing over the three providers with offsets fitted on held-out problems saves 20.0% [10.7, 27.9] relative to the unpinned model and raises the best reachable accuracy from 85.3% to 89.5%. On MMLU-Pro, where providers agree, it saves 2.3% [$-4.9$, 7.7].
 
-We regress log length on predicted success logits and their squares, holding success predictions fixed in routing. This control saves 34.1% on LiveCodeBench and 21.0% on Omni; differences in $G$ from dedicated readouts are inconclusive. On MMLU-Pro it saves 9.2%, versus 30.7%: a paired summary difference of 21.5 points [8.5, 30.3].
+### Original pools and contrasts.
 
-On MMLU-Pro, empirical outcome-based difficulty explains little of log length (mean $R^2\approx .19$). Adding subject labels to success-derived pricing raises savings to 22.3%, accounting for roughly 60% of the difference from the dedicated cost head. This suggests that subject variation partly explains the improvement. We do not measure whether differences in required reasoning account for the remaining variation.
-
-### CARROT and ZeroRouter comparisons.
-
-On original test sets, we evaluate CARROT's MiniLM encoder with cosine kNN cost prediction, holding our success scores fixed. Direct savings over a shared pairwise frontier band are 33.6% [26.4, 40.3] on LiveCodeBench, 14.0% [1.7, 24.2] on Omni, and 14.4% [$-0.3$, 26.6] on MMLU-Pro. The full-router comparison gives 20.2% [11.0, 26.9], 19.9% [6.3, 32.3], and 5.2% [$-12.5$, 20.5]. This comparison excludes CARROT's RoBERTa and OpenAI-embedding variants.
-
-Our ZeroRouter reimplementation uses MAP item-response estimates, difficulty-bin pricing, and frozen 4B features. Configuration is selected on calibration. Original-test differences in savings summaries are $+17.5$ [9.8, 24.9] points on LiveCodeBench, with inconclusive differences on MMLU-Pro ($+9.3$ [$-2.6$, 21.5]) and Omni ($+2.8$ [$-10.7$, 16.6]). The five-route pools differ from its population-scale setting. Neither learned-baseline comparison includes expansion problems.
-
-### Results on additional datasets.
-
-CodeContests ([AlphaCode / CodeContests](https://arxiv.org/abs/2203.07814)), TACO ([TACO](https://arxiv.org/abs/2312.14852)), and BigCodeBench ([BigCodeBench](https://arxiv.org/abs/2406.15877)) have savings under oracle costs of 21.8%, 36.1%, and 20.2%, yet learned gains of 2.0%, 2.1%, and $-3.3%$ have intervals spanning zero. RouterBench's chat pool ([RouterBench](https://arxiv.org/abs/2403.12031)) has only 10.5% headroom. These contrast pools differ in models, prices, and accuracy ladders. They show that the observed gains do not extend to every dataset. Differences among the pools prevent attributing these results to reasoning alone. Additional controls and the headroom plot appear in the supplement.
+On the original test sets, savings against median pricing are 35.6% on LiveCodeBench, 21.9% on Omni-MATH and 30.7% on MMLU-Pro. On CodeContests ([AlphaCode / CodeContests](https://arxiv.org/abs/2203.07814)), TACO ([TACO](https://arxiv.org/abs/2312.14852)), BigCodeBench ([BigCodeBench](https://arxiv.org/abs/2406.15877)) and APPS, oracle costs would save 20–36%, but predicted costs gain $-3$ to 14%, with intervals including zero. RouterBench ([RouterBench](https://arxiv.org/abs/2403.12031)) has 10.5% headroom. A fine-tuned Intern-Decision-4B success predictor, combined with our cost readouts, saves a further 11.2% [5.5, 17.1] on fresh Omni-MATH: improved success and cost predictors combine.
 
 ## Discussion and Limitations
 
-Each route needs training output-length labels; the pools cover five configurations from two model families. MixLLM and ZeroRouter are adaptations; CARROT scope is limited to MiniLM/kNN. Pointwise intervals omit training and calibration-selection uncertainty and do not support selecting the strongest target after evaluation. Bootstrap inference assumes independent problems within strata. Fresh results use recorded generations and planned reference-stratum weights. The pipeline was corrected after outcomes were observed, and the deterministic follow-up was specified after the mixture results were examined; neither is newly preregistered. Encoder overhead is excluded. Broader model families and fresh comparisons with learned baselines remain needed.
+Each route needs output-length labels, and an endpoint offset needs a few labelled calls. All pools use five routes from two model families. Fresh sets have one draw per route, and APPS is the only coding pool with pinned providers. Intervals are pointwise, conditional on the fitted readouts, and assume independent problems. Billed rates were measured over one collection, and prices change within days. The ZeroRouter, MixLLM and CARROT baselines are reimplementations; the fresh CARROT and MixLLM comparisons are pending. The original-pool pipeline was corrected after outcomes were observed. Encoder overhead is excluded.
 
 ## Conclusion
 
-Shared prefill activations support cost estimates for several reasoning routes. On new MMLU-Pro and Omni-MATH problems, calibration-selected policies reduce spending at several operating points, with accuracy differences reported separately. The result varies with the target and reference estimator; comparisons with other learned predictors remain mixed. Separate cost prediction can improve routing, but the evidence does not establish a uniform advantage.
+A frozen prefill that already predicts success also predicts cost. On fresh problems at billed prices, its cost readouts reduce spending at matched accuracy and outperform the alternative estimators we tested, most clearly where output length is not just difficulty. Because endpoints of one model share these readouts up to an offset, the router adapts to provider drift from a few dozen calls.
 
 ## References
 
@@ -142,3 +113,7 @@ Shared prefill activations support cost estimates for several reasoning routes. 
 - [BigCodeBench](https://arxiv.org/abs/2406.15877)
 - [Entropy-guided length prediction](https://arxiv.org/abs/2602.11812)
 - [ALPS](https://doi.org/10.5281/zenodo.19078431)
+- [Same model, not the same service](https://arxiv.org/abs/2605.02821)
+- [API gateway consistency](https://arxiv.org/abs/2604.21083)
+- [Model equality testing](https://arxiv.org/abs/2410.20247)
+- [Market-aware provider routing (FACET)](https://arxiv.org/abs/2609.37902)

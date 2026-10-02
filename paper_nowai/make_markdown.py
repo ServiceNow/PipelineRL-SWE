@@ -51,6 +51,10 @@ refs = {
     "bigcodebench": ("BigCodeBench", "https://arxiv.org/abs/2406.15877"),
     "egtp": ("Entropy-guided length prediction", "https://arxiv.org/abs/2602.11812"),
     "alps": ("ALPS", "https://doi.org/10.5281/zenodo.19078431"),
+    "samemodel": ("Same model, not the same service", "https://arxiv.org/abs/2605.02821"),
+    "gateways": ("API gateway consistency", "https://arxiv.org/abs/2604.21083"),
+    "modelequality": ("Model equality testing", "https://arxiv.org/abs/2410.20247"),
+    "facet": ("Market-aware provider routing (FACET)", "https://arxiv.org/abs/2609.37902"),
 }
 link = lambda k: f"[{refs[k][0]}]({refs[k][1]})"
 md = f"# {title}\n\n## Abstract\n\n{abstract}\n\n{body.strip()}"
@@ -58,7 +62,7 @@ md = re.sub(r"\\section\{([^}]+)\}", r"## \1\n", md)
 md = re.sub(r"\\paragraph\{([^}]+)\}", r"### \1\n\n", md)
 md = re.sub(r"\\(emph|textbf)\{([^{}]+)\}", lambda m: ("*" if m[1] == "emph" else "**") + m[2] + ("*" if m[1] == "emph" else "**"), md)
 md = re.sub(r"~?\\cite\{([^}]+)\}", lambda m: " (" + ", ".join(link(k) for k in m[1].split(",")) + ")", md)
-md = re.sub(r"\\[Cc]ref\{([^}]+)\}", lambda m: {"fig:overview": "Figure 1", "fig:headroom": "Supplementary Figure 1", "tab:fresh": "Table 1", "tab:main": "Table 2"}[m[1]], md)
+md = re.sub(r"\\[Cc]ref\{([^}]+)\}", lambda m: ", ".join({"fig:overview": "Figure 1", "fig:headroom": "Supplementary Figure 1", "tab:fresh": "Table 1", "tab:policies": "Table 2", "tab:main": "Table 2"}[k] for k in m[1].split(",")), md)
 md = md.replace(r'\Delta', 'Δ')
 md = md.replace(r"\begin{equation}", "\n$$").replace(r"\end{equation}", "$$\n")
 md = re.sub(r"\\label\{[^}]+\}\n?", "", md)
