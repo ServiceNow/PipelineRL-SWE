@@ -21,7 +21,9 @@ REPO = Path(__file__).resolve().parents[4]
 R = Path("/mnt/llmd/results/exps/aristides/reason")
 
 
-def tasks_for(ds):
+def tasks_for(ds, tasks_file=""):
+    if tasks_file:                                                  # pre-materialized (job nodes may lack the HF dataset cache)
+        return [json.loads(l) for l in Path(tasks_file).read_text().splitlines()]
     pool = {"mmlupro": "mmlupro_tensors", "omni500": "omni500_tensors"}[ds]
     sp = json.loads((R / pool / "split_manifest.json").read_text())
     keep = set(map(str, sp["train_problem_ids"])) | set(map(str, sp["calibration_problem_ids"]))
@@ -38,7 +40,7 @@ def tasks_for(ds):
 async def run(a):
     key = Path(a.api_key_file).read_text().strip(); spent = {"usd": 0.0, "stop": False}; jobs = []
     for ds in a.datasets.split(","):
-        tasks = tasks_for(ds)
+        tasks = tasks_for(ds, a.tasks_file.replace('{ds}', ds) if a.tasks_file else '')
         if a.pilot:
             tasks = tasks[:a.pilot // 2] + tasks[-(a.pilot - a.pilot // 2):]
         od = Path(a.out) / ds; od.mkdir(parents=True, exist_ok=True)
@@ -76,8 +78,15 @@ def main():
     ap.add_argument("--out", required=True); ap.add_argument("--routes", default="qw32,glm47f"); ap.add_argument("--datasets", default="mmlupro,omni500")
     ap.add_argument("--budget-usd", type=float, default=25.0); ap.add_argument("--concurrency", type=int, default=32)
     ap.add_argument("--max-tokens", type=int, default=64000); ap.add_argument("--pilot", type=int, default=0)
+    ap.add_argument("--tasks-file", default="", help="jsonl of tasks; '{ds}' is replaced by the dataset name")
+    ap.add_argument("--write-tasks", action="store_true", help="write tasks to --tasks-file and exit")
     ap.add_argument("--api-key-file", default="/home/toolkit/.secrets/openrouter_api_key")
-    asyncio.run(run(ap.parse_args()))
+    a = ap.parse_args()
+    if a.write_tasks:
+        for ds in a.datasets.split(","):
+            Path(a.tasks_file.replace("{ds}", ds)).write_text("".join(json.dumps(t) + "\n" for t in tasks_for(ds)))
+        return
+    asyncio.run(run(a))
 
 
 if __name__ == "__main__":
