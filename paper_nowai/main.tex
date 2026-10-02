@@ -84,25 +84,25 @@ Cost from success predictions & 3.2 [$-$1.7, 7.7] & 14.1 [11.4, 16.6] \\
 \footnotesize
 \setlength{\tabcolsep}{3pt}
 \resizebox{\columnwidth}{!}{%
-\begin{tabular}{lrrr}
+\begin{tabular}{lrrrr}
 \toprule
-Fresh set & Cal. target & Savings, \% & $\Delta$ accuracy, pp \\
+Fresh set & Target & Savings, \% & $\Delta$ acc., pp & Matched acc., \% \\
 \midrule
-MMLU-Pro & 0.65 & 17.2 [9.8, 23.9] & $+0.51$ [$-0.15$, $+1.18$] \\
- & 0.75 & 17.1 [10.2, 23.6] & $+3.18$ [$+2.11$, $+4.19$] \\
- & 0.85 & 12.1 [9.0, 15.4] & $-1.11$ [$-1.49$, $-0.69$] \\
-Omni-MATH & 0.65 & 15.3 [7.1, 22.9] & $+1.80$ [$-0.10$, $+3.70$] \\
- & 0.70 & 16.8 [12.3, 21.4] & $-1.70$ [$-3.20$, $-0.20$] \\
- & 0.75 & 12.7 [8.4, 17.2] & $-1.60$ [$-2.80$, $-0.40$] \\
+MMLU-Pro & 0.65 & 17.2 [9.8, 23.9] & $+0.51$ [$-0.15$, $+1.18$] & 21.2 [11.7, 26.6] \\
+ & 0.75 & 17.1 [10.2, 23.6] & $+3.18$ [$+2.11$, $+4.19$] & 27.4 [19.5, 32.2] \\
+ & 0.85 & 12.1 [9.0, 15.4] & $-1.11$ [$-1.49$, $-0.69$] & 7.7 [3.8, 10.9] \\
+Omni-MATH & 0.65 & 15.3 [7.1, 22.9] & $+1.80$ [$-0.10$, $+3.70$] & 20.9 [10.1, 28.0] \\
+ & 0.70 & 16.8 [12.3, 21.4] & $-1.70$ [$-3.20$, $-0.20$] & 7.5 [$-$3.1, 13.0] \\
+ & 0.75 & 12.7 [8.4, 17.2] & $-1.60$ [$-2.80$, $-0.40$] & 4.8 [$-$3.8, 9.0] \\
 \bottomrule
 \end{tabular}}
-\caption{\textbf{Deployable policies.} Policies chosen on original calibration for each accuracy target and applied once to fresh problems; learned versus median-length pricing, billed costs, paired bootstrap (2,000). Fresh accuracy need not equal the target.}
+\caption{\textbf{Deployable policies.} Policies chosen on original calibration for each accuracy target and applied once to fresh problems; learned versus median-length pricing, billed costs. Savings and $\Delta$ accuracy compare the two selected policies (paired bootstrap, 2,000); matched accuracy compares our policy with the median-pricing frontier at our achieved fresh accuracy (300 resamples). Fresh accuracy need not equal the target.}
 \label{tab:policies}
 \end{table}
 
 \section{Results}
 \paragraph{Fresh problems.}
-At matched accuracy, prefill cost readouts spend 23.1\% less than median-length pricing on MMLU-Pro and 27.8\% less on Omni-MATH (\cref{tab:fresh}). They also spend 18--20\% less than a full ZeroRouter reimplementation and 18--20\% less than a prompt-feature model. Calibration-selected policies save 12--29\% at every target; their accuracy differences range from $-1.7$ to $+3.2$ points, depending on the operating point (\cref{tab:policies}).
+At matched accuracy, prefill cost readouts spend 23.1\% less than median-length pricing on MMLU-Pro and 27.8\% less on Omni-MATH (\cref{tab:fresh}). They also spend 18--20\% less than a full ZeroRouter reimplementation and 18--20\% less than a prompt-feature model. Calibration-selected policies save 12--29\% at every target, but each lands at its own fresh accuracy, $-1.7$ to $+3.2$ points from the median policy (\cref{tab:policies}). Evaluated at our achieved accuracy, savings are 21--27\% in the middle of the range and 5--8\% near the top, where every method calls the strongest routes. Calibration selection itself costs little: our selected policies spend 0--2\% more than our own fresh curve at the same accuracy, with one exception at 8\%.
 
 \paragraph{When success predictions suffice.}
 Reading cost off the success predictions (a ridge regression of log length on success logits) ties the dedicated readout on Omni-MATH but loses 14.1 points on MMLU-Pro. On Omni-MATH, output length tracks difficulty. On MMLU-Pro, even empirical difficulty explains little of log length ($R^2\approx .19$), while subject labels recover roughly 60\% of the gap. The prefill encodes length information beyond difficulty, and that information pays where difficulty and length come apart.

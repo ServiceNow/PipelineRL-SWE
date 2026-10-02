@@ -1884,3 +1884,10 @@ strong routes (dsv4f .819 vs .808, oss120md .834 vs .821, oss120hi .847 vs .838)
 +17.1]** vs ours with OUR costs, +24.7% [+17.5, +30.2] with median costs. => The original-test Omni lead (+15.9%) replicates on fresh
 data. Best Omni system = Intern success + our cost readout: success and cost predictors are complementary. MMLU-Pro (where
 Intern's original-test log-loss was significantly worse) pending.
+
+### 4.A.46 Deployable policies at matched accuracy (2026-10-02; `deploy_matched.py`)
+Raw deployable savings mix savings with accuracy differences. At OUR achieved fresh accuracy, vs the median-pricing frontier:
+MMLU-Pro targets .65/.75/.85 -> 21.2 [11.7, 26.6] / 27.4 [19.5, 32.2] / 7.7 [3.8, 10.9]%; Omni .65/.70/.75 -> 20.9 [10.1, 28.0] /
+7.5 [-3.1, 13.0] / 4.8 [-3.8, 9.0]%. Our calibration-selected points cost 0-2% more than our own fresh frontier at equal accuracy
+(Omni .70: 8%). => deployable == frontier at matched accuracy within ~1-2 pt; the gap in Table 2 was accuracy mismatch + position on
+the curve (savings shrink near the top). Added as a column to the 4-pager's Table 2.

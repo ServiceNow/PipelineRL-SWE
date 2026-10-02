@@ -61,22 +61,22 @@ All estimators are fitted on original training problems only and evaluated on th
 
 **Table 1.** **Fresh problems, billed costs.** Cost saved (%) by prefill cost readouts relative to each estimator at matched accuracy, with 95% paired bootstrap intervals. ZeroRouter: item-response latent fitted on the five routes, 4B features, its own success model and bin pricing, configuration chosen on calibration. Difficulty bins: ten quantile bins of mean predicted success logit.
 
-| Fresh set | Cal. target | Savings, % | $Δ$ accuracy, pp |
-| --- | ---: | ---: | ---: |
-| MMLU-Pro | 0.65 | 17.2 [9.8, 23.9] | $+0.51$ [$-0.15$, $+1.18$] |
-|  | 0.75 | 17.1 [10.2, 23.6] | $+3.18$ [$+2.11$, $+4.19$] |
-|  | 0.85 | 12.1 [9.0, 15.4] | $-1.11$ [$-1.49$, $-0.69$] |
-| Omni-MATH | 0.65 | 15.3 [7.1, 22.9] | $+1.80$ [$-0.10$, $+3.70$] |
-|  | 0.70 | 16.8 [12.3, 21.4] | $-1.70$ [$-3.20$, $-0.20$] |
-|  | 0.75 | 12.7 [8.4, 17.2] | $-1.60$ [$-2.80$, $-0.40$] |
+| Fresh set | Target | Savings, % | $Δ$ acc., pp | Matched acc., % |
+| --- | ---: | ---: | ---: | ---: |
+| MMLU-Pro | 0.65 | 17.2 [9.8, 23.9] | $+0.51$ [$-0.15$, $+1.18$] | 21.2 [11.7, 26.6] |
+|  | 0.75 | 17.1 [10.2, 23.6] | $+3.18$ [$+2.11$, $+4.19$] | 27.4 [19.5, 32.2] |
+|  | 0.85 | 12.1 [9.0, 15.4] | $-1.11$ [$-1.49$, $-0.69$] | 7.7 [3.8, 10.9] |
+| Omni-MATH | 0.65 | 15.3 [7.1, 22.9] | $+1.80$ [$-0.10$, $+3.70$] | 20.9 [10.1, 28.0] |
+|  | 0.70 | 16.8 [12.3, 21.4] | $-1.70$ [$-3.20$, $-0.20$] | 7.5 [−3.1, 13.0] |
+|  | 0.75 | 12.7 [8.4, 17.2] | $-1.60$ [$-2.80$, $-0.40$] | 4.8 [−3.8, 9.0] |
 
-**Table 2.** **Deployable policies.** Policies chosen on original calibration for each accuracy target and applied once to fresh problems; learned versus median-length pricing, billed costs, paired bootstrap (2,000). Fresh accuracy need not equal the target.
+**Table 2.** **Deployable policies.** Policies chosen on original calibration for each accuracy target and applied once to fresh problems; learned versus median-length pricing, billed costs. Savings and $Δ$ accuracy compare the two selected policies (paired bootstrap, 2,000); matched accuracy compares our policy with the median-pricing frontier at our achieved fresh accuracy (300 resamples). Fresh accuracy need not equal the target.
 
 ## Results
 
 ### Fresh problems.
 
-At matched accuracy, prefill cost readouts spend 23.1% less than median-length pricing on MMLU-Pro and 27.8% less on Omni-MATH (Table 1). They also spend 18–20% less than a full ZeroRouter reimplementation and 18–20% less than a prompt-feature model. Calibration-selected policies save 12–29% at every target; their accuracy differences range from $-1.7$ to $+3.2$ points, depending on the operating point (Table 2).
+At matched accuracy, prefill cost readouts spend 23.1% less than median-length pricing on MMLU-Pro and 27.8% less on Omni-MATH (Table 1). They also spend 18–20% less than a full ZeroRouter reimplementation and 18–20% less than a prompt-feature model. Calibration-selected policies save 12–29% at every target, but each lands at its own fresh accuracy, $-1.7$ to $+3.2$ points from the median policy (Table 2). Evaluated at our achieved accuracy, savings are 21–27% in the middle of the range and 5–8% near the top, where every method calls the strongest routes. Calibration selection itself costs little: our selected policies spend 0–2% more than our own fresh curve at the same accuracy, with one exception at 8%.
 
 ### When success predictions suffice.
 
