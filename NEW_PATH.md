@@ -1768,3 +1768,22 @@ Context: Codex expanded MMLU-Pro (+6,500) and Omni (+1,000) fresh problems (one 
   no CIs yet). Note: a MEAN-LOG offset overcorrects (calibration 0.43-0.51) because predictions are means of right-skewed lengths.
   Fixed-target policies (chosen with original costs) swing in savings vs accuracy after recalibration -- another reason the
   per-target table is hard to read.
+
+### 4.A.38 Endpoints, not models: deepseek providers as "same model + offset" (2026-10-02; `provider_endpoints.py`)
+Provider recorded per draw on LCB/Omni/MMLU-Pro (100%), CC/APPS (~99.8%), fresh sets (~83%; misses = failed calls); BCB tensors
+lack it. Within-problem log-length variance explained by provider: gpt-oss routes 0.2-1.3%, dsv4f 18.8% (MMLU-Pro) / 21.5% (Omni).
+dsv4f served by 14 providers (all pools, 22k calls): OpenInference 27.6%, GMICloud 15.1%, StreamLake 13.8%, Baidu 13.5%, ... TODAY's
+OpenRouter output prices range $0.084-$1.60/M (we priced all calls at $0.094/M); today's list is inconsistent with the ~$14 actually
+billed for the fresh run -> need the account's activity export for historical per-call cost. Accuracy differs by provider on code
+(CodeContests OpenInference .66 vs .84-.92; APPS .72 vs .81-.90), not on MMLU-Pro.
+Prediction test (shared dsv4f readouts, fitted with NO provider info; offsets on train problems; eval = original test + fresh):
+- Length: providers that differ get large gains from ONE offset -- OpenInference x0.65 (MMLU-Pro log-length MSE 3.30 -> 2.26,
+  pred/real mean 1.77 -> 1.16; Omni x0.63, 1.12 -> 0.73, 1.47 -> 0.93), GMICloud x0.65 (3.39 -> 2.31); providers near the pooled mean
+  (Baidu, DigitalOcean, DeepInfra) unchanged.
+- Onboarding a provider as a NEW endpoint from k draws: k=10 already ~ the full offset (OpenInference MMLU-Pro MSE 2.08; Omni 0.76)
+  and far better than treating it as an unrelated model from the same k (scratch: 2.91 MMLU-Pro, 3.93 Omni; every group, every k).
+- Success: provider offsets do not improve log-loss (pooled .33-.47 already; small-k logit shifts HURT: k=5 LL +.1-.6) ->
+  success is ~provider-invariant here; shift only the length side, or shrink the success offset.
+=> Supports the paper framing "route over endpoints (model x effort x provider) with shared problem-level structure + per-endpoint
+offsets; new / drifted endpoints onboard from ~10 labels" (same mechanism as new-model onboarding 4.A.18/4.A.21 and drift fix 4.A.37).
+Limit: provider ROUTING cannot be evaluated offline (~1 dsv4f draw per provider per problem); needs a pinned collection (paid).
