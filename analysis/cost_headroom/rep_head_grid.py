@@ -1,7 +1,7 @@
 """Representation x head grid for cost prediction on the FRESH sets, billed prices (NEW_PATH 4.A.47).
 Is our gain the representation (a 4B generative prefill) or the head (ridge), and does a same-size or larger EMBEDDING model match it?
 Representations (all frozen; fitted on original TRAIN problems only):
-  prefill4b   our Qwen3-4B prefill activations (mean+last, 8 layers; prefill_combined.npz) -> standardize -> PCA 512
+  prefill4b   our Qwen3-4B prefill activations (mean+last, 8 layers; prefill_combined.npz) -> standardize -> PCA 256 (fitted on train)
   qwen3emb8b  Qwen3-Embedding-8B (last-token, normalized)    jina137m  jina-embeddings-v2-base-code    minilm  all-MiniLM-L12-v2
 Heads (per route, target = log mean output tokens; then residual smearing + train-mean level match, as all our cost heads):
   ridge    RidgeCV on standardized features (ours)
@@ -29,7 +29,7 @@ from sklearn.preprocessing import StandardScaler
 sys.path.insert(0, str(Path(__file__).parent))
 from carrot_compare import POOLS, read_predictions
 from decompose import MK, R, hull, cost_at
-from provider_routing import RATE
+from billed import RATE
 
 VALUES = np.geomspace(1e-7, 1, 300)
 ENC_RATE = {"prefill4b": 0.03, "qwen3emb8b": 0.02, "jina137m": 0.005, "minilm": 0.002}
@@ -80,7 +80,7 @@ for ds in ("omni500", "mmlupro"):
     reps = {}
     z = np.load(F / "prefill_combined.npz", allow_pickle=True); zid = {str(p): i for i, p in enumerate(z["problem_ids"])}
     X = np.concatenate([z[k].reshape(len(z[k]), -1) for k in ("mean", "last")], 1)[[zid[p] for p in ids]].astype(np.float32); del z
-    sc = StandardScaler().fit(X[tr]); reps["prefill4b"] = PCA(512, random_state=0).fit(sc.transform(X[tr])).transform(sc.transform(X)); del X
+    sc = StandardScaler().fit(X[tr]); reps["prefill4b"] = PCA(min(256, len(tr) - 1), random_state=0).fit(sc.transform(X[tr])).transform(sc.transform(X)); del X
     e = np.load(F / "text_embeddings.npz", allow_pickle=True); eid = {str(p): i for i, p in enumerate(e["problem_ids"])}; sel = [eid[p] for p in ids]
     reps.update(qwen3emb8b=e["qwen3emb8b"][sel], jina137m=e["jina"][sel], minilm=e["minilm"][sel])
     enc_in = I.mean(1)                                                              # encoder reads the prompt once per query
