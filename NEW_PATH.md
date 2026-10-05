@@ -1975,3 +1975,38 @@ at matched accuracy [bootstrap 300]; "enc": encoder pass priced at 0.03 $/M x pa
 AUC is flat on Omni and rises on MMLU-Pro. Routing gain saturates by ~1.7B: 1.7B is within CIs of the paper router on both pools
 (and ahead on MMLU-Pro once its cheaper pass is priced); 0.6B loses 5-8 pt; 8B adds nothing over 4B. The 2507 release beats the
 same-size hybrid 4B (+1.7 / +3.3), so the release/tuning matters as much as size above ~2B.
+
+### 4.A.54 Non-Qwen prefills (2026-10-05; `size_sweep_eval.py`; GPU extraction, no API spend)
+Off-family rows added to the 4.A.50 sweep, same protocol (same prompts + system prompt, 8 relative layers x {mean,last}, BOTH readouts
+from each prefill, original train only; fresh sets, billed prices). Models: Phi-4-mini-instruct (3.8B, Microsoft), Granite-3.3-2B-instruct
+(2.5B, IBM), SmolLM2-1.7B-Instruct (HF; SmolLM3 needs transformers >= 4.53, env has 4.51). All templates accept a system message.
+| prefill | Omni AUC / R2 | Omni vs median | Omni vs paper (enc) | MMLU-Pro AUC / R2 | MMLU-Pro vs median | MMLU-Pro vs paper (enc) |
+| Phi-4-mini | .806 / .64 | 23.7 [17.1, 30.5] | -9.2 [-15.5, -2.9] (-9.1) | .693 / .36 | 25.3 [20.7, 29.1] | +3.2 [+0.1, +5.9] (+3.3) |
+| Granite-3.3-2B | .792 / .61 | 21.3 [14.1, 26.9] | -9.2 [-15.0, -1.9] (-8.6) | .675 / .29 | 22.1 [17.6, 25.8] | -2.1 [-4.7, +1.1] (+0.4) |
+| SmolLM2-1.7B | .786 / .58 | 28.4 [22.6, 33.8] | -2.9 [-8.8, +3.8] (-2.2) | .663 / .23 | 20.5 [16.6, 24.6] | -3.8 [-7.1, -0.8] (-0.0) |
+| Qwen3-4B-2507 (paper) | .829 / .69 | 27.8 [20.4, 33.0] | -- | .713 / .39 | 23.1 [18.2, 26.8] | -- |
+=> Not a Qwen quirk: every off-family prefill saves 20-28% vs median pricing on both fresh sets. Matching the paper router is pool-dependent:
+Phi-4-mini is ahead on MMLU-Pro (+3.2, CI just > 0) but 9 pt behind on Omni; SmolLM2-1.7B is within CIs on Omni but 3.8 behind on
+MMLU-Pro (tie once its cheaper pass is priced); Granite is within CIs on MMLU-Pro, 9 behind on Omni. Success AUC and length R2 of the
+off-family prefills sit between Qwen3-0.6B and the paper 4B. Claim: "a small prefill from any of four families captures most of the
+gain"; NOT "any 2B matches ours".
+
+### 4.A.56 Live run of the frozen router (2026-10-05; `analysis/cost_headroom/live_20261005/`, `live_run_20261005/`; $2.10 billed)
+1,000 MMLU-Pro problems never used anywhere (not in the original 1,000, the 6,500 fresh, or by normalized text; subject-stratified like
+the original, but computer science / history / philosophy were exhausted -> unweighted). Qwen3-4B-Instruct-2507 prefill extracted in a GPU
+job with 32 fresh prompts as a feature anchor (relative RMS deviation 0.0); readouts reproduced from the original train/cal split (cost
+heads 1.1e-6 rel., success 4.4e-4 abs.; tolerance 1e-3 set before any call). Policies: cheapest V reaching .65/.75/.85 on ORIGINAL
+calibration (Table 2 rule), ours vs median-length pricing, same success readouts; input tokens predicted from Qwen prompt length.
+Only the chosen routes were called (union 2,555 calls, unpinned OpenRouter as deployed); 2,552 returned (3 long stragglers excluded).
+Live calibration of the frozen cost readouts, predicted/realized output tokens: oss20lo 1.04, oss20md .94, dsv4f .95, oss120md .94
+(oss120hi .75, n=8). Billed cost predicted/realized: gpt-oss routes .83-1.05, **dsv4f .25**: unpinned dsv4f went to Relace ($1.28/M out,
+94 calls = 60% of dsv4f spend) and OpenInference ($1.67/M; was $0.12 in the fresh collection), vs StreamLake $0.09/M (409 calls).
+| target | ours acc / median acc | spend saved, decision-time rates (realized tokens) | spend saved, billed | acc diff (pp) |
+| .65 | 64.9 / 67.1 | 43.8 [25.4, 55.8] | 81.6 [65.8, 88.4] | -2.2 [-4.0, -0.5] |
+| .75 | 73.5 / 75.1 | 45.2 [34.3, 53.6] | 78.0 [66.4, 84.9] | -1.5 [-4.1, +1.3] |
+| .85 | 84.2 / 85.5 | 8.8 [3.8, 14.5] | 13.0 [5.6, 23.0] | -1.3 [-2.4, -0.2] |
+(paired problem bootstrap 2,000; n = 997-999.) => The frozen router works live: token predictions hold on unseen problems, and the
+calibration-chosen policies spend 44-45% less in the middle and 9% less near the top, but they land 1.3-2.2 pp below the median policy, so
+this is NOT a matched-accuracy saving (fresh Table 2 had the median policy below ours at .65/.75). The billed column is inflated by
+unpinned-provider price drift that hits dsv4f-heavy policies (median) harder -- report the decision-time column as the length result and
+the billed column as a second live instance of provider drift (pin, or re-price from a few calls; 4.A.55).
