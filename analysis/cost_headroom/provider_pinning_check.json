@@ -1,0 +1,198 @@
+{
+ "mmlupro": {
+  "best": "StreamLake",
+  "regret": {
+   "StreamLake": 0.0,
+   "GMICloud": 0.09971402819128516,
+   "DigitalOcean": 0.31116283250670906
+  },
+  "vs_endpoints": {
+   "StreamLake": -0.037180831298689654,
+   "GMICloud": 0.057852144093889724,
+   "DigitalOcean": 0.2697420118927869
+  },
+  "fit_cost_per_correct": {
+   "StreamLake": 0.0004273945609756097,
+   "GMICloud": 0.0005248305225296443,
+   "DigitalOcean": 0.000944220984
+  },
+  "selection": {
+   "5": {
+    "p_best": 0.556,
+    "exp_regret": 0.04659896536440028,
+    "p90_regret": 0.09971402819128516,
+    "share": {
+     "StreamLake": 0.556,
+     "GMICloud": 0.433,
+     "DigitalOcean": 0.011
+    }
+   },
+   "10": {
+    "p_best": 0.573,
+    "exp_regret": 0.04278933884199419,
+    "p90_regret": 0.09971402819128516,
+    "share": {
+     "StreamLake": 0.573,
+     "GMICloud": 0.426,
+     "DigitalOcean": 0.001
+    }
+   },
+   "20": {
+    "p_best": 0.639,
+    "exp_regret": 0.03599676417705395,
+    "p90_regret": 0.09971402819128516,
+    "share": {
+     "StreamLake": 0.639,
+     "GMICloud": 0.361,
+     "DigitalOcean": 0.0
+    }
+   },
+   "50": {
+    "p_best": 0.794,
+    "exp_regret": 0.020541089807404746,
+    "p90_regret": 0.09971402819128516,
+    "share": {
+     "StreamLake": 0.794,
+     "GMICloud": 0.206,
+     "DigitalOcean": 0.0
+    }
+   },
+   "100": {
+    "p_best": 0.915,
+    "exp_regret": 0.008475692396259239,
+    "p90_regret": 0.0,
+    "share": {
+     "StreamLake": 0.915,
+     "GMICloud": 0.085,
+     "DigitalOcean": 0.0
+    }
+   },
+   "200": {
+    "p_best": 0.993,
+    "exp_regret": 0.0006979981973389962,
+    "p90_regret": 0.0,
+    "share": {
+     "StreamLake": 0.993,
+     "GMICloud": 0.007,
+     "DigitalOcean": 0.0
+    }
+   }
+  },
+  "n_fit": 300,
+  "n_eval": 1695
+ },
+ "apps": {
+  "best": "StreamLake",
+  "regret": {
+   "StreamLake": 0.0,
+   "GMICloud": 0.32350908213326934,
+   "DigitalOcean": 0.24514526962477912
+  },
+  "vs_endpoints": {
+   "StreamLake": -0.0440597012153523,
+   "GMICloud": 0.24206017615302522,
+   "DigitalOcean": 0.20241579675301002
+  },
+  "fit_cost_per_correct": {
+   "StreamLake": 0.0012715393333333333,
+   "GMICloud": 0.005113051510382513,
+   "DigitalOcean": 0.002270229433460076
+  },
+  "selection": {
+   "5": {
+    "p_best": 0.896,
+    "exp_regret": 0.025573471853485515,
+    "p90_regret": 0.24514526962477912,
+    "share": {
+     "StreamLake": 0.896,
+     "GMICloud": 0.001,
+     "DigitalOcean": 0.103
+    }
+   },
+   "10": {
+    "p_best": 0.882,
+    "exp_regret": 0.028927141815723936,
+    "p90_regret": 0.24514526962477912,
+    "share": {
+     "StreamLake": 0.882,
+     "GMICloud": 0.0,
+     "DigitalOcean": 0.118
+    }
+   },
+   "20": {
+    "p_best": 0.964,
+    "exp_regret": 0.00882522970649205,
+    "p90_regret": 0.0,
+    "share": {
+     "StreamLake": 0.964,
+     "GMICloud": 0.0,
+     "DigitalOcean": 0.036
+    }
+   },
+   "50": {
+    "p_best": 0.998,
+    "exp_regret": 0.0004902905392495582,
+    "p90_regret": 0.0,
+    "share": {
+     "StreamLake": 0.998,
+     "GMICloud": 0.0,
+     "DigitalOcean": 0.002
+    }
+   },
+   "100": {
+    "p_best": 1.0,
+    "exp_regret": 0.0,
+    "p90_regret": 0.0,
+    "share": {
+     "StreamLake": 1.0,
+     "GMICloud": 0.0,
+     "DigitalOcean": 0.0
+    }
+   },
+   "200": {
+    "p_best": 1.0,
+    "exp_regret": 0.0,
+    "p90_regret": 0.0,
+    "share": {
+     "StreamLake": 1.0,
+     "GMICloud": 0.0,
+     "DigitalOcean": 0.0
+    }
+   }
+  },
+  "n_fit": 603,
+  "n_eval": 354
+ },
+ "cc": {
+  "best": "GMICloud",
+  "regret": {
+   "StreamLake": 0.46189083281968135,
+   "GMICloud": 0.0,
+   "DigitalOcean": 0.0
+  },
+  "vs_endpoints": {
+   "StreamLake": 0.0,
+   "GMICloud": -0.3159543944391461,
+   "DigitalOcean": -0.3159543944391461
+  },
+  "fit_cost_per_correct": {
+   "StreamLake": 0.00021221549999999998,
+   "GMICloud": 0.0025890446399999996,
+   "DigitalOcean": 0.00043146950000000003
+  },
+  "selection": {
+   "5": {
+    "p_best": 0.0,
+    "exp_regret": 0.4618908328196812,
+    "p90_regret": 0.46189083281968135,
+    "share": {
+     "StreamLake": 1.0,
+     "GMICloud": 0.0,
+     "DigitalOcean": 0.0
+    }
+   }
+  },
+  "n_fit": 5,
+  "n_eval": 1
+ }
+}

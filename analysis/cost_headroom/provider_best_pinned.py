@@ -8,7 +8,7 @@ import numpy as np
 src = open(__file__.replace("provider_best_pinned.py", "provider_routing.py")).read().split("res = {}")[0]
 g = {"__file__": __file__.replace("provider_best_pinned.py", "provider_routing.py"), "__name__": "x"}; exec(src, g)
 load, frontier, GO, PROV, RATE, PRATE, sig, lgt, cost_at = (g[k] for k in ("load", "frontier", "GO", "PROV", "RATE", "PRATE", "sig", "lgt", "cost_at"))
-for ds in ("apps", "mmlupro"):
+for ds in [d for d, _ in g["DSETS"]]:
     ids, q, L, I, paid, p_pred, len_pred, fit, ev, _ = load(ds)
     rate_of = g["rate_of"]
     p = {s: p_pred[s] for s in GO}; c = {s: I[s] * rate_of(s)[0] + len_pred[s] * rate_of(s)[1] for s in GO}

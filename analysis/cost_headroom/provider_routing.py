@@ -71,13 +71,13 @@ def load(ds):
                 r = json.loads(l)
                 if r.get("finish_reason") != "error": raw[(r["problem_id"], r["route_label"])] = r
         cand = json.load(open(PIL / ds / "problem_ids.json"))
-    else:
-        F = R / "apps_tensors"; t = np.load(F / "tensors.npz", allow_pickle=True)
+    else:                                                  # apps / cc (CodeContests, NEW_PATH 4.A.51): same layout
+        F = R / ("apps_tensors" if ds == "apps" else "cc_tensors"); t = np.load(F / "tensors.npz", allow_pickle=True)
         ids_all = list(map(str, t["problem_ids"])); slots = list(map(str, t["model_slots"]))
         P = read_predictions(F / "content_preds.jsonl", ids_all, "p_successes", len(slots))
         C = read_predictions(F / "cost_preds_probe.jsonl", ids_all, "expected_costs", len(slots))
         raw = {}
-        for f in glob.glob(f"{R}/apps_pool/*_d0.jsonl"):
+        for f in glob.glob(f"{R}/apps_pool/*_d0.jsonl" if ds == "apps" else f"{R}/cc_pool/full/*_d0.jsonl"):
             for l in open(f):
                 r = json.loads(l)
                 if r.get("finish_reason") != "error": raw[(r["problem_id"], r["route_label"])] = r
@@ -129,8 +129,9 @@ def frontier(arm_routes, p, c, q, paid, ev):
     return hull([tuple(np.array(route(arm_routes, p, c, q, paid, ev, V))[[1, 0]].mean(1)) for V in VS])
 
 
+DSETS = [("mmlupro", "MMLU-Pro fresh (pinned 2,000)"), ("apps", "APPS test")] + ([("cc", "CodeContests test")] if (PIL / "cc").exists() else [])
 res = {}
-for ds, label in (("mmlupro", "MMLU-Pro fresh (pinned 2,000)"), ("apps", "APPS test")):
+for ds, label in DSETS:
     ids, q, L, I, paid, p_pred, len_pred, fit, ev, prov_un = load(ds)
     print(f"\n===== {label}: {len(ids)} problems with all routes + 3 pinned providers; fit {len(fit)}, eval {len(ev)}")
     describe(ds, q, L, paid, ev)
