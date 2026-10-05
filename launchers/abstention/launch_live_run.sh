@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Live run (NEW_PATH 4.A.56). STEP=extract: GPU job, Qwen3-4B-Instruct-2507 prefill of the 1,000 frozen live MMLU-Pro prompts
 # (same system prompt / layers / 8192 cap as the fresh features). STEP=route: CPU job, frozen readouts -> per-target routes -> live calls
-# (guard $8). Commit + push first. Prepare the sample once with analysis/cost_headroom/live_20261005/prepare_live.py.
+# (guard $8). STEP=pin: CPU job, re-issue the live dsv4f calls pinned to StreamLake (decisions unchanged; guard $2). Commit + push first. Prepare the sample once with analysis/cost_headroom/live_20261005/prepare_live.py.
 set -euo pipefail
 O=/mnt/llmd/results/exps/aristides/reason/live_run_20261005; STEP=${STEP:-extract}
 cat > ${O}/run_${STEP}.sh <<EOF
@@ -15,6 +15,9 @@ if [ "${STEP}" = extract ]; then
     --model Qwen/Qwen3-4B-Instruct-2507 --route-label mmlupro_live --prompts-file ${O}/prompts_extract.jsonl --activations ${O}/prefill.npz \
     --max-len 8192 --system-prompt "You are a helpful assistant." > ${O}/extract.log 2>&1
   echo EXIT \$? >> ${O}/extract.log
+elif [ "${STEP}" = pin ]; then
+  python -u analysis/cost_headroom/live_20261005/live_pin.py --budget-usd \${BUDGET:-2} > ${O}/pin.log 2>&1
+  echo EXIT \$? >> ${O}/pin.log
 else
   python -u analysis/cost_headroom/live_20261005/live_route.py --budget-usd \${BUDGET:-8} > ${O}/route.log 2>&1
   echo EXIT \$? >> ${O}/route.log
