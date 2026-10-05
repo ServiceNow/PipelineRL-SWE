@@ -1917,3 +1917,45 @@ Routing on fresh problems, billed prices, cost saved by ours at matched accuracy
 => The result holds with two new families (Qwen, GLM): the prefill cost readout transfers to models it was not built for (no change to
 the encoder), and beats difficulty-only pricing. GLM's length is poorly predicted (R2 .06), yet routing still gains. 10-example
 onboarding of the new families recovers most of the value in the full pool (2.3 pt behind full readouts) but less in the new-family pool.
+
+### 4.A.47 Representation x head grid, fresh sets, billed prices (2026-10-05; `rep_head_grid.py`, eai rep_head_grid_072311)
+Cost saved by OUR archived head (4B prefill, raw standardized features -> RidgeCV) vs each cell at matched accuracy [bootstrap 200];
+"enc" = with every encoder pass priced (4B pass for all arms; other encoders extra).
+| cell | Omni vs median | ours vs it | ours vs it, enc | MMLU-Pro vs median | ours vs it | ours vs it, enc |
+| ours (4B prefill + ridge, archived) | 27.8 | -- | -- | 23.1 | -- | -- |
+| 4B prefill PCA-256 + ridge | 18.2 | 11.8 [6.9, 16.5] | 11.7 | 20.0 | 3.8 [2.2, 5.2] | 3.6 |
+| 4B prefill PCA-256 + kNN | 15.3 | 14.6 | 14.5 | 20.1 | 3.7 | 3.5 |
+| 4B prefill PCA-256 + MixLLM | 17.5 | 12.3 | 12.2 | 19.5 | 4.4 | 4.2 |
+| Qwen3-Embedding-8B + ridge | 17.2 | 12.9 [7.2, 17.8] | 13.4 | 14.8 | 9.7 [7.2, 12.0] | 12.4 |
+| Qwen3-Embedding-8B + kNN | 12.3 | 17.8 | 18.1 | 14.0 | 10.6 | 13.2 |
+| Qwen3-Embedding-8B + MixLLM | 12.7 | 17.3 | 17.6 | 12.1 | 12.4 | 14.8 |
+| jina 137M + ridge / kNN / MixLLM | 8.7 / 5.2 / 6.6 | 20.9 / 23.9 / 22.7 | ~same | 11.5 / 8.3 / 13.6 | 13.1 / 16.1 / 10.9 | ~same |
+| MiniLM + ridge / kNN / MixLLM | 12.0 / 7.5 / 9.2 | 17.9 / 22.0 / 20.4 | ~same | 13.0 / 11.4 / 14.1 | 11.5 / 13.2 / 10.4 | ~same |
+Every CI excludes zero. CAVEAT: the grid's "4B prefill" row is PCA-256 -> StandardScaler (= whitening) -> head, not our recipe;
+whitening equalizes noise directions and loses 4-12 pt. The archived row IS the 4B+ridge cell (verified reconstruction to 1e-6).
+=> (1) A 2x larger embedding model (Qwen3-Embedding-8B) under any head loses by 10-18 pt: the representation matters and a generative
+prefill beats a bigger embedder. (2) On the same 4B features, the head matters less than the preprocessing (ridge/kNN/MixLLM within
+~3 pt after PCA). (3) Encoder pricing barely moves anything (<=0.3 pt on Omni; MMLU-Pro +1-3 pt in OUR favour vs the 8B embedder,
+whose pass costs extra).
+
+### 4.A.49 Rigor checks (2026-10-05; free)
+- Price leakage (`heldout_rates.py`): rates cross-fitted on the other half of fresh problems move by <=1.5% (0.1334-0.1342 /
+  0.1203-0.1215 / 0.2530-0.2607 $/M); ours vs median/mean/from-success/bins changes by <=0.6 pt (MMLU-Pro 23.1 -> 22.5, Omni 27.8 ->
+  27.8). At LIST prices: Omni 25.3 vs median, -0.1 vs from-success, 9.2 vs bins. => no leakage effect.
+- Original pools at billed rates (`reprice_original.py`; reproduces the paper's list-price numbers exactly): LCB 35.6 -> 26.7 [21.3,
+  32.4] (headroom 46.0 -> 32.4), Omni 21.9 -> 25.2 [10.0, 36.4], MMLU-Pro 30.7 -> 35.3 [22.6, 45.2]. LCB falls because billed prices
+  compress the gpt-oss-120b/20b output-price gap (0.60/0.09 = 6.7x list -> 0.26/0.13 = 1.9x billed).
+- Refit bootstrap (`refit_bootstrap.py`, 300; train AND test problems resampled, every cost estimator refitted; success fixed;
+  replicate 0 reproduces the archived head to 2e-6). Ours vs: median Omni 27.8 test-only [20.9, 33.4] -> refit [14.6, 30.6], MMLU-Pro
+  23.1 [18.9, 26.9] -> [18.1, 28.0]; from-success Omni 3.2 [-1.7, 7.8] -> [-11.1, 6.2], MMLU-Pro 14.1 [11.3, 16.7] -> [9.7, 19.8];
+  bins Omni 11.6 [6.6, 16.5] -> [-3.4, 13.2] (n.s.), MMLU-Pro 12.7 [8.1, 16.3] -> [7.0, 18.6]. Refit medians: Omni lower (23.1 / -1.8 /
+  4.7), MMLU-Pro unchanged. Bootstrap train sets hold ~63% unique problems (Omni: ~174 of 275), so this is pessimistic for the learned
+  head on the small pool. => MMLU-Pro conclusions survive training noise; Omni vs-median survives, Omni vs-bins does not.
+- Drift offset intervals (`drift_reoffset.py 200`; 200 draws of the k calls). dsv4f predicted/realized: k=0 1.37 / 1.23; k=50 mean
+  0.97 / 1.00 but 95% of draws in [0.53, 1.51] (MMLU-Pro) / [0.78, 1.25] (Omni); k=200 [0.76, 1.32] / [0.87, 1.17]. Net-utility gain at
+  k=50 [+5.2, +19.9] (MMLU-Pro; k=0 +6.4) / [+20.6, +31.1] (Omni; k=0 +20.8). => the offset is unbiased from 50 calls, but one 50-call
+  fit is noisy on MMLU-Pro (heavy length tails); say "removes the bias on average" and give the interval, not "fixes it".
+- Endpoints router vs best pinned provider at matched accuracy (`provider_best_pinned.py`; best chosen on FIT = StreamLake both pools):
+  APPS -4.6 [-10.3, -0.4] (band 58.8-86.2%), MMLU-Pro -3.9 [-6.7, -1.5]; vs GMICloud +19.5 / +5.5, vs DigitalOcean +16.8 / +21.2.
+  => pinning the single cheapest provider beats routing over providers by ~4% where both reach; the router's value is (a) not needing
+  to know the best provider in advance and (b) reaching higher accuracy (APPS 89.5 vs 86.2%).
