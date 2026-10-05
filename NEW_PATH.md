@@ -1959,3 +1959,19 @@ whose pass costs extra).
   APPS -4.6 [-10.3, -0.4] (band 58.8-86.2%), MMLU-Pro -3.9 [-6.7, -1.5]; vs GMICloud +19.5 / +5.5, vs DigitalOcean +16.8 / +21.2.
   => pinning the single cheapest provider beats routing over providers by ~4% where both reach; the router's value is (a) not needing
   to know the best provider in advance and (b) reaching higher accuracy (APPS 89.5 vs 86.2%).
+
+### 4.A.50 Prefill-size sweep: how small can the prefill be? (2026-10-05; `size_sweep_eval.py`; GPU extraction, no API spend)
+Qwen3 hybrid 0.6B / 1.7B / 4B / 8B (default thinking-mode template), same prompts + system prompt, same 8 relative layers x {mean,last};
+each prefill feeds BOTH readouts (paper recipes, original train only); fresh sets, billed prices. Paper row (Qwen3-4B-2507) refitted
+through the same code reproduces the paper (27.8 / 23.1, log loss .496). "vs paper": cost saved by the row's full router vs the paper's
+at matched accuracy [bootstrap 300]; "enc": encoder pass priced at 0.03 $/M x params/4B.
+| prefill | Omni AUC / R2 | Omni vs median | Omni vs paper (enc) | MMLU-Pro AUC / R2 | MMLU-Pro vs median | MMLU-Pro vs paper (enc) |
+| Qwen3-0.6B | .801 / .60 | 24.6 [18.5, 30.5] | -5.1 [-10.3, 1.0] (-4.1) | .662 / .23 | 18.0 [13.8, 21.7] | -7.5 [-10.9, -3.8] (-1.7) |
+| Qwen3-1.7B | .807 / .64 | 27.4 [21.0, 32.4] | -3.4 [-8.8, 1.5] (-2.7) | .685 / .33 | 23.5 [19.4, 27.3] | +0.5 [-1.9, 3.0] (+4.0) |
+| Qwen3-4B | .808 / .66 | 24.7 [18.6, 31.0] | -1.7 [-5.9, 2.6] (-1.6) | .699 / .36 | 22.2 [17.7, 26.3] | -3.3 [-5.5, -1.0] (-3.1) |
+| Qwen3-8B | .804 / .67 | 24.1 [18.1, 30.3] | +0.3 [-3.5, 4.4] (-0.8) | .700 / .37 | 20.8 [16.8, 25.5] | -2.2 [-4.3, 0.5] (-8.2) |
+| Qwen3-4B-2507 (paper) | .829 / .69 | 27.8 [20.4, 33.0] | -- | .713 / .39 | 23.1 [18.2, 26.8] | -- |
+=> Every size saves 18-28% vs median pricing. Length R2 rises monotonically with size (Omni .60 -> .67, MMLU-Pro .23 -> .37); success
+AUC is flat on Omni and rises on MMLU-Pro. Routing gain saturates by ~1.7B: 1.7B is within CIs of the paper router on both pools
+(and ahead on MMLU-Pro once its cheaper pass is priced); 0.6B loses 5-8 pt; 8B adds nothing over 4B. The 2507 release beats the
+same-size hybrid 4B (+1.7 / +3.3), so the release/tuning matters as much as size above ~2B.
