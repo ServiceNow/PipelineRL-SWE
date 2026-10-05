@@ -6,7 +6,36 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.patches import FancyBboxPatch,FancyArrowPatch
 import numpy as np
-from make_fresh_curves import panel, COLORS, LABELS
+
+BILLED=json.loads((Path(__file__).resolve().parent/'data/fresh_billed_curves.json').read_text())
+COLORS={'learned':'#2166AC','median':'#D67C27'}
+LABELS={'learned':'Prefill cost readouts','median':'Training-median length'}
+
+
+def panel(ax,dataset,title):
+ d=BILLED['datasets'][dataset]
+ for arm in ['median','learned']:
+  c=d['curves'][arm]
+  ax.scatter(np.array(c['mean_cost_usd'])*1000,np.array(c['accuracy'])*100,s=1.2,color=COLORS[arm],alpha=.25,lw=0,zorder=2)
+  ax.plot(np.array(c['hull_cost_usd'])*1000,np.array(c['hull_accuracy'])*100,color=COLORS[arm],lw=1.4,solid_capstyle='round',label=LABELS[arm],zorder=3)
+  sel=d['selected'][arm].values()
+  ax.scatter([x['mean_cost_usd']*1000 for x in sel],[x['accuracy']*100 for x in sel],s=14,facecolors='white',edgecolors=COLORS[arm],linewidths=.9,zorder=5)
+ sat=[]
+ for arm in ['median','learned']:
+  c=d['curves'][arm];sp=np.asarray(c['mean_cost_usd'])*1000;ac=np.asarray(c['accuracy'])*100
+  sat.append(float(sp[np.flatnonzero(ac>=ac.max()-.5)[0]]))
+ ax.set_xlim(0,max(sat)*1.08)
+ # matched-accuracy connectors: the saving is a lateral cost shift from the median rule's frontier to ours
+ for k in d['connectors']:
+  y=k['accuracy']*100;x0=k['median_cost_usd']*1000;x1=k['ours_cost_usd']*1000
+  ax.annotate('',xy=(x1,y),xytext=(x0,y),arrowprops=dict(arrowstyle='-|>',color=INK,lw=.7,mutation_scale=6,shrinkA=0,shrinkB=1),zorder=4)
+  ax.text(x0+.01*ax.get_xlim()[1],y-.6,f"−{k['saved']*100:.0f}%",fontsize=5.8,color=INK,ha='left',va='top')
+ ax.set_title(title,loc='left',fontsize=8,fontweight='bold',pad=4)
+ ax.grid(color='#E6EBF0',lw=.6);ax.set_axisbelow(True)
+ for side in ('top','right'):ax.spines[side].set_visible(False)
+ ax.set_xlabel('Billed spend ($ / 1,000 queries)',fontsize=6.5);ax.set_ylabel('Accuracy (%)',fontsize=7)
+ ax.tick_params(labelsize=6)
+ ax.set_ylim((60,88) if dataset=='mmlupro' else (38,73))
 
 HERE=Path(__file__).resolve().parent
 BLUE='#2166AC';TEAL='#138A80';INK='#263240';GREY='#718096';PALE='#EEF5FB'
@@ -34,12 +63,12 @@ a.text(2.75,1.8,'Shared activations',ha='center',fontsize=7.4,color=GREY)
 a.text(0,-.45,'Route selection uses only the encoder activations.',fontsize=7,color=GREY)
 right=gs[1].subgridspec(2,1,hspace=.9)
 b=fig.add_subplot(right[0]);c=fig.add_subplot(right[1])
-panel(b,'mmlupro','(b) Fresh MMLU-Pro',compact=True)
-panel(c,'omni500','Fresh Omni-MATH',compact=True)
+panel(b,'mmlupro','(b) Fresh MMLU-Pro, billed')
+panel(c,'omni500','Fresh Omni-MATH, billed')
 b.set_xlabel('')
 handles,labels=c.get_legend_handles_labels()
-fig.legend(handles,labels,loc='lower center',ncol=3,frameon=False,fontsize=6.6,bbox_to_anchor=(.5,.035),markerscale=2)
-fig.text(.49,.012,'Single-V policies; hollow circles mark calibration selections. Axes stop just past the first point within 0.5 pp of each arm’s peak. Generation spending excludes encoder overhead.',ha='center',fontsize=6.2,color=GREY)
+fig.legend(handles,labels,loc='lower center',ncol=2,frameon=False,fontsize=6.6,bbox_to_anchor=(.5,.035),markerscale=2)
+fig.text(.49,.012,'Dots: single-V policies; lines: their frontiers; hollow circles: calibration-selected policies; arrows: cost saved at matched accuracy.',ha='center',fontsize=6.2,color=GREY)
 for suffix in ['pdf','png','svg']:fig.savefig(HERE/'figures'/f'shared_prefill_overview.{suffix}',dpi=250,bbox_inches='tight',pad_inches=.07)
 svg=HERE/'figures/shared_prefill_overview.svg'
 svg.write_text('\n'.join(line.rstrip() for line in svg.read_text().splitlines())+'\n')

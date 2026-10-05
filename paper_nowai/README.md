@@ -1,6 +1,6 @@
 # Predicting Reasoning-Model Costs from Shared Prefill Activations
 
-A four-page academic manuscript in the uploaded NOWAI template, including references. Authors are placeholders.
+A four-page academic manuscript (excluding references) in the uploaded NOWAI template. Authors are placeholders.
 
 ## Read and edit
 
@@ -23,6 +23,7 @@ Regenerate figures with Python, NumPy, and Matplotlib:
 
 ```bash
 python make_plots.py
+python make_billed_curves.py   # Figure 1(b) data at billed prices (reads analysis/cost_headroom)
 python make_overview.py
 python make_markdown.py
 ```
@@ -45,7 +46,7 @@ Alternatively, use `tectonic main.tex`. The PDF was compiled with Tectonic 0.17.
 - LiveCodeBench's 46.0% oracle result uses the same accuracy band as its 35.6% plain-ridge result.
 - Main savings are descriptive, matched-accuracy test-frontier comparisons, with 500 paired problem bootstrap resamples.
 - ZeroRouter is identified as a paper-based deployment-pool reimplementation. Its configuration is selected on calibration; significance is claimed only where paired intervals support it. Component-swap bars have no significance claim.
-- Encoder overhead is excluded from generation-spend savings and stated explicitly in the manuscript.
+- Figure 1 and Tables 1-3 use billed prices; Table 3 prices every encoder pass. Both arms in Figure 1 share the same encoder pass.
 - Bibliographic metadata was checked against arXiv. `references.bib` abbreviates long author lists for the page limit; `references_full.bib` preserves full metadata.
 
 
@@ -54,12 +55,15 @@ Alternatively, use `tectonic main.tex`. The PDF was compiled with Tectonic 0.17.
 
 ## Current revision
 
-The main PDF compiles to four pages; the supplement compiles to two. Figure 1
-uses parallel Success readouts / Cost readouts labels. The main table reports
-each cost estimator's savings and interval, with paired contrasts in the text.
-ZeroRouter is labeled a reimplementation, Omni differences are inconclusive,
-and the end-to-end difference estimates use plug-in effects rather than
-bootstrap means. No running expansion result has entered this draft.
-
-The prose, headings, and figure captions use descriptive academic wording. The
-style revision leaves the methods, numerical results, and uncertainty claims unchanged.
+Revision of 2026-10-05: original-pool savings repriced at billed rates (LCB 26.7,
+Omni 25.2, MMLU-Pro 35.3); the drift offset is described as removing the bias on
+average, with the single-fit interval; the provider-routing saving is replaced by
+"endpoint = model + offset", since pinning the best provider chosen on fitting
+problems beats the provider router by about 4%; the refit-bootstrap caveat (Omni vs
+difficulty bins not significant) is stated. The extra page adds Table 3
+(representation x readout grid, encoders priced), Table 4 (prefill size, Qwen3
+0.6B-8B), a second-model-family paragraph and the cross-fitted-rates sentence.
+Figure 1(b) now shows billed-price frontiers with matched-accuracy arrows labelled
+with the cost saved. LaTeX comments `% TODO(offfamily)`, `% TODO(aime)`,
+`% TODO(provider-cc)` and `% TODO(live)` mark slots for pending results. The main
+text is four pages; references begin on page 4 and end on page 5.
