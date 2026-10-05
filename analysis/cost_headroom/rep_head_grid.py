@@ -42,7 +42,7 @@ def head_predict(head, X, y, tr):
         return RidgeCV(alphas=np.geomspace(1e-1, 1e7, 17)).fit(Xs[tr], y[tr]).predict(Xs)
     if head == "knn":
         best = None
-        for k in [2 ** i for i in range(1, 9)]:
+        for k in [2 ** i for i in range(1, 9) if 2 ** i <= (4 * len(tr)) // 5 - 1]:      # every CV fold must support k
             sc = []
             for a, b in KFold(5, shuffle=True, random_state=0).split(tr):
                 m = KNeighborsRegressor(k, metric="cosine").fit(X[tr[a]], y[tr[a]]); sc.append(-np.mean((m.predict(X[tr[b]]) - y[tr[b]]) ** 2))
