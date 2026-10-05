@@ -11,7 +11,7 @@ Output: <out>/<dataset>/<route>_d<k>.jsonl
 --pilot N: a stratified sample of N problems per dataset (by level / rounded difficulty), seed 0.
 """
 from __future__ import annotations
-import argparse, asyncio, json, random
+import argparse, asyncio, json, os, random
 from collections import defaultdict
 from pathlib import Path
 import aiohttp
@@ -103,6 +103,9 @@ async def call(session, key, route, prompt, sem, max_tokens, provider_max_price=
             "provider": {"ignore": IGNORE, "require_parameters": True}, **extra}
     if provider_max_price is not None:
         body["provider"]["max_price"] = provider_max_price
+    pin = os.environ.get("OPENROUTER_PIN_PROVIDER")          # NEW_PATH 4.A.58: one provider, no fallbacks
+    if pin:
+        body["provider"] = {"only": [pin], "allow_fallbacks": False, "require_parameters": True}
     err = None
     for attempt in range(4):
         try:

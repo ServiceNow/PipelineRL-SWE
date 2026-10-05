@@ -87,6 +87,7 @@ for spec in "${ROUTES[@]}"; do
       echo 'export HF_HUB_DISABLE_IMPLICIT_TOKEN=1'
       echo 'source pipelinerl/swe/scripts/livecodebench/ensure_lcb_runner.sh'
       echo "export OPENROUTER_API_KEY=\$(cat ${KEYFILE})"
+      [[ -n "${PIN:-}" ]] && echo "export OPENROUTER_PIN_PROVIDER=${PIN}"   # NEW_PATH 4.A.59: provider pinned, no fallbacks
       echo "python pipelinerl/swe/scripts/livecodebench/collect_lcb_expert.py \\"
       echo "  --source-collection-dir ${SRC} --output-dir ${BASE} --route-label ${LABEL} \\"
       echo "  --model '${MODEL}' --splits train,eval \\"

@@ -50,6 +50,7 @@ for spec in "${ROUTES[@]}"; do
       echo '#!/usr/bin/env bash'; echo 'set -euo pipefail'
       echo "cd ${REPO_ROOT}"
       echo "export OPENROUTER_API_KEY=\$(cat ${KEYFILE})"
+      [[ -n "${PIN:-}" ]] && echo "export OPENROUTER_PIN_PROVIDER=${PIN}"   # NEW_PATH 4.A.59: provider pinned, no fallbacks
       echo "python pipelinerl/swe/scripts/bigcodebench/collect_bcb_expert.py \\"
       echo "  --keep-file ${KEEP} --tasks-file ${TASKS} --output-dir ${BASE} --route-label ${LABEL} \\"
       echo "  --model '${MODEL}' --splits train,eval --output-suffix _d${DRAW} \\"
