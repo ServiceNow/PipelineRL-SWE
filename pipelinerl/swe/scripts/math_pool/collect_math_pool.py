@@ -122,6 +122,7 @@ async def call(session, key, route, prompt, sem, max_tokens, provider_max_price=
 
 async def run(a):
     key = Path(a.api_key_file).read_text().strip(); sem = asyncio.Semaphore(a.concurrency)
+    spent = {"usd": 0.0, "stop": False}         # --budget-usd: billed spend of THIS run (usage_cost); new calls stop once exceeded
     draws = {kv.split(":")[0]: int(kv.split(":")[1]) for kv in a.routes.split(",")}
     async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=0)) as session:
         jobs = []
@@ -148,20 +149,26 @@ async def run(a):
             fh = open(path, "a")                  # each row is written the moment it returns: a killed job loses nothing
 
             async def one(t):
+                if spent["stop"]:
+                    return None
                 r = await call(session, key, route, t.get("prompt") or PROMPT.format(problem=t["problem"]), sem, a.max_tokens)
                 r.update(problem_id=t["problem_id"], dataset=ds, route_label=route, model=ROUTES[route][0], draw=d,
                          difficulty=t["difficulty"],
                          # some providers leave the final answer on the reasoning channel: grade it there if content has no box
                          resolved=_grade_task(t, r))
                 fh.write(json.dumps(r) + "\n"); fh.flush()
+                spent["usd"] += float(r.get("usage_cost") or 0)
+                if a.budget_usd and spent["usd"] > a.budget_usd and not spent["stop"]:
+                    spent["stop"] = True; print(f"BUDGET STOP at ${spent['usd']:.2f}", flush=True)
                 return r
-            rows = await asyncio.gather(*[one(t) for t in todo])
+            rows = [r for r in await asyncio.gather(*[one(t) for t in todo]) if r is not None]
             fh.close()
             ok = [r for r in rows if r["finish_reason"] != "error"]
             print(f"{ds} {route} d{d}: {len(ok)}/{len(rows)} ok, acc {sum(r['resolved'] for r in ok)/max(len(ok),1):.2f}, "
                   f"mean out {sum(r['completion_tokens'] for r in ok)/max(len(ok),1):.0f} tok, "
                   f"capped {sum(r['finish_reason'] == 'length' for r in ok)}", flush=True)
         await asyncio.gather(*[one_file(*j) for j in jobs])
+    print(f"spent ${spent['usd']:.2f} (budget stop: {spent['stop']})", flush=True)
 
 
 def main():
@@ -174,6 +181,7 @@ def main():
     ap.add_argument("--api-key-file", default="/home/toolkit/.secrets/openrouter_api_key")
     ap.add_argument("--concurrency", type=int, default=48)
     ap.add_argument("--max-tokens", type=int, default=64000)
+    ap.add_argument("--budget-usd", type=float, default=0.0, help="stop issuing calls once this run's billed spend exceeds it (0 = off)")
     asyncio.run(run(ap.parse_args()))
 
 

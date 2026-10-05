@@ -5,6 +5,7 @@ require_parameters), plus provider.only=[P] and allow_fallbacks=false. The other
 Datasets:
   mmlupro  2,000 problems sampled (seed 20261002) from the 6,500 fresh expansion tasks; graded like collect_expansion.py
   apps     all 1,000 APPS tasks (apps_tasks.jsonl); graded by executing the extracted code against the tests (cc_grader)
+  cc       all 700 CodeContests tasks (cc_pool/cc_tasks.jsonl); graded like apps
 Every row records provider, generation_id and the BILLED usage cost; a shared spend guard stops all workers.
 Output: <out>/<dataset>/dsv4f_pin_<Provider>.jsonl (rows appended as they return; resumable).
 Usage: python collect_provider_pilot.py --out DIR --providers StreamLake,GMICloud,DigitalOcean --budget-usd 18
@@ -29,6 +30,8 @@ def tasks_for(ds, n_mmlu):
         rows = [json.loads(l) for l in (REPO / "analysis/cost_headroom/expansion_20261001/mmlupro_tasks.jsonl").read_text().splitlines()]
         rows = sorted(rows, key=lambda t: t["problem_id"]); random.Random(20261002).shuffle(rows)
         return rows[:n_mmlu]
+    if ds == "cc":                                    # CodeContests (700; second coding pool, NEW_PATH 4.A.51): same stdin/stdout grader as APPS
+        return [json.loads(l) for l in (R / "cc_pool" / "cc_tasks.jsonl").read_text().splitlines()]
     return [json.loads(l) for l in (R / "apps_tasks.jsonl").read_text().splitlines()]
 
 
@@ -87,7 +90,7 @@ async def run(a):
                     g = await asyncio.to_thread(cc_grade, code, [tuple(x) for x in t["tests"]], t["timeout_s"]) if code else None
                     ok = bool(g and g.ok); r["code"] = code
                 r.update(problem_id=t["problem_id"], dataset=ds, route_label=f"dsv4f_pin_{prov}", pinned_provider=prov, resolved=bool(ok))
-                if ds == "apps":
+                if ds in ("apps", "cc"):
                     r.pop("reasoning", None)                          # keep files small; reasoning length is completion_tokens
                 spent["usd"] += float(r.get("usage_cost") or 0)
                 if spent["usd"] > a.budget_usd:

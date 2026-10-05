@@ -3,7 +3,8 @@ is a complete router at that size. Same family (Qwen3), same prompts (original s
 layers x {mean, last}; readouts fitted on ORIGINAL train (success: + calibration C selection) with the paper's recipes:
   success   activation_content_preds.py --rich --select-C (binomial logistic + its calibration)
   cost      reconstruct_paper_cost_heads.py recipe: StandardScaler -> RidgeCV(1e1..1e7) on log mean output, smearing, level match
-Rows: Qwen3-0.6B, 1.7B, 4B (hybrid; anchor for the size trend), 8B (all hybrid thinking-mode releases), plus the paper's
+Rows: Qwen3-0.6B, 1.7B, 4B (hybrid; anchor for the size trend), 8B (all hybrid thinking-mode releases); off-family Phi-4-mini-instruct
+(3.8B, Microsoft), Granite-3.3-2B-instruct (2.5B, IBM), SmolLM2-1.7B-Instruct (HF); plus the paper's
 Qwen3-4B-2507 (Instruct on MMLU-Pro, Thinking on Omni) refitted through this same code as a check.
 Evaluated on the FRESH problems at billed prices (realized = usage_cost):
   fresh success AUC (mean over routes) and log loss; fresh log-length R2 (mean over routes)
@@ -26,6 +27,7 @@ from billed import RATE
 
 S = R / "prefill_size_20261005"; REPO = Path(__file__).resolve().parents[2]
 ROWS = {"q06b": ("Qwen3-0.6B", 0.6), "q17b": ("Qwen3-1.7B", 1.7), "q4bhyb": ("Qwen3-4B", 4.0), "q8b": ("Qwen3-8B", 8.0),
+        "phi4mini": ("Phi-4-mini-instruct", 3.8), "granite2b": ("Granite-3.3-2B-instruct", 2.5), "smol17b": ("SmolLM2-1.7B-Instruct", 1.7),
         "paper": ("Qwen3-4B-2507 (paper)", 4.0)}
 ENC_RATE = {k: 0.03 * b / 4.0 for k, (_, b) in ROWS.items()}
 VALUES = np.geomspace(1e-7, 1, 300)
