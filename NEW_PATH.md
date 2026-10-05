@@ -1901,3 +1901,19 @@ the curve (savings shrink near the top). Added as a column to the 4-pager's Tabl
 - Second model family (`collect_second_family.py`; eai second_family_193327): Qwen3-32B + GLM-4.7-flash on MMLU-Pro original
   train+cal (700) + the 2,000 pinned fresh problems; pilot $0.33 (Qwen3-32B 90% / $0.0041 per call, GLM 76% / $0.0047); est. $24,
   guard $25. Omni skipped: Qwen3-32B hits its output cap on 65% of Omni problems (pilot) and both would cost ~$32 more.
+
+### 4.A.48 Second model family on MMLU-Pro (2026-10-05; `second_family_eval.py`; collection $14.75)
+Qwen3-32B (SiliconFlow, billed $0.57/M out) and GLM-4.7-flash (Cloudflare, $0.40/M) with reasoning, one draw, 700 original train+cal +
+1,905 usable fresh problems. Fresh accuracy 79.0 / 77.7%, ~$0.003 per call (8x dsv4f, which is more accurate: dominated in the full pool).
+New readouts from the SAME frozen 4B features (PCA-256, train only): fresh log-length R2 Qwen3-32B .48 (old routes .46-.60; dsv4f -.35
+under drift), GLM-4.7-flash .06 (its length is hard to read); success AUC .70 / .66.
+Routing on fresh problems, billed prices, cost saved by ours at matched accuracy [paired bootstrap 300]:
+| vs | all 7 routes | gpt-oss-20b x2 + Qwen3-32B + GLM-4.7-flash |
+| median | 22.6 [15.0, 28.9] | 32.5 [20.2, 39.6] |
+| mean | 18.7 [12.5, 23.7] | 21.0 [10.1, 29.9] |
+| cost from success | 8.5 [3.4, 13.3] | 11.9 [1.4, 19.3] |
+| difficulty bins | 7.4 [0.1, 13.5] | 15.1 [5.5, 22.8] |
+| ours with new routes onboarded from 10 examples | 2.3 [1.0, 5.3] | 12.0 [-0.9, 22.1] |
+=> The result holds with two new families (Qwen, GLM): the prefill cost readout transfers to models it was not built for (no change to
+the encoder), and beats difficulty-only pricing. GLM's length is poorly predicted (R2 .06), yet routing still gains. 10-example
+onboarding of the new families recovers most of the value in the full pool (2.3 pt behind full readouts) but less in the new-family pool.
