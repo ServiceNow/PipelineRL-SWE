@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Second coding pool for provider routing (NEW_PATH 4.A.51): deepseek-v4-flash pinned to StreamLake / GMICloud / DigitalOcean on all
+# Second coding pool for provider routing (NEW_PATH 4.A.55): deepseek-v4-flash pinned to StreamLake / GMICloud / DigitalOcean on all
 # 700 CodeContests problems (other routes reused from cc_pool). Billed-cost guard $12 (est. ~$8-10). CPU eai job; commit + push first.
 set -euo pipefail
 R=/mnt/llmd/results/exps/aristides/reason

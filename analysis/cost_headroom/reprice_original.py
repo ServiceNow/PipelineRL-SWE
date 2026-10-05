@@ -15,7 +15,7 @@ from billed import RATE
 
 POOLS = [("LCB", "pool_v2_tensors_5rung", "cost_preds_probe.jsonl"), ("Omni", "omni500_tensors", "cost_preds_probe_thinking.jsonl"),
          ("MMLU-Pro", "mmlupro_tensors", "cost_preds_probe_instruct.jsonl")]
-if len(sys.argv) > 1:                       # e.g. "AIME:aime_tensors:cost_preds_probe_instruct.jsonl" (NEW_PATH 4.A.53) -> only that pool
+if len(sys.argv) > 1:                       # e.g. "AIME:aime_tensors:cost_preds_probe_instruct.jsonl" (NEW_PATH 4.A.57) -> only that pool
     POOLS = [tuple(a.split(":")) for a in sys.argv[1:]]
 fam = lambda s: "oss120" if "120" in s else ("oss20" if s.startswith("oss20") else "dsv4f")
 out = {}

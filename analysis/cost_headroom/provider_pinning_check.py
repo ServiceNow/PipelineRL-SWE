@@ -1,4 +1,4 @@
-"""Does a few-call sample pick the right provider to pin, and what does a wrong pick cost? (NEW_PATH 4.A.51; free, offline)
+"""Does a few-call sample pick the right provider to pin, and what does a wrong pick cost? (NEW_PATH 4.A.55; free, offline)
 Backs the reframed provider paragraph: "endpoint = model + offset; a few calls fix drift and say which provider to pin".
 Reuses provider_routing.py's loader, offsets and frontier (arms: pinned-P = gpt-oss routes + dsv4f pinned to P, P's offsets + price).
   (1) Regret of each pinned arm on EVAL: extra cost of pinned-P over the best pinned arm at matched accuracy (frontier over V,

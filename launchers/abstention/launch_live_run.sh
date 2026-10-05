@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Live run (NEW_PATH 4.A.52). STEP=extract: GPU job, Qwen3-4B-Instruct-2507 prefill of the 1,000 frozen live MMLU-Pro prompts
+# Live run (NEW_PATH 4.A.56). STEP=extract: GPU job, Qwen3-4B-Instruct-2507 prefill of the 1,000 frozen live MMLU-Pro prompts
 # (same system prompt / layers / 8192 cap as the fresh features). STEP=route: CPU job, frozen readouts -> per-target routes -> live calls
 # (guard $8). Commit + push first. Prepare the sample once with analysis/cost_headroom/live_20261005/prepare_live.py.
 set -euo pipefail

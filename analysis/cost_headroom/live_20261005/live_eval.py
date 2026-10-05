@@ -1,4 +1,4 @@
-"""Live run (NEW_PATH 4.A.52), step 4: what each frozen policy actually spent and scored on 1,000 never-used MMLU-Pro problems.
+"""Live run (NEW_PATH 4.A.56), step 4: what each frozen policy actually spent and scored on 1,000 never-used MMLU-Pro problems.
 For each accuracy target, ours (prefill cost readouts) vs median-length pricing (same success readouts, the paper rule):
 billed spend per problem, accuracy, cost saved (1 - spend_ours / spend_median) and accuracy difference, paired problem bootstrap
 (2,000). Also predicted / realized cost per route (live calibration of the frozen cost readouts, incl. provider drift).

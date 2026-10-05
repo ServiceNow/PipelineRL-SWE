@@ -30,7 +30,7 @@ def tasks_for(ds, n_mmlu):
         rows = [json.loads(l) for l in (REPO / "analysis/cost_headroom/expansion_20261001/mmlupro_tasks.jsonl").read_text().splitlines()]
         rows = sorted(rows, key=lambda t: t["problem_id"]); random.Random(20261002).shuffle(rows)
         return rows[:n_mmlu]
-    if ds == "cc":                                    # CodeContests (700; second coding pool, NEW_PATH 4.A.51): same stdin/stdout grader as APPS
+    if ds == "cc":                                    # CodeContests (700; second coding pool, NEW_PATH 4.A.55): same stdin/stdout grader as APPS
         return [json.loads(l) for l in (R / "cc_pool" / "cc_tasks.jsonl").read_text().splitlines()]
     return [json.loads(l) for l in (R / "apps_tasks.jsonl").read_text().splitlines()]
 

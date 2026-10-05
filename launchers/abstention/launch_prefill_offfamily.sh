@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Non-Qwen prefills for the size sweep (NEW_PATH 4.A.50/4.A.51): one GPU job per model; same prompts, system prompt, 8 relative layers.
+# Non-Qwen prefills for the size sweep (NEW_PATH 4.A.54): one GPU job per model; same prompts, system prompt, 8 relative layers.
 # Models pre-downloaded into /home/toolkit/.cache/huggingface. Commit + push first.
 set -euo pipefail
 O=/mnt/llmd/results/exps/aristides/reason/prefill_size_20261005

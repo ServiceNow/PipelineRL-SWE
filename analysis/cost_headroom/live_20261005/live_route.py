@@ -1,4 +1,4 @@
-"""Live run (NEW_PATH 4.A.52), step 3: route 1,000 never-used MMLU-Pro problems with the FROZEN readouts, then call only the chosen
+"""Live run (NEW_PATH 4.A.56), step 3: route 1,000 never-used MMLU-Pro problems with the FROZEN readouts, then call only the chosen
 routes live (OpenRouter, unpinned, as deployed) and grade them. Nothing is fitted on live data.
   readouts   success: activation_content_preds.py --rich --select-C on the original train/cal split (same command as the fresh set);
              cost: the archived train-only RidgeCV heads (paper_cost_heads.joblib). Anchor checks: both reproduce the archived FRESH

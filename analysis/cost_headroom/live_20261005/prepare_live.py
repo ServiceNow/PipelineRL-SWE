@@ -1,4 +1,4 @@
-"""Live run (NEW_PATH 4.A.52), step 1: freeze 1,000 MMLU-Pro problems never used anywhere (not in the original 1,000, the 6,500 fresh,
+"""Live run (NEW_PATH 4.A.56), step 1: freeze 1,000 MMLU-Pro problems never used anywhere (not in the original 1,000, the 6,500 fresh,
 or by normalized text), stratified to the original subject mix, seed 20261005. Writes tasks + prefill prompts (full solving prompt
 with options; no answers) to /mnt/llmd/results/exps/aristides/reason/live_run_20261005/. Usage: python prepare_live.py
 """

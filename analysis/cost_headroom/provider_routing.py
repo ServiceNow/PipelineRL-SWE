@@ -71,7 +71,7 @@ def load(ds):
                 r = json.loads(l)
                 if r.get("finish_reason") != "error": raw[(r["problem_id"], r["route_label"])] = r
         cand = json.load(open(PIL / ds / "problem_ids.json"))
-    else:                                                  # apps / cc (CodeContests, NEW_PATH 4.A.51): same layout
+    else:                                                  # apps / cc (CodeContests, NEW_PATH 4.A.55): same layout
         F = R / ("apps_tensors" if ds == "apps" else "cc_tensors"); t = np.load(F / "tensors.npz", allow_pickle=True)
         ids_all = list(map(str, t["problem_ids"])); slots = list(map(str, t["model_slots"]))
         P = read_predictions(F / "content_preds.jsonl", ids_all, "p_successes", len(slots))
