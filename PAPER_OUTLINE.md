@@ -1,7 +1,7 @@
 # Per-query cost for routing reasoning models: when it pays, why, and how cheaply
 
-Paper outline (bullets, not prose). Status 2026-09-30. Target: TMLR (analysis paper) + a 4-page workshop cut.
-Numbers come from `NEW_PATH.md` §4.A.4–4.A.36 (section in brackets). Figures: `analysis/figures/*.png`
+Paper outline (bullets, not prose). Status 2026-10-05 (§5b and the Oct ledger rows supersede older headline numbers; handoff: `HANDOFF_20261005.md`). Target: TMLR (analysis paper) + a 4-page workshop cut.
+Numbers come from `NEW_PATH.md` §4.A.4–4.A.50 (section in brackets). Figures: `analysis/figures/*.png`
 (regenerate with `python analysis/figures/make_figures.py`).
 
 ---
@@ -136,6 +136,46 @@ Numbers come from `NEW_PATH.md` §4.A.4–4.A.36 (section in brackets). Figures:
   - Confirmed GAIN: Omni (screen .67 → 21.9%), MMLU-Pro (.65 → 30.7%).
   - Pending GAIN: APPS .61 (running), K&K .61, SuperGPQA .58. Pending NO GAIN: AIME .13, BBEH .28. No call: OlympiadBench .48.
   - Excluded: ZebraLogic (public solutions redacted; grader passed placeholders) — report openly.
+
+## 5b. Fresh-set evidence at billed prices (Oct 2026; the paper's primary evidence now) [4.A.37–4.A.50]
+- **Protocol:** 6,500 fresh MMLU-Pro + 1,000 fresh Omni-MATH problems (one draw per route), collected after all readouts were
+  frozen; realized cost = billed usage_cost; predictions priced at effective billed $/M (oss20 0.134, dsv4f 0.121, oss120 0.257;
+  list prices were 0.09 / 0.094 / 0.60). Same success predictions for every cost arm; paired problem bootstrap (300).
+- **Table F1 — ours vs each estimator (cost saved at matched accuracy)** [4.A.43]
+
+  | Estimator | Omni | MMLU-Pro |
+  |---|---|---|
+  | Median length (paper rule) | 27.8 [20.3, 33.1] | 23.1 [18.1, 26.8] |
+  | Mean length | 28.2 | 20.5 |
+  | Prompt-feature GBM | 20.3 | 18.4 |
+  | ZeroRouter reimplementation, cal-tuned | 18.0 [9.0, 24.7] | 19.3 [15.5, 22.6] |
+  | Difficulty bins | 11.6 | 12.7 |
+  | Cost from success | 3.2 (n.s.) | 14.1 [11.4, 16.6] |
+
+- **Deployable policies** (V picked on original calibration) [4.A.44, 4.A.46]: 12–29% raw; at matched accuracy 21–27% mid-range,
+  5–8% near the top; calibration selection costs 0–2% vs our own fresh frontier.
+- **Representation x head grid** [4.A.47]: ours beats every cell; Qwen3-Embedding-8B (2x larger) loses by 10–18 pt under ridge / kNN /
+  MixLLM heads; jina 137M and MiniLM lose by 10–24. Encoder pass priced for every arm changes <= 3 pt (in our favour on MMLU-Pro).
+  Caveat: the grid's own "4B PCA+whitened" row loses 4–12 pt to the archived recipe (whitening hurts); archived = the true 4B+ridge cell.
+- **Prefill size** [4.A.50]: Qwen3 0.6B / 1.7B / 4B / 8B, each feeding BOTH readouts: all save 18–28% vs median; length R2 rises with
+  size; gain saturates by ~1.7B (within CIs of ours; ahead on MMLU-Pro with encoder priced); 0.6B −5 to −8 pt; 8B adds nothing;
+  release matters (4B-2507 > hybrid 4B by 2–3 pt).
+- **Second model family** [4.A.48] (Qwen3-32B, GLM-4.7-flash; MMLU-Pro 1,905 fresh): readouts from the same frozen 4B transfer
+  (R2 .48 / .06); 7 routes: +22.6 vs median, +8.5 vs cost-from-success, +7.4 vs bins; new-family pool +32.5 / +11.9 / +15.1;
+  10-example onboarding 2.3 / 12.0 pt behind full readouts.
+- **Endpoints = model + offset** [4.A.37–4.A.42, 4.A.49]: dsv4f providers agree on 90–96% of correct answers, log-length corr .83–.95.
+  Drift: OpenInference (unseen at training) served 64–72% of fresh dsv4f calls; predicted/realized 1.37 (MMLU-Pro) / 1.23 (Omni);
+  one offset from 50 calls removes the bias ON AVERAGE (0.97 / 1.00) but a single 50-call fit lands in [0.53, 1.51] / [0.78, 1.25].
+  Provider routing: vs unpinned +20.0% on APPS, but the best pinned provider (chosen on FIT) beats the endpoints router by ~4%
+  (APPS −4.6 [−10.3, −0.4], MMLU-Pro −3.9) => DROP "provider routing saves 20%"; keep "endpoint = model + offset; a few calls fix
+  drift and say which provider to pin".
+- **Rigor checks** [4.A.49]: cross-fitted billed rates change results <= 0.6 pt (no leakage); refit bootstrap (train+test resampled):
+  MMLU-Pro conclusions all survive; Omni vs median survives [14.6, 30.6], Omni vs bins does not [−3.4, 13.2]. Original pools at
+  billed rates: LCB 35.6 -> 26.7 [21.3, 32.4] (billed prices compress the 120b/20b gap 6.7x -> 1.9x), Omni 21.9 -> 25.2, MMLU-Pro
+  30.7 -> 35.3.
+- **Intern-Decision-4B success predictor** [4.A.45]: + our costs saves 11.2% [5.5, 17.1] more on fresh Omni, costs 12.3% more on
+  fresh MMLU-Pro — not a general improvement.
+- **APPS pre-registration** [4.A.40]: gain 14.3% [−2.3, 23.6]; GAIN call NOT confirmed (headroom 31.9%).
 
 ## 6. Why it works, and when
 - **6.1 Hard is long for everyone** [4.A.10]
@@ -274,8 +314,11 @@ Numbers come from `NEW_PATH.md` §4.A.4–4.A.36 (section in brackets). Figures:
 
 ## 11. Limitations
 - Every confirmed pre-registered call is a GAIN call (AIME / BBEH not yet run).
-- All pools use the same five models (gpt-oss 20b / 120b × two efforts + deepseek-v4-flash).
-- APPS: one draw per model (deviation from the pre-registered design); pending.
+- Original pools use five routes from two families; a third/fourth family (Qwen3-32B, GLM-4.7-flash) only on MMLU-Pro.
+- APPS: one draw per model; pre-registered GAIN not confirmed (14.3%, CI includes 0).
+- Training-noise CIs (refit bootstrap) widen Omni; Omni vs difficulty bins not significant once refit noise is included.
+- Single 50-call endpoint offsets are noisy on MMLU-Pro; provider routing never beats the best pinned provider.
+- Billed rates from one collection window; prices change within days.
 - Work ≠ difficulty reaches routing on one pool (MMLU-Pro); coding evidence at the prediction level only.
 - ZeroRouter reproduction fills unstated details (K, 11 features, stage-2 loss, MAP vs SVI); no released code; leaderboard
   population unlike a reasoning pool.
@@ -313,6 +356,8 @@ Numbers come from `NEW_PATH.md` §4.A.4–4.A.36 (section in brackets). Figures:
 | 8 | `analysis/figures/fig8_cascades.png` | Router vs single-submission cascades |
 | 9 | `analysis/figures/fig9_mmlupro_length_drivers.png` | What explains MMLU-Pro length |
 
+- Chart improvement (user, Oct 5): Pareto plots get horizontal connectors between the two frontiers at matched accuracy,
+  annotated with % saved, so the saving reads as a lateral cost shift.
 - To add: population-size curve (N = 0 … 196) once the job finishes; APPS rows; pool statistics table.
 
 ## Claims ledger (planning)
@@ -335,6 +380,19 @@ Numbers come from `NEW_PATH.md` §4.A.4–4.A.36 (section in brackets). Figures:
 | C14 | Per-request budgets: +5–7.5 pt at fixed budget in the middle band | [4.A.29] | Solid (hard cap) |
 | C15 | Faithful ZeroRouter on a 5-model pool, its config tuned on calibration: we win +17.6 on LCB (CI > 0), +9.3 on MMLU-Pro (n.s.), tie on Omni; the gap is its pricing | [4.A.32–4.A.36] | Solid on LCB; directional on MMLU-Pro; population curve running |
 | C16 | Coding length readable beyond difficulty (TACO / BCB) | whole-dataset diagnostic | Solid at prediction level |
+| C17 | Fresh, billed: ours beats every estimator incl. ZeroRouter (18–19 pt) except cost-from-success on Omni (tie) | [4.A.43] | Solid (CIs > 0) |
+| C18 | Gain is the representation, not the head; a 2x larger embedder loses 10–18 pt; encoder cost negligible | [4.A.47] | Solid, 2 pools |
+| C19 | A 1.7B prefill suffices; 0.6B still saves 18–25% vs median | [4.A.50] | Solid, Qwen3 only (non-Qwen pending) |
+| C20 | Readouts transfer to new model families from the same prefill | [4.A.48] | Solid, MMLU-Pro only |
+| C21 | Endpoints = model + offset; one offset removes provider-drift bias on average | [4.A.37–4.A.42, 4.A.49] | Solid on average; single fits noisy |
+| C22 | Provider routing beats the best pinned provider | [4.A.49] | REFUTED (−4%); do not claim |
+| C23 | Results robust to price leakage and to billed vs list prices | [4.A.49] | Solid (LCB drops to 26.7 at billed) |
+
+## TMLR readiness — Oct 5 update
+- Done since Sep 30: APPS (not confirmed), second family (MMLU-Pro), fresh sets at billed prices, deployable at matched accuracy,
+  CARROT/MixLLM rows (grid), encoder accounting, prefill-size sweep, refit bootstrap, price-leakage check, provider pilot.
+- Still open: AIME (two-sided pre-registration, ~$15–20); a non-Qwen prefill (free, GPU); second family on a math/code pool;
+  Figure 1 at billed prices; one script per table re-run; live run (~$5, nice).
 
 ## TMLR readiness and remaining plan (assessment, 2026-09-30)
 - **Criteria:** claims supported by accurate, convincing evidence; interest to part of the audience (not novelty).
