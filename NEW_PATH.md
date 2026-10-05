@@ -2010,3 +2010,25 @@ calibration-chosen policies spend 44-45% less in the middle and 9% less near the
 this is NOT a matched-accuracy saving (fresh Table 2 had the median policy below ours at .65/.75). The billed column is inflated by
 unpinned-provider price drift that hits dsv4f-heavy policies (median) harder -- report the decision-time column as the length result and
 the billed column as a second live instance of provider drift (pin, or re-price from a few calls; 4.A.55).
+- 4.A.56 addendum (pinned): live dsv4f calls re-issued pinned to StreamLake (904 problems, $0.31; decisions unchanged, made with the
+  pooled dsv4f rate). Billed spend with pinned dsv4f: ours vs median saves 24.6 [8.9, 37.9] / 18.7 [5.0, 30.2] / 4.2 [-1.0, 9.4]% at
+  .65/.75/.85, acc diff -2.1 / -2.1 / -1.1 pp. Cheap pinned dsv4f makes the median arm's dsv4f-heavy routing cheap; the policies were
+  chosen for the old price, so this is a lower bound for a router that knows it pins StreamLake.
+
+### 4.A.58 Free preview: does pinning dsv4f help or hurt our edge? (2026-10-05; `pin_preview.py`, eai ana_pin_preview; no API spend)
+StreamLake-pinned dsv4f draws from the provider pilot. Realized cost = realized tokens x a FIXED per-model billed rate (removes price
+variation in both worlds); A = same dsv4f rate both worlds, B = pinned world at StreamLake's own billed rate (0.084 $/M out vs pooled 0.121).
+APPS (998 problems; BOTH worlds refit success + cost + cost-from-success readouts with identical code; test n=380):
+| world | dsv4f acc / R2 / AUC | ours vs median (A) | (B) | ours vs cost-from-success (A) | headroom (A) |
+| unpinned | .750 / .08 / .834 | 11.1 [1.0, 20.5] | 11.1 | -2.9 [-13.4, 9.7] | 1.7 [-30.2, 16.4] |
+| pinned | .839 / .64 / .881 | 19.4 [7.0, 27.7] | 19.0 [5.7, 29.0] | +1.4 [-6.5, 9.6] | 29.6 [18.7, 36.9] |
+MMLU-Pro (2,000 pinned fresh problems, readouts frozen from the unpinned train, eval n=1,700):
+| world | dsv4f R2 / pred-real | ours vs median (A) | (B) | headroom (A) / (B) |
+| unpinned | -.27 / 1.31 | 26.1 [17.9, 31.8] | 26.1 | 63.5 / 63.5 |
+| pinned | .16 / 1.04 | 32.2 [24.7, 38.5] | 23.6 [17.7, 29.8] | 60.8 / 58.2 |
+| pinned + 300-call offset (both arms) | .13 / 1.07 | 32.4 | 23.8 | 60.8 / 58.4 |
+=> Provider mixing was HURTING us, mostly through unpredictable dsv4f length on code: pinning lifts APPS dsv4f length R2 .08 -> .64,
+headroom 2 -> 30%, and ours vs median 11 -> 19% (CI > 0; the APPS pre-registered GAIN call failed at 14.3% [-2.3, 23.6] unpinned, list
+prices -- a pinned APPS run would be a re-test, not a confirmation). On MMLU-Pro, label noise alone costs ~6 pt (26 -> 32 at equal price);
+the cheaper pinned price takes ~2-3 pt back (23.6) by making dsv4f dominant. Cost-from-success stays a tie on APPS. Recommend the full
+pinned dsv4f recollection (train + test) on every pool.

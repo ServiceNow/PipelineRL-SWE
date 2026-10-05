@@ -18,6 +18,12 @@ for l in open(OUT / "calls.jsonl"):
     r = json.loads(l)
     if r.get("finish_reason") != "error":
         calls[(r["problem_id"], r["route_label"])] = r
+pinned = {}                                     # dsv4f re-issued pinned to StreamLake (live_pin.py); decisions unchanged
+if (OUT / "calls_dsv4f_pinned_StreamLake.jsonl").exists():
+    for l in open(OUT / "calls_dsv4f_pinned_StreamLake.jsonl"):
+        r = json.loads(l)
+        if r.get("finish_reason") != "error":
+            pinned[(r["problem_id"], "dsv4f")] = r
 tok = np.array(D["tokens_pred"]); Ipred = np.array(D["input_tokens_pred"])
 res = dict(n_problems=len(ids), n_calls=len(calls), spent_usd=sum(float(r.get("usage_cost") or 0) for r in calls.values()))
 print(f"{len(ids)} live problems, {len(calls)} successful calls, billed ${res['spent_usd']:.3f}")
@@ -36,20 +42,23 @@ for k, s in enumerate(slots):
     print(f"  {s:<9} n={len(rows):4d}  tokens pred/real {pt/rt:.2f}  cost pred/real {pc/max(rc,1e-12):.2f}  acc {res['route_calibration'][s]['acc']:.3f}  providers {provs}")
 rng = np.random.default_rng(0)
 def spend(r, mode):
-    if mode == "billed":
+    if mode in ("billed", "pinned_billed"):
         return float(r.get("usage_cost") or 0)
     a, b = rate_of(r["route_label"]); return r["prompt_tokens"] * a + r["completion_tokens"] * b   # decision-time rates, realized tokens
 
 
-for mode in ("billed", "decision_rates"):
-  print(f"--- spend = {'billed usage_cost' if mode == 'billed' else 'realized tokens x the billed rates the router used (price drift removed)'}")
+MODES = {"billed": "billed usage_cost, unpinned", "decision_rates": "realized tokens x the billed rates the router used (price drift removed)",
+         "pinned_billed": "dsv4f PINNED to StreamLake, billed usage_cost (other routes unpinned billed)"}
+for mode in MODES if pinned else ("billed", "decision_rates"):
+  calls_m = calls if mode != "pinned_billed" else {**calls, **pinned}
+  print(f"--- spend = {MODES[mode]}")
   res["targets_" + mode] = {}
   for tg, d in D["decisions"].items():
       arm = {}
       for a in ("ours", "median"):
-          ok = [(p, s) in calls for p, s in zip(ids, d[a])]
-          arm[a] = (np.array([float(calls[(p, s)]["resolved"]) if (p, s) in calls else np.nan for p, s in zip(ids, d[a])]),
-                    np.array([spend(calls[(p, s)], mode) if (p, s) in calls else np.nan for p, s in zip(ids, d[a])]), np.array(ok))
+          ok = [(p, s) in calls_m for p, s in zip(ids, d[a])]
+          arm[a] = (np.array([float(calls_m[(p, s)]["resolved"]) if (p, s) in calls_m else np.nan for p, s in zip(ids, d[a])]),
+                    np.array([spend(calls_m[(p, s)], mode) if (p, s) in calls_m else np.nan for p, s in zip(ids, d[a])]), np.array(ok))
       m = arm["ours"][2] & arm["median"][2]                                  # problems where both arms' calls returned
       qo, co, qm, cm = arm["ours"][0][m], arm["ours"][1][m], arm["median"][0][m], arm["median"][1][m]; n = int(m.sum())
       sv = 1 - co.sum() / cm.sum(); da = qo.mean() - qm.mean(); bsi = [rng.integers(0, n, n) for _ in range(2000)]
