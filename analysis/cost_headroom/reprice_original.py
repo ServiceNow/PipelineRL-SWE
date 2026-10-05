@@ -15,6 +15,8 @@ from billed import RATE
 
 POOLS = [("LCB", "pool_v2_tensors_5rung", "cost_preds_probe.jsonl"), ("Omni", "omni500_tensors", "cost_preds_probe_thinking.jsonl"),
          ("MMLU-Pro", "mmlupro_tensors", "cost_preds_probe_instruct.jsonl")]
+if len(sys.argv) > 1:                       # e.g. "AIME:aime_tensors:cost_preds_probe_instruct.jsonl" (NEW_PATH 4.A.53) -> only that pool
+    POOLS = [tuple(a.split(":")) for a in sys.argv[1:]]
 fam = lambda s: "oss120" if "120" in s else ("oss20" if s.startswith("oss20") else "dsv4f")
 out = {}
 for label, name, cfile in POOLS:
@@ -53,4 +55,4 @@ for label, name, cfile in POOLS:
         print(f"{label:<9} {scheme:<13} learned saves {g['learned']*100:5.1f}% [{ci['learned'][0]*100:.1f}, {ci['learned'][1]*100:.1f}]   "
               f"oracle headroom {g['ORACLE']*100:5.1f}% [{ci['ORACLE'][0]*100:.1f}, {ci['ORACLE'][1]*100:.1f}]", flush=True)
     out[label] = res
-json.dump(out, open(Path(__file__).parent / "reprice_original.json", "w"), indent=1, default=float)
+json.dump(out, open(Path(__file__).parent / ("reprice_original.json" if len(sys.argv) == 1 else f"reprice_{POOLS[0][0].lower()}.json"), "w"), indent=1, default=float)
