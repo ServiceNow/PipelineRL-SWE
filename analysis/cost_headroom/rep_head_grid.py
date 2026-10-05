@@ -50,7 +50,7 @@ def head_predict(head, X, y, tr):
                 best = (np.mean(sc), k)
         return KNeighborsRegressor(best[1], metric="cosine").fit(X[tr], y[tr]).predict(X)
     sc = StandardScaler().fit(X[tr]); Xs = sc.transform(X)
-    ms = [MLPRegressor((128,), alpha=1e-2, max_iter=500, early_stopping=True, random_state=0),
+    ms = [MLPRegressor(hidden_layer_sizes=(128,), alpha=1e-2, max_iter=500, early_stopping=True, random_state=0),
           RandomForestRegressor(300, min_samples_leaf=3, n_jobs=16, random_state=0), KNeighborsRegressor(15, weights="distance")]
     return np.mean([m.fit(Xs[tr], y[tr]).predict(Xs) for m in ms], 0)
 
