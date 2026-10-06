@@ -42,7 +42,7 @@ EOF
 }
 if [[ $P != fresh ]]; then
   $PY $CH/build_pinned_root.py $T --anchor && $PY $CH/build_pinned_root.py $T
-  readouts $REAL/../reason_anchor & readouts $REAL/../reason_pinned & wait
+  readouts $REAL/../reason_anchor & a=$!; readouts $REAL/../reason_pinned & b=$!; wait $a $b   # explicit PIDs: a bare wait also waits for the tee process substitution (deadlock)
   compare
   ROOT=$REAL/../reason_pinned
   REASON_ROOT=$ROOT RESULT_TAG=_pinned $PY $CH/decompose.py --curve --out ${P} $T:$COST:market > $L/${P}_decompose.txt 2>&1
@@ -56,8 +56,8 @@ else
   for ds in mmlupro omni500; do
     E=$ROOT/expanded_eval_20261001/$ds
     $PY pipelinerl/swe/scripts/livecodebench/activation_content_preds.py --activations $E/prefill_combined.npz --tensors-dir $E --rich \
-      --select-C --out $E/success_preds.jsonl > $E/content.log 2>&1 &
-  done; wait
+      --select-C --out $E/success_preds.jsonl > $E/content.log 2>&1 & pids="${pids:-} $!"
+  done; wait $pids
   for ds in mmlupro omni500; do REASON_ROOT=$ROOT $PY $CH/reconstruct_paper_cost_heads.py --dataset $ds > $L/fresh_cost_$ds.txt 2>&1; tail -1 $L/fresh_cost_$ds.txt | cut -c1-300; done
   REASON_ROOT=$ROOT RESULT_TAG=_pinned $PY -u $CH/fresh_baselines.py > $L/fresh_baselines.txt 2>&1
   REASON_ROOT=$ROOT RESULT_TAG=_pinned $PY -u $CH/deploy_matched.py > $L/deploy_matched.txt 2>&1
