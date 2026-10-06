@@ -2094,3 +2094,16 @@ Deployable at matched accuracy (deploy_matched.py, pinned): MMLU-Pro .65/.75/.85
 rises 27.8 -> 34.8). The mechanism claim strengthens: cost-from-success still ties on Omni, but its MMLU-Pro gap grows 14 -> 24 pt;
 difficulty bins and ZeroRouter lose 22-29 pt on MMLU-Pro. LCB's billed-price drop (35.6 -> 26.7) was provider pricing, not prediction
 (pinned billed 34.5). CC pending; grid / size / second-family / Table 2 / Fig 1 reruns running (pinned_tables.sh).
+- 4.A.59 continued (2026-10-06, all pinned, billed): LCB estimator suite (`fresh_baselines.py --pool LCB`, 341 test): ours vs median 33.7
+  [24.1, 39.9], mean 29.6, GBM 26.3, MixLLM-style 18.2 [11.2, 25.2], ZeroRouter (D=5 K=10) 21.1 [13.2, 26.8]; ablations bins 4.0 [-1.1, 9.0],
+  from-success -0.8 (ties). Grid (Table 3, enc priced): ours beats every cell by 16.6-26.6 (Omni) / 16.2-21.3 (MMLU-Pro). Size sweep: all
+  7 prefills save 26.6-34.4 (Omni) / 22.0-28.4 (MMLU-Pro) vs median; none beats ours (Qwen3-8B -0.3 Omni n.s.; Phi-4-mini -0.7 MMLU-Pro
+  n.s.; 0.6B -9 to -11). Refit bootstrap: ours vs median Omni [23.2, 38.0], MMLU-Pro [22.9, 30.7]; Omni vs bins n.s. [-6.4, 11.0].
+  Second family (7 routes): 30.0 vs median, 21.8 vs from-success, 20.6 vs bins; deployable (Table 2) pinned 21-38% at matched acc mid-range.
+  Live run with pinned dsv4f: 24.6 / 18.7 / 4.2% at .65/.75/.85, acc -2.1 / -2.1 / -1.1 pp.
+- CodeContests pinned collection CUT on 2026-10-06 (user: wrap the 4-pager): 1,699 / 2,100 draws on disk in cc_pool/full_pinned
+  (d0 633, d1 533, d2 533); collector resumable. Resume: SUBMIT=1 WHAT=cc bash launchers/abstention/launch_pinned_recollect.sh; then
+  SUBMIT=1 bash launchers/abstention/launch_pinned_rerun.sh cc; then reprice_matched.sh cc. CodeContests removed from the 4-pager.
+- 4-pager (paper_nowai, 2026-10-06): pinned numbers everywhere; user's title/authors/abstract; Table 1 = external estimators only (LCB,
+  Omni, MMLU-Pro); Ablations section (difficulty pricing inline, grid, size, families); deployable table replaced by one sentence; Fig 1 =
+  three Pareto panels with matched-accuracy arrows; no fresh/original wording; Intern-Decision sentence dropped (unpinned).
