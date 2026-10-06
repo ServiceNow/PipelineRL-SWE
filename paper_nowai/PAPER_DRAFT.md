@@ -18,7 +18,7 @@ MixLLM predicts output length from query embeddings ([MixLLM](https://arxiv.org/
 
 ![shared prefill overview](figures/shared_prefill_overview.png)
 
-**Shared prefill readouts and fresh routing curves.** (a) One frozen encoder supplies per-route success and cost readouts. (b) Fresh accuracy versus billed spending for the deterministic policies of the $V$ grid (dots) and their frontiers (lines); hollow circles mark the policies selected on original calibration for the targets of Table 2. Arrows run from the median rule's frontier to ours at matched accuracy and give the cost saved; averaged over the shared accuracy band the saving is 29% on MMLU-Pro and 35% on Omni-MATH. Both arms use the same encoder pass.
+**Cost–accuracy frontiers at billed prices.** Prefill cost readouts (blue) versus training-median length (orange), with the same success predictions and the same encoder pass. Dots: the deterministic policy at each $V$; lines: their frontiers; hollow circles: policies selected on original calibration for the targets of Table 2. Arrows run from the median rule's frontier to ours at matched accuracy and give the cost saved; averaged over the shared accuracy band the saving is 34% on LiveCodeBench, 29% on MMLU-Pro and 35% on Omni-MATH.
 
 ## Cost Prediction and Routing
 
