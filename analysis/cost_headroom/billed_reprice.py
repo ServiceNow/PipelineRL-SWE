@@ -7,14 +7,14 @@ target), applied once to fresh problems; plus the test-frontier savings over the
 problem bootstrap (2,000). Same comparison at the assumed prices is printed alongside for reference.
 Usage: python billed_reprice.py
 """
-import glob, json, sys
+import glob, json, os, sys
 from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent))
 from carrot_compare import POOLS, read_predictions
 from decompose import MK, R, hull, cost_at
-from provider_routing import RATE
+from billed import RATE                                       # same fit, without running provider_routing
 
 VALUES = np.geomspace(1e-7, 1, 400)                          # $ per correct answer
 rate_of = lambda s: RATE["oss120" if "120" in s else ("oss20" if s.startswith("oss20") else "dsv4f")]
@@ -81,4 +81,4 @@ for ds in ("mmlupro", "omni500"):
         res["frontier"] = dict(savings=g(fr), ci=np.percentile(gb, [2.5, 97.5]).tolist())
         print(f"   test-frontier savings (shared band): {g(fr)*100:+.1f}% [{np.percentile(gb,2.5)*100:+.1f}, {np.percentile(gb,97.5)*100:+.1f}]")
         out[f"{label}|{tag}"] = res
-json.dump(out, open(Path(__file__).parent / "billed_reprice.json", "w"), indent=1, default=float)
+json.dump(out, open(Path(__file__).parent / f"billed_reprice{os.environ.get('RESULT_TAG', '')}.json", "w"), indent=1, default=float)

@@ -11,7 +11,7 @@ Reported: (1) test log-length R2 and success AUC of the new readouts on fresh pr
   predicted log length of the old routes), vs its full readout.
 Usage: python second_family_eval.py
 """
-import glob, json, sys
+import glob, json, os, sys
 from pathlib import Path
 import numpy as np
 from sklearn.decomposition import PCA
@@ -118,4 +118,4 @@ for pool, routes in (("all7", routes_all), ("newpool", ["oss20lo", "oss20md", "q
         res[a] = [g, *np.percentile(b, [2.5, 97.5])]
         print(f"  ours saves vs {a:<36} {g*100:+6.1f}% [{np.percentile(b,2.5)*100:+.1f}, {np.percentile(b,97.5)*100:+.1f}]", flush=True)
     out[pool] = res
-json.dump(out, open(Path(__file__).parent / "second_family_eval.json", "w"), indent=1, default=float)
+json.dump(out, open(Path(__file__).parent / f"second_family_eval{os.environ.get('RESULT_TAG', '')}.json", "w"), indent=1, default=float)

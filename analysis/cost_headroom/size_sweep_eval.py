@@ -12,7 +12,7 @@ Evaluated on the FRESH problems at billed prices (realized = usage_cost):
   (b) also with each row's encoder pass priced (ENC_RATE $/M input tokens, scaled with parameters from the 4B's 0.03 upper bound).
 Paired problem bootstrap (300). Usage: python size_sweep_eval.py
 """
-import glob, json, subprocess, sys
+import glob, json, os, subprocess, sys
 from pathlib import Path
 import numpy as np
 from sklearn.linear_model import RidgeCV
@@ -56,7 +56,7 @@ for ds in ("omni500", "mmlupro"):
         feat = F / "prefill_combined.npz" if tag == "paper" else S / tag / f"{ds}.npz"
         if not feat.exists():
             print(f"  {label}: {tag} features missing, skipped"); continue
-        sp_out = S / "readouts" / f"{ds}_{tag}_success.jsonl"; sp_out.parent.mkdir(parents=True, exist_ok=True)
+        sp_out = S / f"readouts{os.environ.get('RESULT_TAG', '')}" / f"{ds}_{tag}_success.jsonl"   # tagged cache: pinned labels never reuse unpinned readouts; sp_out.parent.mkdir(parents=True, exist_ok=True)
         if not sp_out.exists():
             subprocess.run([sys.executable, str(REPO / "pipelinerl/swe/scripts/livecodebench/activation_content_preds.py"), "--activations", str(feat),
                             "--rich", "--tensors-dir", str(F), "--select-C", "--out", str(sp_out)], check=True, cwd=REPO, stdout=subprocess.DEVNULL)
@@ -102,4 +102,4 @@ for ds in ("omni500", "mmlupro"):
         print(f"  {ROWS[tag][0]:<22} AUC {rt['auc']:.3f} R2 {rt['r2']:.2f} max acc {row['max_acc']*100:.1f}% | vs median (own success) "
               f"{g_med*100:+6.1f}% [{np.percentile(b_med,2.5)*100:+.1f}, {np.percentile(b_med,97.5)*100:+.1f}]{vp}", flush=True)
     out[label] = res
-json.dump(out, open(Path(__file__).parent / "size_sweep_eval.json", "w"), indent=1, default=float)
+json.dump(out, open(Path(__file__).parent / f"size_sweep_eval{os.environ.get('RESULT_TAG', '')}.json", "w"), indent=1, default=float)

@@ -15,7 +15,7 @@ ENC_RATE (USD/M): prefill4b 0.03 (gpt-oss-20b's billed input rate: an upper boun
 (public embedding-API prices, order of magnitude). Results with and without encoder cost.
 Usage: python rep_head_grid.py
 """
-import glob, json, sys
+import glob, json, os, sys
 from pathlib import Path
 import numpy as np
 from sklearn.decomposition import PCA
@@ -121,4 +121,4 @@ for ds in ("omni500", "mmlupro"):
         res[a] = dict(vs_median=vm, ours_vs=vo, ours_vs_ci=list(np.percentile(vo_b, [2.5, 97.5])), vs_median_enc=vm_e, ours_vs_enc=vo_e)
         print(f"  {a:<20} {vm*100:+6.1f}% | {vo*100:+6.1f}% [{np.percentile(vo_b,2.5)*100:+.1f}, {np.percentile(vo_b,97.5)*100:+.1f}] | enc: {vm_e*100:+6.1f}% / {vo_e*100:+6.1f}%", flush=True)
     out[label] = res
-json.dump(out, open(Path(__file__).parent / "rep_head_grid.json", "w"), indent=1, default=float)
+json.dump(out, open(Path(__file__).parent / f"rep_head_grid{os.environ.get('RESULT_TAG', '')}.json", "w"), indent=1, default=float)

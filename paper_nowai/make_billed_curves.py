@@ -7,7 +7,7 @@ metric integrates over); for the figure's connectors we store our cost and the m
 interior 90% of the shared band, with the cost saved. Calibration-selected deployable policies (Table 2 targets) are stored as points.
 Output: data/fresh_billed_curves.json.  Usage: python make_billed_curves.py
 """
-import glob, json, sys
+import glob, json, os, sys
 from pathlib import Path
 import numpy as np
 
@@ -78,4 +78,4 @@ for ds in ("mmlupro", "omni500"):
     print(f"{label}: n={len(fr)} band {lo:.3f}-{hi:.3f} saved {res['saved_band_mean']*100:.1f}%  connectors "
           + ", ".join(f"{c['accuracy']*100:.1f}%: {c['saved']*100:.0f}%" for c in res["connectors"]))
     out["datasets"][ds] = res
-(HERE / "data" / "fresh_billed_curves.json").write_text(json.dumps(out, indent=1) + "\n")
+(HERE / "data" / f"fresh_billed_curves{os.environ.get('RESULT_TAG', '')}.json").write_text(json.dumps(out, indent=1) + "\n")
