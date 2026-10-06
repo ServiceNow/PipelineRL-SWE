@@ -7,15 +7,13 @@ A four-page academic manuscript (excluding references) in the uploaded NOWAI tem
 - [Compiled four-page paper](main.pdf)
 - [Filled Markdown draft](PAPER_DRAFT.md)
 - [LaTeX source](main.tex)
-- [Supplementary material](supplement.pdf): [source](supplement.tex)
 - [Original project outline](PAPER_OUTLINE.md)
 
-The workshop draft centers on one frozen prefill predicting costs across a pool of reasoning models. It compares our cost heads with adapted embedding and prompt-feature estimators, then uses headroom and success-derived pricing to explain where the approach helps. The main paper omits the MLP comparison, onboarding, cascades, and pending collection results. A separate two-page supplement records headroom, additional controls, screening, and exploratory cross-fitting with its uncertainty caveats. The original outline is preserved separately.
+The workshop draft centers on one frozen prefill predicting costs across a pool of reasoning models. It compares our cost heads with adapted embedding and prompt-feature estimators, then uses headroom and success-derived pricing to explain where the approach helps. The main paper omits the MLP comparison, onboarding, cascades, and pending collection results. The old two-page supplement (unpinned, list prices) is archived in archive/ and is not part of the submission. The original outline is preserved separately.
 
 ## Figures
 
 - [Figure 1: shared-prefill overview and controlled savings](figures/shared_prefill_overview.png): [vector PDF](figures/shared_prefill_overview.pdf)
-- [Supplement: oracle and predicted cost savings](figures/headroom_and_capture.png): [vector PDF](figures/headroom_and_capture.pdf)
 - [Cost signal and estimator comparisons](figures/cost_signal_ablation.png): [vector PDF](figures/cost_signal_ablation.pdf)
 - [Computed values and provenance](figures/data_manifest.json)
 
@@ -36,7 +34,6 @@ Upload the source ZIP to Overleaf, or compile locally:
 
 ```bash
 latexmk -pdf main.tex
-latexmk -pdf supplement.tex
 ```
 
 Alternatively, use `tectonic main.tex`. The PDF was compiled with Tectonic 0.17.0 and visually checked at four pages. Required template files and figure PDFs are included. `PaperForReview.tex` is a compatibility entry point that includes `main.tex`.

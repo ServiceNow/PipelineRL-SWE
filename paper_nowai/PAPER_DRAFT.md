@@ -68,7 +68,7 @@ The same model served by different providers behaves like the model plus an offs
 
 ### Other pools.
 
-Savings against median pricing are 14.9% [9.4, 21.4] on AIME 1983–2024 (281 test problems) and 16.8% [5.6, 28.3] on APPS (382); on BigCodeBench, where output length is barely driven by difficulty, they are 6.7% [−1.4, 13.0].
+Savings against median pricing are 14.9% [9.4, 21.4] on AIME 1983–2024 (281 test problems) and 16.8% [5.6, 28.3] on APPS (382).
 
 ## Ablations
 
