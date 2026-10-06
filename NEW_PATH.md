@@ -2110,3 +2110,6 @@ difficulty bins and ZeroRouter lose 22-29 pt on MMLU-Pro. LCB's billed-price dro
 - TMLR to-do (2026-10-06): run the pinned estimator suite on BigCodeBench (and APPS, AIME) via fresh_baselines.py --pool (add ORIG
   entries: bcb_tensors_5r / bcb_scout_prefill.npz etc.); BCB was cut from the 4-pager because only ours-vs-median existed (6.7 n.s.).
   Finish the CodeContests pinned collection (resume path above). Rebuild a supplement on pinned numbers (old one archived in paper_nowai/archive/).
+- 4.A.60 headroom + routes (2026-10-06; `headroom_routes.py`, log reason_pinned_logs/headroom_routes.txt): oracle per-query cost vs median,
+  same success: LCB 45.3 [36.6, 50.4] (ours 33.7, capture .74 [.63, .82]), Omni 55.5 [50.4, 58.8] (34.8, .63 [.56, .71]), MMLU-Pro 59.5
+  [57.8, 61.2] (28.8, .49 [.44, .53]). Route acc / billed cost per call (m$) on test: see log; in the 4-pager as Table "Routes".
