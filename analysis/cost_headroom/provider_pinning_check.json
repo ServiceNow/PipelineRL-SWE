@@ -164,27 +164,77 @@
   "n_eval": 354
  },
  "cc": {
-  "best": "GMICloud",
+  "best": "StreamLake",
   "regret": {
-   "StreamLake": 0.46189083281968135,
-   "GMICloud": 0.0,
-   "DigitalOcean": 0.0
+   "StreamLake": 0.0,
+   "GMICloud": 0.18872460227866905,
+   "DigitalOcean": 0.1954036586665393
   },
   "vs_endpoints": {
-   "StreamLake": 0.0,
-   "GMICloud": -0.3159543944391461,
-   "DigitalOcean": -0.3159543944391461
+   "StreamLake": 0.00014562462740674853,
+   "GMICloud": 0.2453885794229369,
+   "DigitalOcean": 0.2119985947286982
   },
   "fit_cost_per_correct": {
-   "StreamLake": 0.00021221549999999998,
-   "GMICloud": 0.0025890446399999996,
-   "DigitalOcean": 0.00043146950000000003
+   "StreamLake": 0.0009797739887323945,
+   "GMICloud": 0.004482551520316623,
+   "DigitalOcean": 0.0019979295096418733
   },
   "selection": {
    "5": {
-    "p_best": 0.0,
-    "exp_regret": 0.4618908328196812,
-    "p90_regret": 0.46189083281968135,
+    "p_best": 0.971,
+    "exp_regret": 0.005660027044941769,
+    "p90_regret": 0.0,
+    "share": {
+     "StreamLake": 0.971,
+     "GMICloud": 0.001,
+     "DigitalOcean": 0.028
+    }
+   },
+   "10": {
+    "p_best": 0.978,
+    "exp_regret": 0.004298880490663864,
+    "p90_regret": 0.0,
+    "share": {
+     "StreamLake": 0.978,
+     "GMICloud": 0.0,
+     "DigitalOcean": 0.022
+    }
+   },
+   "20": {
+    "p_best": 0.992,
+    "exp_regret": 0.0015632292693323144,
+    "p90_regret": 0.0,
+    "share": {
+     "StreamLake": 0.992,
+     "GMICloud": 0.0,
+     "DigitalOcean": 0.008
+    }
+   },
+   "50": {
+    "p_best": 1.0,
+    "exp_regret": 0.0,
+    "p90_regret": 0.0,
+    "share": {
+     "StreamLake": 1.0,
+     "GMICloud": 0.0,
+     "DigitalOcean": 0.0
+    }
+   },
+   "100": {
+    "p_best": 1.0,
+    "exp_regret": 0.0,
+    "p90_regret": 0.0,
+    "share": {
+     "StreamLake": 1.0,
+     "GMICloud": 0.0,
+     "DigitalOcean": 0.0
+    }
+   },
+   "200": {
+    "p_best": 1.0,
+    "exp_regret": 0.0,
+    "p90_regret": 0.0,
     "share": {
      "StreamLake": 1.0,
      "GMICloud": 0.0,
@@ -192,7 +242,7 @@
     }
    }
   },
-  "n_fit": 5,
-  "n_eval": 1
+  "n_fit": 403,
+  "n_eval": 247
  }
 }

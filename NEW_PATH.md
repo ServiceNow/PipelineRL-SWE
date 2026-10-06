@@ -2046,3 +2046,17 @@ sd log .50 vs .77-1.07 elsewhere), and one draw adds sampling noise; with averag
 expensive routes at .45-.52, above the .35 cutoff. Pre-registration tally: GAIN Omni, MMLU-Pro confirmed; APPS GAIN not confirmed;
 AIME NO GAIN falsified (gain instead). Lesson for the rule: screen on a route with representative between-problem variance, or on 2+
 draws; the cheap single-draw screen is biased toward NO GAIN.
+
+### 4.A.55 Provider pinning check + CodeContests pinned providers (2026-10-05; `provider_pinning_check.py`, `provider_best_pinned.py`, `provider_routing.py`; CC collection $5.38)
+dsv4f pinned to StreamLake / GMICloud / DigitalOcean on all 700 CodeContests problems (DigitalOcean 44 errors; 650 with every route).
+CC providers: acc .866 / .919 / .862 (unpinned .850), billed cost per call 0.96 / 4.75 / 2.09 m$ (unpinned 2.52), median output 6.7k /
+21.3k / 5.9k; correct agreement .90-.92 (independent .77-.81), log-length corr .85-.94 -> again "same model + offset".
+Pick the cheapest provider from k calls each (lowest billed cost per correct on FIT problems; 1,000 draws), expected regret vs the
+eval-best pinned arm at matched accuracy:
+| pool | k=5 | k=10 | k=20 | k=50 | regret of a wrong pick |
+| MMLU-Pro | .56 / +4.7% | .57 / +4.3% | .64 / +3.6% | .79 / +2.1% | +10.0 (GMICloud), +31.1 (DigitalOcean) |
+| APPS | .90 / +2.6% | .88 / +2.9% | .96 / +0.9% | 1.00 / +0.05% | +32.4, +24.5 |
+| CC | .97 / +0.6% | .98 / +0.4% | .99 / +0.2% | 1.00 / 0.0% | +18.9, +19.5 |
+(P(pick = best) / expected regret.) Endpoints router vs best pinned (StreamLake, chosen on FIT): APPS -4.6, MMLU-Pro -3.9, CC +0.0
+[-0.4, +1.5] (tie; router reaches 91.5% vs 85.8%). => A few dozen calls per provider pick the provider to pin; routing over providers
+only buys the high-accuracy end.
