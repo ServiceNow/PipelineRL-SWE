@@ -41,7 +41,7 @@ HERE=Path(__file__).resolve().parent
 BLUE='#2166AC';INK='#263240';GREY='#718096'
 plt.rcParams.update({'font.family':'DejaVu Sans','font.size':8,'text.color':INK,'axes.labelcolor':INK,'xtick.color':INK,'ytick.color':INK,'pdf.fonttype':42,'ps.fonttype':42})
 fig,axes=plt.subplots(1,3,figsize=(7.1,2.35),facecolor='white',gridspec_kw=dict(wspace=.28,left=.06,right=.99,bottom=.3,top=.88))
-for ax,(ds,title) in zip(axes,[('lcb','LiveCodeBench (test, 341)'),('mmlupro','MMLU-Pro (fresh, 6,500)'),('omni500','Omni-MATH (fresh, 1,000)')]):
+for ax,(ds,title) in zip(axes,[('lcb','LiveCodeBench (341 test)'),('mmlupro','MMLU-Pro (6,500 test)'),('omni500','Omni-MATH (1,000 test)')]):
  panel(ax,ds,title)
 for ax in axes[1:]:ax.set_ylabel('')
 handles,labels=axes[0].get_legend_handles_labels()
