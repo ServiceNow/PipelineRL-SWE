@@ -16,10 +16,11 @@ Usage: python decompose.py <tensors_dir>[:<cost_preds_file>[:market]] ... [--out
 Pricing: legacy blended $/M per route on all tokens (default, the LCB headline's), or `market` = OpenRouter list
 input/output prices (then the cost head must be the --in-out-prices one, predicting output tokens).
 """
-import json, sys, numpy as np
+import json, os, sys, numpy as np
 from pathlib import Path
 
-R = Path("/mnt/llmd/results/exps/aristides/reason")
+# REASON_ROOT points every script that imports R at a shadow root, e.g. the provider-pinned one (build_pinned_root.py)
+R = Path(os.environ.get("REASON_ROOT", "/mnt/llmd/results/exps/aristides/reason"))
 PR = {"oss20lo": 0.12, "oss20md": 0.57, "dsv4f": 0.111, "oss120md": 1.43, "oss120hi": 1.43}   # legacy blended $/M
 # market $/M (in, out), OpenRouter list 2026-09-25 (build_pass_matrix.P); Qwen3-4B scout self-hosted, priced at 20b
 MK = {"scout": (0.018, 0.09), "oss20": (0.018, 0.09), "oss20lo": (0.018, 0.09), "oss20md": (0.018, 0.09),
@@ -187,7 +188,7 @@ def main():
         k = args.index("--out"); tag = args[k + 1]; args = args[:k] + args[k + 2:]
     res = [pool(s) for s in args]
     out = Path("analysis/cost_headroom"); out.mkdir(parents=True, exist_ok=True)
-    json.dump(res, open(out / f"{tag}.json", "w"), indent=1, default=float)
+    json.dump(res, open(out / f"{tag}{os.environ.get('RESULT_TAG', '')}.json", "w"), indent=1, default=float)
     print("HEADROOM = cost saved at matched accuracy by PERFECT per-problem cost knowledge vs the paper rule; "
           "learned = the 4B-prefill head; capture = learned / headroom (test frontiers, band = accuracies all arms reach)")
     print(f"{'pool':<36}{'band':>13}{'headroom [95% CI]':>24}{'learned [95% CI]':>24}{'capture':>9}{'reroute or/lrn':>16}")

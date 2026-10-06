@@ -14,7 +14,7 @@ Reported: (a) cost saved vs median at matched accuracy over the shared band; (b)
 matched accuracy over the band both reach; paired problem bootstrap (300) for both. Unweighted.
 Usage: python fresh_baselines.py
 """
-import glob, json, sys
+import glob, json, os, sys
 from pathlib import Path
 import numpy as np
 from sklearn.decomposition import PCA
@@ -107,4 +107,4 @@ for ds in ("omni500", "mmlupro"):
         print(f"  {a:<12} saved vs median {g_med*100:+6.1f}% [{np.percentile(bm,2.5)*100:+.1f}, {np.percentile(bm,97.5)*100:+.1f}]"
               f"   | ours saves vs it {g_dir*100:+6.1f}% [{np.percentile(bd,2.5)*100:+.1f}, {np.percentile(bd,97.5)*100:+.1f}]", flush=True)
     out[label] = res
-json.dump(out, open(Path(__file__).parent / "fresh_baselines.json", "w"), indent=1, default=float)
+json.dump(out, open(Path(__file__).parent / f"fresh_baselines{os.environ.get('RESULT_TAG', '')}.json", "w"), indent=1, default=float)

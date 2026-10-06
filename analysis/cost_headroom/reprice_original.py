@@ -5,7 +5,7 @@ at each model's effective billed rate from the fresh collection (billed.RATE). T
 realized cost = tokens x billed rate. Paired problem bootstrap (500, seed 0, as decompose). First line per pool reproduces MK.
 Usage: python reprice_original.py
 """
-import json, sys
+import json, os, sys
 from pathlib import Path
 import numpy as np
 
@@ -55,4 +55,4 @@ for label, name, cfile in POOLS:
         print(f"{label:<9} {scheme:<13} learned saves {g['learned']*100:5.1f}% [{ci['learned'][0]*100:.1f}, {ci['learned'][1]*100:.1f}]   "
               f"oracle headroom {g['ORACLE']*100:5.1f}% [{ci['ORACLE'][0]*100:.1f}, {ci['ORACLE'][1]*100:.1f}]", flush=True)
     out[label] = res
-json.dump(out, open(Path(__file__).parent / ("reprice_original.json" if len(sys.argv) == 1 else f"reprice_{POOLS[0][0].lower()}.json"), "w"), indent=1, default=float)
+json.dump(out, open(Path(__file__).parent / (("reprice_original" if len(sys.argv) == 1 else f"reprice_{POOLS[0][0].lower()}") + os.environ.get("RESULT_TAG", "") + ".json"), "w"), indent=1, default=float)

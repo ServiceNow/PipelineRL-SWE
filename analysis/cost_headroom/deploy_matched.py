@@ -3,13 +3,13 @@ ORIGINAL calibration, billed prices), report raw savings vs the median policy AN
 OUR achieved fresh accuracy; plus our efficiency loss vs our own fresh frontier. Paired problem bootstrap (300). Unweighted.
 Usage: python deploy_matched.py
 """
-import json, glob, sys
+import json, os, glob, sys
 from pathlib import Path
 import numpy as np
 sys.path.insert(0, str(Path(__file__).parent))
 from carrot_compare import POOLS, read_predictions
 from decompose import MK, R, hull, cost_at
-from provider_routing import RATE
+from billed import RATE                                       # same fit as provider_routing.billed_rates, without running that analysis
 VALUES = np.geomspace(1e-7, 1, 400)                          # same grid as billed_reprice.py (Table 2)
 rate_of = lambda s: RATE["oss120" if "120" in s else ("oss20" if s.startswith("oss20") else "dsv4f")]
 
@@ -58,4 +58,4 @@ for ds, targets in (("mmlupro", (0.65, 0.75, 0.85)), ("omni500", (0.65, 0.70, 0.
         res[target] = dict(raw=raw, matched=adj, matched_ci=list(np.nanpercentile(bs[:, 1], [2.5, 97.5])), own_loss=eff)
         print(f"{label} {target:.2f}: raw {raw*100:+.1f}%  at matched accuracy {adj*100:+.1f}% [{np.nanpercentile(bs[:,1],2.5)*100:+.1f}, {np.nanpercentile(bs[:,1],97.5)*100:+.1f}]  own-frontier loss {eff*100:+.1f}%", flush=True)
     out[label] = res
-json.dump(out, open(Path(__file__).parent / "deploy_matched.json", "w"), indent=1, default=float)
+json.dump(out, open(Path(__file__).parent / f"deploy_matched{os.environ.get('RESULT_TAG', '')}.json", "w"), indent=1, default=float)
