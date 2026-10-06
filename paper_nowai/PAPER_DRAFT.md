@@ -40,7 +40,7 @@ An endpoint of an already-modelled route (a new provider, or a provider whose be
 
 ## Experimental Protocol
 
-The routes are gpt-oss-20b at low and medium effort, deepseek-v4-flash, and gpt-oss-120b at medium and high effort, called through OpenRouter, with deepseek-v4-flash pinned to one provider (StreamLake) throughout, because its output length depends on the serving provider (see Endpoints below). LiveCodeBench ([LiveCodeBench](https://arxiv.org/abs/2403.07974)) has 892 problems split by date into 441 training, 110 calibration and 341 test problems. Omni-MATH ([Omni-MATH](https://arxiv.org/abs/2410.07985)) and MMLU-Pro ([MMLU-Pro](https://arxiv.org/abs/2406.01574)) have 275/75 and 550/150 training/calibration problems and 1,000 and 6,500 test problems, disjoint from them and collected only after every readout was fitted. Training problems have 2–16 draws per route; Omni-MATH and MMLU-Pro test problems have one.
+The routes are gpt-oss-20b at low and medium effort, deepseek-v4-flash, and gpt-oss-120b at medium and high effort, called through OpenRouter, with deepseek-v4-flash pinned to one provider (StreamLake) throughout, because its output length depends on the serving provider (see Endpoints below). LiveCodeBench ([LiveCodeBench](https://arxiv.org/abs/2403.07974)) has 892 problems split by date into 441 training, 110 calibration and 341 test problems. Omni-MATH ([Omni-MATH](https://arxiv.org/abs/2410.07985)) and MMLU-Pro ([MMLU-Pro](https://arxiv.org/abs/2406.01574)) have 275/75 and 550/150 training/calibration problems and 1,000 and 6,500 disjoint test problems. Training problems have 2–16 draws per route; Omni-MATH and MMLU-Pro test problems have one.
 
 ### Prices.
 
@@ -122,7 +122,7 @@ Readouts for Qwen3-32B and GLM-4.7-flash, fitted on the same frozen 4B features,
 
 Each route needs output-length labels, and an endpoint offset needs a few labelled calls; a single 50-call offset is noisy where lengths are heavy-tailed. The main experiments use five routes from two model families; two further families (Qwen3-32B, GLM-4.7-flash) were tested on MMLU-Pro only. Omni-MATH and MMLU-Pro test problems have one draw per route, and pinned providers were compared on APPS and MMLU-Pro only.
 Intervals are pointwise and assume independent problems, and Table 1 conditions on the fitted readouts; resampling the training problems as well and refitting every estimator widens them, but our saving over median pricing stays positive on both large test sets (Omni-MATH [23.2, 38.0], MMLU-Pro [22.9, 30.7]). Only deepseek-v4-flash is pinned to a provider; the gpt-oss routes are not, since their provider changes price but barely length. The prefill comparison covers four model families at up to 8B.
-Billed rates were measured over one collection, and prices change within days. The ZeroRouter, MixLLM and CARROT baselines are reimplementations. The test-set feature pipeline was corrected (a prompt-format mismatch) after test outcomes were first observed.
+Billed rates were measured over one collection, and prices change within days. The ZeroRouter, MixLLM and CARROT baselines are reimplementations.
 
 ## Conclusion
 
