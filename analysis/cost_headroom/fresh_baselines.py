@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from carrot_compare import POOLS, read_predictions
 from decompose import MK, R, hull, cost_at
 from baseline_cost_heads import text_features
-from provider_routing import RATE
+from billed import RATE                                       # same fit as provider_routing.billed_rates, without running that analysis
 from zr_dimsweep import fit_stage1
 
 VALUES = np.geomspace(1e-7, 1, 300); sig = lambda z: 1 / (1 + np.exp(-z))
