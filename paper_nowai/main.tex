@@ -16,11 +16,18 @@ ServiceNow AI Research}
 \maketitle
 
 \begin{abstract}
-    Routers typically choose a model per query by trading predicted correctness against cost. However, most price each model at a fixed cost, assuming that the number of tokens each model outputs does not vary significantly. We find that the output length of reasoning models varies by an order of magnitude across queries. We predict \textbf{both} success probability \textbf{and} route-specific output length from the prefill activations of a single small frozen 4B LLM, using a linear readout per route. On 6,500 MMLU-Pro, 1,000 Omni-MATH, and 341 LiveCodeBench tasks, predicted costs reduce spending at matched accuracy by 28.8\%, 34.8\% and 33.7\% relative to median-length pricing, half to three quarters of what perfect per-query cost knowledge would save. They also beat every alternative estimator we evaluated, with paired intervals excluding zero; pricing from difficulty alone matches them only where output length tracks difficulty. We then ablate across different small LLMs and show that every small LLM prefill we tried (0.6--8B, four model families) can be used as a router in this way.
+    Routers typically choose a model per query by trading predicted correctness against cost. However, most price each model at a fixed cost, assuming that the number of tokens each model outputs does not vary significantly. We find that the output length of reasoning models varies by an order of magnitude across queries. We predict \textbf{both} success probability \textbf{and} route-specific output length from the prefill activations of a single small frozen 4B LLM, using a linear readout per route. On 6,500 MMLU-Pro, 1,000 Omni-MATH, and 341 LiveCodeBench tasks, predicted costs reduce spending at matched accuracy by 28.8\%, 34.8\% and 33.7\% relative to median-length pricing. Perfect per-query cost knowledge would save 45--60\%, so our readouts capture half to three quarters of the achievable saving. They also beat every alternative estimator we evaluated, with paired intervals excluding zero; pricing from difficulty alone matches them only where output length tracks difficulty. We then ablate across different small LLMs and show that every small LLM prefill we tried (0.6--8B, four model families) can be used as a router in this way.
 \end{abstract}
 
 \section{Introduction}
-Routing reasoning models requires predicting both correctness and cost before generation. Token rates are published; the number of tokens is not. A model that is cheap on average can be expensive on a particular problem, and the outputs of the models we study vary 10--90$\times$ across problems.
+Routing reasoning models requires predicting both correctness and cost before generation. Token rates are published; the number of tokens is not. A model that is cheap on average can be expensive on a particular problem: on LiveCodeBench, a single model's output length differs 11--121$\times$ between its 10th- and 90th-percentile problems (\cref{fig:spread}).
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/length_spread.pdf}
+\caption{\textbf{Output length varies by orders of magnitude within one model.} Per-problem output tokens by route on the LiveCodeBench test set (log scale). Boxes: interquartile range; whiskers: 5th--95th percentile; line: median; above each box: 90th/10th-percentile ratio.}
+\label{fig:spread}
+\end{figure}
 
 Prefill routers predict correctness from a small encoder's prompt activations; the prefill router of Varshney et al.~\cite{prefill} explicitly prices outputs at median training length. We read output length from the same activations (\cref{fig:overview}). Cost prediction adds one linear readout per route to an existing prefill router, without another encoder pass.
 
@@ -56,7 +63,7 @@ The routes are gpt-oss-20b at low and medium effort, deepseek-v4-flash, and gpt-
 Realized cost is the cost billed for each call (on LCB, realized tokens at the billed rates). Predictions are priced at each model's effective billed rate, fitted on the test calls (USD per million output tokens: 0.13 for gpt-oss-20b, 0.08 for pinned deepseek-v4-flash, 0.26 for gpt-oss-120b). These differ from the list prices by up to 2.3$\times$.
 
 \paragraph{Evaluation.}
-All estimators are fitted on training problems only and evaluated on the test sets, with the same success predictions. Each $V$ on a dense grid gives a deterministic policy and an observed (cost, accuracy) point. Comparing two cost estimators $a,b$, we interpolate each one's cost at 12 accuracies spanning the interior 90\% of the range both reach and report $1-\exp(\overline{\log C_a/C_b})$, the cost saved by $a$ at matched accuracy. Intervals are percentile intervals from paired problem bootstraps (300 resamples), keeping each problem's routes together. To check that an operating point can be chosen in advance, we also select the cheapest $V$ reaching each accuracy target on calibration and apply it once.
+All estimators are fitted on training problems only and evaluated on the test sets, with the same success predictions. Each $V$ on a dense grid gives a deterministic policy and an observed (cost, accuracy) point. Comparing two cost estimators $a,b$, we interpolate each one's cost at 12 accuracies spanning the interior 90\% of the range both reach and report $1-\exp(\overline{\log C_a/C_b})$, the cost saved by $a$ at matched accuracy. Intervals are percentile intervals from paired problem bootstraps (300 resamples), keeping each problem's routes together. As an upper bound, an oracle arm prices each problem at its realized cost; its saving over median pricing is the headroom, and our share of it the capture. To check that an operating point can be chosen in advance, we also select the cheapest $V$ reaching each accuracy target on calibration and apply it once.
 
 \begin{table}[t]
 \centering
@@ -173,6 +180,10 @@ Qwen3-4B-2507 (ours) & .70 & 34.8 & -- & .50 & 28.8 & -- \\
 \end{table}
 
 \section{Discussion and Limitations}
+\paragraph{When does per-query cost pay?}
+It pays when output length varies within a model more than prices differ between models: here lengths span 11--121$\times$ within a route (\cref{fig:spread}) while per-call costs span 17--29$\times$ across routes (\cref{tab:routes}), leaving 45--60\% headroom over median pricing. It is captured when that variation is legible from the prompt. Where length tracks difficulty (LCB, Omni-MATH), even difficulty-only pricing captures most of it; where it tracks the work a question requires (MMLU-Pro), only a dedicated readout does, and that is also where we capture least (49\%), leaving the most room for better cost predictors.
+
+\paragraph{Limitations.}
 Each route needs output-length labels. The main experiments use five routes from two model families; two further families (Qwen3-32B, GLM-4.7-flash) were tested on MMLU-Pro only. Omni-MATH and MMLU-Pro test problems have one draw per route.
 Intervals are pointwise and assume independent problems, and \cref{tab:fresh} conditions on the fitted readouts; resampling the training problems as well and refitting every estimator widens them, but our saving over median pricing stays positive on both large test sets (Omni-MATH [23.2, 38.0], MMLU-Pro [22.9, 30.7]). Only deepseek-v4-flash is pinned to a provider; the gpt-oss routes are not, since their provider changes price but barely length. The prefill comparison covers four model families at up to 8B.
 Billed rates were measured over one collection, and prices change within days. The ZeroRouter, MixLLM and CARROT baselines are reimplementations.
