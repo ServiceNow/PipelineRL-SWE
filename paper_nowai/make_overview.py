@@ -24,7 +24,7 @@ def panel(ax,dataset,title):
  for arm in ['median','learned']:
   c=d['curves'][arm];sp=np.asarray(c['mean_cost_usd'])*1000;ac=np.asarray(c['accuracy'])*100
   sat.append(float(sp[np.flatnonzero(ac>=ac.max()-.5)[0]]))
- ax.set_xlim(0,1.3 if dataset=='lcb' else max(sat)*1.08)   # LCB: its flat plateau past $1 would hide the frontiers
+ ax.set_xlim(0,1.0 if dataset=='lcb' else max(sat)*1.08)   # LCB: its flat plateau past $1 would hide the frontiers
  # matched-accuracy connectors: the saving is a lateral cost shift from the median rule's frontier to ours
  for k in d['connectors']:
   y=k['accuracy']*100;x0=k['median_cost_usd']*1000;x1=k['ours_cost_usd']*1000
