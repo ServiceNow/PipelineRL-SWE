@@ -2107,3 +2107,6 @@ difficulty bins and ZeroRouter lose 22-29 pt on MMLU-Pro. LCB's billed-price dro
 - 4-pager (paper_nowai, 2026-10-06): pinned numbers everywhere; user's title/authors/abstract; Table 1 = external estimators only (LCB,
   Omni, MMLU-Pro); Ablations section (difficulty pricing inline, grid, size, families); deployable table replaced by one sentence; Fig 1 =
   three Pareto panels with matched-accuracy arrows; no fresh/original wording; Intern-Decision sentence dropped (unpinned).
+- TMLR to-do (2026-10-06): run the pinned estimator suite on BigCodeBench (and APPS, AIME) via fresh_baselines.py --pool (add ORIG
+  entries: bcb_tensors_5r / bcb_scout_prefill.npz etc.); BCB was cut from the 4-pager because only ours-vs-median existed (6.7 n.s.).
+  Finish the CodeContests pinned collection (resume path above). Rebuild a supplement on pinned numbers (old one archived in paper_nowai/archive/).
