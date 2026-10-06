@@ -2060,3 +2060,37 @@ eval-best pinned arm at matched accuracy:
 (P(pick = best) / expected regret.) Endpoints router vs best pinned (StreamLake, chosen on FIT): APPS -4.6, MMLU-Pro -3.9, CC +0.0
 [-0.4, +1.5] (tie; router reaches 91.5% vs 85.8%). => A few dozen calls per provider pick the provider to pin; routing over providers
 only buys the high-accuracy end.
+
+### 4.A.59 Full recollection with deepseek-v4-flash PINNED to StreamLake (2026-10-05/06; `launch_pinned_recollect.sh`, `build_pinned_root.py`, `pinned_rerun.sh`, `reprice_matched.sh`)
+Why: 4.A.58 showed provider mixing hides predictable cost. Every dsv4f draw re-collected with provider.only=[StreamLake], no fallbacks
+(OPENROUTER_PIN_PROVIDER), same prompts/settings/draw counts: LCB 8x892, BCB 8x1101, CC 3x700, Omni-500/MMLU-Pro-1000/AIME-933 3 draws,
+fresh MMLU-Pro 6,500 + Omni 1,000 (1 draw); APPS and the live run reuse pilot StreamLake draws. All calls served by StreamLake, 0 errors.
+Shadow root `reason_pinned/` (only the dsv4f slot swapped; same problems, order, splits; no prediction files carried over) and an
+ANCHOR root `reason_anchor/` (unchanged tensors): readouts regenerated there reproduce the archived predictions on every pool (cost
+max rel 1e-6, success max abs <= 1.2e-3), validating feature files and recipes. gpt-oss routes unchanged (provider affects price, not
+length); billed rates refit on the pinned fresh rows (dsv4f = StreamLake's rate). Readouts refit on pinned labels with identical code.
+dsv4f mean output unpinned -> pinned: LCB/CC long code unchanged-ish, APPS 18.7k -> 13.0k, BCB 2.1k -> 1.2k, Omni 17.7k -> 19.4k
+(fresh 15.1k -> 19.7k), MMLU-Pro 4.3k -> 4.3k, AIME 10.2k -> 10.3k; accuracy within +-1 pt.
+**Original pools, ours vs paper rule (median), same script both sides (reprice_original.py), list / billed:**
+| pool | unpinned | pinned |
+| LCB | 35.6 / 26.7 | 36.4 [28.5, 41.3] / **34.5 [24.8, 41.0]** |
+| Omni (test 150) | 21.9 / 25.2 | 15.8 [4.0, 29.3] / 17.5 [0.8, 32.7] |
+| MMLU-Pro | 30.7 / 35.3 | **43.9 [31.6, 53.8] / 43.9 [32.6, 52.3]** |
+| AIME | 13.6 / 11.3 | 14.9 [9.4, 21.4] / 16.1 [11.8, 21.4] |
+| APPS | 14.3 [-2.3, 23.6] / 12.1 | 14.8 [0.8, 22.7] / 16.8 [5.6, 28.3] |
+| BCB | -3.3 / -0.7 | 2.6 / 6.7 (n.s.) |
+Headroom (list / billed, pinned): LCB 45.7 / 45.3 (billed was 32.4), Omni 42.1 / 36.2, MMLU-Pro 64.1 / 61.5, AIME 32.5 / 29.3, APPS 27.7 / 31.9, BCB 13.8 / 12.6.
+**Fresh sets, billed prices, ours saves vs each estimator (fresh_baselines.py), unpinned -> pinned:**
+| vs | Omni (1,000) | MMLU-Pro (6,500) |
+| median | 27.8 -> 34.8 [27.9, 39.8] | 23.1 -> 28.8 [26.0, 31.8] |
+| mean | 28.2 -> 35.8 | 20.5 -> 28.6 |
+| prompt GBM | 20.3 -> 26.5 | 18.4 -> 25.2 |
+| ZeroRouter (cal-tuned: Omni D=1 K=20; MMLU-Pro D=5 K=10) | 18.0 -> 14.4 [8.4, 20.6] | 19.3 -> 29.0 [25.5, 32.0] |
+| difficulty bins | 11.6 -> 6.4 [1.1, 11.6] | 12.7 -> 22.3 [18.8, 24.7] |
+| cost from success | 3.2 -> -0.1 (tie) | 14.1 -> 24.1 [21.1, 26.7] |
+Deployable at matched accuracy (deploy_matched.py, pinned): MMLU-Pro .65/.75/.85 -> 30.2 / 35.0 / 2.5%; Omni .65/.70/.75 -> 37.8 / 21.1 /
+6.7% (unpinned 21.2 / 27.4 / 7.7 and 20.9 / 7.5 / 4.8).
+=> Same story, sharper: pinning raises our edge everywhere except the small original Omni test (wide CIs; the 1,000-problem fresh Omni
+rises 27.8 -> 34.8). The mechanism claim strengthens: cost-from-success still ties on Omni, but its MMLU-Pro gap grows 14 -> 24 pt;
+difficulty bins and ZeroRouter lose 22-29 pt on MMLU-Pro. LCB's billed-price drop (35.6 -> 26.7) was provider pricing, not prediction
+(pinned billed 34.5). CC pending; grid / size / second-family / Table 2 / Fig 1 reruns running (pinned_tables.sh).
