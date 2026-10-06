@@ -10,7 +10,7 @@ Routing reasoning models requires predicting both correctness and cost before ge
 
 Prefill routers predict correctness from a small encoder's prompt activations; the prefill router of Varshney et al. ([Prefill router](https://arxiv.org/abs/2603.20895)) explicitly prices outputs at median training length. We read output length from the same activations (Figure 1). Cost prediction adds one linear readout per route to an existing prefill router, without another encoder pass.
 
-We contribute: (i) evidence on held-out test problems at billed prices that prefill cost readouts reduce spending at matched accuracy and outperform mean-length, prompt-feature, text-embedding and ZeroRouter cost estimators; (ii) a mechanism, from ablations that price from our own success readouts: difficulty suffices where output length tracks it and fails where it does not; (iii) controls showing the gain is the prefill representation, holds for every small prefill we tried (0.6–8B, four families) and transfers to two further routed model families; (iv) a deployment finding: the same model's endpoints drift, and the shared readouts absorb this with one offset per endpoint.
+We contribute: (i) evidence on held-out test problems at billed prices that prefill cost readouts reduce spending at matched accuracy and outperform mean-length, prompt-feature, text-embedding and ZeroRouter cost estimators; (ii) a mechanism, from ablations that price from our own success readouts: difficulty suffices where output length tracks it and fails where it does not; (iii) controls showing the gain is the prefill representation, holds for every small prefill we tried (0.6–8B, four families) and transfers to two further routed model families; and, as a side note, (iv) the same model's provider endpoints drift, which the readouts can absorb with one offset per endpoint; we pin providers instead.
 
 ### Related work.
 
@@ -126,7 +126,7 @@ Billed rates were measured over one collection, and prices change within days. T
 
 ## Conclusion
 
-A frozen prefill that already predicts success also predicts cost. On held-out test problems at billed prices, its cost readouts reduce spending at matched accuracy and outperform every alternative estimator we tested; pricing from difficulty alone matches them only where output length tracks difficulty. Because endpoints of one model share these readouts up to an offset, a few dozen calls remove the bias that provider drift introduces, on average, and price a provider before it is pinned.
+A frozen prefill that already predicts success also predicts cost. On held-out test problems at billed prices, its cost readouts reduce spending at matched accuracy and outperform every alternative estimator we tested; pricing from difficulty alone matches them only where output length tracks difficulty. Endpoints of one model share these readouts up to an offset, so the readouts can absorb provider drift from a few dozen calls, though pinning a provider is simpler.
 
 ## References
 
