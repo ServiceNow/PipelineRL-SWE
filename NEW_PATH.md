@@ -2069,7 +2069,7 @@ Shadow root `reason_pinned/` (only the dsv4f slot swapped; same problems, order,
 ANCHOR root `reason_anchor/` (unchanged tensors): readouts regenerated there reproduce the archived predictions on every pool (cost
 max rel 1e-6, success max abs <= 1.2e-3), validating feature files and recipes. gpt-oss routes unchanged (provider affects price, not
 length); billed rates refit on the pinned fresh rows (dsv4f = StreamLake's rate). Readouts refit on pinned labels with identical code.
-dsv4f mean output unpinned -> pinned: LCB/CC long code unchanged-ish, APPS 18.7k -> 13.0k, BCB 2.1k -> 1.2k, Omni 17.7k -> 19.4k
+dsv4f mean output unpinned -> pinned: LCB 15.1k -> 10.0k (acc .884 -> .887), APPS 18.7k -> 13.0k, BCB 2.1k -> 1.2k, Omni 17.7k -> 19.4k
 (fresh 15.1k -> 19.7k), MMLU-Pro 4.3k -> 4.3k, AIME 10.2k -> 10.3k; accuracy within +-1 pt.
 **Original pools, ours vs paper rule (median), same script both sides (reprice_original.py), list / billed:**
 | pool | unpinned | pinned |
