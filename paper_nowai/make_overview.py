@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import FancyBboxPatch,FancyArrowPatch
 import numpy as np
 
-BILLED=json.loads((Path(__file__).resolve().parent/'data/fresh_billed_curves'+__import__('os').environ.get('RESULT_TAG','')+'.json').read_text())
+BILLED=json.loads((Path(__file__).resolve().parent/('data/fresh_billed_curves'+__import__('os').environ.get('RESULT_TAG','')+'.json')).read_text())
 COLORS={'learned':'#2166AC','median':'#D67C27'}
 LABELS={'learned':'Prefill cost readouts','median':'Training-median length'}
 
