@@ -2032,3 +2032,17 @@ headroom 2 -> 30%, and ours vs median 11 -> 19% (CI > 0; the APPS pre-registered
 prices -- a pinned APPS run would be a re-test, not a confirmation). On MMLU-Pro, label noise alone costs ~6 pt (26 -> 32 at equal price);
 the cheaper pinned price takes ~2-3 pt back (23.6) by making dsv4f dominant. Cost-from-success stays a tie on APPS. Recommend the full
 pinned dsv4f recollection (train + test) on every pool.
+
+### 4.A.57 AIME full pool: pre-registered NO GAIN call FAILED (2026-10-05; aime_tensors, aime.log; collection $25.06)
+933 problems, five routes, draws 4/3/3/2/2 as Omni (unpinned dsv4f; a pinned rerun follows in 4.A.59). Accuracy 55.5 / 85.9 / 96.8 /
+87.7 / 95.3%; mean output 1927 / 8256 / 10237 / 4619 / 12128 tokens. Split 55/15/30 random (seed 0), test n=281. Instruct probe test
+log-output R2 (multi-draw means): oss20lo .39, oss20md .45, dsv4f .47, oss120md .48, oss120hi .52.
+**Gain vs paper rule at matched accuracy, list prices (the pre-registered metric): 13.6% [7.8, 19.3]**; billed rates 11.3% [6.1, 17.5].
+Headroom 33.9% [28.4, 38.0] (>= 15% predicted: YES). Deployable (calibration-chosen, test once): 16-23% cheaper at 60-75% targets, 6-9%
+at 80-85%, accuracy diffs n.s. (costhead_matched_accuracy_ci.py labels its table "LCB"; the data are AIME).
+=> The NO GAIN prediction (CI includes 0) is FALSIFIED; the result meets the GAIN criterion. Why the screen missed: its decision variable
+was the probe's 5-fold R2 on ONE draw of the cheapest route (.13). That route has the least between-problem variance on AIME (ICC .75,
+sd log .50 vs .77-1.07 elsewhere), and one draw adds sampling noise; with averaged draws the same probe reads oss20lo at .39 and the
+expensive routes at .45-.52, above the .35 cutoff. Pre-registration tally: GAIN Omni, MMLU-Pro confirmed; APPS GAIN not confirmed;
+AIME NO GAIN falsified (gain instead). Lesson for the rule: screen on a route with representative between-problem variance, or on 2+
+draws; the cheap single-draw screen is biased toward NO GAIN.

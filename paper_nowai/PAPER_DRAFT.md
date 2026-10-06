@@ -127,7 +127,7 @@ On 1,000 MMLU-Pro problems never used before, the frozen router called only its 
 ### Original pools and contrasts.
 
 Repriced at the same billed rates, savings against median pricing on the original test sets are 26.7% [21.3, 32.4] on LiveCodeBench, 25.2% [10.0, 36.4] on Omni-MATH and 35.3% [22.6, 45.2] on MMLU-Pro. LiveCodeBench falls from 35.6% at list prices because billed rates compress the gpt-oss-120b to gpt-oss-20b output-price ratio from 6.7$\times$ to 1.9$\times$. On CodeContests ([AlphaCode / CodeContests](https://arxiv.org/abs/2203.07814)), TACO ([TACO](https://arxiv.org/abs/2312.14852)), BigCodeBench ([BigCodeBench](https://arxiv.org/abs/2406.15877)) and APPS, oracle costs would save 20–36% at list prices, but predicted costs gain $-3$ to 14%, with intervals including zero.
-
+On AIME 1983–2024 (933 problems), our pre-registered screen predicted no gain from a single draw of the cheapest route (probe $R^2$ .13). Predicted costs instead save 13.6% [7.8, 19.3] at list prices (11.3% billed; headroom 34%): with averaged draws the probe reads length at $R^2$ .39–.52, so the cheap one-draw screen understated predictability and the call failed. 
 RouterBench ([RouterBench](https://arxiv.org/abs/2403.12031)) has 10.5% headroom. A fine-tuned Intern-Decision-4B success predictor, combined with our cost readouts, saves a further 11.2% [5.5, 17.1] on fresh Omni-MATH: improved success and cost predictors combine.
 
 ## Discussion and Limitations
