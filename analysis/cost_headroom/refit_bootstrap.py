@@ -12,7 +12,7 @@ Reported per arm: cost saved by ours vs it on fresh problems at matched accuracy
 train+test resampling (B).
 Usage: python refit_bootstrap.py [B]
 """
-import glob, json, sys, time
+import glob, json, os, sys, time
 from pathlib import Path
 import numpy as np
 from sklearn.linear_model import RidgeCV
@@ -118,4 +118,4 @@ for ds in ("omni500", "mmlupro"):
         print(f"  ours saves vs {a:<18} {point[a]*100:+6.1f}%   test-only [{to[0]*100:+.1f}, {to[1]*100:+.1f}]   train+test refit [{rf[0]*100:+.1f}, {rf[1]*100:+.1f}]", flush=True)
     out[label] = res
     del X
-json.dump(out, open(Path(__file__).parent / "refit_bootstrap.json", "w"), indent=1, default=float)
+json.dump(out, open(Path(__file__).parent / f"refit_bootstrap{os.environ.get('RESULT_TAG', '')}.json", "w"), indent=1, default=float)
