@@ -16,7 +16,7 @@ ServiceNow AI Research}
 \maketitle
 
 \begin{abstract}
-    Routers typically choose a model per query by trading predicted correctness against cost. However, most price each model at a fixed cost, assuming that the number of tokens each model outputs does not vary significantly. We find that the output length of reasoning models varies by an order of magnitude across queries. We predict \textbf{both} success probability \textbf{and} route-specific output length from the prefill activations of a single small frozen 4B LLM, using a linear readout per route. On 6,500 MMLU-Pro, 1,000 Omni-MATH, and 341 LiveCodeBench tasks, predicted costs reduce spending at matched accuracy by 28.8\%, 34.8\% and 33.7\% relative to median-length pricing. They also beat every alternative estimator we evaluated, with paired intervals excluding zero; pricing from difficulty alone matches them only where output length tracks difficulty. We then ablate across different small LLMs and show that every small LLM prefill we tried (0.6--8B, four model families) can be used as a router in this way.
+    Routers typically choose a model per query by trading predicted correctness against cost. However, most price each model at a fixed cost, assuming that the number of tokens each model outputs does not vary significantly. We find that the output length of reasoning models varies by an order of magnitude across queries. We predict \textbf{both} success probability \textbf{and} route-specific output length from the prefill activations of a single small frozen 4B LLM, using a linear readout per route. On 6,500 MMLU-Pro, 1,000 Omni-MATH, and 341 LiveCodeBench tasks, predicted costs reduce spending at matched accuracy by 28.8\%, 34.8\% and 33.7\% relative to median-length pricing, half to three quarters of what perfect per-query cost knowledge would save. They also beat every alternative estimator we evaluated, with paired intervals excluding zero; pricing from difficulty alone matches them only where output length tracks difficulty. We then ablate across different small LLMs and show that every small LLM prefill we tried (0.6--8B, four model families) can be used as a router in this way.
 \end{abstract}
 
 \section{Introduction}
@@ -50,7 +50,7 @@ where $V$ is the value of a correct answer; sweeping $V$ trades accuracy for cos
 We concatenate mean and last-token activations from eight layers of a frozen Qwen3-4B (Instruct-2507; Thinking-2507 on Omni), standardized on training data. Success readouts are L2-regularized logistic regressions with held-out Platt calibration; cost readouts are ridge regressions of log mean output length, regularized by training-only cross-validation. Predicted length is exponentiated with residual smearing and matched to the route's training mean, then priced: $\hat c_m(x)=r_m^{\rm in}n^{\rm in}_m(x)+r_m^{\rm out}\hat\ell_m(x)$.
 
 \section{Experimental Protocol}
-The routes are gpt-oss-20b at low and medium effort, deepseek-v4-flash, and gpt-oss-120b at medium and high effort, called through OpenRouter, with deepseek-v4-flash pinned to one provider (StreamLake) throughout, because its output length depends on the serving provider (see Endpoints). LiveCodeBench~\cite{lcb} has 892 problems split by date into 441 training, 110 calibration and 341 test problems. Omni-MATH~\cite{omni} and MMLU-Pro~\cite{mmlupro} have 275/75 and 550/150 training/calibration problems and 1,000 and 6,500 disjoint test problems. Training problems have 2--16 draws per route; Omni-MATH and MMLU-Pro test problems have one.
+The routes are gpt-oss-20b at low and medium effort, deepseek-v4-flash, and gpt-oss-120b at medium and high effort, called through OpenRouter, with deepseek-v4-flash pinned to one provider (StreamLake) throughout, because its output length depends on the serving provider (see Endpoints). LiveCodeBench~\cite{lcb} has 892 problems split by date into 441 training, 110 calibration and 341 test problems. Omni-MATH~\cite{omni} and MMLU-Pro~\cite{mmlupro} have 275/75 and 550/150 training/calibration problems and 1,000 and 6,500 disjoint test problems. Training problems have 2--16 draws per route; Omni-MATH and MMLU-Pro test problems have one. \Cref{tab:routes} gives each route's accuracy and cost.
 
 \paragraph{Prices.}
 Realized cost is the cost billed for each call (on LCB, realized tokens at the billed rates). Predictions are priced at each model's effective billed rate, fitted on the test calls (USD per million output tokens: 0.13 for gpt-oss-20b, 0.08 for pinned deepseek-v4-flash, 0.26 for gpt-oss-120b). These differ from the list prices by up to 2.3$\times$.
@@ -72,16 +72,40 @@ Training-mean length & 29.6 [23.6, 34.5] & 35.8 [28.9, 40.5] & 28.6 [25.9, 31.7]
 Prompt-feature GBM & 26.3 [16.3, 32.9] & 26.5 [18.9, 31.9] & 25.2 [21.0, 28.7] \\
 MixLLM-style embeddings & 18.2 [11.2, 25.2] & 26.7 [20.0, 32.5] & 19.2 [15.3, 22.5] \\
 ZeroRouter (reimplemented) & 21.1 [13.2, 26.8] & 14.4 [8.4, 20.6] & 29.0 [25.5, 32.0] \\
+\midrule
+\emph{Headroom: oracle vs.\ median} & 45.3 [36.6, 50.4] & 55.5 [50.4, 58.8] & 59.5 [57.8, 61.2] \\
 \bottomrule
 \end{tabular}}
-\caption{\textbf{Cost saved at matched accuracy, billed costs.} Cost saved (\%) by our prefill cost readouts relative to each estimator, with 95\% paired bootstrap intervals; same success predictions for every arm except ZeroRouter, which uses its own; all intervals exclude zero. Test sets as in \cref{fig:overview}. MixLLM-style: jina-embeddings 137M with the MixLLM ensemble head (LCB, code-aware variant). ZeroRouter: item-response latent fitted on the five routes, 4B features, its own success model and bin pricing, configuration chosen on calibration.}
+\caption{\textbf{Cost saved at matched accuracy, billed costs.} Cost saved (\%) by our prefill cost readouts relative to each estimator, with 95\% paired bootstrap intervals; same success predictions for every arm except ZeroRouter, which uses its own; all intervals exclude zero. Last row: cost saved over median pricing by perfect per-query cost knowledge (each problem priced at its realized output), with the same success predictions; our readouts capture 74\%, 63\% and 49\% of it. Test sets as in \cref{fig:overview}. MixLLM-style: jina-embeddings 137M with the MixLLM ensemble head (LCB, code-aware variant). ZeroRouter: item-response latent fitted on the five routes, 4B features, its own success model and bin pricing, configuration chosen on calibration.}
 \label{tab:fresh}
+\end{table}
+
+\begin{table}[t]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lrrrrrr}
+\toprule
+ & \multicolumn{2}{c}{LCB} & \multicolumn{2}{c}{Omni-MATH} & \multicolumn{2}{c}{MMLU-Pro} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+Route & Acc. & Cost & Acc. & Cost & Acc. & Cost \\
+\midrule
+gpt-oss-20b, low & 51.8 & 0.13 & 41.9 & 0.21 & 62.1 & 0.05 \\
+gpt-oss-20b, medium & 68.2 & 0.65 & 57.5 & 1.20 & 69.4 & 0.18 \\
+deepseek-v4-flash & 89.3 & 0.90 & 71.3 & 1.66 & 86.2 & 0.33 \\
+gpt-oss-120b, medium & 82.1 & 0.64 & 60.3 & 1.12 & 77.2 & 0.23 \\
+gpt-oss-120b, high & 89.5 & 3.73 & 66.6 & 4.57 & 79.3 & 0.90 \\
+\bottomrule
+\end{tabular}}
+\caption{\textbf{Routes on the test sets.} Accuracy (\%) and mean billed cost per call (USD per 1,000 calls). No route dominates on every query: costs differ 17--29$\times$ across routes, and accuracy is not monotone in price.}
+\label{tab:routes}
 \end{table}
 
 
 \section{Results}
 \paragraph{Cost readouts beat every estimator.}
-At matched accuracy, prefill cost readouts spend 33.7\% less than median-length pricing on LCB, 34.8\% less on Omni-MATH and 28.8\% less on MMLU-Pro (\cref{tab:fresh}). Every external estimator loses with intervals excluding zero: mean length by 29--36 points, a prompt-feature model by 25--27, MixLLM-style embeddings by 18--27 and a full ZeroRouter reimplementation by 14--29. Choosing $V$ in advance costs little: on Omni-MATH and MMLU-Pro, policies selected on calibration spend 0--4\% more than our own test frontier at the accuracy they reach (hollow circles in \cref{fig:overview}).
+At matched accuracy, prefill cost readouts spend 33.7\% less than median-length pricing on LCB, 34.8\% less on Omni-MATH and 28.8\% less on MMLU-Pro (\cref{tab:fresh}). That is 74\%, 63\% and 49\% of the headroom, the saving perfect per-query cost knowledge would bring (45--60\%). Every external estimator loses with intervals excluding zero: mean length by 29--36 points, a prompt-feature model by 25--27, MixLLM-style embeddings by 18--27 and a full ZeroRouter reimplementation by 14--29. Choosing $V$ in advance costs little: on Omni-MATH and MMLU-Pro, policies selected on calibration spend 0--4\% more than our own test frontier at the accuracy they reach (hollow circles in \cref{fig:overview}).
 
 
 \paragraph{Endpoints.}
