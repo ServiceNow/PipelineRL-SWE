@@ -56,7 +56,7 @@ for ds in ("omni500", "mmlupro"):
         feat = F / "prefill_combined.npz" if tag == "paper" else S / tag / f"{ds}.npz"
         if not feat.exists():
             print(f"  {label}: {tag} features missing, skipped"); continue
-        sp_out = S / f"readouts{os.environ.get('RESULT_TAG', '')}" / f"{ds}_{tag}_success.jsonl"   # tagged cache: pinned labels never reuse unpinned readouts; sp_out.parent.mkdir(parents=True, exist_ok=True)
+        sp_out = S / f"readouts{os.environ.get('RESULT_TAG', '')}" / f"{ds}_{tag}_success.jsonl"; sp_out.parent.mkdir(parents=True, exist_ok=True)   # tagged cache: pinned labels never reuse unpinned readouts
         if not sp_out.exists():
             subprocess.run([sys.executable, str(REPO / "pipelinerl/swe/scripts/livecodebench/activation_content_preds.py"), "--activations", str(feat),
                             "--rich", "--tensors-dir", str(F), "--select-C", "--out", str(sp_out)], check=True, cwd=REPO, stdout=subprocess.DEVNULL)
