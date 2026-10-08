@@ -2126,3 +2126,34 @@ Test split, billed rates, pinned dsv4f; cost saved vs median [95% CI]; "ours vs 
 readout on LCB, Omni, APPS, AIME, BCB and CC; only MMLU-Pro separates (+24). On BCB and CC nothing beats median meaningfully:
 BCB has little headroom (12.6%); CC has 34.5% headroom that no estimator reads (ours, ZeroRouter, MixLLM all ~6-9%, n.s.).
 TACO not rerun: old 3-route pool (scout/oss20/oss120, T=0.2), not comparable.
+
+### 4.A.62 Layer-wise success vs cost readouts (2026-10-08; `layerwise.py`, pinned)
+8 stored layers (9..36) x {mean, last}, both readouts refit per layer. Success and cost peak in the SAME layers (last token, 22-36):
+LCB success AUC .86-.87 / cost R2 .73-.75 / cost-from-layer saves 33-34% (paper all-layer 33.7); Omni .83-.84 / .71-.72 / 35-37% (34.8);
+MMLU-Pro .72 / .48-.50 / 27-29% (28.8). One late last-token layer already matches the 16-layer concatenation. Per-layer correlation of
+the mean success logit with mean predicted log length: LCB -0.90..-0.97, Omni -0.71..-0.84, MMLU-Pro -0.36..-0.58 => the two readouts are
+nearly one signal on LCB, partly one on Omni, largely different on MMLU-Pro (mirrors the cost-from-success ablation).
+
+### 4.A.63 Where the saving comes from, label curve, price ladders, effort vs model (2026-10-08; `tmlr_free_analyses.py`, pinned)
+- Reroutes at matched accuracy (mid band): 31-66% of problems change route vs median pricing; dominant swap oss20lo -> dsv4f (19-38% of
+  problems) and dsv4f -> oss20lo (9-18%): predicted-short problems go to the more accurate dsv4f, predicted-long to the cheap route.
+- Dedicated readout vs training labels (5 seeds): LCB 25 -> 30.5, 100 -> 30.9, 441 -> 33.7; Omni 25 -> 26.6, 100 -> 33.1, 275 -> 34.8;
+  MMLU-Pro 25 -> 10.9, 100 -> 24.0, 200 -> 25.9, 550 -> 28.8. One draw per training problem: 31.5 / 33.9 / 26.1.
+- Price ladders (route out-price gap scaled from 1x to 9.3x; billed = 3.1x): ours vs median LCB 13.3 / 22.3 / 33.7 / 32.9 / 32.3, Omni
+  14.3 / 28.0 / 34.8 / 34.5 / 34.4, MMLU-Pro 36.3 / 36.3 / 28.8 / 28.0 / 26.2; headroom 21-45 / 45-56 / 57-63. Flat prices still save 13-36%
+  (length alone); MMLU-Pro saves most when prices are FLAT (work-driven length), LCB/Omni need a price gap.
+- Effort vs model (ours vs median / headroom): LCB 20b-effort-only 21.2/33.1, 120b-effort-only -1.8/6.0, one-effort-per-model 12.8/24.5,
+  full 33.7/45.3; Omni 21.8/32.7, 12.6/29.0, 17.8/40.6, 34.8/55.5; MMLU-Pro 7.9/22.6, 8.6/37.4, n/a/4.8, 28.8/59.5. Neither choice alone.
+
+### 4.A.65 Free screen: does length separate from difficulty? (2026-10-08; `screen_separation.py`)
+oss20lo x1 + Instruct prefill, 5-fold CV, length R2 direct vs derived from a success readout: Omni .66/.56 (gap +.10, known tie), MMLU-Pro
+.68/.03 (+.66, known separation), AIME .25/.20 (+.05), K&K .64/.49 (+.15), SuperGPQA .63/.02 (+.61), BBEH .39/-.01 (+.40).
+=> SuperGPQA and BBEH separate like MMLU-Pro: candidates for the dedicated-readout claim (C4). Recommend both full pools.
+
+### 4.A.64 Non-reasoning pool (launched 2026-10-08; `launch_nonreason.sh`)
+5 routes pinned (StreamLake deepseek-v4-flash thinking OFF, DeepInfra llama-3.1-8b, StreamLake qwen3-30b-a3b-instruct-2507, Parasail
+llama-3.3-70b, GMICloud qwen3-235b-a22b-2507), card sampling, 16k cap, one draw, same problems. Smoke: pinning holds, ds4off 0 reasoning
+chars, 8k cap truncated Qwen (raised to 16k), Novita rate-limited llama-70b (moved to Parasail). kimi-k2-0905 (Novita, ~$19) NOT launched.
+First launch used a stale snapshot (gitignored file aborted the commit); math rows were valid (route defs live), LCB rows invalid
+(stale openrouter_call, ds4off thought) and deleted; relaunched from e310e0e. LCB llama8 / qw30 rate-limited by concurrent math jobs on the
+same providers; retried at concurrency 8 after the math jobs finish.
