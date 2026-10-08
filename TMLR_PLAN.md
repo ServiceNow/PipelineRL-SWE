@@ -51,3 +51,15 @@ Queued:
 
 ## Writing
 Rewrite intro/abstract around C1-C5; fill sections as results land; appendix: pool statistics, baseline details, protocol, pre-registration.
+
+## Status (2026-10-08 evening)
+Done (NEW_PATH): full pinned estimator suite on all pools (4.A.61); layer-wise (4.A.62); where-the-saving-comes-from, label curve for
+the dedicated readout, price ladders, effort vs model (4.A.63); screen separation: SuperGPQA +.61 and BBEH +.40 separate like MMLU-Pro (4.A.65).
+Running: non-reasoning pool (math done; Omni/MMLU test + LCB in flight; 2 LCB routes retrying after rate limits) (4.A.64);
+F1 variance decomposition (also covers F7 CC), F2 level vs differences, F5 MMLU-Pro drivers, F4 onboarding, F9 budgets (4.A.66);
+F3 label efficiency dedicated vs cost-from-success (4.A.67); F8 prefill-router success reimplementation (4.A.68); G1 perfect-judge
+cascades on all three test sets, CPU (4.A.69; learned-judge arms need judge scores on the pinned draws: GPU, later if wanted);
+APPS/AIME MixLLM rows (GPU).
+Awaiting approval: SuperGPQA + BBEH full pools (~$13, guards $8 + $12); kimi-k2 non-reasoning route (~$19).
+F10 SWE: agentic SWE-rebench results (4.A.14/4.A.15) are public-data and provider-independent, reuse; SWE-Smith one-shot from existing data.
+F6 headroom x capture map: no new compute (suite + headroom outputs); build at the figure stage.
