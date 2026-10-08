@@ -2113,3 +2113,16 @@ difficulty bins and ZeroRouter lose 22-29 pt on MMLU-Pro. LCB's billed-price dro
 - 4.A.60 headroom + routes (2026-10-06; `headroom_routes.py`, log reason_pinned_logs/headroom_routes.txt): oracle per-query cost vs median,
   same success: LCB 45.3 [36.6, 50.4] (ours 33.7, capture .74 [.63, .82]), Omni 55.5 [50.4, 58.8] (34.8, .63 [.56, .71]), MMLU-Pro 59.5
   [57.8, 61.2] (28.8, .49 [.44, .53]). Route acc / billed cost per call (m$) on test: see log; in the 4-pager as Table "Routes".
+
+### 4.A.61 Full pinned estimator suite on every original pool (2026-10-08; `fresh_baselines.py --pool`, `pool_suite.sh`)
+Test split, billed rates, pinned dsv4f; cost saved vs median [95% CI]; "ours vs X" = cost saved by ours relative to X.
+| pool (test n) | ours vs median | headroom (oracle) | ours vs mean | vs GBM | vs MixLLM | vs ZeroRouter | vs bins (abl.) | vs from-success (abl.) |
+| LCB (341) | 33.7 [24.1, 39.9] | 45.3 | 29.6 | 26.3 | 18.2 | 21.1 | 4.0 n.s. | -0.8 n.s. |
+| APPS (377) | 15.1 [5.0, 26.9] | 32.1 | 14.6 | 15.4 n.s. | (GPU rerun) | 13.5 | 1.5 n.s. | -3.7 n.s. |
+| AIME (281) | 15.7 [11.7, 20.6] | 29.3 | 15.7 | 16.1 | (GPU rerun) | 4.5 n.s. | 9.7 | 2.0 n.s. |
+| BCB (421) | 6.3 [-1.6, 11.8] | 12.6 | 6.9 | 6.0 | 3.3 n.s. | -2.7 n.s. | 6.8 n.s. | 3.2 n.s. |
+| CC (266) | 6.3 [-0.2, 17.0] | 34.5 | 8.3 | 15.3 | 2.7 n.s. | -3.3 n.s. | 0.7 n.s. | 0.7 n.s. |
+(CodeContests pinned collection finished 2026-10-08; anchors pass, cost 1.1e-6.) => Cost-from-success (difficulty-only pricing) ties our
+readout on LCB, Omni, APPS, AIME, BCB and CC; only MMLU-Pro separates (+24). On BCB and CC nothing beats median meaningfully:
+BCB has little headroom (12.6%); CC has 34.5% headroom that no estimator reads (ours, ZeroRouter, MixLLM all ~6-9%, n.s.).
+TACO not rerun: old 3-route pool (scout/oss20/oss120, T=0.2), not comparable.
