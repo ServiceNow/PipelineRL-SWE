@@ -15,7 +15,7 @@ SOFT cap (not enforced): the call runs to completion; a query whose realised cos
   Metric: accuracy at matched violation rate (5%, 10%) per X, plus mean overshoot (mean of max(0, cost - X) / X).
 All arms share the prefill success head p. Usage: python budget_cap.py
 """
-import json, sys, numpy as np
+import json, os, sys, numpy as np
 from pathlib import Path
 from scipy.stats import norm
 sys.path.insert(0, str(Path(__file__).parent))
@@ -119,4 +119,4 @@ for label, name, cfile in POOLS:
         print(f"   X {X:.4f}c: " + " | ".join(f"{a} acc@5% {r['acc@5%viol']*100:5.1f} @10% {r['acc@10%viol']*100:5.1f} (overshoot@10% {r['overshoot@10%viol']*100:4.0f}%)"
                                             for a, r in row.items()))
     out.setdefault(label, {}).update({"hard": H, "soft": Sft})
-json.dump(out, open(Path(__file__).parent / "budget_cap.json", "w"), indent=1, default=float)
+json.dump(out, open(Path(__file__).parent / f"budget_cap{os.environ.get('RESULT_TAG', '')}.json", "w"), indent=1, default=float)

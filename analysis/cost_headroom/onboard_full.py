@@ -97,4 +97,4 @@ for h in GN:
           + "  ".join(f"k={k}: onboard {out[(h,f'maxacc_{k}')][0]*100:.1f} / naive {out[(h,f'maxacc_{k}')][1]*100:.1f}" for k in (5, 10, 50)))
 mean = lambda k, j: np.mean([out[(h, k)][j] for h in S])     # single routes only
 print("   mean     " + "".join(f"  k={k}: {mean(k,0)*100:5.1f}% / {mean(k,1)*100:5.1f}%" for k in (5, 10, 20, 50)))
-json.dump({f"{a}|{b}": v for (a, b), v in out.items()} | {"full": full} | {f"without|{k}": v for k, v in without.items()}, open(f"analysis/cost_headroom/onboard_full_{name}{'_no_' + '_'.join(DROP) if DROP else ''}.json", "w"), indent=1)
+json.dump({f"{a}|{b}": v for (a, b), v in out.items()} | {"full": full} | {f"without|{k}": v for k, v in without.items()}, open(f"analysis/cost_headroom/onboard_full_{name}{'_no_' + '_'.join(DROP) if DROP else ''}{os.environ.get('RESULT_TAG', '')}.json", "w"), indent=1)

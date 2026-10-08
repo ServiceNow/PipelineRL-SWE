@@ -14,7 +14,7 @@ Two difficulty measures:
              Omni-MATH rating), where it exists
 Also: the length of failed vs solved draws within a problem-route (is "hard" long because failing is long?).
 """
-import json, sys, numpy as np
+import json, os, sys, numpy as np
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from decompose import MK, R
@@ -22,7 +22,8 @@ from why_predictable import cv_r2
 
 POOLS = {"pool_v2_tensors_5rung": "cost_preds_probe.jsonl", "cc_tensors": "cost_preds_probe.jsonl",
          "taco_tensors_ha": "cost_preds_probe.jsonl", "bcb_tensors_5r": "cost_preds_probe.jsonl",
-         "omni500_tensors": "cost_preds_probe_thinking.jsonl"}
+         "omni500_tensors": "cost_preds_probe_thinking.jsonl",
+         "mmlupro_tensors": "cost_preds_probe_instruct.jsonl", "aime_tensors": "cost_preds_probe_instruct.jsonl", "apps_tensors": "cost_preds_probe.jsonl"}
 
 
 def labels(name, pids):
@@ -79,7 +80,7 @@ def main():
             out[f"{name}/{s}"] = row
             print(f"{name[:18] + ' / ' + s:<30}{rp:7.2f} | {rd:9.2f}{rd + rp - rdp:8.2f}{rdp - rp:11.2f}{rdp - rd:12.2f}{'':>17}| {lab}"
                   f"   fail/solve x{row['fail_vs_solve_ratio']:.2f}")
-    json.dump(out, open("analysis/cost_headroom/why_decompose.json", "w"), indent=1, default=float)
+    json.dump(out, open(f"analysis/cost_headroom/why_decompose{os.environ.get('RESULT_TAG', '')}.json", "w"), indent=1, default=float)
 
 
 if __name__ == "__main__":
