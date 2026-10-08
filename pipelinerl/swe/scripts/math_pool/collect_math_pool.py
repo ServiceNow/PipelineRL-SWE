@@ -28,7 +28,17 @@ ROUTES = {  # label: (OpenRouter id, extra body, temperature, top_p) -- as in th
     "qwnext80": ("qwen/qwen3-next-80b-a3b-thinking", {"reasoning": {"enabled": True}}, 0.6, 0.95),
     "mm25": ("minimax/minimax-m2.5", {"reasoning": {"enabled": True}}, 0.6, 0.95),
     "qw235": ("qwen/qwen3-235b-a22b-thinking-2507", {"reasoning": {"enabled": True}}, 0.6, 0.95),
+    # NON-REASONING pool (NEW_PATH 4.A.64): each route pinned to ONE provider (provider.only, no fallbacks); sampling from the model card
+    # (Qwen3-Instruct-2507: T 0.7 / top_p 0.8, top_k 20 dropped because the pinned providers do not support it; Llama 3.x: 0.6 / 0.9;
+    # Kimi K2: 0.6); deepseek-v4-flash with thinking OFF keeps the thinking route's 0.7 / 0.95 and provider so only reasoning differs.
+    "nr_ds4off": ("deepseek/deepseek-v4-flash", {"reasoning": {"enabled": False}, "provider": {"only": ["StreamLake"], "allow_fallbacks": False}}, 0.7, 0.95),
+    "nr_llama8": ("meta-llama/llama-3.1-8b-instruct", {"provider": {"only": ["DeepInfra"], "allow_fallbacks": False}}, 0.6, 0.9),
+    "nr_qw30": ("qwen/qwen3-30b-a3b-instruct-2507", {"provider": {"only": ["StreamLake"], "allow_fallbacks": False}}, 0.7, 0.8),
+    "nr_llama70": ("meta-llama/llama-3.3-70b-instruct", {"provider": {"only": ["Parasail"], "allow_fallbacks": False}}, 0.6, 0.9),
+    "nr_qw235": ("qwen/qwen3-235b-a22b-2507", {"provider": {"only": ["GMICloud"], "allow_fallbacks": False}}, 0.7, 0.8),
+    "nr_kimik2": ("moonshotai/kimi-k2-0905", {"provider": {"only": ["Novita"], "allow_fallbacks": False}}, 0.6, 1.0),
 }
+NONREASON = [k for k in ROUTES if k.startswith("nr_")]
 IGNORE = ["Parasail", "AkashML"]
 PROMPT = "Solve the following math problem. Reason step by step, then put your final answer within \\boxed{{}}.\n\n{problem}"
 

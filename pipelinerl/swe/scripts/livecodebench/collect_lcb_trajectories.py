@@ -396,6 +396,8 @@ async def openrouter_call(
             prov["order"] = list(provider_order)
         if ignore:
             prov["ignore"] = ignore
+        if os.environ.get("OPENROUTER_REASONING_OFF"):   # NEW_PATH 4.A.64: hybrid model with thinking explicitly disabled
+            p["reasoning"] = {"enabled": False}
         pin = os.environ.get("OPENROUTER_PIN_PROVIDER")   # NEW_PATH 4.A.58: one provider, no fallbacks (removes provider variability)
         if pin:
             prov.pop("ignore", None); prov["only"] = [pin]; prov["allow_fallbacks"] = False
