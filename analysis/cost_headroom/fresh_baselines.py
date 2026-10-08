@@ -34,7 +34,11 @@ VALUES = np.geomspace(1e-7, 1, 300); sig = lambda z: 1 / (1 + np.exp(-z))
 rate_of = lambda s: RATE["oss120" if "120" in s else ("oss20" if s.startswith("oss20") else "dsv4f")]
 # --pool LCB: the same arms on an ORIGINAL pool's own split (train fits, calibration picks ZeroRouter's config, TEST is evaluated);
 # realized cost = realized tokens x billed rates (no per-call usage_cost there). NEW_PATH 4.A.59.
-ORIG = {"LCB": ("pool_v2_tensors_5rung", "cost_preds_probe.jsonl", "/mnt/llmd/results/exps/aristides/reason/pv2_scout_prefill_1756715297/scout.npz")}
+ORIG = {"LCB": ("pool_v2_tensors_5rung", "cost_preds_probe.jsonl", "/mnt/llmd/results/exps/aristides/reason/pv2_scout_prefill_1756715297/scout.npz"),
+        "BCB": ("bcb_tensors_5r", "cost_preds_probe.jsonl", "/mnt/llmd/results/exps/aristides/reason/bcb_scout_prefill.npz"),
+        "APPS": ("apps_tensors", "cost_preds_probe.jsonl", "/mnt/llmd/results/exps/aristides/reason/apps_probe/instruct.npz"),
+        "AIME": ("aime_tensors", "cost_preds_probe_instruct.jsonl", "/mnt/llmd/results/exps/aristides/reason/aime_probe/instruct.npz"),
+        "CC": ("cc_tensors", "cost_preds_probe.jsonl", "/mnt/llmd/results/exps/aristides/reason/cc_pool/scout_prefill.npz")}
 POOL = sys.argv[sys.argv.index("--pool") + 1] if "--pool" in sys.argv else None
 out = {}
 for ds in ([POOL] if POOL else ("omni500", "mmlupro")):
@@ -81,7 +85,10 @@ for ds in ([POOL] if POOL else ("omni500", "mmlupro")):
         tok["mixllm"] = np.maximum((read_predictions(old / "cost_preds_mixllm.jsonl", ids, "expected_costs", M) - I * asg[:, 0]) / asg[:, 1], 1)
     for k_ in ("fromsuccess", "zr-bins", "gbm"):                      # level-match each route to its train mean (as baseline_cost_heads)
         tok[k_] = tok[k_] * (L[tr].mean(0) / tok[k_][tr].mean(0))
-    cost = {a: I * rates[:, 0] + x * rates[:, 1] for a, x in tok.items()}; succp = {a: P for a in cost}
+    cost = {a: I * rates[:, 0] + x * rates[:, 1] for a, x in tok.items()}
+    if POOL:
+        cost["oracle"] = paid.copy()                                  # headroom: each problem priced at its realized cost
+    succp = {a: P for a in cost}
     # ---- full ZeroRouter, configuration chosen on calibration
     z = np.load(feat if POOL else F / "prefill_combined.npz", allow_pickle=True); zid = {str(p): i for i, p in enumerate(z["problem_ids"])}
     X = np.concatenate([z[k_].reshape(len(z[k_]), -1) for k_ in ("mean", "last")], 1)[[zid[p] for p in ids]].astype(np.float32); del z
