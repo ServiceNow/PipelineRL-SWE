@@ -2209,8 +2209,16 @@ API errors 4-6% on gpt-oss-120b-high / 20b-medium (unpinned), excluded as invali
 
 ### 4.A.71 Reasoning vs non-reasoning on the same problems (2026-10-09; `nonreason_compare.py`, pinned, billed)
 Billed $/M in/out fitted from usage_cost: ds4off .094/.177, llama8 .020/.040, qw30 .048/.193, llama70 .214/.500, qw235 .086/.350.
-PRELIMINARY (debug run, Omni, qw235 with only 59/275 training problems): reasoning headroom 55.5 / ours 34.8 (capture .63);
-non-reasoning headroom 42.3 / ours 7.3 [3.7, 10.4] (capture .17) / from-success 8.4; mixed 10-route pool headroom 55.2 / ours 17.7.
-Length spread is NOT small for the instruct routes: sd(log out) ds4off 1.08, llama8 1.47 (degenerate repetition to the cap: mean 3.9k vs
-median 0.7k, cost R2 -0.08), qw30 1.19, qw235 1.18 (Qwen3-2507 instruct writes 4-5k tokens of step-by-step), llama70 0.55; reasoning
-0.90-1.72. deepseek on vs off: acc .713 vs .567, mean out 19.7k vs 1.8k, corr(log out) .76. Final numbers after the qw235 resume.
+FINAL (2026-10-09 04:43 ET; common test problems, every route of both pools valid; qw235 trained on 241/275 Omni, 485/550 MMLU-Pro,
+441/441 LCB problems -- the rest still 429 after backoff):
+| pool (test n) | headroom R / NR / mixed | ours vs median R / NR / mixed | capture R / NR |
+| Omni (1000) | 55.5 / 40.7 / 55.3 | 34.8 / 7.2 [3.7, 10.8] / 17.7 | .63 / .18 |
+| MMLU-Pro (2000) | 60.5 / 26.0 / 37.5 | 30.6 / 1.3 [-2.4, 5.3] / 13.0 | .51 / .05 |
+| LCB (341) | 45.3 / 28.9 / 40.9 | 33.7 / 19.7 [7.7, 29.2] / 24.9 | .74 / .68 |
+=> Headroom 1.4-2.3x larger for reasoning routes; our saving 1.7x (LCB) to ~24x (MMLU-Pro) larger. Non-reasoning length still varies
+(sd log .53-1.73) but much of it is DEGENERATE output from weak/verbose instruct routes, unpredictable from the prompt: llama8 cost R2
+-.08/-.41/-.31 (mean 4-6x median, repetition to the cap); qw30 on LCB p90/p10 142, mean 2.6k vs median 324, R2 .27. That is where the
+LCB non-reasoning headroom comes from. Cost-from-success = dedicated on NR (difficulty ~ length there too). Mixed pool: adding NR routes
+lowers our saving (17.7 vs 34.8 Omni; 13.0 vs 30.6 MMLU-Pro): the cheap NR routes take the easy problems at near-constant cost.
+deepseek thinking on vs off: acc +2.8 (MMLU-Pro) / +14.6 (Omni) / +22.1 (LCB) pt for 13x / 11x / 33x the output; corr(log out) .66-.76
+(the same problems are long either way).
