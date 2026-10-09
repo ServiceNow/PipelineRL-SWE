@@ -26,7 +26,11 @@ bootstrap over test problems (200 resamples; resample b uses seed b mod 5).
                   ours (prefill success + prefill cost), prefill_router (prefill success + median cost: the prefill router's rule),
                   mixllm (embedding success, same logistic recipe, + MixLLM cost), knn (CARROT kNN success + cost), zerorouter (its
                   own IRT success + bin pricing). Reference: the target's in-domain median rule with its own readouts.
-Usage: REASON_ROOT=.../reason_pinned RESULT_TAG=_pinned OUT_DIR=... python cost_generalization.py labels|transfer|fulltransfer POOL
+  pooled POOL     (a) cost readout trained on target train + other pools vs target train only (+ full-router version, success refit
+                  pooled vs in-domain, C / Platt on the target calibration split); (b) sources + n target labels vs target-only n
+                  (n = 10..200, 5 seeds; level matched to the n problems; unweighted and target rows x10); (c) why transfer works:
+                  out-of-pool log-length R2 per route, between-pool share of log-length variance, cross-route agreement of pool means.
+Usage: REASON_ROOT=.../reason_pinned RESULT_TAG=_pinned OUT_DIR=... python cost_generalization.py labels|transfer|fulltransfer|pooled POOL
 """
 import json, os, sys
 from pathlib import Path
@@ -132,7 +136,7 @@ def fit_predict(arm, S, T, cfg=None):
         return tab.T[bt]
     if arm == "ours":
         sc = StandardScaler().fit(S["X"]); Xs, Xt = sc.transform(S["X"]), sc.transform(T["X"])
-        fit = lambda k: RidgeCV(alphas=np.geomspace(1e1, 1e7, 13)).fit(Xs, S["Y"][:, k])
+        fit = lambda k: RidgeCV(alphas=np.geomspace(1e1, 1e7, 13)).fit(Xs, S["Y"][:, k], sample_weight=S.get("w"))
     elif arm == "fromsuccess":
         Fs, Ft = np.c_[S["lg"], S["lg"] ** 2], np.c_[T["lg"], T["lg"] ** 2]
         sc = StandardScaler().fit(Fs); Xs, Xt = sc.transform(Fs), sc.transform(Ft)
@@ -229,8 +233,16 @@ def view(d, ii):
     return dict(X=d["X"][ii], E=d["E"][ii], TF=d["TF"][ii], lg=lg[ii], Y=np.log(d["L"][ii]), succ=d["succ"][ii], n=d["n"][ii], CT=d["CT"][ii], y0=d["y0"][ii], q=d["q"][ii])
 
 
-def stack(views):
-    return {k: np.concatenate([w[k] for w in views]) for k in views[0]}
+def stack(views, weights=None):
+    out_ = {k: np.concatenate([w[k] for w in views]) for k in views[0] if k != "w"}
+    if weights is not None:                       # per-view row weight (ridge sample_weight)
+        out_["w"] = np.concatenate([np.full(len(w["X"]), x, float) for w, x in zip(views, weights)])
+    return out_
+
+
+def r2_routes(d, tk, ii):
+    y = np.log(d["L"][ii]); e = np.log(np.maximum(tk[ii], 1))
+    return [float(1 - ((y[:, k] - e[:, k]) ** 2).sum() / ((y[:, k] - y[:, k].mean()) ** 2).sum()) for k in range(y.shape[1])]
 
 
 def choose(d, S, cal_view):
@@ -284,6 +296,66 @@ if MODE == "labels":
                 preds[a].append(fit_predict(a, S, T, c.get(a)))
         res = evaluate(d, preds, d["ev"]); res["_configs"] = [{k: list(v) if isinstance(v, tuple) else v for k, v in c.items()} for c in cfgs]
         out["by_n"][str(nn)] = res; show(f"n={nn:<4} ({reps} seeds)", {a: r for a, r in res.items() if a != "_configs"})
+elif MODE == "pooled":
+    # (2) pooled training: target train + other pools vs target train only; (3) transfer + n target labels vs target-only n;
+    # (4) why transfer works: out-of-pool length R2 per route, and how much of log length is a pool-level effect
+    assert POOL != "Omni", "uses Omni500 (Instruct prefill like every other pool)"
+    d = load(POOL); N = len(d["ids"]); T = view(d, np.arange(N)); S_in = view(d, d["tr"]); Ca_t = view(d, d["ca"]); ev = d["ev"]
+    dom = "coding" if POOL in DOMAIN["coding"] else "reasoning"
+    same, allo = [p for p in DOMAIN[dom] if p != POOL], [p for p in DOMAIN["coding"] + DOMAIN["reasoning"] if p != POOL]
+    print(f"===== pooled / transfer+n / why, target {POOL} (train {len(d['tr'])}, test {len(ev)}); same-domain sources {same}", flush=True)
+    cache = {}
+    for p in allo:
+        s = load(p); cache[p] = (view(s, s["tr"]), view(s, s["ca"])); del s
+    SRC, SRC_all = stack([cache[p][0] for p in same]), stack([cache[p][0] for p in allo])
+    # ---- (2) cost-only: in-domain vs transfer vs pooled (success = the target's own readouts)
+    tk = {"ours": fit_predict("ours", S_in, T), "transfer_same": fit_predict("ours", SRC, T),
+          "pooled_same": fit_predict("ours", stack([S_in, cache[same[0]][0]] + [cache[p][0] for p in same[1:]]), T),
+          "pooled_all": fit_predict("ours", stack([S_in] + [cache[p][0] for p in allo]), T)}
+    for a in ("pooled_same", "pooled_all"):          # pooled level: match the target's own training mean (its labels are in the fit)
+        tk[a] = tk[a] * (d["L"][d["tr"]].mean(0) / tk[a][d["tr"]].mean(0))[None]
+    r2 = {a: r2_routes(d, x, ev) for a, x in tk.items()}
+    rA = evaluate(d, {a: [x] for a, x in tk.items()}, ev); out["cost_only"] = dict(saving=rA, r2=r2)
+    show("cost-only (target success readouts)", rA)
+    print("      test log-length R2 per route " + str(d["slots"]) + ": " + "  ".join(f"{a} " + " ".join(f"{x:.2f}" for x in r) for a, r in r2.items()), flush=True)
+    # ---- (2b) full router: success refit in-domain vs pooled (C and Platt on the TARGET calibration split in both)
+    P_in = success_linear("X", S_in, Ca_t, T); P_pool = success_linear("X", stack([S_in, SRC]), Ca_t, T)
+    aucs = {nm: float(np.mean([auc(d["y0"][ev, k], Pm[ev, k]) for k in range(d["M"])])) for nm, Pm in (("in_domain", P_in), ("pooled", P_pool), ("paper_readouts", d["P"]))}
+    rB = evaluate(d, {"ours": [tk["ours"]], "pooled_same": [tk["pooled_same"]]}, ev, {"ours": P_in, "pooled_same": P_pool})
+    out["full"] = dict(saving=rB, success_auc=aucs); show("full router, refit in-domain (ours) vs pooled same-domain", rB)
+    print(f"      success AUC: " + "  ".join(f"{a} {x:.3f}" for a, x in aucs.items()), flush=True)
+    # ---- (2c) which side transfers (BCB / CC anomaly): source-trained success (C / Platt on SOURCE calibration) x in-domain or source cost
+    P_src = success_linear("X", SRC, stack([cache[p][1] for p in same]), T)
+    rD = evaluate(d, {"ours": [tk["ours"]], "src_success": [tk["ours"]], "src_success_src_cost": [tk["transfer_same"]], "src_cost": [tk["transfer_same"]]},
+                  ev, {"src_success": P_src, "src_success_src_cost": P_src})
+    bll = lambda Pm: float(-np.mean(d["q"][ev] * np.log(Pm[ev]) + (1 - d["q"][ev]) * np.log(1 - Pm[ev])))      # vs per-problem success rate
+    cal = {nm: dict(auc=float(np.mean([auc(d["y0"][ev, k], Pm[ev, k]) for k in range(d["M"])])), logloss=bll(Pm),
+                    mean_pred=Pm[ev].mean(0).round(3).tolist()) for nm, Pm in (("paper_readouts", d["P"]), ("in_domain_refit", P_in), ("pooled", P_pool), ("source_only", P_src))}
+    cal["true_rate"] = d["q"][ev].mean(0).round(3).tolist()
+    out["which_side"] = dict(saving=rD, calibration=cal); show("which side transfers (ours = target success + in-domain cost)", rD)
+    print("      success on test: " + "  ".join(f"{nm} AUC {c['auc']:.3f} logloss {c['logloss']:.3f}" for nm, c in cal.items() if nm != "true_rate")
+          + f"   mean pred / true rate per route: {cal['source_only']['mean_pred']} / {cal['true_rate']}", flush=True)
+    # ---- (3) transfer + n target labels (cost-only, as the label-efficiency figure)
+    rng = np.random.default_rng(0); out["plus_n"] = {}
+    for nn in [10, 20, 50, 100, 200]:
+        if nn >= len(d["tr"]):
+            continue
+        preds = {"ours": [], "target_only": [], "transfer_level_n": [], "src_plus_n_w10": []}
+        for _ in range(SEEDS):
+            sub = rng.choice(d["tr"], nn, replace=False); St = view(d, sub); lv = lambda x: x * (d["L"][sub].mean(0) / x[sub].mean(0))[None]
+            preds["ours"].append(lv(fit_predict("ours", stack([St, SRC]), T)))                    # sources + n target rows
+            preds["src_plus_n_w10"].append(lv(fit_predict("ours", stack([St, SRC], [10.0, 1.0]), T)))
+            preds["target_only"].append(fit_predict("ours", St, T))
+            preds["transfer_level_n"].append(lv(tk["transfer_same"]))
+        rC = evaluate(d, preds, ev); out["plus_n"][str(nn)] = rC; show(f"n={nn:<3} target labels: ours = sources + n", rC)
+    # ---- (4) why: share of log-length variance that is between pools (per route), and whether routes agree on which pools are long
+    pools_ = [POOL] + allo; Ys = [np.log(d["L"][d["tr"]])] + [cache[p][0]["Y"] for p in allo]
+    allY = np.concatenate(Ys); between = [float(np.var(np.concatenate([np.full(len(y_), y_[:, k].mean()) for y_ in Ys])) / np.var(allY[:, k])) for k in range(d["M"])]
+    means = np.array([y_.mean(0) for y_ in Ys]); cc = np.corrcoef(means.T)
+    out["why"] = dict(pools=pools_, between_pool_share=between, pool_route_mean_loglen=means.tolist(),
+                      mean_cross_route_corr_of_pool_means=float(cc[np.triu_indices(d["M"], 1)].mean()))
+    print(f"  why: between-pool share of log-length variance per route {[round(x, 2) for x in between]}; mean cross-route correlation of pool means "
+          f"{out['why']['mean_cross_route_corr_of_pool_means']:.2f}", flush=True)
 elif MODE == "fulltransfer":
     # a whole router moved to a new benchmark: success AND cost estimators trained on other pools; every choice (C, nn, D, K, Platt)
     # made on the SOURCE pools' calibration splits, so no target label is used except in the level-from-10 variant (cost level only)

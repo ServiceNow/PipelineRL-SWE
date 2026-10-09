@@ -15,7 +15,9 @@ Configurations chosen on CALIBRATION per k (mean over held-out routes and draws)
 (D, K) in {1, 5} x {5, 10, 20}; knn nn in {1, 3, 5, 10} (<= k). zr's best-on-test configuration is reported as an upper bound.
 Metric: cost saved at matched accuracy vs the FULL pool priced at training-median length (fixed reference; same as before);
 intervals for ours - arm: paired bootstrap over test problems (200 resamples), resample b paired with anchor draw b mod 20.
-Usage: REASON_ROOT=.../reason_pinned RESULT_TAG=_pinned OUT_DIR=... python onboard_compare.py LCB|Omni|MMLU-Pro|SuperGPQA|BBEH
+HOLD=groups: hold out a whole MODEL at a time (gpt-oss-20b low+medium, gpt-oss-120b medium+high, deepseek-v4-flash), so no
+sibling effort of the new model stays in the pool; all its routes are onboarded from the same k problems.
+Usage: [HOLD=groups] REASON_ROOT=.../reason_pinned RESULT_TAG=_pinned OUT_DIR=... python onboard_compare.py LCB|Omni|MMLU-Pro|SuperGPQA|BBEH
 """
 import json, os, sys
 from pathlib import Path
@@ -51,20 +53,26 @@ def gain(Pm, C, ii, H0):
     return 1 - float(np.exp(np.nanmean(np.log([cost_at(H, x) / cost_at(H0, x) for x in T]))))
 
 
-def put(h, ph, ch):
-    Pm, C = P.copy(), C_full.copy(); Pm[:, h] = np.clip(ph, 1e-4, 1 - 1e-4); C[:, h] = ch; return Pm, C
+def put(G, pc):
+    """G: held-out routes; pc = (P cols [N, |G|], C cols [N, |G|])"""
+    Pm, C = P.copy(), C_full.copy(); Pm[:, G] = np.clip(pc[0], 1e-4, 1 - 1e-4); C[:, G] = pc[1]; return Pm, C
 
 
+# HOLD=groups: hold out a whole MODEL (both efforts of a gpt-oss size) so no sibling route stays in the pool; default: one route at a time
+GROUPS = ([[slots.index(x) for x in g] for g in (["oss20lo", "oss20md"], ["oss120md", "oss120hi"], ["dsv4f"])]
+          if os.environ.get("HOLD") == "groups" else [[h] for h in range(M)])
+GN = ["+".join(slots[h] for h in G) for G in GROUPS]
+stackc = lambda lst: (np.stack([a for a, _ in lst], 1), np.stack([b for _, b in lst], 1))
 H0_te, H0_ca = curve(P, C_med, ev), curve(P, C_med, ca)
 full = gain(P, C_full, ev, H0_te)
 print(f"===== onboarding {POOL}: test n={len(ev)}, calibration n={len(ca)}, train n={len(tr)}; all routes on full readouts {full*100:+.1f}% "
-      f"vs median", flush=True)
+      f"vs median; held out: {GN}", flush=True)
 CFG_ZR = [(D, K) for D in (1, 5) for K in (5, 10, 20)]
-# per (h, k): list over draws of {arm: (p_h, c_h)}; zr arms keep every configuration so calibration can choose
+# per (group, k): list over draws of {arm: (P cols, C cols)}; zr arms keep every configuration so calibration can choose
 cols, dopt, without = {}, {}, {}
-for h in range(M):
-    others = [m for m in range(M) if m != h]; trh = tr[n[tr, h] > 0]
-    Pw, Cw = P.copy(), C_full.copy(); Pw[:, h] = 1e-4; Cw[:, h] = 1e9; without[slots[h]] = gain(Pw, Cw, ev, H0_te)
+for gi, G in enumerate(GROUPS):
+    others = [m for m in range(M) if m not in G]; trh = tr[(n[tr][:, G] > 0).all(1)]
+    Pw, Cw = P.copy(), C_full.copy(); Pw[:, G] = 1e-4; Cw[:, G] = 1e9; without[GN[gi]] = gain(Pw, Cw, ev, H0_te)
     lvl, dbar = LT[:, others].mean(1), lg[:, others].mean(1)
     lat = {}
     for D in (1, 5):
@@ -76,25 +84,33 @@ for h in range(M):
         lat[D] = (A, B, bins, trh[np.argsort(-fisher)])
 
     def zr_cols(an, D):
-        A, B, bins, _ = lat[D]; th_ = fit_theta(A[an], B[an], succ[an, h], n[an, h], D); ph = sig((A * (th_[None] - B)).sum(1)); o = {}
-        for K, bn in bins.items():
-            tab = np.array([L[an, h][bn[an] == j].mean() if (bn[an] == j).any() else L[an, h].mean() for j in range(K)])
-            o[(D, K)] = (ph, I[:, h] * rates[h, 0] + tab[bn] * rates[h, 1])
-        return o
+        A, B, bins, _ = lat[D]; per = {cfg: [] for cfg in [(D, K) for K in bins]}
+        for h in G:
+            th_ = fit_theta(A[an], B[an], succ[an, h], n[an, h], D); ph = sig((A * (th_[None] - B)).sum(1))
+            for K, bn in bins.items():
+                tab = np.array([L[an, h][bn[an] == j].mean() if (bn[an] == j).any() else L[an, h].mean() for j in range(K)])
+                per[(D, K)].append((ph, I[:, h] * rates[h, 0] + tab[bn] * rates[h, 1]))
+        return {cfg: stackc(v_) for cfg, v_ in per.items()}
 
     def ours_cols(an):
-        off = np.mean(np.log(L[an, h]) - lvl[an]); sm = np.mean(np.exp(np.log(L[an, h]) - (lvl[an] + off)))
-        yk = np.concatenate([t["final_outcome"][i, h][v[i, h]] for i in an]).astype(int); Xk = np.repeat(dbar[an], n[an, h].astype(int))
-        ph = LogisticRegression(C=1.0).fit(Xk[:, None], yk).predict_proba(dbar[:, None])[:, 1] if len(set(yk)) == 2 else np.full(len(ids), yk.mean())
-        return ph, I[:, h] * rates[h, 0] + np.exp(lvl + off) * sm * rates[h, 1]
+        o = []
+        for h in G:
+            off = np.mean(np.log(L[an, h]) - lvl[an]); sm = np.mean(np.exp(np.log(L[an, h]) - (lvl[an] + off)))
+            yk = np.concatenate([t["final_outcome"][i, h][v[i, h]] for i in an]).astype(int); Xk = np.repeat(dbar[an], n[an, h].astype(int))
+            ph = LogisticRegression(C=1.0).fit(Xk[:, None], yk).predict_proba(dbar[:, None])[:, 1] if len(set(yk)) == 2 else np.full(len(ids), yk.mean())
+            o.append((ph, I[:, h] * rates[h, 0] + np.exp(lvl + off) * sm * rates[h, 1]))
+        return stackc(o)
 
-    rng = np.random.default_rng(1000 + h)
+    rng = np.random.default_rng(1000 + gi)
     for k in KS:
         draws = []
         for _ in range(NDRAW):
             an = rng.choice(trh, k, replace=False); o = {"ours": ours_cols(an)}
-            yk = np.concatenate([t["final_outcome"][i, h][v[i, h]] for i in an]).astype(int)
-            o["naive"] = (np.full(len(ids), np.clip(yk.mean(), .02, .98)), I[:, h] * rates[h, 0] + np.median(L[an, h]) * rates[h, 1])
+            nv = []
+            for h in G:
+                yk = np.concatenate([t["final_outcome"][i, h][v[i, h]] for i in an]).astype(int)
+                nv.append((np.full(len(ids), np.clip(yk.mean(), .02, .98)), I[:, h] * rates[h, 0] + np.median(L[an, h]) * rates[h, 1]))
+            o["naive"] = stackc(nv)
             for D in (1, 5):
                 for cfg, pc in zr_cols(an, D).items():
                     o[("zr",) + cfg] = pc
@@ -102,19 +118,19 @@ for h in range(M):
             for nn in (1, 3, 5, 10):
                 if nn <= k:
                     nb = an[order[:, :nn]]
-                    o[("knn", nn)] = (np.clip(q[nb, h].mean(1), .02, .98), I[:, h] * rates[h, 0] + L[nb, h].mean(1) * rates[h, 1])
+                    o[("knn", nn)] = stackc([(np.clip(q[nb, h].mean(1), .02, .98), I[:, h] * rates[h, 0] + L[nb, h].mean(1) * rates[h, 1]) for h in G])
             draws.append(o)
-        cols[(h, k)] = draws
-        dopt[(h, k)] = {("zr-dopt",) + cfg: pc for D in (1, 5) for cfg, pc in zr_cols(lat[D][3][:k], D).items()}
-        dopt[(h, k)].update({("ours-dopt", D): ours_cols(lat[D][3][:k]) for D in (1, 5)})     # ours on the SAME selected anchors
-    print(f"  prepared held-out {slots[h]} (without it: {without[slots[h]]*100:+.1f}%)", flush=True)
+        cols[(gi, k)] = draws
+        dopt[(gi, k)] = {("zr-dopt",) + cfg: pc for D in (1, 5) for cfg, pc in zr_cols(lat[D][3][:k], D).items()}
+        dopt[(gi, k)].update({("ours-dopt", D): ours_cols(lat[D][3][:k]) for D in (1, 5)})     # ours on the SAME selected anchors
+    print(f"  prepared held-out {GN[gi]} (without it: {without[GN[gi]]*100:+.1f}%)", flush=True)
 
 # ---- choose configurations on calibration, per k
 chosen = {}
 for k in KS:
-    zr_c = {cfg: np.nanmean([gain(*put(h, *d[("zr",) + cfg]), ca, H0_ca) for h in range(M) for d in cols[(h, k)]]) for cfg in CFG_ZR}
-    dp_c = {cfg: np.nanmean([gain(*put(h, *dopt[(h, k)][("zr-dopt",) + cfg]), ca, H0_ca) for h in range(M)]) for cfg in CFG_ZR}
-    kn_c = {nn: np.nanmean([gain(*put(h, *d[("knn", nn)]), ca, H0_ca) for h in range(M) for d in cols[(h, k)]]) for nn in (1, 3, 5, 10) if nn <= k}
+    zr_c = {cfg: np.nanmean([gain(*put(G, d[("zr",) + cfg]), ca, H0_ca) for h, G in enumerate(GROUPS) for d in cols[(h, k)]]) for cfg in CFG_ZR}
+    dp_c = {cfg: np.nanmean([gain(*put(G, dopt[(h, k)][("zr-dopt",) + cfg]), ca, H0_ca) for h, G in enumerate(GROUPS)]) for cfg in CFG_ZR}
+    kn_c = {nn: np.nanmean([gain(*put(G, d[("knn", nn)]), ca, H0_ca) for h, G in enumerate(GROUPS) for d in cols[(h, k)]]) for nn in (1, 3, 5, 10) if nn <= k}
     chosen[k] = {"zr": max(zr_c, key=zr_c.get), "zr-dopt": max(dp_c, key=dp_c.get), "knn": max(kn_c, key=kn_c.get)}
     print(f"  k={k}: calibration picks zr D,K={chosen[k]['zr']}  zr-dopt D,K={chosen[k]['zr-dopt']}  knn nn={chosen[k]['knn']}", flush=True)
 
@@ -126,21 +142,22 @@ def arms_of(h, k, j):
 
 
 ARMS = ["ours", "zr", "zr-dopt", "knn", "naive", "ours-dopt"]
-res = {"pool": POOL, "n_test": int(len(ev)), "n_cal": int(len(ca)), "routes": slots, "full": full, "without": without, "by_k": {}}
+res = {"pool": POOL, "n_test": int(len(ev)), "n_cal": int(len(ca)), "routes": slots, "held_out": GN, "full": full, "without": without, "by_k": {}}
 rb = np.random.default_rng(0); BS = [ev[rb.integers(0, len(ev), len(ev))] for _ in range(NBOOT)]; H0_bs = [curve(P, C_med, ii) for ii in BS]
 for k in KS:
-    pt_ = {a: np.array([[gain(*put(h, *arms_of(h, k, j)[a]), ev, H0_te) for j in range(NDRAW)] for h in range(M)]) for a in ARMS}
-    zr_best = max(np.nanmean([[gain(*put(h, *cols[(h, k)][j][("zr",) + cfg]), ev, H0_te) for j in range(NDRAW)] for h in range(M)]) for cfg in CFG_ZR)
-    bs = {a: np.array([[gain(*put(h, *arms_of(h, k, b % NDRAW)[a]), ii, H0b) for h in range(M)] for b, (ii, H0b) in enumerate(zip(BS, H0_bs))])
+    NG = len(GROUPS)
+    pt_ = {a: np.array([[gain(*put(G, arms_of(h, k, j)[a]), ev, H0_te) for j in range(NDRAW)] for h, G in enumerate(GROUPS)]) for a in ARMS}
+    zr_best = max(np.nanmean([[gain(*put(G, cols[(h, k)][j][("zr",) + cfg]), ev, H0_te) for j in range(NDRAW)] for h, G in enumerate(GROUPS)]) for cfg in CFG_ZR)
+    bs = {a: np.array([[gain(*put(G, arms_of(h, k, b % NDRAW)[a]), ii, H0b) for h, G in enumerate(GROUPS)] for b, (ii, H0b) in enumerate(zip(BS, H0_bs))])
           for a in ARMS}
     row = {"chosen": {a: list(c) if isinstance(c, tuple) else c for a, c in chosen[k].items()}, "zr_best_on_test": float(zr_best), "arms": {}}
     for a in ARMS:
-        r_ = dict(mean=float(np.nanmean(pt_[a])), by_route={slots[h]: float(np.nanmean(pt_[a][h])) for h in range(M)},
+        r_ = dict(mean=float(np.nanmean(pt_[a])), by_route={GN[h]: float(np.nanmean(pt_[a][h])) for h in range(NG)},
                   sd_over_draws=float(np.nanstd(np.nanmean(pt_[a], 0))))
         if a != "ours":
             dd = np.nanmean(bs["ours"] - bs[a], 1) * 100
             r_["ours_minus_it"] = [float(np.nanmean(pt_["ours"] - pt_[a]) * 100), *map(float, np.nanpercentile(dd, [2.5, 97.5]))]
-            r_["ours_minus_it_by_route"] = {slots[h]: float(np.nanmean(pt_["ours"][h] - pt_[a][h]) * 100) for h in range(M)}
+            r_["ours_minus_it_by_route"] = {GN[h]: float(np.nanmean(pt_["ours"][h] - pt_[a][h]) * 100) for h in range(NG)}
         row["arms"][a] = r_
     dd = np.nanmean(bs["ours-dopt"] - bs["zr-dopt"], 1) * 100
     row["oursdopt_minus_zrdopt"] = [float(np.nanmean(pt_["ours-dopt"] - pt_["zr-dopt"]) * 100), *map(float, np.nanpercentile(dd, [2.5, 97.5]))]
@@ -153,5 +170,5 @@ for k in KS:
     m_, lo_, hi_ = row["oursdopt_minus_zrdopt"]
     print(f"        same selected anchors: ours-dopt - zr-dopt {m_:+5.1f} pt [{lo_:+.1f}, {hi_:+.1f}]", flush=True)
 out_dir = Path(os.environ.get("OUT_DIR", Path(__file__).parent))
-json.dump(res, open(out_dir / f"onboard_compare_{POOL.replace('-', '').lower()}{os.environ.get('RESULT_TAG', '')}.json", "w"), indent=1, default=float)
+json.dump(res, open(out_dir / f"onboard_compare_{POOL.replace('-', '').lower()}{'_groups' if os.environ.get('HOLD') == 'groups' else ''}{os.environ.get('RESULT_TAG', '')}.json", "w"), indent=1, default=float)
 print("DONE", flush=True)
