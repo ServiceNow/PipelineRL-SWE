@@ -1,7 +1,8 @@
 """Headroom x capture map (TMLR sec:when): per pool, x = headroom (oracle per-query cost vs median), y = cost saved vs median by our
 readouts (filled) and by the best external estimator on that pool (hollow: mean, prompt GBM, MixLLM-style, ZeroRouter); dotted line =
 full capture. Pinned, billed, test splits. Reads analysis/cost_headroom/{pool_baselines_<P>,fresh_baselines}_pinned.json; Omni-MATH /
-MMLU-Pro / LCB headroom from headroom_routes (NEW_PATH 4.A.60), since those suite outputs have no oracle arm. Usage: python make_capture_fig.py
+MMLU-Pro / LCB headroom from headroom_routes (NEW_PATH 4.A.60), since those suite outputs have no oracle arm. Triangles: five
+non-reasoning routes on the same LCB / Omni-MATH / MMLU-Pro test problems (nonreason_compare_*_pinned.json, 4.A.71). Usage: python make_capture_fig.py
 """
 import json
 from pathlib import Path
@@ -15,7 +16,7 @@ NAMES = {"LCB": "LiveCodeBench", "APPS": "APPS", "BCB": "BigCodeBench", "CC": "C
          "MMLU-Pro": "MMLU-Pro", "SuperGPQA": "SuperGPQA", "BBEH": "BBEH"}
 HEADROOM_FRESH = {"Omni": .555, "MMLU-Pro": .595, "LCB": .453}   # suites without an oracle arm
 EXTERNAL = ("mean", "gbm", "mixllm", "zerorouter")
-OFF = {"AIME": (-24, 3), "APPS": (4, -2), "SuperGPQA": (5, -8), "MMLU-Pro": (4, 2), "Omni": (-14, 5), "LCB": (-62, 2), "BBEH": (-30, 2)}
+OFF = {"AIME": (-24, 3), "APPS": (4, -2), "SuperGPQA": (5, -8), "MMLU-Pro": (4, 2), "Omni": (-14, 5), "LCB": (-62, -8), "BBEH": (-30, 2), "CC": (4, -8), "BCB": (4, -8)}
 rows = {}
 for p in ("LCB", "APPS", "AIME", "BCB", "CC", "SuperGPQA", "BBEH"):
     rows[p] = json.load(open(A / f"pool_baselines_{p}_pinned.json"))[p]
@@ -31,6 +32,14 @@ for p, r in rows.items():
     ax.scatter([h], [best], s=16, facecolors="white", edgecolors=EXT, lw=.9, zorder=2)
     ax.scatter([h], [o], s=18, color=OURS, zorder=3)
     ax.annotate(NAMES[p], (h, o), xytext=OFF.get(p, (4, 2)), textcoords="offset points", fontsize=6)
+NR = Path("/mnt/llmd/results/exps/aristides/reason/reason_pinned_logs")      # non-reasoning routes on the same problems (NEW_PATH 4.A.71)
+OFFNR = {"lcb": (4, -6), "omni500": (5, 1), "mmlupro": (4, -2)}
+for ds, nm in (("lcb", "LCB"), ("omni500", "Omni-MATH"), ("mmlupro", "MMLU-Pro")):
+    r = json.load(open(NR / f"nonreason_compare_{ds}_pinned.json"))["routing"]["nonreasoning"]
+    h, o = r["headroom"][0] * 100, r["ours"][0] * 100
+    ax.scatter([h], [o], s=20, marker="^", facecolors="white", edgecolors=OURS, lw=.9, zorder=3)
+    ax.annotate(f"{nm}, non-reasoning", (h, o), xytext=OFFNR[ds], textcoords="offset points", fontsize=5.5, color=OURS)
+ax.scatter([], [], s=20, marker="^", facecolors="white", edgecolors=OURS, lw=.9, label="ours, non-reasoning routes")
 ax.scatter([], [], s=18, color=OURS, label="our readouts"); ax.scatter([], [], s=16, facecolors="white", edgecolors=EXT, label="best external estimator")
 ax.legend(frameon=False, fontsize=6, loc="upper left"); ax.set_xlim(0, 72); ax.set_ylim(-5, 45)
 ax.set_xlabel("headroom: perfect per-query cost vs median (%)"); ax.set_ylabel("cost saved vs median (%)")
