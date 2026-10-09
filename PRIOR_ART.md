@@ -459,3 +459,15 @@ routing rule, with its value measured at matched spend against the median-length
     -> Track A is a direct counterpoint for REASONING models without a verifier (30-45% cheaper on LCB).
   * No resampling of the same model, no priced/imperfect verifier, no choice of test-writer, no abstention
     -> Track B extends their framework to post-hoc quality that is priced, imperfect and chosen.
+
+### 7.2 Re-sweep 2026-10-09 (cross-model length from a foreign prefill): still not found
+- New own-model length predictors since 7: OUTLETS (2609.01068): an EAGLE-3-style draft decoder + regression head reading the FROZEN
+  TARGET's own multi-layer hidden states; trained per target (Llama-3.2-1B / 3.1-8B, Qwen3-30B-A3B); serving only (instance routing
+  among replicas of ONE model + SJF; P99 short-request latency -34.8%); no cross-model prediction. ProD-M / ProD-D (2604.07931): robust
+  median / distributional own-length targets. Length Value Model (2604.27039): token-level own-length value pretraining.
+- Cross-model, routing, cost-aware but from TEXT or retrieval: SCOPE (2601.22323), MixLLM (2502.18482), ZeroRouter (2601.06220),
+  latency routing (2607.18253), Token-Budget-Aware Pool Routing (2604.09613: input-side token budgets, pools of backends).
+- Unchanged: the prefill router (2603.20895) is the only foreign-prefill router and prices by median length; SCX (2609.02292) reads
+  task-level "expected output length" from a decoder KV cache, not per candidate model. Our cell (one small foreign prefill -> every
+  candidate model's per-query length, inside the routing rule, valued vs the median proxy; plus transfer / onboarding / work vs
+  difficulty) remains unclaimed. Re-read SCX before submission.
