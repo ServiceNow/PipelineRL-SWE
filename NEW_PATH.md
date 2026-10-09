@@ -2268,3 +2268,20 @@ Smoke checks: LCB labels n=all reproduces ours 33.7 / from-success 34.4 / median
 - `fit_timing.py LCB|MMLU-Pro`: wall-clock fit time and configs searched, ours vs prefill-router pipeline, ZeroRouter, MixLLM, GBM. eai fittime_*.
 - `BILLED=1 budget_cap.py`: per-query budgets at billed rates (draft numbers were list prices). eai budgetbilled.
 Logs reason_pinned_logs/{costgen_cgfull_*,fit_timing_*,budget_billed}.txt.
+- 4.A.74 RESULTS (2026-10-09 13:10 ET). FULL TRANSFER, zero-shot, same-domain sources; saving vs the target's in-domain median rule
+  (ours / in-domain ours / prefill-router rule transferred / best external transferred; transferred success AUC ours vs target readouts):
+  LCB 32.1 / 33.7 / 2.0 / 7.8 MixLLM (AUC .65 vs .83); MMLU-Pro 27.3 / 28.8 / -1.4 / 17.2 kNN (.66 vs .72); AIME 14.2 / 15.7 / -1.6 /
+  6.8 kNN (.67 vs .79); APPS 21.7 / 12.8 / -0.7 / 11.0 MixLLM (.81 vs .83); SuperGPQA 19.0 / 27.6 / -23.2 / 6.0 (.58 vs .57); BBEH 7.3 /
+  26.1 / -21.0 / -6.2 (.62 vs .77); Omni500 8.1 / 18.2 / -20.0 / 4.3 (.84 vs .85; test 150); BCB 17.6 / 6.3 / 5.7 / 12.0; CC 12.3 / 4.7 /
+  3.6 / 9.7 ZR. Ours - every arm significant on LCB, MMLU-Pro, AIME, BBEH; most arms on APPS, SuperGPQA. All-other sources: similar or
+  a few points lower (BBEH -5.0, SuperGPQA 10.0). Level from 10 target problems does not help (cost level transfers well enough).
+  => A whole router transfers to a new benchmark with no target labels and keeps most of its saving where the in-domain router works;
+  the prefill-router rule (median pricing) collapses under transfer (-23..+6), so the transferred COST readout is what carries it, even
+  though transferred success AUC drops (LCB .83 -> .65). BCB / CC transferred > in-domain (17.6 vs 6.3; 12.3 vs 4.7): UNEXPLAINED (more
+  pooled training data? cost-only transfer did not show it: 1.5 / 8.7) -- check before claiming.
+  FIT TIMING (16 CPU threads; excludes the shared 4B prefill pass): LCB / MMLU-Pro seconds -- ours success 170 / 163 (9 C x 5 routes +
+  Platt) + ours cost 1.8 / 2.5; prefill-router pipeline 438 + 5 / 435 + 7 (48 configs x 5 folds per route + 10-seed nets); ZeroRouter
+  6 / 7 (+ DistilBERT fine-tune, extra encoder pass); MixLLM 14 / 19 (+ jina pass); GBM 6 / 5. => ours fits 2.6x faster than the prefill
+  router's pipeline and needs no extra encoder pass, but is NOT the fastest to fit (the cheaper baselines are worse).
+  BUDGETS AT BILLED PRICES (hard cap; budget the rule needs / budget ours needs at matched accuracy, geo-mean): LCB constant 1.26 /
+  median 1.34 (list: 1.27 / 1.28); Omni (test 150) 1.31 / 1.08; MMLU-Pro (test 300) 1.18 / 1.06.
