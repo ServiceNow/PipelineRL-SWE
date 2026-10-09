@@ -2232,3 +2232,15 @@ chosen on calibration per k; zr best-on-test reported as an upper bound. Metric:
 test bootstrap (200) for ours - arm. eai onboardcmp_{lcb,omni,mmlupro,supergpqa,bbeh}; logs reason_pinned_logs/onboard_compare_*.txt.
 LCB smoke (2 draws): k=5 ours 20.6 / zr 5.5 / zr-dopt 30.4 / ours-dopt 30.6 / knn -10.1 / naive -34.3; k=20 ours 30.4 / zr 22.8 /
 zr-dopt 30.5 / ours-dopt 30.1. Anchor SELECTION matters as much as the estimator at k=5; on the same anchors ours ~ zr.
+
+### 4.A.73 Label curves and cross-pool transfer for every cost estimator (launched 2026-10-09 ~12:40 ET; `cost_generalization.py`)
+Cost-only comparison (all arms route with the target's own success readouts). Arms: ours (ridge on the 4B prefill), from-success
+(ablation), median, mean, GBM, MixLLM-style (jina-code -> MLP + RF + kNN), CARROT-style kNN (nn on calibration), ZeroRouter pricing
+(IRT + PCA-ridge latent, K bins; D, K on calibration). `labels POOL`: refit on n = 10/20/50/100/200/all training problems (5 seeds) on
+LCB, Omni, MMLU-Pro, SuperGPQA, BBEH. `transfer POOL`: trained on the OTHER pools (same domain; all other), applied to POOL's test set,
+zero-shot level or level from 10 target problems; Omni enters as the 500-problem Instruct-prefill pool (test 150). Baseline configs
+chosen on the target calibration set (generous to them). Paired bootstrap (200) for ours - arm, in points of saving vs median.
+eai cglabels_* (5) and cgxfer_* (9); logs reason_pinned_logs/costgen_*.txt.
+Smoke checks: LCB labels n=all reproduces ours 33.7 / from-success 34.4 / median 0.0; n=20: ours 29.4, GBM -3.3, MixLLM -3.9, kNN
+-5.1, ZeroRouter 15.7. APPS transfer from LCB+BCB+CC (zero-shot): ours 18.7 vs in-domain ours 12.8 (in-domain refit here; suite
+15.1), ZeroRouter 15.0, MixLLM 2.7, GBM -9.6; level from 10 APPS problems HURTS (ours 7.1): one draw, heavy-tailed lengths.
