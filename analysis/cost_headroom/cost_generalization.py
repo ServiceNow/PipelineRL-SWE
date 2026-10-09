@@ -30,7 +30,10 @@ bootstrap over test problems (200 resamples; resample b uses seed b mod 5).
                   pooled vs in-domain, C / Platt on the target calibration split); (b) sources + n target labels vs target-only n
                   (n = 10..200, 5 seeds; level matched to the n problems; unweighted and target rows x10); (c) why transfer works:
                   out-of-pool log-length R2 per route, between-pool share of log-length variance, cross-route agreement of pool means.
-Usage: REASON_ROOT=.../reason_pinned RESULT_TAG=_pinned OUT_DIR=... python cost_generalization.py labels|transfer|fulltransfer|pooled POOL
+  whytransfer POOL  why the dedicated readout transfers and pricing from success does not: in-domain vs transferred R2 and saving
+                  for ours / fromsuccess / one-feature mean-logit map / ORACLE difficulty map (true solve rate), raw and level-matched;
+                  success-space shift and log length by true-difficulty bin per pool.
+Usage: REASON_ROOT=.../reason_pinned RESULT_TAG=_pinned OUT_DIR=... python cost_generalization.py labels|transfer|fulltransfer|pooled|whytransfer POOL
 """
 import json, os, sys
 from pathlib import Path
@@ -139,6 +142,13 @@ def fit_predict(arm, S, T, cfg=None):
         fit = lambda k: RidgeCV(alphas=np.geomspace(1e1, 1e7, 13)).fit(Xs, S["Y"][:, k], sample_weight=S.get("w"))
     elif arm == "fromsuccess":
         Fs, Ft = np.c_[S["lg"], S["lg"] ** 2], np.c_[T["lg"], T["lg"] ** 2]
+        sc = StandardScaler().fit(Fs); Xs, Xt = sc.transform(Fs), sc.transform(Ft)
+        fit = lambda k: RidgeCV(alphas=np.geomspace(1e-3, 1e4, 15)).fit(Xs, S["Y"][:, k])
+    elif arm in ("oracle_diff", "meanlogit_lin"):
+        if arm == "oracle_diff":                  # leaky upper bound for difficulty-only pricing: the problem's true solve rate
+            Fs, Ft = (np.c_[v_["q"].mean(1), v_["q"].mean(1) ** 2] for v_ in (S, T))
+        else:                                     # one feature, linear: no extrapolating polynomial in success space
+            Fs, Ft = S["lg"].mean(1)[:, None], T["lg"].mean(1)[:, None]
         sc = StandardScaler().fit(Fs); Xs, Xt = sc.transform(Fs), sc.transform(Ft)
         fit = lambda k: RidgeCV(alphas=np.geomspace(1e-3, 1e4, 15)).fit(Xs, S["Y"][:, k])
     elif arm == "gbm":
@@ -296,6 +306,40 @@ if MODE == "labels":
                 preds[a].append(fit_predict(a, S, T, c.get(a)))
         res = evaluate(d, preds, d["ev"]); res["_configs"] = [{k: list(v) if isinstance(v, tuple) else v for k, v in c.items()} for c in cfgs]
         out["by_n"][str(nn)] = res; show(f"n={nn:<4} ({reps} seeds)", {a: r for a, r in res.items() if a != "_configs"})
+elif MODE == "whytransfer":
+    # Why does the dedicated readout transfer across benchmarks while pricing from success does not, if in-domain it is mostly
+    # difficulty? Cost-only (target success readouts). Arms in-domain (target train) and transferred (same-domain sources):
+    #   ours, fromsuccess (paper ablation: logits + squares), meanlogit_lin (one linear feature), oracle_diff (TRUE solve rate,
+    #   linear + square: upper bound for difficulty-only pricing). Each transferred arm raw and with its level matched to the
+    #   target TEST mean per route (leaky; isolates shape from level). Test log-length R2 per route.
+    # Diagnostics: per pool, mean predicted success logit and true solve rate (covariate shift in success space), and mean log
+    # length per route within true-difficulty bins (does the same difficulty mean the same length on every benchmark?).
+    assert POOL != "Omni", "uses Omni500"
+    d = load(POOL); N = len(d["ids"]); T = view(d, np.arange(N)); S_in = view(d, d["tr"]); ev = d["ev"]
+    dom = "coding" if POOL in DOMAIN["coding"] else "reasoning"; same = [p for p in DOMAIN[dom] if p != POOL]
+    print(f"===== why transfer, target {POOL} (test {len(ev)}); sources {same}", flush=True)
+    srcv = {}
+    for p in same:
+        s = load(p); srcv[p] = view(s, s["tr"]); del s
+    SRC = stack([srcv[p] for p in same]); ARMSW = ["ours", "fromsuccess", "meanlogit_lin", "oracle_diff"]
+    tk_in = {a: fit_predict(a, S_in, T) for a in ARMSW}; tk_tr = {a: fit_predict(a, SRC, T) for a in ARMSW}
+    lvl = lambda x: x * (d["L"][ev].mean(0) / x[ev].mean(0))[None]
+    preds = {f"{a}|in": [x] for a, x in tk_in.items()} | {f"{a}|xfer": [x] for a, x in tk_tr.items()} | {f"{a}|xfer_lvl": [lvl(x)] for a, x in tk_tr.items()}
+    preds = {"ours": preds.pop("ours|in")} | preds
+    r = evaluate(d, preds, ev); r2 = {a: r2_routes(d, x[0], ev) for a, x in preds.items()}
+    out["saving"] = r; out["r2"] = r2
+    for a in preds:
+        print(f"  {a:<20} saving {r[a]['vs_median']*100:+6.1f}   R2 per route " + " ".join(f"{x:+.2f}" for x in r2[a]), flush=True)
+    lg_ = lambda v_: float(v_["lg"].mean(1).mean()); qd = lambda v_: float(v_["q"].mean(1).mean())
+    diag = {p: dict(mean_logit=lg_(v_), sd_logit=float(v_["lg"].mean(1).std()), mean_true_rate=qd(v_)) for p, v_ in [(POOL, S_in)] + list(srcv.items())}
+    bins = [0, .2, .4, .6, .8, 1.01]; bl = {}
+    for p, v_ in [(POOL, S_in)] + list(srcv.items()):
+        dd = v_["q"].mean(1); bl[p] = [[float(v_["Y"][(dd >= lo) & (dd < hi), k].mean()) if ((dd >= lo) & (dd < hi)).sum() >= 5 else None
+                                       for lo, hi in zip(bins, bins[1:])] for k in range(d["M"])]
+    out["diag"] = diag; out["loglen_by_true_difficulty_bin"] = dict(bins=bins, routes=d["slots"], by_pool=bl)
+    print("  success-space shift (mean logit / sd / true solve rate): " + "  ".join(f"{p} {x['mean_logit']:+.2f}/{x['sd_logit']:.2f}/{x['mean_true_rate']:.2f}" for p, x in diag.items()), flush=True)
+    for k, rt in enumerate(d["slots"]):
+        print(f"  mean log length by true solve-rate bin {bins[:-1]} for {rt}: " + "  ".join(f"{p} " + " ".join("  -  " if x is None else f"{x:5.2f}" for x in bl[p][k]) for p in bl), flush=True)
 elif MODE == "pooled":
     # (2) pooled training: target train + other pools vs target train only; (3) transfer + n target labels vs target-only n;
     # (4) why transfer works: out-of-pool length R2 per route, and how much of log length is a pool-level effect
