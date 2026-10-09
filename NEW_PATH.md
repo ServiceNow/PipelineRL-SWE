@@ -2330,3 +2330,7 @@ Logs reason_pinned_logs/{costgen_cgfull_*,fit_timing_*,budget_billed}.txt.
   Daytona at concurrency 8 (plan-D labelling took ~24 min per 500 at concurrency 3). Guards $5 per generation job. swe_draw_patches.py
   now writes rows incrementally and has --budget-usd.
 - Ops note: `git push` hung because the SSH agent socket blocks; `SSH_AUTH_SOCK= git push` works (key on disk).
+- 4.A.76 health (first rows, 2026-10-09): every route on its pinned provider (SiliconFlow / Novita / DekaLLM / StreamLake), no fallbacks.
+  Cost per row: qw32 Omni 1.05 c (7/15 hit SiliconFlow's 24,575-token stop; route property, as on MMLU-Pro), glm47f Omni 0.38 c,
+  nemo120 MMLU-Pro 0.09 c, LCB 0.09-0.34 c; SWE dsv4f 0.10 c (3/96 API errors). Projected total ~$35 (guards $98). Omni / LCB jobs
+  run ~6-10 h at concurrency 12. TMLR draft updated (paper_tmlr, 4.A.71-75 written in; new sec:general; capture map with non-reasoning).
