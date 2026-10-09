@@ -2244,3 +2244,17 @@ eai cglabels_* (5) and cgxfer_* (9); logs reason_pinned_logs/costgen_*.txt.
 Smoke checks: LCB labels n=all reproduces ours 33.7 / from-success 34.4 / median 0.0; n=20: ours 29.4, GBM -3.3, MixLLM -3.9, kNN
 -5.1, ZeroRouter 15.7. APPS transfer from LCB+BCB+CC (zero-shot): ours 18.7 vs in-domain ours 12.8 (in-domain refit here; suite
 15.1), ZeroRouter 15.0, MixLLM 2.7, GBM -9.6; level from 10 APPS problems HURTS (ours 7.1): one draw, heavy-tailed lengths.
+- 4.A.72 RESULT (all 5 pools, 2026-10-09 ~12:35 ET). Mean over held-out routes, k=10 (ours / zr / knn; ours - zr [95% paired CI]):
+  LCB 29.0 / 17.3 / 13.7, +11.7 [+1.0, +27.2]; MMLU-Pro 25.3 / 14.5 / 9.6, +10.8 [+1.7, +27.3]; SuperGPQA 23.5 / 11.9 / 13.9, +11.6
+  [+4.8, +20.2]; Omni 28.6 / 24.1 / 21.3, +4.5 n.s.; BBEH 19.1 / 12.3 / 17.7, +6.8 n.s. k=50: LCB +7.6 [+3.0, +12.8], MMLU-Pro +7.2
+  [+1.9, +11.9], SuperGPQA +8.0 [+3.1, +16.1], Omni -0.7 n.s., BBEH +2.0 n.s. Same selected (Fisher) anchors, ours - zr: ties on LCB /
+  Omni / BBEH (|d| <= 2.5), ahead on MMLU-Pro (+2.0..+10.0) and SuperGPQA (k=50 +8.7 [+4.8, +11.6]). Selected anchors help both methods
+  equally on LCB / Omni. Gains concentrate on dsv4f (+15..+35 pt by route); the cheapest route (oss20lo) is slightly worse for ours.
+  => Onboarding beats ZeroRouter on 3 of 5 pools, never loses significantly; ties where length ~ difficulty (Omni, BBEH).
+- 4.A.73 RESULT (all 14 jobs). Label curves, ours vs median at n = 20 (external best at that n): LCB 24.7 (ZR 7.6), Omni 22.8 (ZR 9.3),
+  SuperGPQA 20.6 (kNN 7.4), MMLU-Pro 16.4 (kNN 10.7; n=100: ours 22.6 vs kNN 10.6, all CIs exclude 0), BBEH 10.6 (GBM 2.3; text estimators
+  catch up only at n >= 100: tie at full). Transfer, zero-shot from the same domain (ours / in-domain ours / best external):
+  LCB 30.2 / 33.7 / 15.5 MixLLM; MMLU-Pro 29.3 / 28.8 / 10.5 (all-other 29.0); AIME 13.2 / 15.7 / 2.5; SuperGPQA 17.5 / 27.6 / 10.8; BBEH
+  11.3 / 26.1 / 3.8 (20.2 with 10 target labels); APPS 18.7 / 12.8 / ZR 15.0 (tie); Omni500 15.6 / 18.2 / ZR 21.5 (n.s., test 150);
+  BCB / CC ~0 everywhere. Cost-from-success does NOT transfer (LCB -6.2, SuperGPQA -19.9, BBEH -16.9) although it ties in-domain:
+  the dedicated readout is what generalises across benchmarks. Caveat: cost-only transfer (target-trained success readouts).
