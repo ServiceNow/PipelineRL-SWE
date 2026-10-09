@@ -2184,9 +2184,28 @@ cost-from-success plateaus at ~6% and the dedicated readout needs 100-200 labels
 ### 4.A.68 Prefill-router success pipeline reimplementation (2026-10-09; `prefill_router_repro.py`, pinned)
 Their pipeline (per-target layer/pooling/PCA search by 5-fold CV over the upper half, SharedTrunkNet 10 seeds -> top 5) vs our linear
 readouts, same encoder and cost readout: LCB AUC .839 vs ours .857, log loss .354 vs .341, ours saves -0.1% [-7.7, 4.0] (tie);
-MMLU-Pro .714 vs .715, .499 vs .492, +1.1% [-1.0, 3.0] (tie). Omni: rerun (snapshot dir vanished mid-job). => The simpler linear readout
-on fixed layers matches the full pipeline.
+MMLU-Pro .714 vs .715, .499 vs .492, +1.1% [-1.0, 3.0] (tie); Omni (rerun) .842 vs ours .829, .476 vs .491, -2.2% [-5.7, 1.9] (tie, theirs
+slightly ahead). => The simpler linear readout on fixed layers matches the full pipeline within the intervals on all three.
 
 ### 4.A.69 Perfect-judge single-submission cascades vs one-shot routing (2026-10-09; `cascade_oracle.py`, pinned, billed)
 All 31 ordered plans, cheapest-first, judge = true outcome: our router saves 29.7% [19.6, 37.7] (LCB) and 31.9% [26.4, 37.3] (Omni)
 vs the perfect-judge cascade family; MMLU-Pro -0.8% [-6.1, 3.9] (tie: the cheapest route is cheap and solves 62%, so escalation is cheap).
+
+### 4.A.70 SuperGPQA + BIG-Bench Extra Hard full pools (2026-10-09; `hetero_suite.sh`, pinned dsv4f, gpt-oss unpinned; ~$13)
+1,000 problems each, draws 4/3/3/2/2 as the math pools, 16k cap; seed-0 55/15/30 split (test n 300; 298 BBEH with all routes valid).
+API errors 4-6% on gpt-oss-120b-high / 20b-medium (unpinned), excluded as invalid; dsv4f hits the cap on ~6% of BBEH draws (kept).
+- BBEH (test 298): cost R2 .57-.90. Ours vs median 26.5 [16.4, 34.3], headroom 41.8 (capture .63). Cost-from-success 0.0, difficulty
+  bins 8.5 n.s. => ours vs from-success +26.6 [17.8, 34.9], vs bins +19.8: the dedicated readout pays, like MMLU-Pro (screen +.40 held).
+  BUT text estimators read it too: MixLLM-style 28.0 vs median (ours vs it -2.2 n.s.), GBM 22.9 (ours +4.6 n.s.); ZeroRouter -0.8,
+  mean 0.0. (23 task families with very different formats: task type is visible in the text.) Label efficiency: from-success never
+  above 2%; dedicated 15% at n=10, 23.5% at 200. Prefill-router repro: ours +5.3 [-3.2, 14.1] (AUC .806 vs .801). Perfect-judge
+  cascades: ours saves 34.2 [19.7, 45.5]. Flat prices still 21.2%. Effort only (20b) 29.7 of 29.9 headroom; 120b-only -3.0.
+- SuperGPQA: running.
+
+### 4.A.71 Reasoning vs non-reasoning on the same problems (2026-10-09; `nonreason_compare.py`, pinned, billed)
+Billed $/M in/out fitted from usage_cost: ds4off .094/.177, llama8 .020/.040, qw30 .048/.193, llama70 .214/.500, qw235 .086/.350.
+PRELIMINARY (debug run, Omni, qw235 with only 59/275 training problems): reasoning headroom 55.5 / ours 34.8 (capture .63);
+non-reasoning headroom 42.3 / ours 7.3 [3.7, 10.4] (capture .17) / from-success 8.4; mixed 10-route pool headroom 55.2 / ours 17.7.
+Length spread is NOT small for the instruct routes: sd(log out) ds4off 1.08, llama8 1.47 (degenerate repetition to the cap: mean 3.9k vs
+median 0.7k, cost R2 -0.08), qw30 1.19, qw235 1.18 (Qwen3-2507 instruct writes 4-5k tokens of step-by-step), llama70 0.55; reasoning
+0.90-1.72. deepseek on vs off: acc .713 vs .567, mean out 19.7k vs 1.8k, corr(log out) .76. Final numbers after the qw235 resume.
