@@ -317,6 +317,8 @@ elif MODE == "whytransfer":
     assert POOL != "Omni", "uses Omni500"
     d = load(POOL); N = len(d["ids"]); T = view(d, np.arange(N)); S_in = view(d, d["tr"]); ev = d["ev"]
     dom = "coding" if POOL in DOMAIN["coding"] else "reasoning"; same = [p for p in DOMAIN[dom] if p != POOL]
+    if os.environ.get("SOURCES"):                     # override, e.g. LCB without BigCodeBench (flat difficulty -> length curve)
+        same = os.environ["SOURCES"].split(","); out["sources"] = same
     print(f"===== why transfer, target {POOL} (test {len(ev)}); sources {same}", flush=True)
     srcv = {}
     for p in same:
@@ -454,5 +456,5 @@ elif MODE == "transfer":
                           zero_shot=r0, level10=r1)
         show(f"{sname} ({len(S['X'])} source problems) zero-shot", r0); show(f"{sname} level from 10 target problems", r1)
 out_dir = Path(os.environ.get("OUT_DIR", Path(__file__).parent))
-json.dump(out, open(out_dir / f"cost_generalization_{MODE}_{POOL.replace('-', '').lower()}{os.environ.get('RESULT_TAG', '')}.json", "w"), indent=1, default=float)
+json.dump(out, open(out_dir / f"cost_generalization_{MODE}_{POOL.replace('-', '').lower()}{'_src_' + os.environ['SOURCES'].replace(',', '_').replace('-', '').lower() if os.environ.get('SOURCES') else ''}{os.environ.get('RESULT_TAG', '')}.json", "w"), indent=1, default=float)
 print("DONE", flush=True)
