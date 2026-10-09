@@ -2222,3 +2222,13 @@ LCB non-reasoning headroom comes from. Cost-from-success = dedicated on NR (diff
 lowers our saving (17.7 vs 34.8 Omni; 13.0 vs 30.6 MMLU-Pro); untested guess: cheap NR routes take the easy problems at near-constant cost.
 deepseek thinking on vs off: acc +2.8 (MMLU-Pro) / +14.6 (Omni) / +22.1 (LCB) pt for 13x / 11x / 33x the output; corr(log out) .66-.76
 (the same problems are long either way).
+
+### 4.A.72 Onboarding a new route, pinned and billed: ours vs ZeroRouter / kNN / naive (launched 2026-10-09 11:36 ET; `onboard_compare.py`)
+Supersedes the unpinned list-price 4.A.31 / 4.A.33. Hold out one route; the others keep full readouts in every arm; k = 5/10/20/50
+random training problems (20 draws, same anchors in every arm). Arms: ours (level + offset cost, logistic-in-shared-difficulty success),
+ZeroRouter (D-dim IRT on the other routes + PCA-ridge stage 2, theta from anchors, per-bin length), zr-dopt (their Fisher-selected
+anchors), ours-dopt (ours on the same selected anchors), CARROT-style kNN in the same PCA prefill space, naive. Configs (D, K; nn)
+chosen on calibration per k; zr best-on-test reported as an upper bound. Metric: saving vs the full pool at median pricing; paired
+test bootstrap (200) for ours - arm. eai onboardcmp_{lcb,omni,mmlupro,supergpqa,bbeh}; logs reason_pinned_logs/onboard_compare_*.txt.
+LCB smoke (2 draws): k=5 ours 20.6 / zr 5.5 / zr-dopt 30.4 / ours-dopt 30.6 / knn -10.1 / naive -34.3; k=20 ours 30.4 / zr 22.8 /
+zr-dopt 30.5 / ours-dopt 30.1. Anchor SELECTION matters as much as the estimator at k=5; on the same anchors ours ~ zr.
