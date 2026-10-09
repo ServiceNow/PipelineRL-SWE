@@ -2285,3 +2285,13 @@ Logs reason_pinned_logs/{costgen_cgfull_*,fit_timing_*,budget_billed}.txt.
   router's pipeline and needs no extra encoder pass, but is NOT the fastest to fit (the cheaper baselines are worse).
   BUDGETS AT BILLED PRICES (hard cap; budget the rule needs / budget ours needs at matched accuracy, geo-mean): LCB constant 1.26 /
   median 1.34 (list: 1.27 / 1.28); Omni (test 150) 1.31 / 1.08; MMLU-Pro (test 300) 1.18 / 1.06.
+
+### 4.A.75 Free checks on the generalisation story (launched 2026-10-09 13:54 ET; eai CPU)
+1. Whole-model onboarding (`HOLD=groups onboard_compare.py`): hold out gpt-oss-20b (low+medium), gpt-oss-120b (medium+high) or
+   deepseek-v4-flash, so no sibling effort stays in the pool. LCB smoke (2 draws): k=20 ours 29.7 vs ZR 18.9 (+10.7), held-out 20b
+   group is where ours is weakest at k=5. eai onbgrp_*; logs onboard_groups_*.txt.
+2-4. `cost_generalization.py pooled POOL` (9 pools): pooled training (target + other pools) vs in-domain, cost-only and full router;
+   which side transfers (source success x in-domain / source cost), with calibration (AUC, log loss, mean predicted vs true rate);
+   sources + n target labels vs target-only n; why transfer works (out-of-pool R2 per route, between-pool share of log-length variance,
+   cross-route agreement of pool means). BCB smoke: pooled cost 7.4 vs in-domain 6.3 (no anomaly in the cost side); transfer R2 -0.43..0.36
+   vs in-domain 0.48..0.71; between-pool share .24-.40, cross-route corr of pool means .84. eai cgpool_*; logs costgen_cgpool_*.txt.
