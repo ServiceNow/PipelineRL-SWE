@@ -2417,3 +2417,12 @@ Caveat: measured difficulty saturates (half of MMLU-Pro is solved by all five ro
 5. PAID refills, $1 guards each: Qwen3-235B non-reasoning training rows (concurrency 4) -> nonreason_compare Omni / MMLU-Pro rerun;
    BBEH / SuperGPQA gpt-oss API-error draws (concurrency 32) -> hetero_suite rerun (waits for jobs 2-3 that read those tensors).
    NOTE: these reruns overwrite the BBEH / SuperGPQA and non-reasoning numbers in the paper; recheck them afterwards.
+- 4.A.82 RESULTS (2) robustness bootstrap (drop = in-domain minus transferred saving; drop - ours' drop, positive = ours loses less):
+  vs cost-from-success: LCB +37.1 [+26.9, +46.0], SuperGPQA +30.5 [+16.2, +47.6], others n.s. (AIME -1.6, APPS +7.0, BBEH +1.8,
+  BCB +2.0, CC +0.6, MMLU-Pro +0.1, Omni500 +10.2 [-8.4, +24.4]); vs ZeroRouter pricing: LCB +21.0 [+11.7, +28.5], others n.s. except
+  SuperGPQA -17.4 [-35.6, -3.6] (ZR loses less there only because it loses money in-domain too: -13.7 -> -6.4). Ours' own drop is
+  significant on BBEH (14.8) and SuperGPQA (10.0). => "significantly more robust" holds on LCB (both) and SuperGPQA (vs from-success);
+  elsewhere ties. (3) worked_examples.md: corr(predicted, actual length residual beyond difficulty) .56-.92 by pool; MMLU-Pro by
+  subject predicted / actual: engineering +.95 / +.95 (x2.6 longer than difficulty implies), chemistry +.42 / +.43, physics +.25 / +.27;
+  psychology -.32 / -.43, history -.31 / -.32. Examples every route solves: multi-step engineering calculations predicted 5-7k tokens
+  (actual 2.4-5.6k) vs one-line facts / arithmetic predicted ~100-150 (actual 120-170).
