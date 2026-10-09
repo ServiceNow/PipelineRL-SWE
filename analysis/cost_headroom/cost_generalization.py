@@ -33,7 +33,9 @@ bootstrap over test problems (200 resamples; resample b uses seed b mod 5).
   whytransfer POOL  why the dedicated readout transfers and pricing from success does not: in-domain vs transferred R2 and saving
                   for ours / fromsuccess / one-feature mean-logit map / ORACLE difficulty map (true solve rate), raw and level-matched;
                   success-space shift and log length by true-difficulty bin per pool.
-Usage: REASON_ROOT=.../reason_pinned RESULT_TAG=_pinned OUT_DIR=... python cost_generalization.py labels|transfer|fulltransfer|pooled|whytransfer POOL
+  robust POOL     drop under transfer (in-domain minus transferred saving) per arm with paired bootstrap intervals, and each arm's drop
+                  minus ours (positive: ours loses less); ours / fromsuccess / zerorouter pricing.
+Usage: REASON_ROOT=.../reason_pinned RESULT_TAG=_pinned OUT_DIR=... python cost_generalization.py labels|transfer|fulltransfer|pooled|whytransfer|robust POOL
 """
 import json, os, sys
 from pathlib import Path
@@ -306,6 +308,31 @@ if MODE == "labels":
                 preds[a].append(fit_predict(a, S, T, c.get(a)))
         res = evaluate(d, preds, d["ev"]); res["_configs"] = [{k: list(v) if isinstance(v, tuple) else v for k, v in c.items()} for c in cfgs]
         out["by_n"][str(nn)] = res; show(f"n={nn:<4} ({reps} seeds)", {a: r for a, r in res.items() if a != "_configs"})
+elif MODE == "robust":
+    # Is ours MORE ROBUST under transfer? Cost-only (target success readouts), same-domain sources, configs on the target calibration
+    # split for both in-domain and transferred fits (as `transfer`). drop_a = saving in-domain - saving transferred, per arm, on the SAME
+    # bootstrap resample of test problems (300); report drop_a and drop_a - drop_ours (positive: ours loses less) with 95% intervals.
+    assert POOL != "Omni", "uses Omni500"
+    d = load(POOL); N = len(d["ids"]); T = view(d, np.arange(N)); ev = d["ev"]; Ca = view(d, d["ca"])
+    dom = "coding" if POOL in DOMAIN["coding"] else "reasoning"; same = [p for p in DOMAIN[dom] if p != POOL]
+    srcv = []
+    for p in same:
+        s = load(p); srcv.append(view(s, s["tr"])); del s
+    S_in, SRC = view(d, d["tr"]), stack(srcv); c_in, c_x = choose(d, S_in, Ca), choose(d, SRC, Ca); RA = ["ours", "fromsuccess", "zerorouter"]
+    tk = {(a, "in"): fit_predict(a, S_in, T, c_in.get(a)) for a in RA} | {(a, "x"): fit_predict(a, SRC, T, c_x.get(a)) for a in RA}
+    Cm = cost_of(d, np.repeat(d["med"][None], N, 0)); rb = np.random.default_rng(0)
+    BS = [ev] + [ev[rb.integers(0, len(ev), len(ev))] for _ in range(NBOOT)]
+    sv = np.array([[saved(curve(d, d["P"], cost_of(d, tk[k]), ii), H0) for k in tk] for ii in BS for H0 in [curve(d, d["P"], Cm, ii)]]) * 100
+    keys = list(tk); col = {k: j for j, k in enumerate(keys)}
+    drop = {a: sv[:, col[(a, "in")]] - sv[:, col[(a, "x")]] for a in RA}
+    ci = lambda x: [float(x[0]), *map(float, np.nanpercentile(x[1:], [2.5, 97.5]))]
+    out.update(sources=same, saving={f"{a}|{m}": ci(sv[:, col[(a, m)]]) for a, m in keys}, drop={a: ci(drop[a]) for a in RA},
+               drop_minus_ours={a: ci(drop[a] - drop["ours"]) for a in RA[1:]})
+    print(f"===== robustness {POOL} (test {len(ev)}; sources {same})", flush=True)
+    for a in RA:
+        print(f"  {a:<12} in {out['saving'][a + '|in'][0]:+6.1f}  transferred {out['saving'][a + '|x'][0]:+6.1f}  drop {out['drop'][a][0]:+6.1f} "
+              f"[{out['drop'][a][1]:+.1f}, {out['drop'][a][2]:+.1f}]"
+              + (f"   drop - ours' drop {out['drop_minus_ours'][a][0]:+6.1f} [{out['drop_minus_ours'][a][1]:+.1f}, {out['drop_minus_ours'][a][2]:+.1f}]" if a != "ours" else ""), flush=True)
 elif MODE == "whytransfer":
     # Why does the dedicated readout transfer across benchmarks while pricing from success does not, if in-domain it is mostly
     # difficulty? Cost-only (target success readouts). Arms in-domain (target train) and transferred (same-domain sources):

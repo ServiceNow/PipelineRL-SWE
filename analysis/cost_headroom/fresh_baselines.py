@@ -40,7 +40,8 @@ ORIG = {"LCB": ("pool_v2_tensors_5rung", "cost_preds_probe.jsonl", "/mnt/llmd/re
         "AIME": ("aime_tensors", "cost_preds_probe_instruct.jsonl", "/mnt/llmd/results/exps/aristides/reason/aime_probe/instruct.npz"),
         "CC": ("cc_tensors", "cost_preds_probe.jsonl", "/mnt/llmd/results/exps/aristides/reason/cc_pool/scout_prefill.npz"),
         "SuperGPQA": ("supergpqa_tensors", "cost_preds_probe_instruct.jsonl", "/mnt/llmd/results/exps/aristides/reason/supergpqa_probe/instruct.npz"),
-        "BBEH": ("bbeh_tensors", "cost_preds_probe_instruct.jsonl", "/mnt/llmd/results/exps/aristides/reason/bbeh_probe/instruct.npz")}
+        "BBEH": ("bbeh_tensors", "cost_preds_probe_instruct.jsonl", "/mnt/llmd/results/exps/aristides/reason/bbeh_probe/instruct.npz"),
+        "SWESmith": ("swesmith_v2_tensors", "cost_preds_probe_instruct.jsonl", "/mnt/llmd/results/exps/aristides/reason/swesmith_costhead/scout_prefill.npz")}
 POOL = sys.argv[sys.argv.index("--pool") + 1] if "--pool" in sys.argv else None
 out = {}
 for ds in ([POOL] if POOL else ("omni500", "mmlupro")):
