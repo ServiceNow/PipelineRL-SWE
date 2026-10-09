@@ -194,7 +194,7 @@ Given success readouts, where length tracks difficulty a cost readout needs few 
 At matched accuracy in the middle of the band, 31--66\% of problems change route relative to median pricing. The dominant changes are between gpt-oss-20b-low and deepseek-v4-flash: problems predicted to be short move to the more accurate deepseek-v4-flash (19--38\% of problems), and problems predicted to be long move to the cheap route (9--18\%).
 
 \section{When it works and when it does not}\label{sec:when}
-Per-query cost pays under two conditions: (a) output length varies within a route by more than prices differ between routes, which creates headroom, and (b) that variation can be read from the prompt, which lets an estimator capture it. Each of our two failures violates one condition, and neither is specific to our estimator.
+Per-query cost pays under two conditions: (a) output length varies within a route by more than prices differ between routes, which creates headroom, and (b) that variation can be read from the prompt, which lets an estimator capture it. Each of our two failures violates one condition, and neither is specific to our estimator (\cref{fig:capture}).
 
 \paragraph{Little headroom: BigCodeBench.}
 BigCodeBench tasks are library-usage functions with short, similar solutions; perfect cost knowledge saves only 12.6\% [4.1, 19.0]. No estimator's saving relative to median pricing has an interval excluding zero: ours 6.3 [$-$1.6, 11.8], ZeroRouter 8.8 [$-$12.5, 19.6], MixLLM-style 2.8, cost-from-success 3.1, prompt features 0.2. Here length is the least tied to difficulty of any pool (the prefill-only share of length variance is largest on BigCodeBench), but there is little to gain from reading it.
@@ -202,11 +202,28 @@ BigCodeBench tasks are library-usage functions with short, similar solutions; pe
 \paragraph{Illegible headroom: CodeContests.}
 CodeContests has as much headroom as APPS (34.5\% [29.0, 42.0]), but no estimator captures more than about a quarter of it: ZeroRouter saves 9.3\% [1.1, 20.0], difficulty bins 5.6\% [1.2, 14.6], ours 6.3\% [$-$0.2, 17.0], and the rest are within noise of zero or below it. Length again tracks difficulty, but difficulty itself is hard to read from these prompts: the prefill misses .11--.18 of the length $R^2$ that empirical difficulty explains, against at most .07 on LCB and Omni-MATH.
 
-\todo{Figure: x = headroom, y = capture, one point per pool (7 + SuperGPQA, BBEH + non-reasoning pools), marker = domain; plus per pool the readable share of length variance. From pool\_baselines\_*\_pinned.json and fresh\_baselines\_pinned.json.}
+\begin{figure}[t]
+\centering
+\includegraphics[width=.55\linewidth]{figures/capture_map.pdf}
+\caption{\textbf{Headroom and capture.} Per pool: the saving of perfect per-query cost knowledge over median pricing (x) against the saving of our readouts (filled) and of the best external estimator on that pool (hollow; mean length, prompt features, MixLLM-style embeddings or ZeroRouter). Billed costs, test splits, deepseek-v4-flash pinned. Where headroom is large and length is legible, the readouts capture half or more of it; on BigCodeBench there is little to capture, and on CodeContests no estimator captures it.}
+\label{fig:capture}
+\end{figure}
+\todo{Add the non-reasoning pools to \cref{fig:capture} when they land.}
 \todo{Remaining negatives to place here once rerun on one protocol: RouterBench chat (little length variation), agentic SWE (price gaps between models dominate; \cref{sec:swe}), non-reasoning routes (running).}
 
 \section{Software engineering}\label{sec:swe}
-\todo{SWE back in: (a) one-shot patch routing on SWE-Smith with real Daytona labels; (b) agentic cost from public SWE-rebench trajectories (13 agents x 5 runs; variance shares model 74 / task 15; issue-text prefill R$^2$ .29, partial-trajectory read .28 own / .16 cross-model); (c) the verification measurement (cheap cross-model test writer 33--42\% cheaper than self-verification; NEW\_PATH 4.B). Frame as where per-query cost is hardest and why.}
+Software engineering is where per-query cost is hardest to use. We study it in two regimes, one-shot patch generation and agents.
+
+\paragraph{One-shot patches.}
+On 500 SWE-Smith instances~\citep{swesmith}, each of the five routes writes one patch per draw, labelled by executing the repository's tests. Pass rates are low and close together (23--36\%), and the success readouts are nearly flat. Per-query cost knowledge is worth 14.2\% [$-$2.1, 29.6] on the 150 test instances, and our readouts save 7.5\% [$-$5.5, 20.0]: with little to choose between routes on correctness, knowing their costs helps little, even though length is predictable for the gpt-oss routes (log-length $R^2$ .49--.72; .20 for deepseek-v4-flash).
+
+\paragraph{Agents: cost is real, varies by task and is stable.}
+Public SWE-rebench trajectories~\citep{swerebench} give 111 tasks run five times by each of 13 models in one scaffold. Across models, agentic cost is dominated by the model: of the variance of log cost, 74\% is between models, 15\% between tasks, 6\% their interaction and 4\% run to run. Within a model, however, per-task cost spans 2.7--9.0$\times$ between the 10th and 90th percentile, and it is stable across runs (intraclass correlation .69--.92). Whether knowing it pays depends on the price gaps between the routed models, as in \cref{sec:when}: among all 13 models, whose prices per run span about 190$\times$, per-task cost knowledge is worth 8.5\% [$-$5.0, 17.8] (one-shot routing, success and cost from three runs, scored on the other two); among the seven open-weight models, whose prices span about 10$\times$, it is worth 25.7\% [6.3, 40.6], as much as on the reasoning pools.
+
+\paragraph{Agents: cost is only partly legible before the run.}
+From the issue text alone, the prefill's cost readout reaches out-of-fold $R^2$ of about zero on the 111 SWE-rebench tasks, too few to fit it. On 3,387 tasks with about 20 SWE-agent runs each (one model, Llama-3.1-70B; cost proxied by cumulative context and output length), the per-task mean cost is reliable (split-half reliability .91) and the issue text predicts it at $R^2$ .29, still rising with data (.18 with 100 tasks, .32 with 2,710). This is below what the prefill reaches on one-shot pools (.43--.83). Reading the first ten steps of a cheap model's trajectory predicts other models' per-task cost at $R^2$ .16 and the same run's final cost at .28, which suggests exploring cheaply before pricing the expensive candidates.
+
+\todo{SWE-Smith used unpinned deepseek-v4-flash (collected before pinning); rerun pinned or state it. Decide whether the test-writer measurement (cheap cross-model test writer 33--42\% cheaper than self-verification, NEW\_PATH 4.B.2) belongs here. Cite the nebius SWE-agent trajectories dataset.}
 
 \section{Ablations}
 \paragraph{Is difficulty enough to price?}
