@@ -2339,3 +2339,16 @@ Logs reason_pinned_logs/{costgen_cgfull_*,fit_timing_*,budget_billed}.txt.
   4k chars < .12); LCB 0.3%. Qwen3-30B-A3B-Instruct on LCB (9.4% capped) does NOT loop (12% of capped): with the code-only prompt it
   reasons in code comments until the cap -- reasoning-like length, truncated. Other routes cap <= 0.4%. Qwen card's top_k=20 /
   presence_penalty were not passed (temperature / top_p only). Provider vs model for the Llama loops not separated (one provider).
+
+### 4.A.77 Why the dedicated readout transfers and pricing from success does not (2026-10-09 15:37 ET; free; `cost_generalization.py whytransfer`)
+Cost-only (target success readouts); arms in-domain vs transferred from same-domain pools: ours, fromsuccess (logits + squares),
+meanlogit_lin (one linear feature), oracle_diff (TRUE problem solve rate over the five routes, linear + square: upper bound for
+difficulty-only pricing); transferred arms also with the level matched to the target test mean (leaky; shape only). eai cgwhy_*.
+LCB smoke: in-domain R2 per route ours .69-.74, fromsuccess .65-.70, meanlogit .62-.68, ORACLE difficulty only .46-.54 (saving 21.5 vs
+34.4 for fromsuccess) => the success logits carry prefill length information beyond the true solve rate. Transferred: ours R2 .64-.68
+(saving 30.2), fromsuccess -.21..+.36 (-6.2), oracle difficulty .01-.27 (-6.8), level matching does not rescue either => even TRUE
+difficulty is not a transferable price: the solve-rate -> length curve differs by benchmark (BCB flat: oss20lo 6.0 -> 5.8 log tokens
+from hardest to easiest bin; LCB 7.0 -> 5.8; dsv4f LCB 9.8 -> 6.9 vs BCB 7.1 -> 6.7), and solve rates shift (BCB mean .49 vs .76-.78).
+### 4.A.78 Llama-3.1-8B loop check (PAID < $1 expected, approved; launched 15:37 ET; `llama8_loop_check.py`)
+423 / 4,500 nr_llama8 math answers loop. 300 loop + 150 control problems x {DeepInfra redraw, Novita (14k cap), DeepInfra
+repetition_penalty 1.1}. eai l8loop; out llama8_loop_check/ (report.txt).
