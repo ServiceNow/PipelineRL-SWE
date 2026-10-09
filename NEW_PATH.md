@@ -2334,3 +2334,8 @@ Logs reason_pinned_logs/{costgen_cgfull_*,fit_timing_*,budget_billed}.txt.
   Cost per row: qw32 Omni 1.05 c (7/15 hit SiliconFlow's 24,575-token stop; route property, as on MMLU-Pro), glm47f Omni 0.38 c,
   nemo120 MMLU-Pro 0.09 c, LCB 0.09-0.34 c; SWE dsv4f 0.10 c (3/96 API errors). Projected total ~$35 (guards $98). Omni / LCB jobs
   run ~6-10 h at concurrency 12. TMLR draft updated (paper_tmlr, 4.A.71-75 written in; new sec:general; capture map with non-reasoning).
+- 4.A.71 CORRECTION (2026-10-09, inspected raw outputs): "degenerate output" holds for Llama-3.1-8B only: at card sampling (T 0.6,
+  top_p 0.9, DeepInfra) 9-12% of its math answers run to the 16k cap and 77-84% of those are repetition loops (zlib ratio of the last
+  4k chars < .12); LCB 0.3%. Qwen3-30B-A3B-Instruct on LCB (9.4% capped) does NOT loop (12% of capped): with the code-only prompt it
+  reasons in code comments until the cap -- reasoning-like length, truncated. Other routes cap <= 0.4%. Qwen card's top_k=20 /
+  presence_penalty were not passed (temperature / top_p only). Provider vs model for the Llama loops not separated (one provider).
