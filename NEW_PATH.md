@@ -2219,6 +2219,6 @@ FINAL (2026-10-09 04:43 ET; common test problems, every route of both pools vali
 (sd log .53-1.73) but much of it is DEGENERATE output from weak/verbose instruct routes, unpredictable from the prompt: llama8 cost R2
 -.08/-.41/-.31 (mean 4-6x median, repetition to the cap); qw30 on LCB p90/p10 142, mean 2.6k vs median 324, R2 .27. That is where the
 LCB non-reasoning headroom comes from. Cost-from-success = dedicated on NR (difficulty ~ length there too). Mixed pool: adding NR routes
-lowers our saving (17.7 vs 34.8 Omni; 13.0 vs 30.6 MMLU-Pro): the cheap NR routes take the easy problems at near-constant cost.
+lowers our saving (17.7 vs 34.8 Omni; 13.0 vs 30.6 MMLU-Pro); untested guess: cheap NR routes take the easy problems at near-constant cost.
 deepseek thinking on vs off: acc +2.8 (MMLU-Pro) / +14.6 (Omni) / +22.1 (LCB) pt for 13x / 11x / 33x the output; corr(log out) .66-.76
 (the same problems are long either way).
