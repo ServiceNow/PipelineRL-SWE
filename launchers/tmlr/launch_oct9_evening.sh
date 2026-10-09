@@ -25,6 +25,8 @@ cd /home/toolkit/PipelineRL-SWE; $ENVS
 for DS in bbeh supergpqa; do
   $PY pipelinerl/swe/scripts/math_pool/collect_math_pool.py --out-dir $R/math_pool --pilot 0 --routes oss20lo:4,oss20md:3,oss120md:2,oss120hi:2 \
     --datasets \$DS --concurrency 32 --budget-usd 1 > $R/math_pool/collect_refill_\${DS}_oss.log 2>&1
+  # the rebuild overwrites this pool's tensors / readouts: wait for the jobs that read them (robustness, worked examples)
+  until grep -q "^DONE" $L/costgen_cgrobust_\$DS.txt 2>/dev/null && grep -q "^DONE" $L/worked_examples.txt 2>/dev/null; do sleep 120; done
   bash analysis/cost_headroom/hetero_suite.sh \$DS > $L/refill_\${DS}_hetero.txt 2>&1
 done
 echo REFILL HETERO DONE >> $R/math_pool/collect_refill_bbeh_oss.log
