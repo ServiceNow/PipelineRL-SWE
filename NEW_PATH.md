@@ -2233,7 +2233,7 @@ test bootstrap (200) for ours - arm. eai onboardcmp_{lcb,omni,mmlupro,supergpqa,
 LCB smoke (2 draws): k=5 ours 20.6 / zr 5.5 / zr-dopt 30.4 / ours-dopt 30.6 / knn -10.1 / naive -34.3; k=20 ours 30.4 / zr 22.8 /
 zr-dopt 30.5 / ours-dopt 30.1. Anchor SELECTION matters as much as the estimator at k=5; on the same anchors ours ~ zr.
 
-### 4.A.73 Label curves and cross-pool transfer for every cost estimator (launched 2026-10-09 ~12:40 ET; `cost_generalization.py`)
+### 4.A.73 Label curves and cross-pool transfer for every cost estimator (launched 2026-10-09 ~12:00 ET; `cost_generalization.py`)
 Cost-only comparison (all arms route with the target's own success readouts). Arms: ours (ridge on the 4B prefill), from-success
 (ablation), median, mean, GBM, MixLLM-style (jina-code -> MLP + RF + kNN), CARROT-style kNN (nn on calibration), ZeroRouter pricing
 (IRT + PCA-ridge latent, K bins; D, K on calibration). `labels POOL`: refit on n = 10/20/50/100/200/all training problems (5 seeds) on
