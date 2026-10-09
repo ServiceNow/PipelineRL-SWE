@@ -2295,3 +2295,24 @@ Logs reason_pinned_logs/{costgen_cgfull_*,fit_timing_*,budget_billed}.txt.
    sources + n target labels vs target-only n; why transfer works (out-of-pool R2 per route, between-pool share of log-length variance,
    cross-route agreement of pool means). BCB smoke: pooled cost 7.4 vs in-domain 6.3 (no anomaly in the cost side); transfer R2 -0.43..0.36
    vs in-domain 0.48..0.71; between-pool share .24-.40, cross-route corr of pool means .84. eai cgpool_*; logs costgen_cgpool_*.txt.
+- 4.A.75 RESULTS (2026-10-09 14:25 ET).
+  (1) WHOLE-MODEL onboarding (no sibling effort left in the pool), mean over the 3 held-out models, ours / ZR, ours - ZR [95% CI]:
+  k=10: LCB 24.6 / 13.6, +10.9 [-2.0, +24.1]; MMLU-Pro 22.6 / 12.6, +10.1 [+1.4, +23.7]; SuperGPQA 20.4 / 5.8, +14.6 [+3.0, +26.0]; Omni
+  25.6 / 22.4, +3.2 n.s.; BBEH 13.5 / 6.0, +7.5 n.s. k=50: LCB +9.3 [+3.0, +17.0], MMLU-Pro +9.6 [+2.2, +14.8], SuperGPQA +12.8 [+5.8,
+  +23.0], Omni -0.2, BBEH +4.2 n.s. Ours drops 3-6 pt vs single-route hold-out (siblings did help), the edge over ZR is unchanged.
+  The gains sit on dsv4f (the only cross-family model, never had a sibling: +15..+35 pt); the gpt-oss-20b pair is our weak spot (Omni
+  -13..-16). => sibling concern minor, but cross-family onboarding evidence is ONE model per pool (+ 4.A.48 on MMLU-Pro).
+  (2) POOLED training (target train + same-domain pools) vs target only, cost-only: LCB 33.3 / 33.7, MMLU-Pro 29.8 / 28.8, AIME 16.7 /
+  15.7, BBEH 25.7 / 26.1, Omni500 17.8 / 18.2, APPS 13.3 / 12.8, BCB 7.4 / 6.3, CC 5.9 / 4.7, SuperGPQA 24.5 / 27.6. Full router (success
+  refit too, target calibration) the same within ~1-3 pt. => one readout trained across benchmarks ~ the per-benchmark readout.
+  BCB / CC ANOMALY EXPLAINED (artifact): it is the SUCCESS side (source success + in-domain cost: BCB 16.3 vs 6.3, CC 12.8 vs 4.7),
+  from a badly MISCALIBRATED transferred success head on a low-signal pool (BCB: AUC .574 vs .652, log loss 1.17 vs .67, mean predicted
+  .62-.96 vs true .45-.53). With target calibration (pooled full) it shrinks to 9.9 / 2.0. Not a real gain; do not claim.
+  (3) SOURCES + n TARGET LABELS vs target-only n (cost-only, 5 seeds): n=10 LCB 26.6 vs 15.9 (+10.6 n.s.), MMLU-Pro 27.8 vs 8.1 (+19.7
+  [+5.0, +32.6]), AIME 13.1 vs 4.4 (+8.7 [+2.5, +16.6]), CC 7.4 vs -3.5 (+10.9 [+2.1, +18.6]), BBEH (n=20) 21.7 vs 10.6 (+11.1 [+3.4, +22.7]),
+  SuperGPQA 19.0 vs -7.0 (+26.0 n.s.); converges by n = 50-200 (SuperGPQA: target-only ahead from n=20, -3..-7 n.s.). Sources + n also
+  beats pure transfer at large n on LCB (+9.0 [+5.8, +12.9] at 200) and Omni500 (+13.4). Upweighting target rows x10: no gain.
+  (4) WHY transfer works: 24-40% of per-route log-length variance is BETWEEN pools, and routes agree on which pools are long (mean
+  cross-route corr of pool means .84). Transferred length R2 per route ~ in-domain on LCB (.64-.68 vs .69-.74), APPS, CC, Omni500, AIME,
+  SuperGPQA; much lower on MMLU-Pro (.02-.46 vs .29-.63), BCB, BBEH (oss20lo -.61), yet MMLU-Pro routing transfers fully (29.3): routing
+  needs the within-pool ranking and the across-route contrast, not absolute calibration of length.
