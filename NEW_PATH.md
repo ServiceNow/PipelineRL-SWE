@@ -2157,3 +2157,36 @@ chars, 8k cap truncated Qwen (raised to 16k), Novita rate-limited llama-70b (mov
 First launch used a stale snapshot (gitignored file aborted the commit); math rows were valid (route defs live), LCB rows invalid
 (stale openrouter_call, ds4off thought) and deleted; relaunched from e310e0e. LCB llama8 / qw30 rate-limited by concurrent math jobs on the
 same providers; retried at concurrency 8 after the math jobs finish.
+
+### 4.A.66 Mechanism + deployment reruns on the pinned root (2026-10-09; `pinned_mechanism.sh`; list/market prices inside decompose)
+- Variance decomposition (why_decompose, test, 5-fold CV R2 of log length): probe R2 LCB .73-.77, Omni .74-.83, MMLU-Pro .52-.66, AIME
+  .43-.57, APPS .56-.71, CC .42-.54, BCB .49-.71, TACO .41-.52. Difficulty-shared part dominates on LCB/Omni/AIME (empirical-difficulty
+  R2 .48-.65, probe misses <=.07 of it, except AIME .10-.22); probe-ONLY share largest on BCB (.43-.64) and MMLU-Pro (.29-.57); CC: the
+  probe misses .11-.18 of difficulty (illegible). Failed vs solved draws equally long (x0.83-1.16) except pinned dsv4f on Omni (x2.52)
+  and AIME (x1.90): StreamLake dsv4f writes much longer when it fails on hard math.
+- Level vs differences (LCB, list prices, headroom 45.7): oracle level-only 39.8 (87%), oracle differences-only 38.7, probe full 36.4,
+  probe level-only 33.2, probe differences-only 23.1; probe R2 of the LEVEL .75, of the differences .41.
+- MMLU-Pro length drivers: test R2 difficulty .18-.37, subject .17-.25, difficulty+subject .34-.44, +text .34-.44, 4B probe .41-.66;
+  routing: difficulty+subject pricing 30.3% vs probe 43.9% (headroom 64.1). Engineering and law are long (6.4k / 4.1k tokens) and hard.
+- Onboarding a held-out route from k problems (cost + success): LCB mean k=5 30.0 / k=10 30.6 / k=50 32.8 vs full 36.9, naive -11.1 / -3.0
+  / 4.1; dsv4f removed -35.4 -> onboarded 26.1 (k=5); MMLU-Pro dsv4f -19.6 -> 26.9 (k=5) / 32.6 (k=10) vs full 42.7.
+- Per-query budgets (LCB hard cap): budget the constant rule needs / budget ours needs at matched accuracy 1.00-1.89x (geo-mean 1.27);
+  median rule 1.28x. Soft cap at 10% violations: ours +4-9 pt accuracy in the middle band, overshoot 8% vs 12-20%.
+
+### 4.A.67 Label efficiency: dedicated readout vs cost-from-success (2026-10-09; `label_efficiency.py`, pinned, billed)
+Saving vs median (5 seeds) at n = 10 / 20 / 50 / 100 / 200 / all training problems:
+LCB dedicated 15.9 / 24.7 / 30.3 / 31.1 / 32.4 / 33.7; from-success 27.3 / 27.8 / 31.7 / 33.6 / 33.4 / 34.4.
+Omni dedicated 16.6 / 22.8 / 26.0 / 30.8 / 34.1 / 34.8; from-success 3.2 (sd 22) / 31.5 / 31.4 / 34.8 / 34.6 / 34.9.
+MMLU-Pro dedicated 8.1 / 16.4 / 16.6 / 22.6 / 26.4 / 28.8; from-success -0.5 / 6.8 / 3.3 / 4.2 / 6.0 / 6.3.
+=> Where length is difficulty, ~20 length labels on top of the success readouts get most of the saving; where it is work (MMLU-Pro),
+cost-from-success plateaus at ~6% and the dedicated readout needs 100-200 labels.
+
+### 4.A.68 Prefill-router success pipeline reimplementation (2026-10-09; `prefill_router_repro.py`, pinned)
+Their pipeline (per-target layer/pooling/PCA search by 5-fold CV over the upper half, SharedTrunkNet 10 seeds -> top 5) vs our linear
+readouts, same encoder and cost readout: LCB AUC .839 vs ours .857, log loss .354 vs .341, ours saves -0.1% [-7.7, 4.0] (tie);
+MMLU-Pro .714 vs .715, .499 vs .492, +1.1% [-1.0, 3.0] (tie). Omni: rerun (snapshot dir vanished mid-job). => The simpler linear readout
+on fixed layers matches the full pipeline.
+
+### 4.A.69 Perfect-judge single-submission cascades vs one-shot routing (2026-10-09; `cascade_oracle.py`, pinned, billed)
+All 31 ordered plans, cheapest-first, judge = true outcome: our router saves 29.7% [19.6, 37.7] (LCB) and 31.9% [26.4, 37.3] (Omni)
+vs the perfect-judge cascade family; MMLU-Pro -0.8% [-6.1, 3.9] (tie: the cheapest route is cheap and solves 62%, so escalation is cheap).
