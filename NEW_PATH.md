@@ -2316,3 +2316,17 @@ Logs reason_pinned_logs/{costgen_cgfull_*,fit_timing_*,budget_billed}.txt.
   cross-route corr of pool means .84). Transferred length R2 per route ~ in-domain on LCB (.64-.68 vs .69-.74), APPS, CC, Omni500, AIME,
   SuperGPQA; much lower on MMLU-Pro (.02-.46 vs .29-.63), BCB, BBEH (oss20lo -.61), yet MMLU-Pro routing transfers fully (29.3): routing
   needs the within-pool ranking and the across-route contrast, not absolute calibration of length.
+
+### 4.A.76 New routed families on all three main sets + SWE-Smith v2 (PAID, approved 2026-10-09; launched 15:19 ET)
+- New families (`launchers/tmlr/launch_newfamily.sh`; out second_family_20261009/ (Omni-500 train+cal 350 + Omni 1,000 test; nemo120 also
+  MMLU-Pro 2,700) and pool_v2_lcb_second_family/ (LCB 892)); one draw, reasoning on, each route pinned to ONE provider, concurrency 12:
+  qw32 Qwen3-32B @ SiliconFlow (stops at 24,575 output tokens, as in the 4.A.48 rows), glm47f GLM-4.7-flash @ Novita (Cloudflare,
+  which served 95% of the 4.A.48 MMLU-Pro rows, did not finish 2 Omni calls in 15 min), nemo120 Nemotron-3-super-120B @ DekaLLM
+  (DeepInfra caps output at 16,384 and returns the thinking in the answer channel: 2/2 Omni pilot calls truncated). Max 64k.
+  Pilot (DekaLLM nemo120, 6 calls): reasoning separate, 1k-16k tokens, 0.05-0.7 c per call, 1 error. Guards: math 22 / 14 / 18, LCB
+  14 / 10 / 10 ($88). Spend guards added to collect_lcb_expert.py (billed usage.cost, incl. rows on disk).
+- SWE-Smith v2 (`launchers/tmlr/launch_swesmith_v2.sh`; out swesmith_reasoning_pool_v2/): 500 -> 1,432 instances; gpt-oss routes reuse
+  the 500 plan-D draws + 932 new (unpinned, as every gpt-oss route); dsv4f all 1,432 redrawn PINNED to StreamLake; light converter;
+  Daytona at concurrency 8 (plan-D labelling took ~24 min per 500 at concurrency 3). Guards $5 per generation job. swe_draw_patches.py
+  now writes rows incrementally and has --budget-usd.
+- Ops note: `git push` hung because the SSH agent socket blocks; `SSH_AUTH_SOCK= git push` works (key on disk).
