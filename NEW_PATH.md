@@ -2402,3 +2402,8 @@ MMLU-Pro -.53. Problems every reasoning route always solves (LCB 59, Omni 359, M
 for strong models, nothing about success; for weak models more work also means failure (long-for-their-difficulty problems trip Llama-8B:
 r predicts its failures better than s does, -.48 vs +.20 on Omni). On LCB length and difficulty residuals are nearly one signal.
 Caveat: measured difficulty saturates (half of MMLU-Pro is solved by all five routes); the clean separation is the strong-model result.
+- 2026-10-09 note: the old "Opus 5 = 43% on LCB" (lcb_opus5_eval_*, n=100; RESEARCH_LOG) is an ARTIFACT of a one-off inline script, not
+  of the paper harness: its runner returns False for every non-stdin (LeetCode functional) test -> 0/45 LeetCode by construction;
+  AtCoder 42/54 (78%), Codeforces 1/1. Also no reasoning param, 8k cap, 180 s timeout with failures scored as unsolved, exact-match
+  stdout, outputs not saved (cannot be re-scored). The paper's routes use collect_lcb_expert.py with the official LCB evaluator.
+  Opus 5.5 reference run (LCB test 341, official evaluator, thinking on; ~$60-70 list) proposed and put ON HOLD by the user.
