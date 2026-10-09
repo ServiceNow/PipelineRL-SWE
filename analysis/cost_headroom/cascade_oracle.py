@@ -15,7 +15,7 @@ exec(open(Path(__file__).parent / "tmlr_free_analyses.py").read().split("# -----
      .replace('print(f"===== {POOL}', 'print(f"===== cascades {POOL}'))
 okd = (t["final_outcome"] & v).astype(float); K = v.shape[2]
 pd_draw = t["prompt_tokens"] * rates[None, :, 0, None] + t["completion_tokens"] * rates[None, :, 1, None]   # per-draw cost (tokens x billed rate)
-if POOL != "LCB":                                      # one billed draw per test problem: use the billed cost
+if POOL not in SINGLE:                                      # one billed draw per test problem: use the billed cost
     pd_draw[:, :, 0] = np.where(v[:, :, 0], paid, pd_draw[:, :, 0])
 nd = int(min(v[ev].sum(2).min(0).min(), 3)) or 1
 order = list(np.argsort([paid[tr, k].mean() for k in range(M)]))

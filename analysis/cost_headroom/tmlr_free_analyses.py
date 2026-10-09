@@ -23,9 +23,13 @@ from baseline_cost_heads import rich
 VALUES = np.geomspace(1e-7, 1, 300)
 rate_of = lambda s: RATE["oss120" if "120" in s else ("oss20" if s.startswith("oss20") else "dsv4f")]
 POOL = sys.argv[1]
-if POOL == "LCB":
-    name, cost_file = "pool_v2_tensors_5rung", "cost_preds_probe.jsonl"; old = F = R / name
-    feat = Path("/mnt/llmd/results/exps/aristides/reason/pv2_scout_prefill_1756715297/scout.npz")
+REAL = "/mnt/llmd/results/exps/aristides/reason"
+SINGLE = {   # pools evaluated on their own test split (tokens x billed rates), not on the fresh test sets
+    "LCB": ("pool_v2_tensors_5rung", "cost_preds_probe.jsonl", f"{REAL}/pv2_scout_prefill_1756715297/scout.npz"),
+    "SuperGPQA": ("supergpqa_tensors", "cost_preds_probe_instruct.jsonl", f"{REAL}/supergpqa_probe/instruct.npz"),
+    "BBEH": ("bbeh_tensors", "cost_preds_probe_instruct.jsonl", f"{REAL}/bbeh_probe/instruct.npz")}
+if POOL in SINGLE:
+    name, cost_file, feat = SINGLE[POOL]; old = F = R / name; feat = Path(feat)
 else:
     name, cost_file = POOLS[POOL]; old = R / name; ds = "mmlupro" if POOL == "MMLU-Pro" else "omni500"; F = R / "expanded_eval_20261001" / ds
     feat = F / "prefill_combined.npz"
@@ -33,19 +37,19 @@ t = np.load(F / "tensors.npz", allow_pickle=True)
 ids, slots = list(map(str, t["problem_ids"])), list(map(str, t["model_slots"])); idx = {p: i for i, p in enumerate(ids)}; M = len(slots)
 sp = json.loads((old / "split_manifest.json").read_text()); tr = np.array([idx[str(p)] for p in sp["train_problem_ids"]])
 n_old = len(np.load(old / "tensors.npz", allow_pickle=True)["problem_ids"])
-ev = np.array([idx[str(p)] for p in sp["test_problem_ids"]]) if POOL == "LCB" else np.arange(n_old, len(ids))
+ev = np.array([idx[str(p)] for p in sp["test_problem_ids"]]) if POOL in SINGLE else np.arange(n_old, len(ids))
 v = t["valid"].astype(bool); cnt = np.maximum(v.sum(2), 1)
 q = np.where(v, t["final_outcome"], 0).sum(2) / cnt; L = np.maximum(np.where(v, t["completion_tokens"], 0).sum(2) / cnt, 1)
 I = np.where(v, t["prompt_tokens"], 0).sum(2) / cnt
 rates = np.array([rate_of(s) for s in slots]); toks = I * rates[:, 0] + L * rates[:, 1]; paid = toks.copy()
-if POOL != "LCB":
+if POOL not in SINGLE:
     for f in glob.glob(f"{R}/math_expand_20261001/{ds}/*_d0.jsonl"):
         for l in open(f):
             r = json.loads(l)
             if r.get("finish_reason") != "error" and r.get("usage_cost") is not None and r["problem_id"] in idx and r["route_label"] in slots:
                 paid[idx[r["problem_id"]], slots.index(r["route_label"])] = r["usage_cost"]
 ev = ev[(v[ev].sum(2) > 0).all(1)]
-if POOL == "LCB":
+if POOL in SINGLE:
     learned = read_predictions(old / cost_file, ids, "expected_costs", M); P = read_predictions(old / "content_preds.jsonl", ids, "p_successes", M)
 else:
     learned = read_predictions(F / "paper_cost_preds.jsonl", ids, "expected_costs", M); learned[:n_old] = read_predictions(old / cost_file, ids[:n_old], "expected_costs", M)
@@ -136,7 +140,7 @@ out["learning"] = res2
 res3 = {}; cheapest = rates[:, 1].min()
 for s_ in (0.0, 0.5, 1.0, 1.5, 2.0):
     mult = (rates[:, 1] / cheapest) ** (s_ - 1.0); rt = rates * mult[:, None]
-    pd = costs(L, rt) if POOL == "LCB" else paid * mult[None]                 # realized cost rescaled by the same factor
+    pd = costs(L, rt) if POOL in SINGLE else paid * mult[None]                 # realized cost rescaled by the same factor
     g, h = saved(costs(tok, rt), costs(med[None].repeat(len(ids), 0), rt), pd, ev), saved(pd, costs(med[None].repeat(len(ids), 0), rt), pd, ev)
     gap = float(rt[:, 1].max() / rt[:, 1].min()); res3[str(s_)] = dict(price_gap=gap, ours=g, headroom=h)
     print(f"[prices] steepness {s_:.1f} (out-price gap {gap:.1f}x): ours vs median {g*100:+.1f}%  headroom {h*100:+.1f}%", flush=True)

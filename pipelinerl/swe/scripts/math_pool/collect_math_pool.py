@@ -117,7 +117,7 @@ async def call(session, key, route, prompt, sem, max_tokens, provider_max_price=
     if pin:
         body["provider"] = {"only": [pin], "allow_fallbacks": False, "require_parameters": True}
     err = None
-    for attempt in range(4):
+    for attempt in range(8):                                   # long backoff: pinned providers rate-limit (429)
         try:
             async with sem, session.post("https://openrouter.ai/api/v1/chat/completions", json=body,
                                          headers={"Authorization": f"Bearer {key}"},
@@ -129,7 +129,7 @@ async def call(session, key, route, prompt, sem, max_tokens, provider_max_price=
                         finish_reason=ch.get("finish_reason"), provider=d.get("provider"), error=None,
                         generation_id=d.get("id"), usage_cost=u.get("cost"))
         except Exception as e:
-            err = f"{type(e).__name__}: {e}"[:200]; await asyncio.sleep(5 * (attempt + 1))
+            err = f"{type(e).__name__}: {e}"[:200]; await asyncio.sleep(min(120.0, 5.0 * 2 ** attempt) * (0.5 + random.random()))
     return dict(content="", reasoning="", prompt_tokens=0, completion_tokens=0, finish_reason="error", provider=None, error=err)
 
 

@@ -455,6 +455,17 @@ async def openrouter_call(
                          if logprobs else None),
         }
 
+    async def _call_backoff(ignore: list[str]) -> dict:
+        # HTTP 429/502/503 is the (pinned) provider's rate limit or a gateway hiccup, not the model: wait and retry
+        # instead of recording an incomplete row (NEW_PATH 4.A.64: pinned non-reasoning routes lost up to 86% of calls).
+        for k in range(8):
+            try:
+                return await _call(ignore)
+            except aiohttp.ClientResponseError as exc:
+                if exc.status not in (429, 502, 503) or k == 7:
+                    raise
+                await asyncio.sleep(min(240.0, 15.0 * 2 ** k) * (0.5 + random.random()))
+
     async def _call_with_retry():
         """Retry an empty answer, but only when the budget was NOT the cause.
 
@@ -486,7 +497,7 @@ async def openrouter_call(
         ignore: list[str] = list(ignore_providers or [])
         for attempt in range(1 + max(0, empty_retries)):
             try:
-                out = await _call(ignore)
+                out = await _call_backoff(ignore)
             except (aiohttp.ClientPayloadError, aiohttp.ClientConnectionError,
                     asyncio.IncompleteReadError) as exc:
                 # TRANSPORT, not the model. A dropped/partial response is not evidence that the
