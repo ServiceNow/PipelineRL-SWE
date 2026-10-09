@@ -10,7 +10,7 @@
 \usepackage{amsmath,amssymb}
 \usepackage{xcolor}
 \usepackage[capitalize]{cleveref}
-\newcommand{\todo}[1]{\par\noindent\fbox{\parbox{\linewidth}{\small\color{red!70!black}\textbf{TODO:} #1}}\par}
+\newcommand{\todo}[1]{\par\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{\small\color{red!70!black}\textbf{TODO:} #1}}\par}
 
 \title{Reducing the Cost of LLM Coding and Reasoning Models with Routers}
 % Authors must not appear in the submitted version.
@@ -128,13 +128,82 @@ The same model served by different providers behaves like the model plus an offs
 Savings against median pricing are 14.9\% [9.4, 21.4] on AIME 1983--2024 (281 test problems) and 16.8\% [5.6, 28.3] on APPS (382).
 
 \section{How much is per-query cost worth?}\label{sec:headroom}
-\todo{Headroom across ALL pools on one protocol (pinned, billed): LCB, Omni-MATH, MMLU-Pro, AIME, APPS, BigCodeBench, CodeContests (finish pinned collection), TACO, SWE-Smith (one-shot patches), RouterBench (chat), SWE-rebench agents (7 open / all 13). Old unpinned numbers: NEW\_PATH 4.A.4/4.A.7/4.A.14/4.A.19. Principle to test: headroom large when within-model length variation is large relative to price gaps (chat: low variation; mixed-price agents: price gaps dominate).}
+A cost estimator can be no better than knowing each query's realized cost. We therefore measure, on every pool, the \emph{headroom}: the cost saved at matched accuracy when each test problem is priced at its realized cost instead of the training median, with the same success predictions. \Cref{tab:pools} reports it with our saving and the share of it we capture, on nine pools under one protocol (five routes, deepseek-v4-flash pinned, billed rates, test splits).
+
+\begin{table}[t]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{llrrrrr}
+\toprule
+Pool & Domain & Test $n$ & Headroom & Ours vs.\ median & Capture & Ours vs.\ cost-from-success \\
+\midrule
+LiveCodeBench & code & 341 & 45.3 & 33.7 [24.1, 39.9] & .74 & $-0.8$ \\
+Omni-MATH & math & 1,000 & 55.5 & 34.8 [27.9, 39.8] & .63 & $-0.1$ \\
+MMLU-Pro & knowledge & 6,500 & 59.5 & 28.8 [26.0, 31.8] & .49 & \textbf{24.1} \\
+AIME 1983--2024 & math & 281 & 29.3 & 15.7 [11.7, 20.6] & .54 & 2.0 \\
+APPS & code & 377 & 32.1 & 15.1 [5.0, 26.9] & .47 & $-3.7$ \\
+BigCodeBench & code & 421 & 12.6 & 6.3 [$-$1.6, 11.8] & .50 & 3.2 \\
+CodeContests & code & 266 & 34.5 & 6.3 [$-$0.2, 17.0] & .18 & 0.7 \\
+\midrule
+SuperGPQA & knowledge & 300 & 57.0 & 27.6 [11.0, 38.2] & .48 & \textbf{9.0} \\
+BIG-Bench Extra Hard & reasoning & 298 & 41.8 & 26.5 [16.4, 34.3] & .63 & \textbf{26.6} \\
+\bottomrule
+\end{tabular}
+\caption{\textbf{Headroom and capture on every pool.} Cost saved (\%) at matched accuracy relative to median-length pricing: by perfect per-query cost knowledge (headroom) and by our readouts (95\% paired bootstrap intervals); capture is their ratio. Last column: cost saved by our dedicated cost readout relative to our ablation that prices from the success readouts alone; bold: interval excludes zero. Billed costs, deepseek-v4-flash pinned, same success predictions in every column.}
+\label{tab:pools}
+\end{table}
+
+\paragraph{Headroom is large wherever reasoning lengths vary.}
+On seven of nine pools perfect per-query cost knowledge would save 29--60\%, and our readouts capture about half of it or more. The exceptions are informative. BigCodeBench has little to capture (12.6\%), and CodeContests has headroom that our readouts do not reach (capture .18); \cref{sec:when} shows that no estimator reaches it.
+
+\paragraph{Length, not only price gaps, makes it pay.}
+To separate the two sources of headroom, we rescale every route's billed price toward or away from the cheapest route's while keeping realized lengths fixed. With all routes at the same per-token price, our readouts still save 13.3\% (LCB), 14.3\% (Omni-MATH) and 36.3\% (MMLU-Pro) relative to median pricing: per-query length alone is worth that much. On LCB and Omni-MATH the saving grows with the price gap and saturates near the billed gap (3.1$\times$); on MMLU-Pro it is largest at flat prices (36.3\%, against 28.8\% at billed prices), because there length differs between questions rather than between routes.
+
+\paragraph{Choosing effort and choosing the model are both needed.}
+Restricting the pool removes most of the saving. With only gpt-oss-20b's two efforts, ours saves 21.2\% (LCB), 21.8\% (Omni-MATH) and 7.9\% (MMLU-Pro); with only gpt-oss-120b's, $-$1.8\%, 12.6\% and 8.6\%; with one effort per model, 12.8\% and 17.8\% on LCB and Omni-MATH; with all five routes, 33.7\%, 34.8\% and 28.8\%.
+
+\todo{Non-reasoning pool on the same problems (running, NEW\_PATH 4.A.64/4.A.71): headroom, length spread (sd log length, p90/p10) and our saving for 5 non-reasoning routes vs the reasoning routes on Omni-MATH, MMLU-Pro and LCB test problems; deepseek-v4-flash thinking on vs off. Expected to be the C1 figure: per-query cost matters for reasoning routes.}
 
 \section{What the cost readout captures}\label{sec:mechanism}
-\todo{Mechanism, pinned reruns: (1) variance decomposition: between-problem share of log length, ICC; failed vs solved draws within a problem (NEW\_PATH 4.A.10); (2) level vs route-specific differences: shared level alone vs differences alone (4.A.17); (3) difficulty vs work required: what explains length beyond difficulty on MMLU-Pro (subject, multi-step calculations; probe residual correlates .64 with true residual, 4.A.28); (4) capture vs predictor $R^2$ is convex, $R^2\neq$ routing value (4.A.4, 4.A.15); (5) NEW: what the readout reads -- correlate predictions with interpretable prompt features (length, numbers, sub-questions, code constraints), layer-wise probes, examples of the largest over/under-predictions; (6) NEW: the model-specific remainder (which routes' lengths are predictable beyond the shared level; 4.A.11/4.A.16).}
+\paragraph{Length is mostly a property of the problem.}
+The prefill explains much of each route's log output length on held-out problems (5-fold cross-validated $R^2$: .73--.77 on LCB, .74--.83 on Omni-MATH, .52--.66 on MMLU-Pro, .43--.57 on AIME). On LCB, Omni-MATH and AIME most of this is shared with difficulty: a problem's empirical solve rate across routes alone reaches $R^2$ .48--.65, and the prefill misses at most .07 of what difficulty explains (.10--.22 on AIME). Within a problem, failed and solved draws are about equally long ($\times$0.83--1.16), with one exception: deepseek-v4-flash writes 2.5$\times$ (Omni-MATH) and 1.9$\times$ (AIME) longer when it fails on hard math.
+
+\paragraph{The shared level carries most of the value.}
+A problem's lengths across routes can be split into a shared level (their mean) and route-specific differences. On LCB, an oracle that knows only each problem's level captures 87\% of the headroom, about as much as one that knows only the differences. The prefill reads the level far better ($R^2$ .75) than the differences (.41); pricing with the predicted level alone keeps 33.2 of the full readout's 36.4 points (list prices).
+
+\paragraph{Success and cost are read from the same layers.}
+Refitting both readouts on each stored layer separately, success AUC and length $R^2$ peak in the same late layers at the last token (layers 22--36 of 36), and one such layer matches the full concatenation (LCB AUC .86--.87, $R^2$ .73--.75, saving 33--34\%; Omni-MATH .83--.84, .71--.72, 35--37\%; MMLU-Pro .72, .48--.50, 27--29\%). The two readouts are close to one signal where length tracks difficulty: the mean success logit correlates with predicted log length at $-$.90 to $-$.97 per layer on LCB and $-$.71 to $-$.84 on Omni-MATH, but only $-$.36 to $-$.58 on MMLU-Pro.
+
+\paragraph{Where length tracks work rather than difficulty.}
+On MMLU-Pro, difficulty explains log length only in part (test $R^2$ .18--.37), subject labels about as much (.17--.25), and the two together .34--.44, against .41--.66 for the prefill. Engineering and law questions are both long (6.4k and 4.1k output tokens on average) and hard. Pricing from difficulty and subject together saves 30.3\%, against 43.9\% for the prefill (headroom 64.1\%, list prices): the prefill reads how much work a question requires, beyond its difficulty and topic.
+
+\paragraph{Two further heterogeneous pools.}
+We chose SuperGPQA~\citep{supergpqa} and BIG-Bench Extra Hard~\citep{bbeh} as further pools because, on a cheap screen (one gpt-oss-20b-low draw per problem), length predicted directly from the prefill beat length predicted from a success readout by a margin as large as MMLU-Pro's ($R^2$ gap .61 and .40, against .66 on MMLU-Pro and .10 on Omni-MATH). On their full pools the dedicated readout again beats pricing from success: by 26.6\% [17.8, 34.9] on BIG-Bench Extra Hard, where pricing from success saves nothing over the median, and by 9.0\% [0.1, 15.4] on SuperGPQA (\cref{tab:pools}). On BIG-Bench Extra Hard, text-only estimators read length as well as the prefill: MixLLM-style embeddings save 28.0\% relative to median pricing (ours $-$2.2 [$-$5.7, 1.8] relative to it). Its 23 tasks have very different formats, and the task is visible in the text. On SuperGPQA they do not (ours saves 15.2\% [$-$1.4, 25.4] relative to MixLLM-style and 18.8\% [5.6, 29.6] relative to prompt features).
+
+\paragraph{How many length labels are needed.}
+Given success readouts, where length tracks difficulty a cost readout needs few length labels (\cref{fig:labels}). Pricing from the success logits reaches 27.8\% (LCB) and 31.5\% (Omni-MATH) with 20 labelled training problems, against 24.7\% and 22.8\% for a dedicated readout. On MMLU-Pro it plateaus at about 6\%, while the dedicated readout climbs to 22.6\% at 100 problems and 28.8\% at all 550. One draw per training problem instead of all draws gives up 1--3 points.
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/label_efficiency.pdf}
+\caption{\textbf{Length labels needed.} Cost saved relative to median pricing when the cost readout is fitted on $n$ labelled training problems: a dedicated readout on the prefill (blue) versus pricing from the success readouts (red), which needs length labels only to map success logits to length. Mean over five random subsets; bands $\pm$1 s.d. Where length tracks difficulty (LiveCodeBench, Omni-MATH), pricing from success is as good from 20 problems on; where it tracks the work a question requires (MMLU-Pro, BIG-Bench Extra Hard), it stays near zero at every $n$.}
+\label{fig:labels}
+\end{figure}
+
+\paragraph{What changes in the routing.}
+At matched accuracy in the middle of the band, 31--66\% of problems change route relative to median pricing. The dominant changes are between gpt-oss-20b-low and deepseek-v4-flash: problems predicted to be short move to the more accurate deepseek-v4-flash (19--38\% of problems), and problems predicted to be long move to the cheap route (9--18\%).
 
 \section{When it works and when it does not}\label{sec:when}
-\todo{Narrative + one figure: x = headroom, y = capture (or readable share of length variance), one point per pool incl. negatives. Two conditions: (a) length varies within a model relative to price gaps; (b) that variation is legible from the prompt (difficulty or work required). Negatives explained: BigCodeBench / TACO (length barely difficulty-driven), CodeContests (difficulty illegible from the prompt), RouterBench (little variation), agentic SWE (price gaps dominate; issue text predicts per-task cost at R$^2$ .29), SWE-Smith one-shot (14\% headroom, n.s.). Needs the full pinned estimator suite on every pool so ``everyone fails here'' is shown, not assumed.}
+Per-query cost pays under two conditions: (a) output length varies within a route by more than prices differ between routes, which creates headroom, and (b) that variation can be read from the prompt, which lets an estimator capture it. Each of our two failures violates one condition, and neither is specific to our estimator.
+
+\paragraph{Little headroom: BigCodeBench.}
+BigCodeBench tasks are library-usage functions with short, similar solutions; perfect cost knowledge saves only 12.6\% [4.1, 19.0]. No estimator's saving relative to median pricing has an interval excluding zero: ours 6.3 [$-$1.6, 11.8], ZeroRouter 8.8 [$-$12.5, 19.6], MixLLM-style 2.8, cost-from-success 3.1, prompt features 0.2. Here length is the least tied to difficulty of any pool (the prefill-only share of length variance is largest on BigCodeBench), but there is little to gain from reading it.
+
+\paragraph{Illegible headroom: CodeContests.}
+CodeContests has as much headroom as APPS (34.5\% [29.0, 42.0]), but no estimator captures more than about a quarter of it: ZeroRouter saves 9.3\% [1.1, 20.0], difficulty bins 5.6\% [1.2, 14.6], ours 6.3\% [$-$0.2, 17.0], and the rest are within noise of zero or below it. Length again tracks difficulty, but difficulty itself is hard to read from these prompts: the prefill misses .11--.18 of the length $R^2$ that empirical difficulty explains, against at most .07 on LCB and Omni-MATH.
+
+\todo{Figure: x = headroom, y = capture, one point per pool (7 + SuperGPQA, BBEH + non-reasoning pools), marker = domain; plus per pool the readable share of length variance. From pool\_baselines\_*\_pinned.json and fresh\_baselines\_pinned.json.}
+\todo{Remaining negatives to place here once rerun on one protocol: RouterBench chat (little length variation), agentic SWE (price gaps between models dominate; \cref{sec:swe}), non-reasoning routes (running).}
 
 \section{Software engineering}\label{sec:swe}
 \todo{SWE back in: (a) one-shot patch routing on SWE-Smith with real Daytona labels; (b) agentic cost from public SWE-rebench trajectories (13 agents x 5 runs; variance shares model 74 / task 15; issue-text prefill R$^2$ .29, partial-trajectory read .28 own / .16 cross-model); (c) the verification measurement (cheap cross-model test writer 33--42\% cheaper than self-verification; NEW\_PATH 4.B). Frame as where per-query cost is hardest and why.}
@@ -146,6 +215,9 @@ Two ablations price each route from our own success readouts instead of a dedica
 \paragraph{Representation, readout and prefill size.}
 \Cref{tab:grid} crosses three text encoders with three cost readouts: ridge, CARROT-style $k$-nearest neighbours and a MixLLM-style ensemble, each with our success predictions and with every encoder pass priced. Our readout saves 16--27\% against every cell, including Qwen3-Embedding-8B, an encoder twice the prefill's size. On PCA-reduced 4B features the three readouts are within about 7 points of one another, so the gain comes from the representation rather than the regressor. Pricing the encoder pass changes no comparison by more than 3 points. \Cref{tab:size} varies the prefill model while keeping prompts, layers and both readouts fixed. Every size saves 22--34\% against median pricing, and length $R^2$ rises with size. None beats our prefill: Qwen3-1.7B and 8B come within 0.3--4 points (within the intervals on Omni-MATH), while 0.6B trails by 9--11.
 The result is not specific to Qwen: prefills from three other families (Phi-4-mini, Granite-3.3-2B, SmolLM2-1.7B) also save 25--31\% against median pricing on both sets. Phi-4-mini matches our router on MMLU-Pro ($-$0.7 [$-$2.6, 1.3]) but trails by 10 points on Omni-MATH; Granite and SmolLM2 trail by 5--9.
+
+\paragraph{Is the prefill router's success pipeline needed?}
+The prefill router~\citep{prefill} selects a layer, a pooling and a PCA dimension per target by cross-validation over the encoder's upper layers, concatenates the selected features and trains an ensemble of shared-trunk MLPs. We reimplemented this pipeline on the same encoder, splits and cost readout, and compared it with our per-route logistic readouts on fixed layers. The two are tied on all three test sets: ours saves $-$0.1\% [$-$7.7, 4.0] on LCB, 1.1\% [$-$1.0, 3.0] on MMLU-Pro and $-$2.2\% [$-$5.7, 1.9] on Omni-MATH relative to it (success AUC .857 vs.\ .839, .715 vs.\ .714 and .829 vs.\ .842). Linear readouts on a fixed set of layers are enough, and they make the cost readout a drop-in addition: the same features feed both.
 
 \paragraph{New model families.}
 Readouts for Qwen3-32B and GLM-4.7-flash, fitted on the same frozen 4B features, were evaluated on 1,905 MMLU-Pro test problems (log-length $R^2$ .48 and .06). With all seven routes, prefill cost readouts save 30.0\% [25.4, 35.3] relative to median pricing, 21.8\% [16.3, 26.7] relative to cost from success and 20.6\% [15.3, 25.4] relative to difficulty bins. On a pool of the two gpt-oss-20b routes and the two new families, they save 32.2\%, 11.6\% and 14.8\%. Readouts onboarded from ten examples per new route match the full readouts in the seven-route pool (0.1 points) and trail them by 11.9 [$-$4.2, 21.9] in the new-family pool.
@@ -198,7 +270,16 @@ Qwen3-4B-2507 (ours) & .70 & 34.8 & -- & .50 & 28.8 & -- \\
 \end{table}
 
 \section{Deployment}\label{sec:deploy}
-\todo{Deployable policies table (calibration-chosen V, raw vs matched; pinned numbers in reason\_pinned\_logs/deploy\_matched.txt, billed\_reprice.txt); onboarding new models from 5--10 examples (4.A.18/4.A.21/4.A.24, rerun pinned); per-request budgets (4.A.29, rerun pinned); single-submission cascades incl. FrugalGPT-style and perfect-judge (4.A.25/4.A.27, rerun pinned on all three test sets); live run (rerun with policies chosen at the pinned price); provider endpoints in full (4.A.37--4.A.41, 4.A.55).}
+\paragraph{Routing versus cascades.}
+A cascade calls routes in sequence and stops when an answer is accepted~\citep{frugalgpt,automix}. To bound what any cascade could achieve on our pools, we give it a perfect judge: every ordered plan of the five routes is called cheapest first, each attempt is judged by its true outcome at no cost, and the cascade stops at the first correct answer. A learned judge can only do worse. Even against this bound, one-shot routing with our readouts spends 29.7\% [19.6, 37.7] less at matched accuracy on LCB and 31.9\% [26.4, 37.3] less on Omni-MATH, because a cascade pays for every failed attempt before the one it accepts. On MMLU-Pro the two tie ($-$0.8\% [$-$6.1, 3.9]): the cheapest route solves 62\% of questions at about 6\% of the most expensive route's cost, so failed first attempts are cheap.
+
+\paragraph{Per-query budgets.}
+Predicted costs also enforce per-query budgets. Under a hard cap on predicted cost per query on LCB, the constant-price rule needs 1.00--1.89$\times$ our budget to reach the same accuracy (geometric mean 1.27$\times$).
+
+\paragraph{Onboarding a new route.}
+Adding a route requires its own readouts. Holding out one route on LCB and fitting its success and cost readouts on $k$ problems, the router saves 30.0\% ($k$=5), 30.6\% ($k$=10) and 32.8\% ($k$=50) relative to median pricing, against 36.9\% with full readouts (list prices). The held-out route matters most when it is deepseek-v4-flash: without it the router spends 35.4\% more than median pricing on the full pool, while onboarding it from five problems turns this into a 26.1\% saving; on MMLU-Pro, the same goes from $-$19.6\% to 26.9\% ($k$=5) and 32.6\% ($k$=10), against 42.7\% with full readouts.
+
+\todo{Deployable policies (calibration-chosen $V$; pinned deploy\_matched.txt) and provider endpoints in full (4.A.37--4.A.41, 4.A.55). Onboarding and budget numbers above are at list prices (decompose.py); rerun billed if kept.}
 
 \section{Pre-registered predictions}\label{sec:prereg}
 \todo{Two-sided pre-registration record: screen rule (4.A.9), GAIN confirmed Omni, MMLU-Pro; APPS GAIN not confirmed unpinned (pinned 16.8\% billed); AIME NO GAIN falsified (gain 14.9\%) and why (single-draw cheapest-route screen understates predictability); remaining calls (K\&K, SuperGPQA, BBEH) to run.}

@@ -2200,7 +2200,12 @@ API errors 4-6% on gpt-oss-120b-high / 20b-medium (unpinned), excluded as invali
   mean 0.0. (23 task families with very different formats: task type is visible in the text.) Label efficiency: from-success never
   above 2%; dedicated 15% at n=10, 23.5% at 200. Prefill-router repro: ours +5.3 [-3.2, 14.1] (AUC .806 vs .801). Perfect-judge
   cascades: ours saves 34.2 [19.7, 45.5]. Flat prices still 21.2%. Effort only (20b) 29.7 of 29.9 headroom; 120b-only -3.0.
-- SuperGPQA: running.
+- SuperGPQA (test 300): cost R2 .18-.75; success AUC only .58 (prefill-router repro .56; ours vs it -3.3 [-8.5, 2.6]). Ours vs median
+  27.6 [11.0, 38.2], headroom 57.0 (capture .48). From-success 20.6, bins 17.8 => ours vs from-success +9.0 [0.1, 15.4], vs bins +11.7 n.s.
+  (partial separation: screen gap +.61 overstated it). Text estimators do NOT read it: MixLLM 14.9 (ours +15.2 [-1.4, 25.4]), GBM 11.0
+  (+18.8), ZeroRouter -10.1 (+34.3), mean -13.5 (+36.2). Cascades: ours saves 34.4 [16.9, 45.7]. Flat prices 20.6%. Label curve:
+  from-success climbs to ~20% by n=100, dedicated 20.6% at n=20 -> 27.6%. (120b-effort-only sub-pool: ours 46.0 > 'headroom' 29.7 --
+  the oracle prices at realized cost but keeps the noisy success predictions, so it is not a strict bound when success AUC is ~.58.)
 
 ### 4.A.71 Reasoning vs non-reasoning on the same problems (2026-10-09; `nonreason_compare.py`, pinned, billed)
 Billed $/M in/out fitted from usage_cost: ds4off .094/.177, llama8 .020/.040, qw30 .048/.193, llama70 .214/.500, qw235 .086/.350.
