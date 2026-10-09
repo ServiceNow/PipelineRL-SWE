@@ -1,17 +1,20 @@
 #!/usr/bin/env bash
 # TMLR (NEW_PATH 4.A.76): new routed-model families on all three main sets, so cross-model generalisation (whole-family onboarding,
-# transfer with unseen routes) is tested beyond one deepseek route. Approved 2026-10-09 (~$55 est., guards below sum to $80).
+# transfer with unseen routes) is tested beyond one deepseek route. Approved 2026-10-09 (~$55 est.; guards: math 22 / 14 / 18, LCB 14 / 10 / 10 = $88).
 # Routes (collect_math_pool.ROUTES settings; reasoning on; one draw; each pinned to ONE provider, no fallbacks):
 #   qw32    qwen/qwen3-32b                     SiliconFlow (as the 4.A.48 MMLU-Pro rows)   max 64k
-#   glm47f  z-ai/glm-4.7-flash                 Cloudflare  (as the 4.A.48 MMLU-Pro rows)   max 64k
-#   nemo120 nvidia/nemotron-3-super-120b-a12b  DeepInfra   (provider max output 16,384)     max 16k
+#   glm47f  z-ai/glm-4.7-flash                 Novita      (Cloudflare served 95% of the 4.A.48 MMLU-Pro rows but did not finish
+#                                                           2 Omni calls in 15 min; Novita served the other 5%)   max 64k
+#   nemo120 nvidia/nemotron-3-super-120b-a12b  DekaLLM     (DeepInfra caps output at 16,384 and returns the thinking in the
+#                                                           answer channel: 2/2 Omni pilot calls truncated)        max 64k
+#   (qw32: SiliconFlow stops at 24,575 output tokens, as in the 4.A.48 rows: part of that route's definition)
 # Problems: Omni-500 train+cal (350) + Omni 1,000 test; LCB 892 (train + eval); MMLU-Pro 2,700 for nemo120 only (qw32 / glm47f exist).
 # Concurrency 12 per provider (rate limits); resumable; billed usage_cost spend guard per job. Usage: SUBMIT=1 bash launch_newfamily.sh
 set -euo pipefail
 R=/mnt/llmd/results/exps/aristides/reason; O=$R/second_family_20261009; OL=$R/pool_v2_lcb_second_family; mkdir -p $O $OL
 SRC=$R/lcb_corrected_temporal_qwen_qwen3_4b_instruct_2507_1787205448; GAP=35
-spec() { case $1 in qw32) echo "qwen/qwen3-32b SiliconFlow 64000";; glm47f) echo "z-ai/glm-4.7-flash Cloudflare 64000";; nemo120) echo "nvidia/nemotron-3-super-120b-a12b DeepInfra 16000";; esac; }
-mathbud() { case $1 in qw32) echo 18;; glm47f) echo 14;; nemo120) echo 18;; esac; }
+spec() { case $1 in qw32) echo "qwen/qwen3-32b SiliconFlow 64000";; glm47f) echo "z-ai/glm-4.7-flash Novita 64000";; nemo120) echo "nvidia/nemotron-3-super-120b-a12b DekaLLM 64000";; esac; }
+mathbud() { case $1 in qw32) echo 22;; glm47f) echo 14;; nemo120) echo 18;; esac; }
 submit() { make job JOB_NAME="$1" ENV=pipeline-rl CONDA_EXE=/opt/conda/bin/conda GPU=0 GPU_MEM=0 CPU=${3:-4} CPU_MEM=${4:-16} SNAPSHOT=1 COMMAND="$2" 2>&1 | grep -oE "QUEUING|RUNNING|[Ee]rror.*" | head -1 || true; sleep $GAP; }
 for r in qw32 glm47f nemo120; do read M PV MT <<< "$(spec $r)"; DS=omni500; [ $r = nemo120 ] && DS=omni500,mmlupro
 cat > $O/run_$r.sh <<EOS
@@ -29,7 +32,7 @@ source pipelinerl/swe/scripts/livecodebench/ensure_lcb_runner.sh
 python pipelinerl/swe/scripts/livecodebench/collect_lcb_expert.py --source-collection-dir $SRC --output-dir $OL --route-label $r \
   --model '$M' --reasoning-enabled --splits train,eval --temperature 0.6 --top-p 0.95 --max-tokens $MT --gen-timeout 3600 \
   --max-invalid-frac 0.10 --output-suffix _d0 --api-key-file /home/toolkit/.secrets/openrouter_api_key --concurrency 12 \
-  --budget-usd 10 > $OL/log_$r.txt 2>&1
+  --budget-usd $( [ $r = qw32 ] && echo 14 || echo 10 ) > $OL/log_$r.txt 2>&1
 echo EXIT \$? >> $OL/log_$r.txt
 EOS
 done
