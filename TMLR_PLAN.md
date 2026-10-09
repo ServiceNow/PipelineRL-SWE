@@ -1,5 +1,7 @@
 # TMLR plan (written 2026-10-08)
 
+**Current state and full to-do list: `HANDOFF_20261009.md` (start new chats there).**
+
 Draft: `paper_tmlr/main.tex` (TMLR style; 4-pager text ported; TODO boxes per section). Target ~12 pages body.
 Results log: `NEW_PATH.md` (pinned results from 4.A.59 on). All numbers: deepseek-v4-flash pinned to StreamLake, billed prices,
 train/calibration/test only (no "fresh/original" wording). Shadow root `/mnt/llmd/results/exps/aristides/reason_pinned`
@@ -72,3 +74,7 @@ when-it-works (BCB, CC + capture-map figure), SWE (one-shot SWE-Smith + agentic)
 ablation (prefill-router repro). Open TODOs: non-reasoning (C1), deployable policies, endpoints, pre-registration, appendix, intro/abstract.
 Running: qw235 resumes (math training pools, LCB) with 429 backoff; nonreason_compare job waits for them (4.A.71; debug run on partial
 Omni data: non-reasoning headroom 42.3 vs reasoning 55.5, ours 7.3 vs 34.8).
+
+## Status (2026-10-09 11:20 ET)
+All collections and analyses finished; nothing running. Non-reasoning comparison final (NEW_PATH 4.A.71): headroom and our saving are
+much larger for reasoning routes (C1 supported). Remaining work is mostly writing; see HANDOFF_20261009.md.
