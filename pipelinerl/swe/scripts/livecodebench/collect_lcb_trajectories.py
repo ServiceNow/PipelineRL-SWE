@@ -442,6 +442,7 @@ async def openrouter_call(
             "thinking_text": reasoning,
             "prompt_tokens": usage.get("prompt_tokens", 0),
             "completion_tokens": usage.get("completion_tokens", 0),
+            "usage_cost": usage.get("cost"),          # billed USD (OpenRouter usage accounting), for spend guards
             "latency_s": latency,
             # Needed to tell a model that burned its budget mid-reasoning apart from a
             # provider that ended the turn without ever emitting the final channel.

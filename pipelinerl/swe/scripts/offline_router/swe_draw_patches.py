@@ -42,7 +42,9 @@ async def run(a):
     df = df[df.problem_id.isin(ids)]
     key = Path(a.api_key_file).read_text().strip()
     out = Path(a.out_dir); out.mkdir(parents=True, exist_ok=True)
-    sem = asyncio.Semaphore(a.concurrency)
+    sem = asyncio.Semaphore(a.concurrency); spent = {"usd": 0.0}
+    for f in out.glob("predictions_*.jsonl"):           # resume: spend already on disk counts against --budget-usd
+        spent["usd"] += sum(float(json.loads(l).get("usage_cost") or 0) for l in open(f) if l.strip())
     async with aiohttp.ClientSession() as session:
         for label in a.models.split(","):
             model, effort, max_tokens, temperature, top_p = MODELS[label]
@@ -51,7 +53,11 @@ async def run(a):
                 done = {json.loads(l)["instance_id"] for l in open(path)} if path.exists() else set()
                 rows = [r for _, r in df.iterrows() if r.problem_id not in done]
 
+                fh = open(path, "a")
+
                 async def one(r):
+                    if spent["usd"] > a.budget_usd:            # spend guard: no new calls past the budget
+                        return None
                     system, user = split_chat(r.prompt_text)
                     try:
                         o = await openrouter_call(session, model, system, user, key, max_tokens=max_tokens,
@@ -63,19 +69,20 @@ async def run(a):
                             patch, why = o["full_output"], ("" if o["full_output"].strip() else "empty output")
                         else:
                             patch, why = to_patch(o["full_output"], files_from_prompt(r.prompt_text))
-                        return {"instance_id": r.problem_id, "model_patch": patch, "model": f"{label}_d{k}",
+                        spent["usd"] += float(o.get("usage_cost") or 0)
+                        x = {"instance_id": r.problem_id, "model_patch": patch, "model": f"{label}_d{k}",
                                 "why_empty": why, "finish_reason": o.get("finish_reason"),
                                 "thinking_chars": len(o.get("thinking_text") or ""),
                                 "split": r.get("split"), "prompt_tokens": o.get("prompt_tokens", 0),
-                                "completion_tokens": o.get("completion_tokens", 0), "provider": o.get("provider")}
+                                "completion_tokens": o.get("completion_tokens", 0), "provider": o.get("provider"),
+                                "usage_cost": o.get("usage_cost")}
                     except Exception as e:
-                        return {"instance_id": r.problem_id, "model_patch": "", "model": f"{label}_d{k}",
-                                "why_empty": f"error {type(e).__name__}", "prompt_tokens": 0, "completion_tokens": 0}
+                        x = {"instance_id": r.problem_id, "model_patch": "", "model": f"{label}_d{k}",
+                             "why_empty": f"error {type(e).__name__}", "prompt_tokens": 0, "completion_tokens": 0}
+                    fh.write(json.dumps(x) + "\n"); fh.flush()      # incremental: a killed job keeps every finished row
+                    return x
 
-                res = await asyncio.gather(*[one(r) for r in rows])
-                with open(path, "a") as f:
-                    for x in res:
-                        f.write(json.dumps(x) + "\n")
+                res = [x for x in await asyncio.gather(*[one(r) for r in rows]) if x is not None]; fh.close()
                 n = sum(bool(x["model_patch"]) for x in res)
                 print(f"{label} d{k}: {n}/{len(res)} produced a patch", flush=True)
 
@@ -90,6 +97,7 @@ def main():
     ap.add_argument("--collection-dir", default=COLL, help="parquet dir; use .../collect/* for train+eval")
     ap.add_argument("--raw", action="store_true", help="write raw model text (SWE-Smith converter runs later)")
     ap.add_argument("--concurrency", type=int, default=16)
+    ap.add_argument("--budget-usd", type=float, default=float("inf"), help="billed spend guard over every predictions file in --out-dir")
     ap.add_argument("--api-key-file", default="/home/toolkit/.secrets/openrouter_api_key")
     asyncio.run(run(ap.parse_args()))
 

@@ -28,6 +28,7 @@ from pipelinerl.swe.scripts.livecodebench.collect_lcb_trajectories import (
 from pipelinerl.swe.scripts.livecodebench.mdp_utils import redact_sensitive_text
 
 logger = logging.getLogger(__name__)
+BUDGET: dict[str, Any] = {"usd": float("inf"), "spent": 0.0, "counted": set()}   # --budget-usd spend guard (billed usage.cost)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 
@@ -103,6 +104,8 @@ async def collect_split(
 ) -> None:
     latest = _read_latest(output_path)
     done = {pid: row for pid, row in latest.items() if _is_complete(row, dataset_revision)}
+    if output_path not in BUDGET["counted"]:          # resume: rows already on disk count against the guard
+        BUDGET["counted"].add(output_path); BUDGET["spent"] += sum(float(r.get("usage_cost") or 0) for r in latest.values())
     todo = [row for row in rows if problem_id(row) not in done]
     logger.info(
         "%s: %d/%d reusable, %d to collect", output_path.name, len(done), len(rows), len(todo)
@@ -117,8 +120,10 @@ async def collect_split(
     generation_temperature = temperature
 
     async with aiohttp.ClientSession() as session:
-        async def process(row: dict[str, Any]) -> dict[str, Any]:
+        async def process(row: dict[str, Any]) -> dict[str, Any] | None:
             pid = problem_id(row)
+            if BUDGET["spent"] > BUDGET["usd"]:          # --budget-usd: no new calls once billed spend exceeds the guard
+                return None
             try:
                 out = await openrouter_call(
                     session,
@@ -142,6 +147,7 @@ async def collect_split(
                     ignore_providers=ignore_providers,
                     logprobs=logprobs,
                 )
+                BUDGET["spent"] += float(out.get("usage_cost") or 0)
                 code = extract_code(out["full_output"])
                 async with eval_sem:
                     public_report = await asyncio.to_thread(
@@ -186,6 +192,7 @@ async def collect_split(
                 "thinking_chars": len(out.get("thinking_text", "") or ""),
                 "prompt_tokens": out["prompt_tokens"],
                 "completion_tokens": out["completion_tokens"],
+                "usage_cost": out.get("usage_cost"),
                 "latency_s": out["latency_s"],
                 # Without these an empty answer is undiagnosable: "length" means the model
                 # burned its budget reasoning, anything else means the provider returned
@@ -211,6 +218,8 @@ async def collect_split(
 
         for index, task in enumerate(asyncio.as_completed([process(row) for row in todo]), 1):
             result = await task
+            if result is None:
+                continue
             results.append(result)
             with open(output_path, "a") as out_f:
                 out_f.write(json.dumps(result) + "\n")
@@ -263,6 +272,8 @@ def main() -> None:
     parser.add_argument("--min-date", default="2023-09-01")
     parser.add_argument("--temporal-cutoff", default="2024-10-01")
     parser.add_argument("--max-tokens", type=int, default=4096)
+    parser.add_argument("--budget-usd", type=float, default=float("inf"),
+                        help="stop issuing new calls once this run's billed spend (usage.cost, incl. rows already on disk) exceeds it")
     parser.add_argument("--top-p", type=float, default=None)
     parser.add_argument("--top-k", type=int, default=None,
                         help="Qwen cards specify 20; omitted entirely when not passed")
@@ -318,6 +329,7 @@ def main() -> None:
                             "caught before any spend; only the generation set is trimmed."
                         ))
     args = parser.parse_args()
+    BUDGET["usd"] = args.budget_usd
 
     source_dir = Path(args.source_collection_dir)
     output_dir = Path(args.output_dir)
