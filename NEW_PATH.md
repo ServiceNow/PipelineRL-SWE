@@ -2362,3 +2362,26 @@ readout reads cues of the work itself. Each test has a refuting outcome:
   (difficulty-only predicts 0 by construction).
 - subjects: leave-one-subject-out within MMLU-Pro / SuperGPQA / BBEH with ONE set of success readouts (removes the logit-scale confound).
 eai whytest_*; logs reason_pinned_logs/why_transfer_tests_*.txt.
+- 4.A.77 RESULTS (9 pools; cost-only; saving vs median, in-domain -> transferred): ORACLE difficulty (true solve rate) is a weak price
+  even in-domain (LCB 21.5, AIME 9.6, CC 6.4; APPS -7.9 (1 draw), Omni500 -4.1, MMLU-Pro -0.7, SuperGPQA -4.1, BBEH -12.2) while the
+  success logits price well where length tracks difficulty (LCB 34.4, APPS 18.2, Omni500 18.0): the success readouts carry prefill
+  length cues beyond the true solve rate. Transferred: oracle difficulty LCB -6.8, APPS -18.9, Omni500 -15.5, SuperGPQA -10.4, BBEH -23.9.
+  LCB WITHOUT BigCodeBench in the sources (APPS + CC): fromsuccess -6.2 -> 12.1, one-feature mean-logit map 12.5 -> 32.5 (in-domain
+  34.7), oracle difficulty -6.8 -> 12.0, ours 30.2 -> 33.8 => BCB's flat difficulty -> length curve is what broke difficulty transfer to LCB.
+- 4.A.79 RESULTS. (a) slopes of log length on true solve rate differ widely: dsv4f LCB -4.33, AIME -4.05, Omni500 -2.91, APPS -2.49,
+  MMLU-Pro -1.76, BBEH -0.95, SuperGPQA -0.83, BCB -0.47 (oss20lo on SuperGPQA / BBEH positive). (b) Spearman(slope mismatch, oracle-
+  difficulty R2 drop) +.32 (p .035, n 45): weak. (c) WORK oracle (realized oss20lo length) transfers far better than oracle difficulty:
+  mean R2 drop .61 vs 2.35 (LCB in/xfer .78-.85 / .78-.85; CC, APPS, Omni500 small drops), but also fails on BCB, MMLU-Pro, BBEH
+  (cross-route length relations differ there too). (d) retention of our saving falls with target-vs-source dissimilarity: Spearman
+  -.68 (domain AUC; AUC .89-1.0, prefill always separates benchmarks) / -.55 (NN ratio), n 8; BBEH and BCB least similar, least retained.
+  GAPS (the cleanest test): at matched true solve rate, benchmarks differ by 1.13 log units on average (x3.1) across 470 (pair, route,
+  bin) cells; our readout trained on NEITHER pool predicts the gaps: corr .95, slope .87, 90% of the squared gap explained; pricing
+  from success corr .61, 31%; difficulty-only 0 by construction. SUBJECTS (leave-one-subject-out, one set of success readouts):
+  MMLU-Pro ours 28.8 -> 25.2 (fromsuccess 6.3 -> -0.2); SuperGPQA ours 27.6 -> 27.6 AND fromsuccess 20.6 -> 20.6 (difficulty holds
+  across disciplines there); BBEH ours 26.1 -> 6.8 (leave-one-task-out is close to a new benchmark), fromsuccess -0.3 -> -12.6.
+  => Supported: difficulty -> length differs by benchmark (gaps, slopes, LCB-without-BCB); work cues transfer better; transfer
+  degrades with dissimilarity. Weak / mixed: slope-mismatch correlation; subjects test (difficulty holds within SuperGPQA; ours fails
+  leave-one-task-out on BBEH). Caveat: oracle difficulty is noisy on 1-draw pools (APPS).
+- 4.A.80 ZeroRouter on CodeContests (`zr_cc_check.py`): over 27 configurations (D 1/2/5 x K 5/10/20 x 3 seeds) ZR full saves mean 2.3
+  [-2.1, +10.5], above ours (6.3) in 30%; the calibration-chosen config (D=1, K=10; 9.3) sits near the top. ZR success + our cost
+  mean 6.2 (= ours), our success + ZR pricing 2.8. => not a success-side advantage; a favourable configuration. Not a concern.
