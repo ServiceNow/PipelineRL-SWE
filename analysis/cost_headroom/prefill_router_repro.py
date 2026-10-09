@@ -118,4 +118,4 @@ for nm, Pm in (("ours_linear", P), ("prefill_router", P_theirs)):
 g = saved_P(P, C_ours, P_theirs, C_ours, ev); b = [saved_P(P, C_ours, P_theirs, C_ours, bb) for bb in BS]
 res["ours_vs_theirs"] = [g, *np.percentile(b, [2.5, 97.5]).tolist()]
 print(f"  our linear success vs their pipeline (same cost readout): ours saves {g*100:+.1f}% [{np.percentile(b,2.5)*100:+.1f}, {np.percentile(b,97.5)*100:+.1f}]", flush=True)
-json.dump(res, open(Path(__file__).parent / f"prefill_router_repro_{POOL.replace('-', '').lower()}{os.environ.get('RESULT_TAG', '')}.json", "w"), indent=1, default=float)
+json.dump(res, open(Path(os.environ.get("OUT_DIR", Path(__file__).parent)) / f"prefill_router_repro_{POOL.replace('-', '').lower()}{os.environ.get('RESULT_TAG', '')}.json", "w"), indent=1, default=float)
