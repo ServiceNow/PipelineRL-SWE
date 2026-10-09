@@ -63,3 +63,12 @@ APPS/AIME MixLLM rows (GPU).
 Awaiting approval: SuperGPQA + BBEH full pools (~$13, guards $8 + $12); kimi-k2 non-reasoning route (~$19).
 F10 SWE: agentic SWE-rebench results (4.A.14/4.A.15) are public-data and provider-independent, reuse; SWE-Smith one-shot from existing data.
 F6 headroom x capture map: no new compute (suite + headroom outputs); build at the figure stage.
+
+## Status (2026-10-09 03:30 ET)
+Done: SuperGPQA + BBEH full pools and full suite + mechanism scripts (NEW_PATH 4.A.70): dedicated readout beats cost-from-success on
+BBEH (+26.6) and SuperGPQA (+9.0); MixLLM-style ties us on BBEH. Omni prefill-router repro: tie (-2.2 n.s.).
+Draft (paper_tmlr): sections headroom (pools table, price ladders, effort vs model), mechanism (+ label-efficiency figure, hetero pools),
+when-it-works (BCB, CC + capture-map figure), SWE (one-shot SWE-Smith + agentic), deployment (cascades, budgets, onboarding),
+ablation (prefill-router repro). Open TODOs: non-reasoning (C1), deployable policies, endpoints, pre-registration, appendix, intro/abstract.
+Running: qw235 resumes (math training pools, LCB) with 429 backoff; nonreason_compare job waits for them (4.A.71; debug run on partial
+Omni data: non-reasoning headroom 42.3 vs reasoning 55.5, ours 7.3 vs 34.8).
