@@ -2258,3 +2258,13 @@ Smoke checks: LCB labels n=all reproduces ours 33.7 / from-success 34.4 / median
   11.3 / 26.1 / 3.8 (20.2 with 10 target labels); APPS 18.7 / 12.8 / ZR 15.0 (tie); Omni500 15.6 / 18.2 / ZR 21.5 (n.s., test 150);
   BCB / CC ~0 everywhere. Cost-from-success does NOT transfer (LCB -6.2, SuperGPQA -19.9, BBEH -16.9) although it ties in-domain:
   the dedicated readout is what generalises across benchmarks. Caveat: cost-only transfer (target-trained success readouts).
+
+### 4.A.74 Full transfer, fit timing, billed budgets (launched 2026-10-09 ~13:15 ET; free, eai CPU)
+- `cost_generalization.py fulltransfer POOL` (9 targets): success AND cost estimators trained on other pools; C / Platt / nn / D / K chosen
+  on the SOURCE calibration splits (no target labels; the level-from-10 variant touches only the cost level). Arms: ours, prefill_router
+  (our success + median cost), MixLLM-style (embedding logistic success + MixLLM cost), CARROT kNN, ZeroRouter (own IRT success + bins).
+  APPS smoke (same-domain, 2-value C grid): ours 17.7 vs median-with-target-readouts, prefill_router -4.4, MixLLM 3.4, kNN 2.8, ZR 0.5;
+  transferred success AUC .792 (target readouts .834; MixLLM .656, kNN .633, ZR .779). eai cgfull_*.
+- `fit_timing.py LCB|MMLU-Pro`: wall-clock fit time and configs searched, ours vs prefill-router pipeline, ZeroRouter, MixLLM, GBM. eai fittime_*.
+- `BILLED=1 budget_cap.py`: per-query budgets at billed rates (draft numbers were list prices). eai budgetbilled.
+Logs reason_pinned_logs/{costgen_cgfull_*,fit_timing_*,budget_billed}.txt.
