@@ -21,7 +21,12 @@ Modes:
                   The baselines' configurations (zerorouter D, K; knn nn) are chosen on the TARGET calibration set: generous to them.
 Metric: cost saved at matched accuracy vs the target's in-domain median rule (full training split); ours - arm with a paired
 bootstrap over test problems (200 resamples; resample b uses seed b mod 5).
-Usage: REASON_ROOT=.../reason_pinned RESULT_TAG=_pinned OUT_DIR=... python cost_generalization.py labels|transfer POOL
+  fulltransfer POOL  a whole router moved: success AND cost estimators trained on other pools, with every choice (C, Platt, nn, D, K)
+                  made on the SOURCE calibration splits (no target labels; level-from-10 variant touches only the cost level). Arms:
+                  ours (prefill success + prefill cost), prefill_router (prefill success + median cost: the prefill router's rule),
+                  mixllm (embedding success, same logistic recipe, + MixLLM cost), knn (CARROT kNN success + cost), zerorouter (its
+                  own IRT success + bin pricing). Reference: the target's in-domain median rule with its own readouts.
+Usage: REASON_ROOT=.../reason_pinned RESULT_TAG=_pinned OUT_DIR=... python cost_generalization.py labels|transfer|fulltransfer POOL
 """
 import json, os, sys
 from pathlib import Path
@@ -87,6 +92,7 @@ def load(pool):
     texts = [str(json.loads(l)["problem_statement"]) for l in open(F / "problems.jsonl")]
     d = dict(pool=pool, ids=ids, slots=slots, M=M, tr=tr[(n[tr] > 0).all(1)], ca=ok(ca), ev=ok(ev), n=n, succ=succ, q=q, L=L, I=I, rates=rates,
              paid=paid, P=np.clip(P, 1e-4, 1 - 1e-4), X=rich(feat, ids), E=np.asarray(E, np.float32), TF=np.array([text_features(x) for x in texts], float))
+    fv = v.argmax(2)[..., None]; d["y0"] = np.take_along_axis(np.asarray(t["final_outcome"]).astype(int), fv, 2)[..., 0]
     CT = np.full(v.shape[:2] + (16,), np.nan); CT[:, :, :v.shape[2]] = np.where(v, t["completion_tokens"], np.nan); d["CT"] = CT
     d["med"] = np.array([np.median(t["completion_tokens"][d["tr"], k][v[d["tr"], k]]) for k in range(M)])   # the paper rule (over draws)
     return d
@@ -158,9 +164,69 @@ def fit_predict(arm, S, T, cfg=None):
     return out
 
 
+def auc(y, s_):
+    r = np.argsort(np.argsort(s_)) + 1; npos = y.sum()
+    return (r[y == 1].sum() - npos * (npos + 1) / 2) / max(npos * (len(y) - npos), 1)
+
+
+def success_linear(key, S, Ca, T):
+    """the paper's success readout (activation_content_preds.py --rich --select-C): per route, L2 logistic on standardized features,
+    binomial over all draws, C chosen by AUC on the calibration rows (Ca), Platt-calibrated on Ca. Fitted on S only."""
+    from sklearn.linear_model import LogisticRegression
+    sc = StandardScaler().fit(S[key]); Xs, Xc, Xt = sc.transform(S[key]), sc.transform(Ca[key]), sc.transform(T[key])
+    scale = max(1, S[key].shape[1] // 2560); out = np.zeros((len(Xt), S["succ"].shape[1]))
+    for k in range(out.shape[1]):
+        yb = S["y0"][:, k]; best = (1e-3, -1.0)
+        for cand in (1e-5, 3e-5, 1e-4, 3e-4, 1e-3, 3e-3, 1e-2, 3e-2, 1e-1):
+            if 0 < yb.mean() < 1 and 0 < Ca["y0"][:, k].mean() < 1:
+                v_ = auc(Ca["y0"][:, k], LogisticRegression(max_iter=2000, C=cand / scale).fit(Xs, yb).decision_function(Xc))
+                if v_ > best[1]:
+                    best = (cand, v_)
+        s_, n_ = S["succ"][:, k], S["n"][:, k]; w = np.r_[s_, n_ - s_]; kw = w > 0
+        clf = LogisticRegression(max_iter=2000, C=best[0] / scale).fit(np.vstack([Xs, Xs])[kw], np.r_[np.ones(len(Xs)), np.zeros(len(Xs))][kw], sample_weight=w[kw])
+        lo_c, lo_t = clf.decision_function(Xc), clf.decision_function(Xt)
+        pl = LogisticRegression(max_iter=2000, C=1e6).fit(lo_c[:, None], Ca["y0"][:, k]) if 0 < Ca["y0"][:, k].mean() < 1 else None
+        out[:, k] = pl.predict_proba(lo_t[:, None])[:, 1] if pl is not None else sig(lo_t)
+    return np.clip(out, 1e-4, 1 - 1e-4)
+
+
+def logloss(y, p_):
+    p_ = np.clip(p_, 1e-4, 1 - 1e-4); return float(-np.mean(y * np.log(p_) + (1 - y) * np.log(1 - p_)))
+
+
+def success_knn(S, Ca, T):
+    """CARROT-style: success = mean success rate of the nn nearest training problems (embedding space); nn by calibration log loss"""
+    sc = StandardScaler().fit(S["E"]); Xs, Xc, Xt = sc.transform(S["E"]), sc.transform(Ca["E"]), sc.transform(T["E"]); M = S["q"].shape[1]
+    ll = {nn: logloss(Ca["y0"], KNeighborsRegressor(nn).fit(Xs, S["q"]).predict(Xc)) for nn in (5, 10, 20, 50) if nn <= len(Xs)}
+    nn = min(ll, key=ll.get)
+    return np.clip(KNeighborsRegressor(nn).fit(Xs, S["q"]).predict(Xt), .02, .98), nn
+
+
+def zerorouter_full(S, Ca, T):
+    """ZeroRouter's own success (IRT latent read from the prefill) and bin pricing, fitted on S; D by calibration log loss, K by
+    calibration squared error of log length"""
+    pc = min(256, len(S["X"]) - 1); pca = PCA(pc, random_state=0).fit(S["X"]); sd = pca.transform(S["X"]).std(0) + 1e-6
+    Zs, Zc, Zt = pca.transform(S["X"]) / sd, pca.transform(Ca["X"]) / sd, pca.transform(T["X"]) / sd; best = None
+    for D in (1, 5):
+        la, bb, th = fit_stage1(S["succ"], S["n"], D, 0); rg = RidgeCV(alphas=np.geomspace(1, 1e5, 11)).fit(Zs, np.c_[la, bb])
+        lat = lambda Z_, rg=rg, D=D: (np.exp(rg.predict(Z_)[:, :D]), rg.predict(Z_)[:, D:])
+        Ac, Bc = lat(Zc); Pc = sig((Ac[:, None, :] * (th[None] - Bc[:, None, :])).sum(-1)); l_ = logloss(Ca["y0"], Pc)
+        if best is None or l_ < best[0]:
+            best = (l_, D, la, bb, th, lat)
+    _, D, la, bb, th, lat = best; At, Bt = lat(Zt); Pt = sig((At[:, None, :] * (th[None] - Bt[:, None, :])).sum(-1))
+    s_tr = (np.exp(la) * bb).sum(1); Ac, Bc = lat(Zc); s_c, s_t = (Ac * Bc).sum(1), (At * Bt).sum(1); Ls = np.exp(S["Y"]); M = Ls.shape[1]; bk = None
+    for K in (5, 10, 20):
+        e = np.quantile(s_tr, np.linspace(0, 1, K + 1)[1:-1]); bs_ = np.searchsorted(e, s_tr)
+        tab = np.array([[Ls[bs_ == j, k].mean() if (bs_ == j).any() else Ls[:, k].mean() for j in range(K)] for k in range(M)])
+        err = float(np.mean((np.log(tab.T[np.searchsorted(e, s_c)]) - Ca["Y"]) ** 2))
+        if bk is None or err < bk[0]:
+            bk = (err, K, tab.T[np.searchsorted(e, s_t)])
+    return np.clip(Pt, 1e-4, 1 - 1e-4), bk[2], (D, bk[1])
+
+
 def view(d, ii):
     lg = np.log(d["P"] / (1 - d["P"]))
-    return dict(X=d["X"][ii], E=d["E"][ii], TF=d["TF"][ii], lg=lg[ii], Y=np.log(d["L"][ii]), succ=d["succ"][ii], n=d["n"][ii], CT=d["CT"][ii])
+    return dict(X=d["X"][ii], E=d["E"][ii], TF=d["TF"][ii], lg=lg[ii], Y=np.log(d["L"][ii]), succ=d["succ"][ii], n=d["n"][ii], CT=d["CT"][ii], y0=d["y0"][ii], q=d["q"][ii])
 
 
 def stack(views):
@@ -181,13 +247,15 @@ def choose(d, S, cal_view):
     return best
 
 
-def evaluate(d, preds, ev):
-    """preds: {arm: [list over seeds of tokens [N, M]]} -> saving vs median, ours - arm with a paired bootstrap"""
+def evaluate(d, preds, ev, Ps=None):
+    """preds: {arm: [list over seeds of tokens [N, M]]}; Ps: optional {arm: success [N, M]} (default: the target's own readouts)
+    -> saving vs the target's in-domain median rule, ours - arm with a paired bootstrap"""
+    Pa = lambda a: Ps[a] if Ps and a in Ps else d["P"]
     Cm = cost_of(d, np.repeat(d["med"][None], len(d["ids"]), 0)); H0 = curve(d, d["P"], Cm, ev)
-    pt = {a: [saved(curve(d, d["P"], cost_of(d, tk), ev), H0) for tk in r] for a, r in preds.items()}
+    pt = {a: [saved(curve(d, Pa(a), cost_of(d, tk), ev), H0) for tk in r] for a, r in preds.items()}
     rb = np.random.default_rng(0); res = {}
     BS = [ev[rb.integers(0, len(ev), len(ev))] for _ in range(NBOOT)]; H0b = [curve(d, d["P"], Cm, ii) for ii in BS]
-    bs = {a: np.array([saved(curve(d, d["P"], cost_of(d, r[b % len(r)]), ii), H0b[b]) for b, ii in enumerate(BS)]) for a, r in preds.items()}
+    bs = {a: np.array([saved(curve(d, Pa(a), cost_of(d, r[b % len(r)]), ii), H0b[b]) for b, ii in enumerate(BS)]) for a, r in preds.items()}
     for a in preds:
         res[a] = dict(vs_median=float(np.nanmean(pt[a])), sd_seeds=float(np.nanstd(pt[a])))
         if a != "ours" and "ours" in preds:
@@ -216,6 +284,35 @@ if MODE == "labels":
                 preds[a].append(fit_predict(a, S, T, c.get(a)))
         res = evaluate(d, preds, d["ev"]); res["_configs"] = [{k: list(v) if isinstance(v, tuple) else v for k, v in c.items()} for c in cfgs]
         out["by_n"][str(nn)] = res; show(f"n={nn:<4} ({reps} seeds)", {a: r for a, r in res.items() if a != "_configs"})
+elif MODE == "fulltransfer":
+    # a whole router moved to a new benchmark: success AND cost estimators trained on other pools; every choice (C, nn, D, K, Platt)
+    # made on the SOURCE pools' calibration splits, so no target label is used except in the level-from-10 variant (cost level only)
+    assert POOL != "Omni", "transfer uses Omni500 (Instruct prefill like every other pool)"
+    d = load(POOL); N = len(d["ids"]); T = view(d, np.arange(N)); rng = np.random.default_rng(0)
+    dom = "coding" if POOL in DOMAIN["coding"] else "reasoning"
+    srcs = {"same_domain": [p for p in DOMAIN[dom] if p != POOL], "all_other": [p for p in DOMAIN["coding"] + DOMAIN["reasoning"] if p != POOL]}
+    print(f"===== full transfer to {POOL} (test {len(d['ev'])}); same-domain sources {srcs['same_domain']}", flush=True)
+    S_in = view(d, d["tr"]); r_in = evaluate(d, {"ours": [fit_predict("ours", S_in, T)]}, d["ev"]); out["in_domain_ours"] = r_in["ours"]
+    print(f"  in-domain ours (target readouts) {r_in['ours']['vs_median']*100:+.1f}", flush=True)
+    cache = {}; lvl_sets = [rng.choice(d["tr"], 10, replace=False) for _ in range(SEEDS)]
+    for sname, plist in srcs.items():
+        for p in plist:
+            if p not in cache:
+                s = load(p); cache[p] = (view(s, s["tr"]), view(s, s["ca"])); del s
+        S, Ca = stack([cache[p][0] for p in plist]), stack([cache[p][1] for p in plist])
+        P_lin = success_linear("X", S, Ca, T); P_emb = success_linear("E", S, Ca, T); P_knn, nn = success_knn(S, Ca, T)
+        P_zr, tok_zr, cfg_zr = zerorouter_full(S, Ca, T)
+        Ps = {"ours": P_lin, "prefill_router": P_lin, "mixllm": P_emb, "knn": P_knn, "zerorouter": P_zr}
+        zs = {"ours": fit_predict("ours", S, T), "prefill_router": fit_predict("median", S, T), "mixllm": fit_predict("mixllm", S, T),
+              "knn": fit_predict("knn", S, T, nn), "zerorouter": tok_zr}
+        aucs = {a: float(np.mean([auc(d["y0"][d["ev"], k], Ps[a][d["ev"], k]) for k in range(d["M"])])) for a in ("ours", "mixllm", "knn", "zerorouter")}
+        aucs["target_readouts"] = float(np.mean([auc(d["y0"][d["ev"], k], d["P"][d["ev"], k]) for k in range(d["M"])]))
+        r0 = evaluate(d, {a: [x] for a, x in zs.items()}, d["ev"], Ps)
+        lm = {a: [x * (d["L"][ls].mean(0) / x[ls].mean(0))[None] for ls in lvl_sets] for a, x in zs.items()}
+        r1 = evaluate(d, lm, d["ev"], Ps)
+        out[sname] = dict(sources=plist, n_source=int(len(S["X"])), knn_nn=nn, zerorouter_DK=list(cfg_zr), test_auc=aucs, zero_shot=r0, level10=r1)
+        print(f"  {sname}: test success AUC " + " ".join(f"{a} {x:.3f}" for a, x in aucs.items()), flush=True)
+        show(f"{sname} ({len(S['X'])} source problems) zero-shot", r0); show(f"{sname} level from 10 target problems", r1)
 elif MODE == "transfer":
     assert POOL != "Omni", "transfer uses Omni500 (Instruct prefill like every other pool)"
     d = load(POOL); N = len(d["ids"]); T = view(d, np.arange(N)); rng = np.random.default_rng(0)

@@ -13,7 +13,8 @@ SOFT cap (not enforced): the call runs to completion; a query whose realised cos
   Router: most likely-to-succeed model whose predicted cost x theta <= X (theta >= 1 is a safety margin, swept); predicted cost
   = input + median train output (paper) or the cost probe's expected cost (ours) or the true mean (oracle).
   Metric: accuracy at matched violation rate (5%, 10%) per X, plus mean overshoot (mean of max(0, cost - X) / X).
-All arms share the prefill success head p. Usage: python budget_cap.py
+All arms share the prefill success head p. BILLED=1: billed effective rates (billed.RATE) for caps and realised cost.
+Usage: [BILLED=1] python budget_cap.py
 """
 import json, os, sys, numpy as np
 from pathlib import Path
@@ -38,6 +39,11 @@ for label, name, cfile in POOLS:
     lc = {json.loads(l)["problem_id"]: json.loads(l)["expected_costs"][:M] for l in open(D / cfile)}
     LC = np.array([lc[p] for p in pids]) * 100
     MU = np.log(np.maximum((LC - inp * pin) / pout, 1.0)); LOGL = np.log(np.maximum(np.where(v, ct, np.nan), 1.0))
+    if os.environ.get("BILLED"):                      # TMLR: billed effective rates (billed.RATE); the probe's tokens are unchanged
+        from billed import RATE
+        tokE = (LC - inp * pin) / pout
+        rb = np.array([RATE["oss120" if "120" in s_ else ("oss20" if s_.startswith("oss20") else "dsv4f")] for s_ in S]) * 100   # cents / token
+        pin, pout = rb[:, 0], rb[:, 1]; LC = inp * pin + tokE * pout
     SIG = np.array([np.nanstd((LOGL[tr, m] - MU[tr, m][:, None])[v[tr, m]]) for m in range(M)])
     RES = [np.sort((LOGL[tr, m] - MU[tr, m][:, None])[v[tr, m]]) for m in range(M)]
     trainL = [np.sort(ct[tr, m][v[tr, m]]) for m in range(M)]; med = np.array([np.median(x) for x in trainL])
@@ -119,4 +125,4 @@ for label, name, cfile in POOLS:
         print(f"   X {X:.4f}c: " + " | ".join(f"{a} acc@5% {r['acc@5%viol']*100:5.1f} @10% {r['acc@10%viol']*100:5.1f} (overshoot@10% {r['overshoot@10%viol']*100:4.0f}%)"
                                             for a, r in row.items()))
     out.setdefault(label, {}).update({"hard": H, "soft": Sft})
-json.dump(out, open(Path(__file__).parent / f"budget_cap{os.environ.get('RESULT_TAG', '')}.json", "w"), indent=1, default=float)
+json.dump(out, open(Path(os.environ.get("OUT_DIR", Path(__file__).parent)) / f"budget_cap{'_billed' if os.environ.get('BILLED') else ''}{os.environ.get('RESULT_TAG', '')}.json", "w"), indent=1, default=float)
