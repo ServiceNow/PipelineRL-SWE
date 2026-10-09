@@ -2259,7 +2259,7 @@ Smoke checks: LCB labels n=all reproduces ours 33.7 / from-success 34.4 / median
   BCB / CC ~0 everywhere. Cost-from-success does NOT transfer (LCB -6.2, SuperGPQA -19.9, BBEH -16.9) although it ties in-domain:
   the dedicated readout is what generalises across benchmarks. Caveat: cost-only transfer (target-trained success readouts).
 
-### 4.A.74 Full transfer, fit timing, billed budgets (launched 2026-10-09 ~13:15 ET; free, eai CPU)
+### 4.A.74 Full transfer, fit timing, billed budgets (launched 2026-10-09 12:35 ET; free, eai CPU)
 - `cost_generalization.py fulltransfer POOL` (9 targets): success AND cost estimators trained on other pools; C / Platt / nn / D / K chosen
   on the SOURCE calibration splits (no target labels; the level-from-10 variant touches only the cost level). Arms: ours, prefill_router
   (our success + median cost), MixLLM-style (embedding logistic success + MixLLM cost), CARROT kNN, ZeroRouter (own IRT success + bins).
