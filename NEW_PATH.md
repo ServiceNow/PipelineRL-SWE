@@ -2390,3 +2390,15 @@ eai whytest_*; logs reason_pinned_logs/why_transfer_tests_*.txt.
   14.0 / 30.0). => model, not provider (same control rate on two providers); partly problem-dependent (5x the base rate on a redraw),
   mostly stochastic; a repetition penalty removes most loops, possibly at ~6 pt accuracy (n 150, ~1.5 SE). C1 unaffected: removing the
   loops would shrink non-reasoning headroom further. Paper sentence updated.
+
+### 4.A.81 Is the prefill's length signal beyond difficulty WORK or FINER DIFFICULTY? (2026-10-09; free; `residual_work_test.py`)
+r = predicted log-length level (dedicated readout) residualised on the five reasoning routes' TRUE solve rates (+ squares); s = same for
+the mean predicted success logit (finer difficulty by construction). Partial correlations given those rates with the FIVE NON-REASONING
+routes (held out: never used to fit). r vs held-out length: +.57..+.81 for the strong ones (ds4off, qw30, qw235) on every set, +.33..+.59
+for Llama-8B / 70B. r vs held-out success: strong models ~0 on Omni / MMLU-Pro (-.07..+.04), -.22..-.32 on LCB; weak models -.17..-.53
+everywhere. s vs held-out success: LCB +.23..+.42; Omni / MMLU-Pro only for the weak models (+.06..+.20). corr(r, s) LCB -.92, Omni -.63,
+MMLU-Pro -.53. Problems every reasoning route always solves (LCB 59, Omni 359, MMLU-Pro 3,280): prefill log-length R2 within them
+.39-.81 (level-free); r vs held-out length +.41..+.87. => The extra signal is length-specific WORK: it predicts any model's length and,
+for strong models, nothing about success; for weak models more work also means failure (long-for-their-difficulty problems trip Llama-8B:
+r predicts its failures better than s does, -.48 vs +.20 on Omni). On LCB length and difficulty residuals are nearly one signal.
+Caveat: measured difficulty saturates (half of MMLU-Pro is solved by all five routes); the clean separation is the strong-model result.
