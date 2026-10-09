@@ -2385,3 +2385,8 @@ eai whytest_*; logs reason_pinned_logs/why_transfer_tests_*.txt.
 - 4.A.80 ZeroRouter on CodeContests (`zr_cc_check.py`): over 27 configurations (D 1/2/5 x K 5/10/20 x 3 seeds) ZR full saves mean 2.3
   [-2.1, +10.5], above ours (6.3) in 30%; the calibration-chosen config (D=1, K=10; 9.3) sits near the top. ZR success + our cost
   mean 6.2 (= ours), our success + ZR pricing 2.8. => not a success-side advantage; a favourable configuration. Not a concern.
+- 4.A.78 RESULT (Llama-3.1-8B loops; total spend < $0.30). Loop set (300 problems that looped) / controls (150): DeepInfra redraw loops
+  29.0% / 5.4% (acc 12.7 / 35.8); Novita 18.7% / 5.3% (acc 13.0 / 28.7; 14k cap); DeepInfra + repetition_penalty 1.1 5.7% / 2.7% (acc
+  14.0 / 30.0). => model, not provider (same control rate on two providers); partly problem-dependent (5x the base rate on a redraw),
+  mostly stochastic; a repetition penalty removes most loops, possibly at ~6 pt accuracy (n 150, ~1.5 SE). C1 unaffected: removing the
+  loops would shrink non-reasoning headroom further. Paper sentence updated.
