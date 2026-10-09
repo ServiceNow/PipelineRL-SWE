@@ -2352,3 +2352,13 @@ from hardest to easiest bin; LCB 7.0 -> 5.8; dsv4f LCB 9.8 -> 6.9 vs BCB 7.1 -> 
 ### 4.A.78 Llama-3.1-8B loop check (PAID < $1 expected, approved; launched 15:37 ET; `llama8_loop_check.py`)
 423 / 4,500 nr_llama8 math answers loop. 300 loop + 150 control problems x {DeepInfra redraw, Novita (14k cap), DeepInfra
 repetition_penalty 1.1}. eai l8loop; out llama8_loop_check/ (report.txt).
+### 4.A.79 Falsification tests for the transfer explanation (launched 2026-10-09; free; `why_transfer_tests.py slopes|gaps|subjects`)
+Explanation under test: difficulty is a benchmark-specific proxy for work (WHY a problem is hard differs by benchmark); the prefill
+readout reads cues of the work itself. Each test has a refuting outcome:
+- slopes: (a) solve-rate -> log-length slopes differ across pools; (b) oracle-difficulty transfer drop grows with slope mismatch;
+  (c) a WORK oracle (realized gpt-oss-20b-low length) transfers, oracle difficulty does not; (d) dedicated-readout retention falls with
+  target-vs-source dissimilarity in prefill space (domain AUC, NN distance ratio).
+- gaps: same true solve rate, different benchmark -> actual log-length gap vs the gap predicted by a readout trained on neither pool
+  (difficulty-only predicts 0 by construction).
+- subjects: leave-one-subject-out within MMLU-Pro / SuperGPQA / BBEH with ONE set of success readouts (removes the logit-scale confound).
+eai whytest_*; logs reason_pinned_logs/why_transfer_tests_*.txt.
