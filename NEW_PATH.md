@@ -2407,3 +2407,13 @@ Caveat: measured difficulty saturates (half of MMLU-Pro is solved by all five ro
   AtCoder 42/54 (78%), Codeforces 1/1. Also no reasoning param, 8k cap, 180 s timeout with failures scored as unsolved, exact-match
   stdout, outputs not saved (cannot be re-scored). The paper's routes use collect_lcb_expert.py with the official LCB evaluator.
   Opus 5.5 reference run (LCB test 341, official evaluator, thinking on; ~$60-70 list) proposed and put ON HOLD by the user.
+
+### 4.A.82 Evening batch (launched 2026-10-09 17:59 ET; `launchers/tmlr/launch_oct9_evening.sh`)
+1. swev2_analysis: waits for SWE-Smith v2 labels, then build_swesmith_v2.py (REAL report.json labels; API-error draws and unlabelled
+   patches invalid; issue text in problems.jsonl) -> readouts -> fresh_baselines.py --pool SWESmith (headroom oracle, all estimators but
+   MixLLM-style, which needs GPU embeddings). Log swesmith_reasoning_pool_v2/analysis.log, reason_pinned_logs/SWESmith_suite.txt.
+2. cgrobust_<pool> (9): `cost_generalization.py robust` -- drop under transfer per arm with paired bootstrap, and drop - ours.
+3. workedex: `worked_examples.py` -> reason_pinned_logs/worked_examples.md (long / short for their difficulty, by subject + examples).
+5. PAID refills, $1 guards each: Qwen3-235B non-reasoning training rows (concurrency 4) -> nonreason_compare Omni / MMLU-Pro rerun;
+   BBEH / SuperGPQA gpt-oss API-error draws (concurrency 32) -> hetero_suite rerun (waits for jobs 2-3 that read those tensors).
+   NOTE: these reruns overwrite the BBEH / SuperGPQA and non-reasoning numbers in the paper; recheck them afterwards.
