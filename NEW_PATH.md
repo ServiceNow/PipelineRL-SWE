@@ -2443,3 +2443,14 @@ Caveat: measured difficulty saturates (half of MMLU-Pro is solved by all five ro
   MixLLM -2.2 -> -0.4 n.s., vs GBM +4.6 -> -0.3 n.s.; SuperGPQA ours 27.6 -> 27.5, headroom 57.0 -> 56.6, vs from-success 9.0 [0.1, 15.4]
   -> 9.8 [-0.7, 17.5] (NO LONGER SIGNIFICANT), vs MixLLM 15.2 -> 15.0 n.s. Qwen3-235B refill FAILED ($0; its pinned provider still
   429s): 58 Omni / 109 MMLU-Pro rows remain errors; non-reasoning numbers unchanged.
+- 4.A.83 follow-ups (2026-10-11 evening, user-approved): (1) Nemotron refill (PAID; concurrency 6; guards math $16 incl. $11.99 already
+  spent, LCB $7 incl. $4.75): eai nfrefill_math / nfrefill_lcb. (2) `newfamily_eval.py` (eai newfamily_eval; waits for the refill):
+  8-route routing (all8, newpool = gpt-oss-20b x2 + 3 new families), whole-family onboarding in newpool (in all8 the new families are
+  dominated: removing one changes nothing, LCB smoke 34.6 = 34.6) and all8, transfer of the new routes' readouts Omni500 -> MMLU-Pro.
+  LCB smoke: new readouts AUC .84-.86, length R2 .60-.75; all8 ours 34.6 vs median, ties from-success (+0.6), beats bins +5.2 [3.2, 7.4];
+  newpool ours 38.4, vs from-success +4.8 [4.4, 7.9], vs bins +10.4. (3) Generalisation battery rerun on the refilled BBEH / SuperGPQA
+  (eai rerun_*; JSON outputs overwritten in place). (4) eai swe_mixllm (GPU): MixLLM-style row for SWE-Smith.
+  SWE-Smith v2 readouts: success AUC .80-.83 per route on test (389), length R2 .09-.37, output p90/p10 5-28x.
+  Refreshed hetero pools: prefill-router repro BBEH ours +8.4 [-2.5, 18.4]; SuperGPQA THEIRS ahead by 6.0 [0.4, 11.2] (success AUC .58
+  vs .57); cascades BBEH 35.6 [23.0, 46.5], SuperGPQA 32.4 [18.3, 43.0]. Paper updated: SWE-Smith positive; BBEH / SuperGPQA numbers;
+  SuperGPQA C4 now directional; C7 "four of five sets".
