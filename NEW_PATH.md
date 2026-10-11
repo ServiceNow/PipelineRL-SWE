@@ -2426,3 +2426,20 @@ Caveat: measured difficulty saturates (half of MMLU-Pro is solved by all five ro
   subject predicted / actual: engineering +.95 / +.95 (x2.6 longer than difficulty implies), chemistry +.42 / +.43, physics +.25 / +.27;
   psychology -.32 / -.43, history -.31 / -.32. Examples every route solves: multi-step engineering calculations predicted 5-7k tokens
   (actual 2.4-5.6k) vs one-line facts / arithmetic predicted ~100-150 (actual 120-170).
+
+### 4.A.83 Weekend results (status 2026-10-11 17:10 ET)
+- New-family collections FINISHED (4.A.76). Rows (latest per problem) / errors: qw32 Omni 1,325 ok / 25 err; glm47f Omni 1,306 / 44;
+  nemo120 Omni 1,024 ok / 326 err (DekaLLM: 325 errors with an empty message), MMLU-Pro 2,314 / 386 (257 HTTP 429), LCB eval 291 / 50
+  invalid (24 API errors, 13 empty generations) -> collect_lcb_expert validation failed (11.1% > 10%; rows kept), LCB train 530 / 21.
+  qw32 / glm47f LCB 892 / 892 OK. Spend: math $38.11 (qw32 13.83, glm47f 12.29, nemo120 11.99), LCB + SWE generation $27.39; key now
+  $141 of $900 (Friday $207). Total ~$66, ~$5-10 above the ~$55-60 approved estimate, within the $98 of guards.
+- SWE-Smith v2 (1,432 instances, dsv4f PINNED, Daytona labels; test 389 with every route valid). Resolve rates oss20lo .25, oss20md .30,
+  dsv4f .37, oss120md .35, oss120hi .37; gpt-oss-20b valid .89 (API errors on the new draws). Billed suite: HEADROOM 25.2% [15.0, 31.1];
+  OURS 14.5% [5.8, 19.8] vs median (capture .58); ours vs mean +7.8 [3.5, 13.2], vs cost-from-success +9.2 [2.2, 13.9], vs GBM +18.2
+  [8.1, 27.6], vs difficulty bins +2.9 [-0.3, 5.7], vs ZeroRouter +1.7 [-4.7, 9.0] (MixLLM not run: needs GPU embeddings).
+  => SWE-Smith one-shot is NO LONGER NULL (was 14.2 n.s. headroom / 7.5 n.s. ours on 500 unpinned): per-query cost pays there too.
+- Refills: BBEH gpt-oss errors 24 left of 11,000 ($1.07, guard hit), SuperGPQA 0 left ($0.25). Rerun suites (overwrite the paper's
+  numbers): BBEH test 298 -> 300, ours 26.5 -> 28.6 [19.0, 36.7], headroom 41.8 -> 41.0, vs from-success 26.6 -> 24.5 [15.5, 33.3], vs
+  MixLLM -2.2 -> -0.4 n.s., vs GBM +4.6 -> -0.3 n.s.; SuperGPQA ours 27.6 -> 27.5, headroom 57.0 -> 56.6, vs from-success 9.0 [0.1, 15.4]
+  -> 9.8 [-0.7, 17.5] (NO LONGER SIGNIFICANT), vs MixLLM 15.2 -> 15.0 n.s. Qwen3-235B refill FAILED ($0; its pinned provider still
+  429s): 58 Omni / 109 MMLU-Pro rows remain errors; non-reasoning numbers unchanged.
