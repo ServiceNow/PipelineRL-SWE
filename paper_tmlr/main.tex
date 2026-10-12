@@ -214,7 +214,7 @@ Given success readouts, where length tracks difficulty a cost readout needs few 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\linewidth]{figures/label_efficiency.pdf}
-\caption{\textbf{Length labels needed.} Cost saved relative to median pricing when the cost readout is fitted on $n$ labelled training problems: a dedicated readout on the prefill (blue) versus pricing from the success readouts (red), which needs length labels only to map success logits to length. Mean over five random subsets; bands $\pm$1 s.d. Where length tracks difficulty (LiveCodeBench, Omni-MATH), pricing from success is as good from 20 problems on; where it tracks the work a question requires (MMLU-Pro, BIG-Bench Extra Hard), it stays near zero at every $n$.}
+\caption{\textbf{Length labels needed.} Cost saved relative to median pricing when the cost readout is fitted on $n$ labelled training problems: a dedicated readout on the prefill (blue) versus pricing from the success readouts (red), which needs length labels only to map success logits to length. Mean over five random subsets; bands $\pm$1 s.d. Where length tracks difficulty (LiveCodeBench, Omni-MATH), pricing from success is as good from 20 problems on; where it tracks the work a question requires (MMLU-Pro, BIG-Bench Extra Hard), it stays below 8\% at every $n$.}
 \label{fig:labels}
 \end{figure}
 
@@ -225,7 +225,7 @@ At matched accuracy in the middle of the band, 31--66\% of problems change route
 Where length tracks difficulty, pricing from the success readouts ties the dedicated cost readout when both are fitted on a benchmark's full training set (\cref{tab:pools}). A deployed router rarely has that: it has few labels, it adds models, and it meets benchmarks it was not trained on. We test the cost estimators in all three settings, with every estimator given the same success predictions unless stated, and the same protocol as before.
 
 \paragraph{Few labels.}
-\Cref{tab:labels} refits every cost estimator on 20 randomly chosen training problems (five subsets). Our readout keeps 57--75\% of its full-data saving on four of five pools (LCB 24.7\%, Omni-MATH 22.8\%, MMLU-Pro 16.4\%, SuperGPQA 20.6\%), while the external estimators save less than 11\% on every pool. Their deficit narrows with data but stays large on most pools: at 100 problems ours saves 22.6\% on MMLU-Pro against at most 10.6\% for any external estimator, with every paired interval excluding zero. The exception is BIG-Bench Extra Hard, where the task format is visible in the text: the text estimators reach 19--22\% at 100 problems and tie ours at full data. Pricing from the success readouts is the strongest arm on LCB and Omni-MATH from 20 problems on, as in \cref{fig:labels}, and far behind ours on the two heterogeneous pools.
+\Cref{tab:labels} refits every cost estimator on 20 randomly chosen training problems (five subsets). Our readout keeps 51--75\% of its full-data saving on every pool (LCB 24.7\%, Omni-MATH 22.8\%, MMLU-Pro 16.4\%, SuperGPQA 20.5\%, BIG-Bench Extra Hard 14.7\%), while the external estimators save less than 11\% on every pool. Their deficit narrows with data but stays large on most pools: at 100 problems ours saves 22.6\% on MMLU-Pro against at most 10.6\% for any external estimator, with every paired interval excluding zero. The exception is BIG-Bench Extra Hard, where the task format is visible in the text: the text estimators reach 20--21\% at 100 problems and tie ours at full data, though below 50 problems ours still leads (by 22.7 [5.8, 42.2] points over MixLLM-style embeddings at 50). Pricing from the success readouts is the strongest arm on LCB and Omni-MATH from 20 problems on, as in \cref{fig:labels}, and far behind ours on the two heterogeneous pools.
 
 \begin{table}[t]
 \centering
@@ -235,22 +235,22 @@ Where length tracks difficulty, pricing from the success readouts ties the dedic
 \toprule
 Cost estimator, 20 training problems & LCB & Omni-MATH & MMLU-Pro & SuperGPQA & BBEH \\
 \midrule
-Ours (prefill readout) & \textbf{24.7} & 22.8 & \textbf{16.4} & \textbf{20.6} & 10.6 \\
-Cost from success (our ablation) & 27.8 & 31.5 & 6.8 & 5.9 & $-$15.0 \\
-Prompt-feature GBM & $-$7.7 & 0.1 & 2.8 & 2.3 & 2.3 \\
-MixLLM-style embeddings & $-$1.8 & 7.0 & 2.5 & 3.4 & $-$5.8 \\
-CARROT-style $k$NN & 0.1 & 6.0 & 10.7 & 7.4 & $-$1.4 \\
-ZeroRouter pricing & 7.6 & 9.3 & 3.5 & $-$9.2 & $-$3.6 \\
+Ours (prefill readout) & \textbf{24.7} & 22.8 & \textbf{16.4} & 20.5 & 14.7 \\
+Cost from success (our ablation) & 27.8 & 31.5 & 6.8 & 3.4 & $-$8.4 \\
+Prompt-feature GBM & $-$7.7 & 0.1 & 2.8 & 2.5 & 7.9 \\
+MixLLM-style embeddings & $-$1.8 & 7.0 & 2.5 & 3.4 & $-$11.6 \\
+CARROT-style $k$NN & 0.1 & 6.0 & 10.7 & 7.3 & $-$5.7 \\
+ZeroRouter pricing & 7.6 & 9.3 & 3.5 & $-$9.5 & $-$3.9 \\
 \midrule
-\emph{Ours, all training problems (refit)} & 33.7 & 34.8 & 28.8 & 27.6 & 26.1 \\
+\emph{Ours, all training problems (refit)} & 33.7 & 34.8 & 28.8 & 27.5 & 28.6 \\
 \bottomrule
 \end{tabular}
-\caption{\textbf{Few labels.} Cost saved (\%) relative to median pricing (from the full training set) when each cost estimator is fitted on 20 random training problems; mean of five subsets; every arm routes with the same success readouts. ZeroRouter pricing: its item-response latent fitted on the 20 problems, read from the prefill, with its bin lookup; $k$NN neighbours and ZeroRouter's dimension and bin count chosen on the calibration split. Bold: ours exceeds every external estimator with paired intervals excluding zero (LCB from $n$=20, SuperGPQA from $n$=50, MMLU-Pro from $n$=100).}
+\caption{\textbf{Few labels.} Cost saved (\%) relative to median pricing (from the full training set) when each cost estimator is fitted on 20 random training problems; mean of five subsets; every arm routes with the same success readouts. ZeroRouter pricing: its item-response latent fitted on the 20 problems, read from the prefill, with its bin lookup; $k$NN neighbours and ZeroRouter's dimension and bin count chosen on the calibration split. Bold: ours exceeds every external estimator with paired intervals excluding zero (LCB from $n$=20, MMLU-Pro from $n$=100); on SuperGPQA it does so at $n$=50 only, and on BIG-Bench Extra Hard the prompt-feature GBM stays within noise at every $n$.}
 \label{tab:labels}
 \end{table}
 
 \paragraph{New models.}
-To add a model, a router needs its success and cost readouts. We hold out one model at a time from the pool (both efforts of gpt-oss-20b, both efforts of gpt-oss-120b, or deepseek-v4-flash, so that no sibling effort of the new model remains) and fit its readouts from $k$ labelled problems while every other route keeps its full readouts. Our onboarding fits two parameters per readout: an offset to the other routes' predicted log length, and a logistic map from their mean success logit. ZeroRouter's onboarding, its main use case, fits the new model's ability on the same $k$ anchors in an item-response latent fitted on the remaining routes and fills its per-bin length table from them~\citep{zerorouter}; a CARROT-style arm averages the $k$ anchors' outcomes and lengths over nearest neighbours. \Cref{tab:onboard} reports the mean over the three held-out models. From 10 examples our router saves 13.5--25.6\%, against 5.8--22.4\% for ZeroRouter's onboarding, and leads it by 10.1 [1.4, 23.7] points on MMLU-Pro and 14.6 [3.0, 26.0] on SuperGPQA; at $k$=50 it also leads on LCB (9.3 [3.0, 17.0]). On Omni-MATH and BIG-Bench Extra Hard the two are within noise. The gain concentrates on deepseek-v4-flash, the one model whose family is not otherwise in the pool, and whose absence makes the router spend more than median pricing on four of five pools: onboarding it from 10 problems recovers 10--35 points more than ZeroRouter's onboarding does. ZeroRouter's Fisher-information anchors help both methods about equally; with the same anchors ours ties on LCB and Omni-MATH and leads by 6--16 points on the other three pools at $k$=10.
+To add a model, a router needs its success and cost readouts. We hold out one model at a time from the pool (both efforts of gpt-oss-20b, both efforts of gpt-oss-120b, or deepseek-v4-flash, so that no sibling effort of the new model remains) and fit its readouts from $k$ labelled problems while every other route keeps its full readouts. Our onboarding fits two parameters per readout: an offset to the other routes' predicted log length, and a logistic map from their mean success logit. ZeroRouter's onboarding, its main use case, fits the new model's ability on the same $k$ anchors in an item-response latent fitted on the remaining routes and fills its per-bin length table from them~\citep{zerorouter}; a CARROT-style arm averages the $k$ anchors' outcomes and lengths over nearest neighbours. \Cref{tab:onboard} reports the mean over the three held-out models. From 10 examples our router saves 17.1--25.6\%, against 4.4--22.4\% for ZeroRouter's onboarding, and leads it by 10.1 [1.4, 23.7] points on MMLU-Pro and 15.7 [0.4, 31.5] on SuperGPQA; at $k$=50 it also leads on LCB (9.3 [3.0, 17.0]). On Omni-MATH and BIG-Bench Extra Hard the two are within noise. The gain concentrates on deepseek-v4-flash, the one model whose family is not otherwise in the pool, and whose absence makes the router spend more than median pricing on four of five pools: onboarding it from 10 problems recovers 11--38 points more than ZeroRouter's onboarding does. ZeroRouter's Fisher-information anchors help both methods about equally; with the same anchors ours ties on LCB and Omni-MATH and leads by 5--14 points on the other three pools at $k$=10.
 \todo{New routed families (Qwen3-32B, GLM-4.7-flash, Nemotron-3-super) on all three main sets are being collected (NEW\_PATH 4.A.76): whole-family onboarding beyond one cross-family model; add a row block or replace the held-out set.}
 
 \begin{table}[t]
@@ -261,15 +261,15 @@ To add a model, a router needs its success and cost readouts. We hold out one mo
 \toprule
  & LCB & Omni-MATH & MMLU-Pro & SuperGPQA & BBEH \\
 \midrule
-Ours, $k$=10 & 24.6 & 25.6 & 22.6 & 20.4 & 13.5 \\
-ZeroRouter onboarding, $k$=10 & 13.6 & 22.4 & 12.6 & 5.8 & 6.0 \\
-CARROT-style $k$NN, $k$=10 & 13.3 & 15.3 & 8.5 & 7.4 & 11.9 \\
-Median length + base rate, $k$=10 & $-$7.1 & 10.6 & 2.9 & 3.5 & 5.8 \\
+Ours, $k$=10 & 24.6 & 25.6 & 22.6 & 20.1 & 17.1 \\
+ZeroRouter onboarding, $k$=10 & 13.6 & 22.4 & 12.6 & 4.4 & 9.7 \\
+CARROT-style $k$NN, $k$=10 & 13.3 & 15.3 & 8.5 & 7.0 & 13.9 \\
+Median length + base rate, $k$=10 & $-$7.1 & 10.6 & 2.9 & 3.3 & 10.3 \\
 \midrule
-Ours $-$ ZeroRouter, $k$=10 & 10.9 [$-$2.0, 24.1] & 3.2 [$-$12.3, 27.9] & 10.1 [1.4, 23.7] & 14.6 [3.0, 26.0] & 7.5 [$-$2.2, 17.9] \\
-Ours $-$ ZeroRouter, $k$=50 & 9.3 [3.0, 17.0] & $-$0.2 [$-$7.3, 6.0] & 9.6 [2.2, 14.8] & 12.8 [5.8, 23.0] & 4.2 [$-$1.6, 16.6] \\
+Ours $-$ ZeroRouter, $k$=10 & 10.9 [$-$2.0, 24.1] & 3.2 [$-$12.3, 27.9] & 10.1 [1.4, 23.7] & 15.7 [0.4, 31.5] & 7.4 [$-$1.9, 20.9] \\
+Ours $-$ ZeroRouter, $k$=50 & 9.3 [3.0, 17.0] & $-$0.2 [$-$7.3, 6.0] & 9.6 [2.2, 14.8] & 13.4 [5.8, 23.8] & 3.7 [$-$1.1, 7.8] \\
 \midrule
-\emph{All routes on full readouts} & 33.7 & 34.8 & 28.8 & 27.6 & 26.5 \\
+\emph{All routes on full readouts} & 33.7 & 34.8 & 28.8 & 27.5 & 28.6 \\
 \bottomrule
 \end{tabular}
 \caption{\textbf{Onboarding a new model from $k$ examples.} Cost saved (\%) relative to the full pool at median pricing, mean over three held-out models (gpt-oss-20b with both efforts, gpt-oss-120b with both efforts, deepseek-v4-flash) and 20 random draws of the $k$ anchors (the same anchors in every arm); every other route keeps its full readouts. Differences in points with 95\% paired bootstrap intervals over test problems. ZeroRouter's dimension and bin count and the $k$NN neighbour count are chosen on calibration.}
@@ -277,7 +277,7 @@ Ours $-$ ZeroRouter, $k$=50 & 9.3 [3.0, 17.0] & $-$0.2 [$-$7.3, 6.0] & 9.6 [2.2,
 \end{table}
 
 \paragraph{New benchmarks.}
-Finally, we move a whole router to a benchmark it has not seen: both readouts are trained on the other pools of the same domain (code, or math and knowledge), with every choice (regularisation, Platt calibration, neighbour counts, latent dimension, bin count) made on those pools' calibration splits, so no label of the target is used. \Cref{tab:transfer} compares it with the router trained on the target itself. On LCB, MMLU-Pro and AIME the transferred router keeps 90--95\% of its in-domain saving (32.1\%, 27.3\% and 14.2\%), and on APPS it exceeds it. The prefill router's rule, the same transferred success readouts with median pricing, saves at most 2\% on any of these, so the transferred cost readout carries the result, even though transferred success predictions are weaker (LCB AUC .65 against .83). Ours leads every external estimator transferred the same way, by 7--24 points on these four pools. Transfer is weaker on the two heterogeneous pools and on Omni-MATH (7.3--19.0\%). Combining both sources of labels is better than either: with ten labelled target problems added to the source data, the cost readout saves 27.8\% on MMLU-Pro and 13.1\% on AIME (with the target's success readouts), against 8.1\% and 4.4\% from the ten problems alone, and 21.7\% against 10.6\% on BIG-Bench Extra Hard with twenty. Pricing from the success readouts transfers unevenly. With the target's own success readouts and a map trained on the other pools, it keeps its saving where the target's kind of difficulty resembles its sources' (APPS 17.1\%, AIME 13.2\%, CodeContests 9.3\%) and collapses elsewhere: from 34.4\% to $-$6.2\% on LCB, 20.6\% to $-$19.9\% on SuperGPQA, 18.0\% to 5.2\% on Omni-MATH and $-$0.3\% to $-$16.9\% on BIG-Bench Extra Hard. Under the same conditions the dedicated readout saves 30.2\%, 17.5\%, 15.6\% and 11.3\% on those four, and ZeroRouter's difficulty-bin pricing transfers as unevenly as pricing from success.
+Finally, we move a whole router to a benchmark it has not seen: both readouts are trained on the other pools of the same domain (code, or math and knowledge), with every choice (regularisation, Platt calibration, neighbour counts, latent dimension, bin count) made on those pools' calibration splits, so no label of the target is used. \Cref{tab:transfer} compares it with the router trained on the target itself. On LCB, MMLU-Pro and AIME the transferred router keeps 90--95\% of its in-domain saving (32.1\%, 27.3\% and 14.1\%), and on APPS it exceeds it. The prefill router's rule, the same transferred success readouts with median pricing, saves at most 2\% on any of these, so the transferred cost readout carries the result, even though transferred success predictions are weaker (LCB AUC .65 against .83). Ours leads every external estimator transferred the same way, by 7--24 points on these four pools. Transfer is weaker on the two heterogeneous pools and on Omni-MATH (7.8--19.3\%), but still ahead of every transferred external estimator, which save at most 4.0\% there. Combining both sources of labels is better than either: with ten labelled target problems added to the source data, the cost readout saves 27.9\% on MMLU-Pro and 13.1\% on AIME (with the target's success readouts), against 8.1\% and 4.4\% from the ten problems alone, and 24.1\% against 14.7\% on BIG-Bench Extra Hard with twenty. Pricing from the success readouts transfers unevenly. With the target's own success readouts and a map trained on the other pools, it keeps its saving where the target's kind of difficulty resembles its sources' (APPS 17.1\%, AIME 12.3\%, CodeContests 9.3\%) and collapses elsewhere: from 34.4\% to $-$6.2\% on LCB, 19.6\% to $-$21.9\% on SuperGPQA, 18.0\% to 6.5\% on Omni-MATH and 5.5\% to $-$20.5\% on BIG-Bench Extra Hard. Under the same conditions the dedicated readout saves 30.2\%, 17.7\%, 15.7\% and 16.1\% on those four, and ZeroRouter's difficulty-bin pricing transfers as unevenly as pricing from success.
 
 \begin{table}[t]
 \centering
@@ -290,19 +290,22 @@ Target & in-domain & transferred & transferred & transferred \\
 \midrule
 LiveCodeBench & 33.7 & 32.1 & 2.0 & 7.8 (MixLLM) \\
 APPS & 12.8 & 21.7 & $-$0.7 & 11.0 (MixLLM) \\
-MMLU-Pro & 28.8 & 27.3 & $-$1.4 & 17.2 ($k$NN) \\
-AIME & 15.7 & 14.2 & $-$1.6 & 6.8 ($k$NN) \\
-SuperGPQA & 27.6 & 19.0 & $-$23.2 & 6.0 (MixLLM) \\
-BIG-Bench Extra Hard & 26.1 & 7.3 & $-$21.0 & $-$6.2 (MixLLM) \\
-Omni-MATH (500-problem pool) & 18.2 & 8.1 & $-$20.0 & 4.3 (MixLLM) \\
+MMLU-Pro & 28.8 & 27.3 & $-$1.5 & 17.3 ($k$NN) \\
+AIME & 15.7 & 14.1 & $-$1.6 & 6.8 ($k$NN) \\
+SuperGPQA & 27.5 & 19.3 & $-$22.5 & 4.0 (MixLLM) \\
+BIG-Bench Extra Hard & 28.6 & 8.6 & $-$19.1 & $-$5.4 (MixLLM) \\
+Omni-MATH (500-problem pool) & 18.2 & 7.8 & $-$20.0 & $-$0.5 (MixLLM) \\
 \bottomrule
 \end{tabular}
 \caption{\textbf{A router moved to a new benchmark.} Cost saved (\%) relative to the target's own median rule, at matched accuracy on its test set. Transferred: success and cost readouts trained on the other pools of the same domain (coding: LCB, APPS, BigCodeBench, CodeContests; math and knowledge: Omni-MATH, MMLU-Pro, AIME, SuperGPQA, BIG-Bench Extra Hard), with every choice made on their calibration splits. Prefill-router rule: the transferred success readouts with median pricing. External estimators transferred the same way, each with its own success model (MixLLM-style: logistic readout on the text embedding; $k$NN; ZeroRouter: its latent and bins). Ours exceeds every other arm with paired intervals excluding zero on LCB, MMLU-Pro, AIME and BIG-Bench Extra Hard. Omni-MATH uses its 500-problem pool (test 150), whose prefill matches the other pools'. BigCodeBench and CodeContests, where no in-domain estimator saves significantly, are omitted: there the transferred success readouts are badly miscalibrated (BigCodeBench log loss 1.17 against .67 in-domain) and the apparent gains are not robust.}
 \label{tab:transfer}
 \end{table}
 
+\paragraph{Which estimators lose least.}
+Holding the target's success readouts fixed, we bootstrap over test problems the drop from in-domain to transferred pricing for each estimator, and its difference from our drop. Ours loses significantly less than pricing from success on LCB (37.1 points [26.9, 46.0]), SuperGPQA (31.8 [16.3, 49.9]) and BIG-Bench Extra Hard (13.4 [1.4, 23.9]), and less than ZeroRouter's bin pricing on LCB (21.0 [11.7, 28.5]) and MMLU-Pro (4.0 [1.1, 8.2]); on the other pools the drops are within noise of each other, and on no pool does ours lose significantly more. Our own drop is significant only on the two heterogeneous pools (9.8 and 12.5 points).
+
 \paragraph{Why the cost readout transfers.}
-Training one readout on the target together with the other pools matches the target-only readout within about 3 points on every pool, so a single readout can serve all of them. Part of what transfers is shared structure: 24--40\% of each route's variance in log length lies between benchmarks, and the routes agree on which benchmarks are long (mean correlation of benchmark means across routes .84). Length $R^2$ under transfer is close to in-domain on LCB, APPS, AIME, Omni-MATH and SuperGPQA but falls sharply on MMLU-Pro (.02--.46 against .29--.63), where routing transfers fully nonetheless: routing needs the ordering of problems within a route and the contrast between routes, not calibrated absolute lengths.
+Training one readout on the target together with the other pools matches the target-only readout within 4.4 points on every pool, with no difference significant, so a single readout can serve all of them. Part of what transfers is shared structure: 24--40\% of each route's variance in log length lies between benchmarks, and the routes agree on which benchmarks are long (mean correlation of benchmark means across routes .84). Length $R^2$ under transfer is close to in-domain on LCB, APPS, AIME, Omni-MATH and SuperGPQA but falls sharply on MMLU-Pro (.02--.46 against .29--.63), where routing transfers fully nonetheless: routing needs the ordering of problems within a route and the contrast between routes, not calibrated absolute lengths.
 
 \section{When it works and when it does not}\label{sec:when}
 Per-query cost pays under two conditions: (a) output length varies within a route by more than prices differ between routes, which creates headroom, and (b) that variation can be read from the prompt, which lets an estimator capture it. Each of our two failures violates one condition, and neither is specific to our estimator (\cref{fig:capture}).
@@ -327,7 +330,7 @@ Non-reasoning routes combine both failures (\cref{tab:nonreason}): less headroom
 We study software engineering in two regimes: one-shot patch generation, where per-query cost pays as on the coding pools, and agents, where the price gaps between models dominate.
 
 \paragraph{One-shot patches.}
-On 1,432 SWE-Smith instances~\citep{swesmith}, each of the five routes writes one patch (deepseek-v4-flash pinned as elsewhere), labelled by executing the repository's tests in a sandbox. Pass rates are low and close together (25--37\%), but which instances are solvable is legible from the issue (success AUC .80--.83 per route on the 389 test instances where every route returned a patch). Output length varies 5--28$\times$ between a route's 10th- and 90th-percentile instances and is only modestly predictable (log-length $R^2$ .09--.37). Per-query cost knowledge is worth 25.2\% [15.0, 31.1] over median pricing, and our readouts save 14.5\% [5.8, 19.8], a capture of .58. They beat mean length by 7.8\% [3.5, 13.2], pricing from success by 9.2\% [2.2, 13.9] and prompt features by 18.2\% [8.1, 27.6]; difficulty bins (2.9\% [$-$0.3, 5.7]) and ZeroRouter (1.7\% [$-$4.7, 9.0]) are within noise. One-shot patch generation thus behaves like the coding pools.
+On 1,432 SWE-Smith instances~\citep{swesmith}, each of the five routes writes one patch (deepseek-v4-flash pinned as elsewhere), labelled by executing the repository's tests in a sandbox. Pass rates are low and close together (25--37\%), but which instances are solvable is legible from the issue (success AUC .80--.83 per route on the 389 test instances where every route returned a patch). Output length varies 5--28$\times$ between a route's 10th- and 90th-percentile instances and is only modestly predictable (log-length $R^2$ .09--.37). Per-query cost knowledge is worth 25.2\% [15.0, 31.1] over median pricing, and our readouts save 14.5\% [5.8, 19.8], a capture of .58. They beat mean length by 7.8\% [3.5, 13.2], pricing from success by 9.2\% [2.2, 13.9], MixLLM-style embeddings by 6.8\% [2.5, 10.6] and prompt features by 18.2\% [8.1, 27.6]; difficulty bins (2.9\% [$-$0.3, 5.7]) and ZeroRouter (1.7\% [$-$4.7, 9.0]) are within noise. One-shot patch generation thus behaves like the coding pools.
 
 \paragraph{Agents: cost is real, varies by task and is stable.}
 Public SWE-rebench trajectories~\citep{swerebench} give 111 tasks run five times by each of 13 models in one scaffold. Across models, agentic cost is dominated by the model: of the variance of log cost, 74\% is between models, 15\% between tasks, 6\% their interaction and 4\% run to run. Within a model, however, per-task cost spans 2.7--9.0$\times$ between the 10th and 90th percentile, and it is stable across runs (intraclass correlation .69--.92). Whether knowing it pays depends on the price gaps between the routed models, as in \cref{sec:when}: among all 13 models, whose prices per run span about 190$\times$, per-task cost knowledge is worth 8.5\% [$-$5.0, 17.8] (one-shot routing, success and cost from three runs, scored on the other two); among the seven open-weight models, whose prices span about 10$\times$, it is worth 25.7\% [6.3, 40.6], as much as on the reasoning pools.
@@ -335,7 +338,7 @@ Public SWE-rebench trajectories~\citep{swerebench} give 111 tasks run five times
 \paragraph{Agents: cost is only partly legible before the run.}
 From the issue text alone, the prefill's cost readout reaches out-of-fold $R^2$ of about zero on the 111 SWE-rebench tasks, too few to fit it. On 3,387 tasks with about 20 SWE-agent runs each (one model, Llama-3.1-70B; cost proxied by cumulative context and output length), the per-task mean cost is reliable (split-half reliability .91) and the issue text predicts it at $R^2$ .29, still rising with data (.18 with 100 tasks, .32 with 2,710). This is below what the prefill reaches on one-shot pools (.43--.83). Reading the first ten steps of a cheap model's trajectory predicts other models' per-task cost at $R^2$ .16 and the same run's final cost at .28, which suggests exploring cheaply before pricing the expensive candidates.
 
-\todo{MixLLM-style row for SWE-Smith (GPU embeddings, running). Decide whether the test-writer measurement (NEW\_PATH 4.B.2) belongs here. Cite the nebius SWE-agent trajectories dataset (verify on its Hugging Face page).}
+\todo{Decide whether the test-writer measurement (NEW\_PATH 4.B.2) belongs here. Cite the nebius SWE-agent trajectories dataset (verify on its Hugging Face page).}
 
 \section{Ablations}
 \paragraph{Is difficulty enough to price?}
