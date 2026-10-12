@@ -118,7 +118,7 @@ def onboarding(S, allc):
     C_full = costs8(S, S["tok"]); C_med = costs8(S, np.repeat(np.median(S["L"][tr], 0)[None], N, 0))
     H0 = {nm: curve8(S, S["P"], C_med, ii, allc) for nm, ii in (("te", ev), ("ca", ca))}
     gain = lambda Pm, C, ii, h0: saved(curve8(S, Pm, C, ii, allc), h0)
-    pca = PCA(256, random_state=0).fit(S["X"][tr]); Z = pca.transform(S["X"]); Z /= Z[tr].std(0) + 1e-6
+    pca = PCA(min(256, len(tr) - 1), random_state=0).fit(S["X"][tr]); Z = pca.transform(S["X"]); Z /= Z[tr].std(0) + 1e-6
     out = {"full": gain(S["P"], C_full, ev, H0["te"])}; rng = np.random.default_rng(0)
     BS = [ev[rng.integers(0, len(ev), len(ev))] for _ in range(200)]; H0b = [curve8(S, S["P"], C_med, ii, allc) for ii in BS]
     for h in range(5, 8):
