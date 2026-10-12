@@ -2511,3 +2511,25 @@ Qwen3-14B at $0.12/M input (no 4B listed). Handoff: HANDOFF_20261012.md.
   OpenRouter input price ($0.12/M) 6-51%, >100% on APPS. Zero marginal cost vs a prefill success router (same pass).
 Paper: Results (V in advance; re-split sentence), sec:headroom (price gaps), Deployment (tab:deploy, "The router's own cost"),
 Limitations, appendix (tab:resplit, fig:pricegap); removed the superseded 7-route "New model families" ablation. Body ~15 pages.
+### 4.A.88 Reviewer-proofing checks (launched 2026-10-12; free; user-approved items 1-4; `launchers/tmlr/launch_oct12_checks.sh`, 28 eai jobs)
+- **(3) DONE: list-price mechanism rows at billed prices** (`decompose.py` new `billed` pricing; ran directly, seconds; logs
+  reason_pinned_logs/mech_lvr_billed.txt, mech_drivers_billed.txt; JSON lvr_*_pinned_billed.json, drivers_mmlupro_pinned_billed.json).
+  LCB level vs differences (headroom 45.3, = the paper's billed headroom): oracle level-only 37.4 (82%), oracle differences-only 38.9
+  (86%), probe full 34.5, probe level-only 32.2 (93% of full), probe differences-only 23.5 [list: 39.8 / 38.7 / 36.4 / 33.2 / 23.1].
+  MMLU-Pro drivers (pool test 300, headroom 61.5): difficulty+subject pricing 32.6 [17.0, 44.9], +text 33.5, probe 43.9 [32.6, 52.3]
+  [list: 30.3 / 43.9 / 64.1]. Conclusions unchanged.
+- **(1) Billed rates fitted on TRAINING calls only** (`billed.py RATE_FIT=train`; tr_* jobs, outputs *_pinned_trainrate.json). Fits:
+  dsv4f 0.0419 / 0.0840 $/M (4,014 pinned training calls of Omni / MMLU-Pro / AIME; identical to the test-call fit 0.042 / 0.084);
+  gpt-oss-20b 0.0219 / 0.1543 (vs 0.0288 / 0.1338 on test calls), gpt-oss-120b 0.0431 / 0.2565 (vs 0.0201 / 0.2568), both from the
+  SuperGPQA / BBEH training calls (the only training calls with a billed cost). FINDING: StreamLake billed dsv4f at 0.078 / 0.165 $/M
+  in the Oct 9 SuperGPQA / BBEH collections, ~2x the Oct 5 rate the paper used for those pools (their realized cost = tokens x rate).
+  tr_supergpqa / tr_bbeh use each pool's own training-call rates (RATE_POOL), i.e. what was actually billed there.
+- **(2) Draw-preserving re-splits** (`tmlr_strengthen.py resplit_tc`; Omni, MMLU-Pro; train + calibration reshuffled, paper test
+  kept; seed -1 = paper split through the same pipeline) + matched paper-split controls for the random re-splits of the other 7
+  pools (`resplit P -1 0`). Tests whether the Omni 19.0 / MMLU-Pro 25.8 re-split means (vs 34.8 / 28.8) come from the split
+  composition or from the re-split pipeline (success readouts refit with success_linear).
+- **(4) Split-draw headroom** (`tmlr_strengthen.py splitdraw`; LCB, AIME, BCB, CC, SuperGPQA, BBEH, Omni500; 20 splits, NBOOT 100):
+  draws of each (test problem, route) split into a pricing half A and an evaluation half B; oracle_realized (B's own length: the
+  paper's headroom) vs oracle_heldout (A's length: achievable by an expected-cost predictor, noisy). AIME smoke (1 split): all draws
+  headroom 28.4 / ours 15.0; on B halves ours 12.7, realized oracle 29.6, held-out oracle 17.4 -> the realized-cost oracle overstates
+  the achievable headroom; capture .43 (realized) vs .73 (held-out).
