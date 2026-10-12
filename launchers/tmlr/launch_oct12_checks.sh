@@ -9,7 +9,7 @@
 set -euo pipefail
 R=/mnt/llmd/results/exps/aristides/reason; L=$R/reason_pinned_logs; PY=/home/toolkit/.conda/envs/pipeline-rl/bin/python3
 CD="cd /home/toolkit/PipelineRL-SWE/analysis/cost_headroom && export REASON_ROOT=$R/../reason_pinned OUT_DIR=$L NTHREADS=16 HF_HOME=/home/toolkit/.cache/huggingface HF_HUB_OFFLINE=1 &&"
-sub() { make job JOB_NAME="$1" ENV=pipeline-rl CONDA_EXE=/opt/conda/bin/conda SNAPSHOT=1 GPU=0 CPU=$3 CPU_MEM=$4 COMMAND="$2" 2>&1 | grep -oE "QUEUING|RUNNING|[Ee]rror.*" | head -1 || true; }
+sub() { make job JOB_NAME="$1" ENV=pipeline-rl CONDA_EXE=/opt/conda/bin/conda SNAPSHOT=1 GPU=0 GPU_MEM=0 CPU=$3 CPU_MEM=$4 COMMAND="$2" 2>&1 | grep -oE "QUEUING|RUNNING|[Ee]rror.*" | head -1 || true; }
 [[ ${SUBMIT:-0} == 1 ]] || { echo "dry run"; exit 0; }
 TR="export RESULT_TAG=_pinned_trainrate RATE_FIT=train &&"
 echo -n "tr_fresh "; sub tr_fresh "$CD $TR $PY -u fresh_baselines.py > $L/trainrate_fresh.txt 2>&1; echo EXIT \$? >> $L/trainrate_fresh.txt" 16 128
