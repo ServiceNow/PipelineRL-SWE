@@ -2533,3 +2533,21 @@ Limitations, appendix (tab:resplit, fig:pricegap); removed the superseded 7-rout
   paper's headroom) vs oracle_heldout (A's length: achievable by an expected-cost predictor, noisy). AIME smoke (1 split): all draws
   headroom 28.4 / ours 15.0; on B halves ours 12.7, realized oracle 29.6, held-out oracle 17.4 -> the realized-cost oracle overstates
   the achievable headroom; capture .43 (realized) vs .73 (held-out).
+### 4.A.89 Reviewer-proofing results (2026-10-12; all 28 jobs of 4.A.88 DONE; paper updated)
+- **(1) Training-call rates** (*_pinned_trainrate.json): ours vs median, test-fit -> train-fit: LCB 33.7 -> 32.8, Omni 34.8 -> 35.4,
+  MMLU-Pro 28.8 -> 29.2, AIME 15.7 -> 15.7, APPS 15.1 -> 18.7, BCB 6.3 -> 4.9, CC 6.3 -> 5.4; SuperGPQA 27.5 -> 32.4 and BBEH 28.6 -> 29.7
+  at their OWN billed dsv4f rate (~2x). No sign change in tab:fresh; estimator ranking unchanged everywhere. One significance change:
+  Omni ours vs zr-bins 6.4 [1.1, 11.6] -> 4.5 [-1.0, 10.0] (the ablation text claims no significance there).
+- **(2) Re-splits.** Paper-split controls through the re-split pipeline reproduce the paper on 8 of 9 pools (LCB 33.7, AIME 15.7, BCB 6.2,
+  CC 7.0, SuperGPQA 27.5, BBEH 28.8, Omni 34.9, MMLU-Pro 28.9; APPS 20.9 vs 15.1: the success refit). Draw-preserving re-splits (paper test
+  kept, train + calibration reshuffled, 10 each): Omni ours 31.5 +- 1.7 (headroom 51.9 +- 1.9; random re-splits 19.0) -> the random
+  re-split drop on Omni WAS the composition; MMLU-Pro ours 23.4 +- 2.7 (headroom 58.0; random 25.8) -> NOT composition: the paper's
+  28.8 is a favourable draw of training problems (~2 sd). Ahead of every external in 10/10 splits on both (Omni by 17.6, MMLU-Pro by
+  12.4); vs from-success Omni -1.9 (from-success sig. ahead 3/10), MMLU-Pro +17.4 (ours sig. ahead 10/10).
+- **(4) Split-draw headroom** (20 splits; ours / realized-cost oracle / held-out-draw oracle; capture realized / held-out): LCB 33.3 /
+  45.9 / 41.2 (.72 / .81); AIME 14.9 / 30.1 / 20.1 (.50 / .74); BCB 5.2 / 14.9 / 11.8; CC 7.4 / 38.9 / 23.4 (.19 / .32); SuperGPQA
+  27.0 / 57.1 / 52.7 (.47 / .51); BBEH 29.2 / 44.1 / 24.1 (ours exceeds the held-out oracle: it is noisy with 1-2 draws per half);
+  Omni500 15.5 / 35.9 / 23.6 (.43 / .66). The realized-cost headroom overstates the achievable one; capture figures are conservative.
+- Paper: Prices paragraph (fit on test calls disclosed + training-call check + SuperGPQA/BBEH billed rate), Results re-split sentence,
+  tab:resplit caption, new sec:headroom paragraph "The headroom is an upper bound", billed numbers in the level and MMLU-Pro driver
+  paragraphs (4.A.88).
