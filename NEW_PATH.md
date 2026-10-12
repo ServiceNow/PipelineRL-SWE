@@ -2493,3 +2493,21 @@ Paper: paragraph "Three further model families" in sec:general (replaces the TOD
 ties from-success (+0.2), ZR 6.3 behind; price gap: headroom 28.5-31.8 for 1.3-9.3x output-price spread, 6.9 at 29x, 2-3 beyond 87x
 (flat 22.2); one re-split: ours 9.2, oracle 23.9 (paper split 15.7 / 29.3). Prefill price bound: cheapest Qwen3 on OpenRouter is
 Qwen3-14B at $0.12/M input (no 4B listed). Handoff: HANDOFF_20261012.md.
+### 4.A.87 Strengthening results (2026-10-12 ~03:40 ET; all 37 jobs DONE; paper updated)
+- **Deployable policies** (`strengthen_deploy_*`; V per target chosen on calibration, applied once to test; headline = vs the median rule's
+  DEPLOYED curve at the accuracy reached): ours LCB 36.5 [27.2, 43.8], Omni 34.6 [30.3, 44.9], MMLU-Pro 37.9 [34.4, 42.8], AIME 22.2
+  [14.5, 28.8], APPS 16.0 n.s., BCB 7.8 n.s., CC 21.0 [5.2, 30.9], SuperGPQA 31.6 [8.6, 41.8], BBEH 27.1 [19.6, 37.4]. Ours - best
+  deployed external: LCB +9.1 (ZR), Omni +17.6 (kNN), MMLU-Pro +16.1 (MixLLM), SuperGPQA +18.9 (MixLLM), all CI-excl-0; AIME +6.3,
+  BBEH -2.0 (GBM) ties. vs from-success: MMLU-Pro +23.1, BBEH +24.6, SuperGPQA +10.1 [-0.2, 19.0]. Our own-frontier loss 1.0-4.7
+  (APPS 10.1, BCB 9.7, CC 5.0); median's 10-21 on MMLU-Pro / AIME / APPS / CC (why deployed savings exceed frontier savings).
+- **Re-splits** (10 per pool): ours LCB 34.1+-3.5, Omni 19.0+-3.3, MMLU-Pro 25.8+-2.3, AIME 15.3+-2.6, APPS 15.6+-4.9, BCB 3.6+-2.3,
+  CC 8.7+-4.5, SuperGPQA 32.1+-5.8, BBEH 24.8+-5.7. No external estimator significantly cheaper than ours in any of 90 splits;
+  from-success significantly ahead in 2/10 Omni splits. Omni / MMLU-Pro lower than paper split: re-splits put single-draw evaluation
+  problems into training (paper train has 2-4 draws per route).
+- **Price gaps** (alpha 0..5 around the geometric-mean price; costs from tokens): headroom peaks near the billed 3.1x; at 29x 7-49%, at
+  87x 2-42%; ours at 87x 1-25%. BCB band degenerates (omitted from figure). Figure paper_tmlr/figures/price_gap.pdf (appendix).
+- **Prefill overhead** (H100, HF bf16): prompts 127-1,216 tokens (BBEH longest), batch-1 latency 19-28 ms median, batched 8-21k tok/s.
+  As a share of our deployed $ saving: at $2/H100-h 2-10% (Omni, AIME, MMLU-Pro, SuperGPQA), ~30% (BBEH, APPS); at Qwen3-14B's
+  OpenRouter input price ($0.12/M) 6-51%, >100% on APPS. Zero marginal cost vs a prefill success router (same pass).
+Paper: Results (V in advance; re-split sentence), sec:headroom (price gaps), Deployment (tab:deploy, "The router's own cost"),
+Limitations, appendix (tab:resplit, fig:pricegap); removed the superseded 7-route "New model families" ablation. Body ~15 pages.
