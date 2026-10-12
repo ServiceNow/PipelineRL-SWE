@@ -14,7 +14,8 @@ the REROUTE rate (share of test problems where the oracle and paper rules pick d
 operating point).
 Usage: python decompose.py <tensors_dir>[:<cost_preds_file>[:market]] ... [--out name]
 Pricing: legacy blended $/M per route on all tokens (default, the LCB headline's), or `market` = OpenRouter list
-input/output prices (then the cost head must be the --in-out-prices one, predicting output tokens).
+input/output prices (then the cost head must be the --in-out-prices one, predicting output tokens), or `billed` = the effective
+billed $/M of billed.RATE (honours RATE_FIT); a `billed` spec reads a market-priced cost file and reprices its implied output tokens.
 """
 import json, os, sys, numpy as np
 from pathlib import Path
@@ -57,8 +58,14 @@ def pool(spec):
     PT = dict(MK)
     if (D / "prices.json").exists():                       # a pool with its own (in, out) $/M table, e.g. RouterBench
         PT.update({k: tuple(v) for k, v in json.load(open(D / "prices.json")).items()})
-    pin_of = (lambda s: PT[s][0]) if pricing == "market" else (lambda s: PR[s])
-    pout_of = (lambda s: PT[s][1]) if pricing == "market" else (lambda s: PR[s]); t = np.load(D / "tensors.npz", allow_pickle=True)
+    if pricing == "billed":                                # NEW_PATH 4.A.88: billed rates (the cost file is market-priced)
+        from billed import RATE, fam
+        PB = {s: tuple(float(x) * 1e6 for x in RATE[fam(s)]) for s in MK}
+        pin_of, pout_of = (lambda s: PB[s][0]), (lambda s: PB[s][1])
+    else:
+        pin_of = (lambda s: PT[s][0]) if pricing == "market" else (lambda s: PR[s])
+        pout_of = (lambda s: PT[s][1]) if pricing == "market" else (lambda s: PR[s])
+    t = np.load(D / "tensors.npz", allow_pickle=True)
     S = [str(s) for s in t["model_slots"]]; M = len(S)
     pids = [str(p) for p in t["problem_ids"]]; pi = {p: i for i, p in enumerate(pids)}
     v = t["valid"].astype(bool); ok = (t["final_outcome"] & t["valid"]).astype(float)
@@ -75,6 +82,10 @@ def pool(spec):
     assert len(pids_ok) == len(pids), f"{name}: {len(pids) - len(pids_ok)} problems lack predictions"
     P = np.array([lp[p] for p in pids]); LC = np.array([lc[p] for p in pids]) * 100
     tr = idx["train"]; inp = np.nanmean(np.where(v, pt, np.nan), 2)
+    if pricing == "billed":                                # market $ -> predicted output tokens -> billed $ (cents)
+        ii = np.stack([np.nan_to_num(inp[:, m], nan=np.nanmean(inp[tr, m])) for m in range(M)], 1)
+        tk = np.maximum((LC / 100 - ii * np.array([MK[s][0] for s in S]) / 1e6) / (np.array([MK[s][1] for s in S]) / 1e6), 1)
+        LC = (ii * np.array([pin_of(s) for s in S]) + tk * np.array([pout_of(s) for s in S])) / 1e6 * 100
     med = np.array([np.median(ct[tr, m][v[tr, m]]) for m in range(M)])
     PC = np.stack([(np.nan_to_num(inp[:, m], nan=np.nanmean(inp[tr, m])) * pin_of(S[m]) + med[m] * pout_of(S[m])) / 1e6 * 100
                    for m in range(M)], 1)
@@ -172,7 +183,7 @@ def pool(spec):
         routes[s] = dict(acc=float(Q[ok_p, m].mean()), mean_cost_c=float(c.mean()),
                          p90_p10=float(np.percentile(c, 90) / np.percentile(c, 10)), sd_log=float(np.log(c).std()),
                          icc=float(1 - within / tot) if tot > 0 else np.nan, output_share=out_share, test_r2=float(r2))
-    return dict(pool=name + (" [market]" if pricing == "market" else "") + (f" +overhead {OH[te].max(1).mean():.4f}c" if OH.any() else ""), cost_file=cfile or "cost_preds.jsonl", n_test=int(len(te)), band=[float(T[0]), float(T[-1])],
+    return dict(pool=name + (f" [{pricing}]" if pricing in ("market", "billed") else "") + (f" +overhead {OH[te].max(1).mean():.4f}c" if OH.any() else ""), cost_file=cfile or "cost_preds.jsonl", n_test=int(len(te)), band=[float(T[0]), float(T[-1])],
                 headroom=g["ORACLE"], headroom_ci=ci["ORACLE"], learned_gain=g["learned"], learned_ci=ci["learned"],
                 capture=g["learned"] / g["ORACLE"] if g["ORACLE"] > 0.01 else np.nan,
                 reroute_oracle=reroute, reroute_learned=reroute_l, routes=routes, curve=curve, boot=boot, single_best=single,

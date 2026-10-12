@@ -14,7 +14,15 @@ Modes:
   pricegap POOL   price-gap sweep: route prices r_m(alpha) = g * (r_m / g)^alpha (g = geometric mean over routes; input and output
                   alike), alpha 0 (flat) .. 5; costs recomputed from tokens (no billed overrides); savings vs median of ours,
                   pricing from success, and the oracle (headroom), with the max / min output-price ratio at each alpha.
-Usage: REASON_ROOT=.../reason_pinned RESULT_TAG=_pinned OUT_DIR=... python tmlr_strengthen.py deploy|resplit|pricegap POOL [S0 S1]
+  resplit_tc POOL S0 S1   (NEW_PATH 4.A.88) draw-preserving re-splits: only the paper's train + calibration problems (2-16 draws per
+                  route) are reshuffled into train / calibration of the original sizes; the test set is the paper's. Seed -1 = the paper
+                  split through the same pipeline (matched control for `resplit`, whose success readouts are refit).
+  splitdraw POOL  (NEW_PATH 4.A.88) a noise-free bound on the headroom: on test problems with >= 2 valid draws on every route, each
+                  (problem, route)'s draws are split at random into a pricing half A and an evaluation half B (REPS splits); every
+                  arm is scored on B's mean outcome and cost. oracle_realized prices at B's own mean length (the paper's headroom
+                  oracle, which also knows B's sampling noise); oracle_heldout prices at A's mean length (achievable by an
+                  expected-cost predictor, noisy with |A| draws). Same training fits (ours, median) in every split.
+Usage: REASON_ROOT=.../reason_pinned RESULT_TAG=_pinned OUT_DIR=... python tmlr_strengthen.py deploy|resplit|resplit_tc|pricegap|splitdraw POOL [S0 S1]
 """
 import json, os, sys
 from pathlib import Path
@@ -80,12 +88,18 @@ if MODE_ == "deploy":
               f"  miss {m[6]*100:.2f} pt  ${m[1]*1e3:.3f}/1k queries{extra}", flush=True)
     res["targets"] = targets.tolist(); res["cfg"] = {k: list(v) if isinstance(v, tuple) else v for k, v in cfg.items()}
 
-elif MODE_ == "resplit":
-    s0, s1 = int(sys.argv[3]), int(sys.argv[4]); d = load(POOL_); N = len(d["ids"])
-    U = np.concatenate([d["tr"], d["ca"], d["ev"]]); ntr, nca = len(d["tr"]), len(d["ca"]); res["splits"] = {}
-    print(f"===== re-splits {POOL_}: {len(U)} problems, train {ntr}, calibration {nca}, test {len(U) - ntr - nca}; seeds {s0}..{s1 - 1}", flush=True)
+elif MODE_ in ("resplit", "resplit_tc"):
+    s0, s1 = int(sys.argv[3]), int(sys.argv[4]); d = load(POOL_); N = len(d["ids"]); tc = MODE_ == "resplit_tc"
+    U = np.concatenate([d["tr"], d["ca"]] + ([] if tc else [d["ev"]])); ntr, nca = len(d["tr"]), len(d["ca"]); res["splits"] = {}
+    print(f"===== {'draw-preserving ' if tc else ''}re-splits {POOL_}: {len(U)} problems reshuffled, train {ntr}, calibration {nca}, test "
+          f"{len(d['ev']) if tc else len(U) - ntr - nca}; seeds {s0}..{s1 - 1}{' (-1 = paper split)' if s0 < 0 else ''}", flush=True)
     for s in range(s0, s1):
-        perm = np.random.default_rng(1000 + s).permutation(U); tr2, ca2, ev2 = perm[:ntr], perm[ntr:ntr + nca], perm[ntr + nca:]
+        if s < 0:
+            tr2, ca2, ev2 = d["tr"], d["ca"], d["ev"]
+        elif tc:
+            perm = np.random.default_rng(2000 + s).permutation(U); tr2, ca2, ev2 = perm[:ntr], perm[ntr:], d["ev"]
+        else:
+            perm = np.random.default_rng(1000 + s).permutation(U); tr2, ca2, ev2 = perm[:ntr], perm[ntr:ntr + nca], perm[ntr + nca:]
         d2 = dict(d); d2.update(tr=tr2, ca=ca2, ev=ev2)
         d2["med"] = np.array([np.nanmedian(d["CT"][tr2, k]) for k in range(d["M"])])
         A = dict(X=d["X"], y0=d["y0"], succ=d["succ"], n=d["n"])
@@ -99,7 +113,38 @@ elif MODE_ == "resplit":
         print(f"  seed {s}: AUC {np.round(aucs, 3).tolist()}  " + "  ".join(f"{a} {r_[a]['vs_median']*100:+5.1f}" for a in preds), flush=True)
         print("      ours - arm: " + "  ".join(f"{a} {r_[a]['ours_minus_it'][0]:+5.1f} [{r_[a]['ours_minus_it'][1]:+.1f}, {r_[a]['ours_minus_it'][2]:+.1f}]"
                                        for a in preds if a != "ours"), flush=True)
-        json.dump(res, open(OUT / f"tmlr_strengthen_resplit_{POOL_.lower().replace('-', '')}_{s0}_{s1}{TAG}.json", "w"), indent=1, default=float)
+        json.dump(res, open(OUT / f"tmlr_strengthen_{MODE_}_{POOL_.lower().replace('-', '')}_{s0}_{s1}{TAG}.json", "w"), indent=1, default=float)
+
+elif MODE_ == "splitdraw":
+    d = load(POOL_); N = len(d["ids"]); REPS = int(os.environ.get("REPS", "20"))
+    name, feat, ds = POOLS[POOL_]; assert not ds, "splitdraw needs a pool evaluated on its own multi-draw split"
+    t = np.load(R / name / "tensors.npz", allow_pickle=True); v = t["valid"].astype(bool)
+    yo, ct, pt = np.asarray(t["final_outcome"]).astype(float), t["completion_tokens"].astype(float), t["prompt_tokens"].astype(float)
+    ev = d["ev"][(v[d["ev"]].sum(2) >= 2).all(1)]
+    S, T = view(d, d["tr"]), view(d, np.arange(N)); ours = fit_predict("ours", S, T)
+    print(f"===== split-draw headroom {POOL_}: {len(ev)} of {len(d['ev'])} test problems with >= 2 draws on every route; {REPS} splits; "
+          f"draws per route (median) {np.median(v[ev].sum(2), 0).tolist()}", flush=True)
+    full = evaluate(d, {"ours": [ours], "oracle": [d["L"]]}, ev); res["all_draws"] = full
+    print(f"  all draws (paper protocol) on these problems: headroom {full['oracle']['vs_median']*100:+5.1f}  ours {full['ours']['vs_median']*100:+5.1f}", flush=True)
+    rows = []; res["reps"] = []
+    for rep in range(REPS):
+        rg = np.random.default_rng(3000 + rep); A = np.zeros(v.shape, bool); B = np.zeros(v.shape, bool)
+        for i in ev:
+            for m in range(d["M"]):
+                k = rg.permutation(np.flatnonzero(v[i, m])); A[i, m, k[:len(k) // 2]] = True; B[i, m, k[len(k) // 2:]] = True
+        mean_ = lambda x, W: np.where(W, x, 0).sum(2) / np.maximum(W.sum(2), 1)
+        d2 = dict(d); q2, L2, I2 = d["q"].copy(), d["L"].copy(), d["I"].copy(); LA = d["L"].copy()
+        q2[ev], L2[ev], I2[ev] = mean_(yo, B)[ev], np.maximum(mean_(ct, B)[ev], 1), mean_(pt, B)[ev]; LA[ev] = np.maximum(mean_(ct, A)[ev], 1)
+        d2.update(q=q2, L=L2, I=I2, paid=I2 * d["rates"][:, 0] + L2 * d["rates"][:, 1])
+        r_ = evaluate(d2, {"ours": [ours], "oracle_realized": [L2], "oracle_heldout": [LA]}, ev); res["reps"].append(r_)
+        rows.append([r_[a]["vs_median"] for a in ("ours", "oracle_realized", "oracle_heldout")])
+        print(f"  split {rep:2d}: ours {rows[-1][0]*100:+5.1f}  oracle realized {rows[-1][1]*100:+5.1f}  held-out {rows[-1][2]*100:+5.1f}   "
+              f"ours - held-out oracle {r_['oracle_heldout']['ours_minus_it'][0]:+5.1f} [{r_['oracle_heldout']['ours_minus_it'][1]:+.1f}, {r_['oracle_heldout']['ours_minus_it'][2]:+.1f}]", flush=True)
+    m_, sd_ = np.nanmean(rows, 0) * 100, np.nanstd(rows, 0) * 100
+    res["summary"] = dict(ours=[m_[0], sd_[0]], oracle_realized=[m_[1], sd_[1]], oracle_heldout=[m_[2], sd_[2]],
+                          capture_realized=m_[0] / m_[1], capture_heldout=m_[0] / m_[2])
+    print(f"  MEAN over splits: ours {m_[0]:.1f} +- {sd_[0]:.1f}; headroom realized {m_[1]:.1f} +- {sd_[1]:.1f}, held-out {m_[2]:.1f} +- {sd_[2]:.1f}; "
+          f"capture {m_[0] / m_[1]:.2f} (realized) / {m_[0] / m_[2]:.2f} (held-out)", flush=True)
 
 elif MODE_ == "pricegap":
     d = load(POOL_); N = len(d["ids"]); S, T = view(d, d["tr"]), view(d, np.arange(N))
@@ -114,6 +159,6 @@ elif MODE_ == "pricegap":
               f"  fromsuccess {r_['fromsuccess']['vs_median']*100:+5.1f}   ours - fromsuccess {r_['fromsuccess']['ours_minus_it'][0]:+5.1f} "
               f"[{r_['fromsuccess']['ours_minus_it'][1]:+.1f}, {r_['fromsuccess']['ours_minus_it'][2]:+.1f}]", flush=True)
 
-if MODE_ != "resplit":
+if MODE_ not in ("resplit", "resplit_tc"):
     json.dump(res, open(OUT / f"tmlr_strengthen_{MODE_}_{POOL_.lower().replace('-', '')}{TAG}.json", "w"), indent=1, default=float)
 print("DONE", flush=True)
