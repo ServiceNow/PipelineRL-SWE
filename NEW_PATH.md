@@ -2472,3 +2472,18 @@ costgen_cg_<pool>.txt); relaunched via `launchers/tmlr/launch_oct11_reruns.sh` (
   returns finish_reason=error mid-generation, ~12 rows/h, 257/1350 draws still error. EXIT marker written by hand to release newfamily_eval.
 Paper: sec:general tables/text refreshed, new "Which estimators lose least" paragraph, SWE MixLLM row, label figure regenerated.
 Body now ~14 pages (refs start p.15) -> needs trimming.
+### 4.A.85 New model families: results (2026-10-12 ~02:30 ET; `newfamily_eval.py`; log reason_pinned_logs/newfamily_eval.txt, JSON newfamily_eval_pinned.json)
+First run crashed on Omni (PCA(256) > 230 all-8-valid training problems); fixed (min(256, n-1)) and rerun as eai newfamily_eval2.
+Routes: 5 old + qw32 (SiliconFlow, 24,575-token stop), glm47f (Novita), nemo120 (DekaLLM; Omni valid .73 after the stopped refill);
+billed out $/M .57 / .40 / .45. Test = all 8 valid: LCB 331, Omni 763, MMLU-Pro 1,888 (new routes cover a 2,700 subset).
+- New readouts: AUC .72-.87, log-length R2 .23-.81.
+- all8: ours LCB 34.8 / Omni 33.0 / MMLU-Pro 28.6; vs bins +4.2 n.s. / +8.7 [2.1, 14.2] / +21.3 [14.9, 26.0]; vs fromsuccess +1.2 / +2.6
+  / +10.4 [5.1, 14.9]. The new models are dominated in all8 (removal changes saving <= 0.2).
+- newpool (oss20lo, oss20md, qw32, glm47f, nemo120): ours 36.8 / 11.7 / 30.5; LCB beats fromsuccess +6.3 [1.7, 11.5] and bins +7.6;
+  Omni ties (fromsuccess 13.2, bins 14.3); MMLU-Pro beats bins +18.1, ties fromsuccess +4.3 n.s.
+- Onboarding (newpool): only Nemotron matters (without it LCB 36.8 -> 26.1, MMLU-Pro 30.5 -> 26.4, Omni 11.7 -> 10.0).
+  Nemotron k=10: ours 26.0 / 9.4 / 26.0 vs ZR -30.2 / 2.1 / 10.8; ours - ZR k=10 LCB +56.3 [20.3, 126.0]; k=50 LCB +34.9 [18.0, 61.3],
+  MMLU-Pro +18.6 [4.7, 35.6]; Omni n.s. Harm: at k=10 naive onboarding makes the router lose money vs median in 7/9 model-pool pairs,
+  ZR in 2/9, ours 0/9.
+- New readouts trained on Omni500 used on MMLU-Pro: 28.5 vs 28.6 in-domain (AUC drop .03-.08, R2 .49 -> .27 etc.).
+Paper: paragraph "Three further model families" in sec:general (replaces the TODO).
