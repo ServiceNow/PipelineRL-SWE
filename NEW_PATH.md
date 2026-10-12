@@ -2454,3 +2454,21 @@ Caveat: measured difficulty saturates (half of MMLU-Pro is solved by all five ro
   Refreshed hetero pools: prefill-router repro BBEH ours +8.4 [-2.5, 18.4]; SuperGPQA THEIRS ahead by 6.0 [0.4, 11.2] (success AUC .58
   vs .57); cascades BBEH 35.6 [23.0, 46.5], SuperGPQA 32.4 [18.3, 43.0]. Paper updated: SWE-Smith positive; BBEH / SuperGPQA numbers;
   SuperGPQA C4 now directional; C7 "four of five sets".
+### 4.A.84 Generalisation battery on refreshed BBEH / SuperGPQA; SWE MixLLM; Nemotron refill stopped (2026-10-12 02:00 ET)
+The Oct 11 ad-hoc reruns of transfer / fulltransfer / pooled / robust / why lost their arguments (IndexError on sys.argv; logs
+costgen_cg_<pool>.txt); relaunched via `launchers/tmlr/launch_oct11_reruns.sh` (28 jobs, all DONE). Labels + onboarding had run fine.
+- Labels n=20: SuperGPQA ours 20.5 (externals <= 7.3); BBEH ours 14.7 (gbm 7.9, mixllm -11.6). BBEH: text arms tie at full data,
+  ours leads at n<=50 (vs mixllm +22.7 [5.8, 42.2] at 50; gbm never significant).
+- Whole-model onboarding vs ZR: SuperGPQA k=10 +15.7 [0.4, 31.5], k=50 +13.4 [5.8, 23.8]; BBEH +7.4 [-1.9, 20.9] / +3.7 [-1.1, 7.8] (tie).
+- Full transfer (same domain, zero-shot): MMLU-Pro 27.3, AIME 14.1, SuperGPQA 19.3, BBEH 8.6, Omni500 7.8; best external 17.3 / 6.8 /
+  4.0 / -5.4 / -0.5. Ours > all arms CI-excl-0 on MMLU-Pro, AIME, BBEH.
+- Cost-only transfer, from-success in -> xfer: SuperGPQA 19.6 -> -21.9, BBEH 5.5 -> -20.5, Omni500 18.0 -> 6.5, AIME 14.2 -> 12.3;
+  ours 17.7 / 16.1 / 15.7 / 12.8.
+- Robustness (drop - ours' drop): vs fromsuccess LCB +37.1, SuperGPQA +31.8 [16.3, 49.9], BBEH +13.4 [1.4, 23.9]; vs ZR LCB +21.0,
+  MMLU-Pro +4.0 [1.1, 8.2]; SuperGPQA vs ZR now +3.2 [-11.1, 14.8] (the old -17.4 was the pre-refill data). Never significantly worse.
+- Pooled (sources + target) within 4.4 of target-only everywhere, n.s.
+- SWE-Smith MixLLM-style 8.5 [0.2, 14.2]; ours - it +6.8 [2.5, 10.6].
+- Nemotron refill: MMLU-Pro done (357/386 recovered, 29 err); Omni500 stopped by user decision at ~$14.9 total nemo spend: DekaLLM
+  returns finish_reason=error mid-generation, ~12 rows/h, 257/1350 draws still error. EXIT marker written by hand to release newfamily_eval.
+Paper: sec:general tables/text refreshed, new "Which estimators lose least" paragraph, SWE MixLLM row, label figure regenerated.
+Body now ~14 pages (refs start p.15) -> needs trimming.
