@@ -2487,3 +2487,9 @@ billed out $/M .57 / .40 / .45. Test = all 8 valid: LCB 331, Omni 763, MMLU-Pro 
   ZR in 2/9, ours 0/9.
 - New readouts trained on Omni500 used on MMLU-Pro: 28.5 vs 28.6 in-domain (AUC drop .03-.08, R2 .49 -> .27 etc.).
 Paper: paragraph "Three further model families" in sec:general (replaces the TODO).
+### 4.A.86 Strengthening batch launched (2026-10-12 ~02:50 ET; free; user approved items 1-4, declined the prompt-editing causal test)
+`tmlr_strengthen.py` deploy / resplit / pricegap on 9 pools + `prefill_overhead.py` (GPU); `launchers/tmlr/launch_oct12_strengthen.sh`
+(37 eai jobs). Smoke (AIME): deploy ours +22.2% vs the median rule's deployed curve (frontier metric 15.7), own-frontier loss 1.8%,
+ties from-success (+0.2), ZR 6.3 behind; price gap: headroom 28.5-31.8 for 1.3-9.3x output-price spread, 6.9 at 29x, 2-3 beyond 87x
+(flat 22.2); one re-split: ours 9.2, oracle 23.9 (paper split 15.7 / 29.3). Prefill price bound: cheapest Qwen3 on OpenRouter is
+Qwen3-14B at $0.12/M input (no 4B listed). Handoff: HANDOFF_20261012.md.
