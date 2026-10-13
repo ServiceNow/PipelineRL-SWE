@@ -10,6 +10,7 @@ Arms (cost estimator; success = our prefill success readout unless stated):
   gbm           prompt-feature gradient boosting (baseline_cost_heads.text_features)
   zerorouter    full ZeroRouter reproduction: stage-1 2PL IRT on the 5 routes' train outcomes, stage 2 = 4B prefill -> PCA -> ridge,
                 THEIR success model and bin-lookup pricing; (D, K) chosen on original CALIBRATION from {1,5} x {5,10,20}
+  ft-<enc>      (only with FT_DIR) a text encoder fine-tuned end-to-end on the training lengths (finetune_cost_estimator.py; 4.A.90)
 Reported: (a) cost saved vs median at matched accuracy over the shared band; (b) DIRECT ours vs each arm: cost saved by ours at
 matched accuracy over the band both reach; paired problem bootstrap (300) for both. Unweighted.
 Usage: python fresh_baselines.py [--pool LCB]
@@ -88,6 +89,8 @@ for ds in ([POOL] if POOL else ("omni500", "mmlupro")):
         tok["mixllm"] = np.maximum((read_predictions(old / "cost_preds_mixllm.jsonl", ids, "expected_costs", M) - I * asg[:, 0]) / asg[:, 1], 1)
     for k_ in ("fromsuccess", "zr-bins", "gbm"):                      # level-match each route to its train mean (as baseline_cost_heads)
         tok[k_] = tok[k_] * (L[tr].mean(0) / tok[k_][tr].mean(0))
+    for f_ in sorted(Path(os.environ["FT_DIR"]).glob(f"ft_cost_{label}_*.jsonl")) if os.environ.get("FT_DIR") else []:
+        tok["ft-" + f_.stem.rsplit("_", 1)[1]] = read_predictions(f_, ids, "pred_tokens", M)   # fine-tuned encoders (finetune_cost_estimator.py; level-matched on calibration there)
     cost = {a: I * rates[:, 0] + x * rates[:, 1] for a, x in tok.items()}
     if POOL:
         cost["oracle"] = paid.copy()                                  # headroom: each problem priced at its realized cost

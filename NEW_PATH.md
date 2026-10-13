@@ -2551,3 +2551,13 @@ Limitations, appendix (tab:resplit, fig:pricegap); removed the superseded 7-rout
 - Paper: Prices paragraph (fit on test calls disclosed + training-call check + SuperGPQA/BBEH billed rate), Results re-split sentence,
   tab:resplit caption, new sec:headroom paragraph "The headroom is an upper bound", billed numbers in the level and MMLU-Pro driver
   paragraphs (4.A.88).
+
+### 4.A.90 Fine-tuned text encoders as cost-estimator arms (2026-10-13; user-approved, free, GPU; LAUNCHED)
+Reviewer question: would a small encoder FINE-TUNED on the length labels (CARROT's RoBERTa, ZeroRouter's DistilBERT, the
+length-prediction-for-serving kind) match the frozen-prefill readout? 4.A.16 said no (137M jina, R2 only, LCB/CC, older protocol);
+this reruns it as a tab:fresh arm at billed prices, pinned. `finetune_cost_estimator.py`: distilbert (66M, 512 tok), jina-code
+(137M, 2048), Qwen3-0.6B (full fine-tune, 2048); mean pool -> linear head on per-route z-scored log mean output; same train
+problems and labels as ours; lr (2 values) and epoch (<=10) chosen on calibration MSE; smearing + level match on calibration;
+MMLU-Pro input rebuilt with its options (matches the prefill prompts 1000/1000). Stage 2: fresh_baselines.py with FT_DIR adds
+arms ft-<enc> (our success predictions, as every arm) -> fresh_baselines_pinned_ft.json, pool_baselines_LCB_pinned_ft.json.
+Launcher: launchers/tmlr/launch_oct13_finetuned.sh (STAGE=1: 9 GPU jobs ft_<pool>_<enc>; STAGE=2: ftb_fresh, ftb_lcb).
