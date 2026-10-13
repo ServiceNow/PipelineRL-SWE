@@ -7,6 +7,7 @@
 #               dl_<pool>_<s>   cost_generalization.py labels on draw s, 2 subsets per n (tab:labels, fig:labels)
 #               do_<pool>_<s>   onboard_compare.py HOLD=groups on draw s, 4 anchor draws per k (tab:onboard)
 #               dft_lcb_<s>     finetune_cost_estimator.py LCB qwen06 on draw s (GPU)
+#  STAGE=ft20   dft20_lcb_<s>   20-epoch rerun for the draws in FTS whose best epoch was the last of 10 -> $D/ft_e20 (keep lower calib. MSE)
 #  STAGE=2      drf_lcb_<a>     LCB draws again with the fine-tuned predictions of STAGE=1 (FT_DIR)
 set -euo pipefail
 R=/mnt/llmd/results/exps/aristides/reason; L=$R/reason_pinned_logs; D=$L/draws; PY=/home/toolkit/.conda/envs/pipeline-rl/bin/python3
@@ -40,6 +41,12 @@ smoke2)
   done
   for s in 0 1 2 3 4 5 6 7 8 9; do
     echo -n "dft_lcb_$s "; sub dft_lcb_$s "$CD export DRAW=$s DRAW_TAG=_d$s && $PY -u finetune_cost_estimator.py --pool LCB --enc qwen06 > $D/ft_lcb_qwen06_$s.txt 2>&1; echo EXIT \$? >> $D/ft_lcb_qwen06_$s.txt" 8 64 1 80
+  done
+  ;;
+ft20)
+  mkdir -p $D/ft_e20
+  for s in $FTS; do
+    echo -n "dft20_lcb_$s "; sub dft20_lcb_$s "$CD export OUT_DIR=$D/ft_e20 DRAW=$s DRAW_TAG=_d$s && $PY -u finetune_cost_estimator.py --pool LCB --enc qwen06 --epochs 20 > $D/ft_e20/ft_lcb_qwen06_$s.txt 2>&1; echo EXIT \$? >> $D/ft_e20/ft_lcb_qwen06_$s.txt" 8 64 1 80
   done
   ;;
 2)
