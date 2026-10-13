@@ -11,7 +11,7 @@ if [[ ${STAGE:-1} == 1 ]]; then
   # POOLS / PFX: resubmit a subset under new job names (MMLU-Pro reran as ft2_*: its first jobs could not see the dataset cache)
   for P in ${POOLS:-LCB Omni MMLU-Pro}; do p=$(echo $P | tr -d '-' | tr A-Z a-z)
     for E in distilbert jina qwen06; do G=32; [[ $E == qwen06 ]] && G=80
-      echo -n "${PFX:-ft}_${p}_$E "; sub ${PFX:-ft}_${p}_$E"$CD $PY -u finetune_cost_estimator.py --pool $P --enc $E > $L/ft_${p}_$E.txt 2>&1; echo EXIT \$? >> $L/ft_${p}_$E.txt" 8 64 1 $G
+      echo -n "${PFX:-ft}_${p}_$E "; sub ${PFX:-ft}_${p}_$E "$CD $PY -u finetune_cost_estimator.py --pool $P --enc $E > $L/ft_${p}_$E.txt 2>&1; echo EXIT \$? >> $L/ft_${p}_$E.txt" 8 64 1 $G
     done
   done
 else
