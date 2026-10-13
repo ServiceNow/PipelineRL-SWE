@@ -8,9 +8,10 @@ CD="cd /home/toolkit/PipelineRL-SWE/analysis/cost_headroom && export REASON_ROOT
 sub() { make job JOB_NAME="$1" ENV=pipeline-rl CONDA_EXE=/opt/conda/bin/conda SNAPSHOT=1 GPU=$5 GPU_MEM=$6 CPU=$3 CPU_MEM=$4 COMMAND="$2" 2>&1 | grep -oE "QUEUING|RUNNING|[Ee]rror.*" | head -1 || true; }
 [[ ${SUBMIT:-0} == 1 ]] || { echo "dry run"; exit 0; }
 if [[ ${STAGE:-1} == 1 ]]; then
-  for P in LCB Omni MMLU-Pro; do p=$(echo $P | tr -d '-' | tr A-Z a-z)
+  # POOLS / PFX: resubmit a subset under new job names (MMLU-Pro reran as ft2_*: its first jobs could not see the dataset cache)
+  for P in ${POOLS:-LCB Omni MMLU-Pro}; do p=$(echo $P | tr -d '-' | tr A-Z a-z)
     for E in distilbert jina qwen06; do G=32; [[ $E == qwen06 ]] && G=80
-      echo -n "ft_${p}_$E "; sub ft_${p}_$E "$CD $PY -u finetune_cost_estimator.py --pool $P --enc $E > $L/ft_${p}_$E.txt 2>&1; echo EXIT \$? >> $L/ft_${p}_$E.txt" 8 64 1 $G
+      echo -n "${PFX:-ft}_${p}_$E "; sub ${PFX:-ft}_${p}_$E"$CD $PY -u finetune_cost_estimator.py --pool $P --enc $E > $L/ft_${p}_$E.txt 2>&1; echo EXIT \$? >> $L/ft_${p}_$E.txt" 8 64 1 $G
     done
   done
 else
