@@ -2552,7 +2552,7 @@ Limitations, appendix (tab:resplit, fig:pricegap); removed the superseded 7-rout
   tab:resplit caption, new sec:headroom paragraph "The headroom is an upper bound", billed numbers in the level and MMLU-Pro driver
   paragraphs (4.A.88).
 
-### 4.A.90 Fine-tuned text encoders as cost-estimator arms (2026-10-13; user-approved, free, GPU; LAUNCHED)
+### 4.A.90 Fine-tuned text encoders as cost-estimator arms (2026-10-13; user-approved, free, GPU; DONE -> 4.A.91)
 Reviewer question: would a small encoder FINE-TUNED on the length labels (CARROT's RoBERTa, ZeroRouter's DistilBERT, the
 length-prediction-for-serving kind) match the frozen-prefill readout? 4.A.16 said no (137M jina, R2 only, LCB/CC, older protocol);
 this reruns it as a tab:fresh arm at billed prices, pinned. `finetune_cost_estimator.py`: distilbert (66M, 512 tok), jina-code
@@ -2561,3 +2561,20 @@ problems and labels as ours; lr (2 values) and epoch (<=10) chosen on calibratio
 MMLU-Pro input rebuilt with its options (matches the prefill prompts 1000/1000). Stage 2: fresh_baselines.py with FT_DIR adds
 arms ft-<enc> (our success predictions, as every arm) -> fresh_baselines_pinned_ft.json, pool_baselines_LCB_pinned_ft.json.
 Launcher: launchers/tmlr/launch_oct13_finetuned.sh (STAGE=1: 9 GPU jobs ft_<pool>_<enc>; STAGE=2: ftb_fresh, ftb_lcb).
+
+### 4.A.91 Fine-tuned encoders: results (2026-10-13; logs reason_pinned_logs/ft_*.txt, ftb_{lcb,fresh}.txt)
+MMLU-Pro first jobs failed (dataset cache not visible in eai jobs) -> prompts written once to
+expanded_eval_20261001/mmlupro/prompts_with_options.jsonl, reran as ft2_*. Runs whose best epoch was the last of 10 (Omni jina,
+Omni qwen06, MMLU-Pro qwen06) reran with 20 epochs (ft_e20/); kept the lower calibration MSE (qwen06 both: e20 .346 < .356,
+.604 < .608; Omni jina e10 .376 < .379). 10-epoch qwen06 files in ft_e10/.
+Test log-output R2 (mean over routes): LCB distil .46 / jina .52 / qwen06 .63; Omni .48 / .50 / .53; MMLU-Pro .30 / .31 / .38.
+| arm (our success) | LCB vs median / ours vs it | Omni | MMLU-Pro |
+| ours | 33.7 | 34.8 | 28.8 |  (reproduces tab:fresh)
+| ft-distilbert | 22.1 / +14.9 [8.7, 20.1] | 12.2 / +25.6 [19.9, 29.9] | 15.8 / +15.5 [12.4, 18.1] |
+| ft-jina | 24.8 / +11.7 [4.6, 15.0] | 14.1 / +24.2 [17.8, 29.5] | 17.1 / +14.1 [10.6, 17.2] |
+| ft-qwen06 | 30.1 / +5.4 [-0.3, 11.3] | 20.0 / +18.4 [13.2, 22.1] | 19.3 / +11.9 [8.9, 14.0] |
+=> Matched-size control: FROZEN Qwen3-0.6B + linear readouts (tab:size, its own weaker success readouts) saves 31.9 / 22.0 on
+Omni / MMLU-Pro, more than its FULLY FINE-TUNED copy (20.0 / 19.3, with our success). Fine-tuning does not add what a linear
+readout of the frozen prefill lacks: the length information is latent in the pretrained decoder (user's framing, agreed).
+Only LCB's fine-tuned 0.6B comes within the interval. Paper: new ablation paragraph "Is fine-tuning needed?", clause in
+contribution (v). Second test draw for Omni / MMLU-Pro priced at ~$20-25 API (+ full rerun / number pass); user leaning no.
