@@ -32,7 +32,7 @@ for pool in POOLS:
             pts = np.array([seeds[s][a][key] for s in have]); bs = np.concatenate([seeds[s][a][key + "_bs"] for s in have])
             r[key] = [float(pts.mean()), *ci(bs)]; r[key + "_sd"] = float(pts.std())
             r[key + "_draws_excl0"] = int(sum(ci(seeds[s][a][key + "_bs"])[0] > 0 for s in have))
-            if "-1" in seeds:
+            if "-1" in seeds and a in seeds["-1"]:
                 r[key + "_paper_split"] = float(seeds["-1"][a][key])
         res[a] = r
     o, m = res["oracle"]["vs_median"][0], res["ours"]["vs_median"][0]; res["capture"] = m / o
