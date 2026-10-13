@@ -2578,3 +2578,23 @@ Omni / MMLU-Pro, more than its FULLY FINE-TUNED copy (20.0 / 19.3, with our succ
 readout of the frozen prefill lacks: the length information is latent in the pretrained decoder (user's framing, agreed).
 Only LCB's fine-tuned 0.6B comes within the interval. Paper: new ablation paragraph "Is fine-tuning needed?", clause in
 contribution (v). Second test draw for Omni / MMLU-Pro priced at ~$20-25 API (+ full rerun / number pass); user leaning no.
+
+### 4.A.92 Every quantitative claim averaged over 10 training draws (2026-10-13; user-approved, free; logs reason_pinned_logs/draws/)
+User: one set of numbers, not paper split + re-splits. Our intervals so far resampled TEST problems only (readouts fixed on one
+split); training-draw variation was only in the refit bootstrap (Limitations) and tab:resplit, where the MMLU-Pro paper split is
+~2 s.d. favourable. Protocol now: a training draw = DRAW=s in decompose.split_manifest (train + calibration reshuffled into the same
+sizes, seed 2000+s; TEST KEPT, so LCB's date split and the large Omni-MATH / MMLU-Pro test sets stay). Every loader reads its split
+there; with DRAW set, cost_generalization.load refits the success readouts (paper recipe, success_linear) and tmlr_free_analyses
+refits both readouts through it. Number = mean over draws 0..9; interval = percentiles of the bootstrap replicates POOLED over
+draws (test resamples x draws). Draw -1 = paper split refitted the same way (control).
+  tmlr_strengthen.py draws POOL S0 S1: every tab:fresh / tab:pools / tab:allest arm (ours, median, mean, fromsuccess, zr-bins,
+    gbm, mixllm, knn, zr-pricing, zerorouter = zr_paper, ft-<enc> if present, oracle), saving vs median AND direct ours vs arm,
+    NBOOT=300 replicates saved. Smoke on BBEH paper split reproduces tab:allest (ours 28.6, headroom 41.0, bins 15.5, from
+    success 24.5, GBM -0.3, ZeroRouter 30.8 once its (D, K) is chosen by calibration saving as in fresh_baselines.py;
+    zerorouter_full's log-loss choice gave 25.6).
+  cost_generalization.py labels (DRAW=s, SEEDS=2 subsets per n), onboard_compare.py HOLD=groups (DRAW=s, NDRAW=4), SAVE_BS=1.
+  finetune_cost_estimator.py LCB qwen06 per draw (DRAW_TAG=_d<s>); LCB draws run after it (STAGE=2) with FT_DIR.
+  Aggregation: draws_aggregate.py -> analysis/cost_headroom/draws_summary_pinned.json.
+  Not redrawn (one draw, stated in the paper): mechanism analyses, transfer (trains on other pools), non-reasoning, families,
+  prefill size, fine-tuned arms on Omni / MMLU-Pro and LCB distilbert / jina, tab:deploy.
+Launcher: launchers/tmlr/launch_oct13_draws.sh (STAGE=smoke|smoke2|1 [PART=draws|rest]|2).
