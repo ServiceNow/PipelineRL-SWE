@@ -34,14 +34,9 @@ Y = np.log(np.maximum(L, 1)); Y[v.sum(2) == 0] = np.nan                  # same 
 probs = {json.loads(l)["problem_id"]: json.loads(l) for l in (F / "problems.jsonl").read_text().splitlines()}
 text = {p: probs[p]["problem_statement"] for p in ids}
 if a.pool == "MMLU-Pro":                                                  # the prefill read the question with its ten options
-    import ast
-    from datasets import load_dataset
-    sys.path.insert(0, str(Path(__file__).parents[2] / "pipelinerl/swe/scripts/math_pool"))
-    from reasoning_datasets import _mc_prompt
-    for r in load_dataset("TIGER-Lab/MMLU-Pro", split="test"):
-        p = f"mmlup_{r['question_id']}"
-        if p in text:
-            text[p] = _mc_prompt(r["question"], ast.literal_eval(r["options"]) if isinstance(r["options"], str) else r["options"])
+    # prompts_with_options.jsonl: reasoning_datasets._mc_prompt over the cached TIGER-Lab/MMLU-Pro test split, written once locally
+    # (the dataset cache is not visible from eai jobs); matches mmlupro_probe_prompts.jsonl on all 1000 problems it covers
+    text.update({r["problem_id"]: r["prompt"] for r in map(json.loads, (F / "prompts_with_options.jsonl").open())})
     assert all(t_.startswith("Answer the following") for t_ in text.values()), "MMLU-Pro prompt rebuild incomplete"
 mu, sd = np.nanmean(Y[tr], 0), np.nanstd(Y[tr], 0); Z = (Y - mu) / sd
 print(f"{a.pool} {a.enc}: n={len(ids)} train {len(tr)} calibration {len(ca)}; routes {S}", flush=True)
