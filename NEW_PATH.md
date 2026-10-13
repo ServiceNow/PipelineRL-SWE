@@ -2617,3 +2617,10 @@ tab:resplit kept as the test-reshuffling robustness check; Limitations' refit-bo
 NOTE (2026-10-13): LCB's manifest split is RANDOM (split_manifest.json split_mode "random"; train / calibration / test all span
 2023-09 to 2025-04). Settled earlier with the user: contamination is a property of the routed models (same in every arm), not of the
 router, so no date split. The paper had kept "split by date" in sec:protocol, tab:poolstats and tab:resplit; corrected.
+
+### 4.A.94 Opus 5.5 frontier reference on LCB (2026-10-13; user-approved; billed $2.19; lcb_opus55_anchor_20261013/, opus_anchor_lcb_pinned.json)
+100 random manifest TEST problems (seed 0), anthropic/claude-opus-5.5 via OpenRouter (served by "Claude Platform on AWS"), reasoning
+effort high = adaptive thinking (thinks on 24% of problems; a direct test call confirmed reasoning_tokens are returned when it thinks),
+temperature 1, max 64k, same collector / prompt / grader as the routes. Accuracy 94.0%, $21.90 per 1k calls, 954 output tokens mean.
+Same problems, 10 training sets: our router's most accurate point 87.7% at $1.62/1k (median pricing 87.8% at $1.39); routes: oss120hi
+89.3% at $3.36, dsv4f 88.8% at $0.81. Opus is off the router's frontier: +6 points for 13x the cost. Paper: "A frontier reference" (sec:deploy).
