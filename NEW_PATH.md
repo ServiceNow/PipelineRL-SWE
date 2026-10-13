@@ -2583,7 +2583,7 @@ contribution (v). Second test draw for Omni / MMLU-Pro priced at ~$20-25 API (+ 
 User: one set of numbers, not paper split + re-splits. Our intervals so far resampled TEST problems only (readouts fixed on one
 split); training-draw variation was only in the refit bootstrap (Limitations) and tab:resplit, where the MMLU-Pro paper split is
 ~2 s.d. favourable. Protocol now: a training draw = DRAW=s in decompose.split_manifest (train + calibration reshuffled into the same
-sizes, seed 2000+s; TEST KEPT, so LCB's date split and the large Omni-MATH / MMLU-Pro test sets stay). Every loader reads its split
+sizes, seed 2000+s; TEST KEPT, so the large Omni-MATH / MMLU-Pro test sets stay; LCB's manifest split is RANDOM, not by date — see 4.A.93 note). Every loader reads its split
 there; with DRAW set, cost_generalization.load refits the success readouts (paper recipe, success_linear) and tmlr_free_analyses
 refits both readouts through it. Number = mean over draws 0..9; interval = percentiles of the bootstrap replicates POOLED over
 draws (test resamples x draws). Draw -1 = paper split refitted the same way (control).
@@ -2614,3 +2614,6 @@ Paper: abstract / contributions / tab:fresh / tab:pools / tab:allest / tab:label
 text citing them now use the ten-draw means ("training sets" in the paper, to avoid clashing with "draws per route"); protocol
 paragraph defines them; single-draw analyses say "manifest split"; re-split clauses removed from abstract / (ii) / Results;
 tab:resplit kept as the test-reshuffling robustness check; Limitations' refit-bootstrap sentence replaced.
+NOTE (2026-10-13): LCB's manifest split is RANDOM (split_manifest.json split_mode "random"; train / calibration / test all span
+2023-09 to 2025-04). Settled earlier with the user: contamination is a property of the routed models (same in every arm), not of the
+router, so no date split. The paper had kept "split by date" in sec:protocol, tab:poolstats and tab:resplit; corrected.
