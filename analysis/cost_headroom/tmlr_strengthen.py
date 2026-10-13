@@ -26,7 +26,7 @@ Modes:
                   decompose.split_manifest: train + calibration reshuffled, test kept; -1 = the paper split) the success readouts are
                   refitted and every cost arm of tab:fresh / tab:pools / tab:allest is fitted: ours, median, mean, fromsuccess, zr-bins
                   (ten bins of the mean success logit), gbm, mixllm, knn, zr-pricing (ZeroRouter bins with our success),
-                  zerorouter (its own success and bins, zerorouter_full), ft-<enc> (FT_DIR/ft_cost_<pool>_<enc>_d<s>.jsonl if
+                  zerorouter (its own success and bins, zr_paper = fresh_baselines.py's), ft-<enc> (FT_DIR/ft_cost_<pool>_<enc>_d<s>.jsonl if
                   present), oracle (realized length). Per arm: saving vs median and the DIRECT saving of ours vs the arm, point and
                   NBOOT test resamples (rng 0, the same resamples in every seed), saved for draws_aggregate.py.
 Usage: REASON_ROOT=.../reason_pinned RESULT_TAG=_pinned OUT_DIR=... python tmlr_strengthen.py deploy|resplit|resplit_tc|pricegap|splitdraw|draws POOL [S0 S1]
@@ -44,6 +44,26 @@ ARMS8 = ["ours", "median", "mean", "fromsuccess", "gbm", "mixllm", "knn", "zeror
 
 def choices(d, Pm, Cm, ii):
     return (VALUES[:, None, None] * Pm[ii][None] - Cm[ii][None]).argmax(2)            # [nV, n]
+
+
+def zr_paper(d, S):
+    """ZeroRouter as in fresh_baselines.py (tab:fresh / tab:allest): stage-1 2PL IRT on the train outcomes, stage 2 = prefill -> PCA(256)
+    -> ridge onto (log alpha, b), its own success and bin pricing; (D, K) in {1, 5} x {5, 10, 20} chosen by the saving vs median on the
+    calibration problems. Returns success [N, M], tokens [N, M], (D, K)."""
+    tr, ca, N = d["tr"], d["ca"], len(d["ids"]); Ltr = d["L"][tr]
+    Z = PCA(256, random_state=0).fit(d["X"][tr]).transform(d["X"]); Z /= Z[tr].std(0) + 1e-6
+    H0 = curve(d, d["P"], cost_of(d, np.repeat(d["med"][None], N, 0)), ca); best = None
+    for D in (1, 5):
+        la, bb, th = fit_stage1(S["succ"], S["n"], D, 0); pr = RidgeCV(alphas=np.geomspace(1, 1e5, 11)).fit(Z[tr], np.c_[la, bb]).predict(Z)
+        A = np.exp(pr[:, :D]); B = pr[:, D:]; A[tr] = np.exp(la); B[tr] = bb; Pz = np.clip(sig((A[:, None, :] * (th[None] - B[:, None, :])).sum(-1)), 1e-4, 1 - 1e-4)
+        sc = (A * B).sum(1)
+        for K in (5, 10, 20):
+            e_ = np.quantile(sc[tr], np.linspace(0, 1, K + 1)[1:-1]); bn = np.searchsorted(e_, sc)
+            tab = np.array([[Ltr[bn[tr] == j, k].mean() if (bn[tr] == j).any() else Ltr[:, k].mean() for j in range(K)] for k in range(d["M"])])
+            g = saved(curve(d, Pz, cost_of(d, tab.T[bn]), ca), H0)
+            if best is None or g > best[0]:
+                best = (g, Pz, tab.T[bn], (D, K))
+    return best[1], best[2], best[3]
 
 
 if MODE_ == "deploy":
@@ -131,7 +151,7 @@ elif MODE_ == "draws":
         dbar = np.log(d["P"] / (1 - d["P"])).mean(1); e_ = np.quantile(dbar[tr], np.linspace(0, 1, 11)[1:-1]); b_ = np.searchsorted(e_, dbar)
         zb = np.stack([np.array([d["L"][tr][b_[tr] == j, k].mean() if (b_[tr] == j).any() else d["L"][tr, k].mean() for j in range(10)])[b_] for k in range(d["M"])], 1)
         tk["zr-bins"] = zb * (d["L"][tr].mean(0) / zb[tr].mean(0))          # level-matched to the train mean, as fresh_baselines.py
-        Pz, tk["zerorouter"], zcfg = zerorouter_full(S, Ca, T); Ps = {a: d["P"] for a in tk}; Ps["zerorouter"] = Pz
+        Pz, tk["zerorouter"], zcfg = zr_paper(d, S); Ps = {a: d["P"] for a in tk}; Ps["zerorouter"] = Pz
         for f_ in sorted(FT.glob(f"ft_cost_{POOL_}_*_d{s}.jsonl")) if FT and s >= 0 else []:
             tk["ft-" + f_.stem.split("_")[3]] = read_predictions(f_, d["ids"], "pred_tokens", d["M"]); Ps["ft-" + f_.stem.split("_")[3]] = d["P"]
         tk["oracle"] = d["L"]; Ps["oracle"] = d["P"]

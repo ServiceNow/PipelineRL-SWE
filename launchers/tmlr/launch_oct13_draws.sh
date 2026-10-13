@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # 2026-10-13 (user-approved; free): every quantitative claim averaged over 10 training draws (NEW_PATH 4.A.92). A draw = DRAW=s of
 # decompose.split_manifest: the pool's train + calibration problems reshuffled into train / calibration of the same sizes, test kept.
-#  STAGE=smoke  BBEH: draws (seeds -1, 0; NBOOT 3), labels and onboarding on draw 0 (tiny)
-#  STAGE=1      dr_<pool>_<a>   tmlr_strengthen.py draws, seeds -1..4 and 5..9 (tab:fresh, tab:pools, tab:allest; -1 = paper split)
+#  STAGE=smoke  BBEH: draws (seeds -1, 0; NBOOT 3), labels and onboarding on draw 0 (tiny); STAGE=smoke2 the draws part only
+#  STAGE=1      (PART=draws | rest | all, default all)
+#               dr_<pool>_<a>   tmlr_strengthen.py draws, seeds -1..4 and 5..9 (tab:fresh, tab:pools, tab:allest; -1 = paper split)
 #               dl_<pool>_<s>   cost_generalization.py labels on draw s, 2 subsets per n (tab:labels, fig:labels)
 #               do_<pool>_<s>   onboard_compare.py HOLD=groups on draw s, 4 anchor draws per k (tab:onboard)
 #               dft_lcb_<s>     finetune_cost_estimator.py LCB qwen06 on draw s (GPU)
@@ -21,12 +22,16 @@ smoke)
   echo -n "dsmoke_labels "; sub dsmoke_labels "$CD export DRAW=0 RESULT_TAG=_smoke SEEDS=1 NBOOT=3 SAVE_BS=1 && $PY -u cost_generalization.py labels BBEH > $D/smoke_labels.txt 2>&1; echo EXIT \$? >> $D/smoke_labels.txt" 16 128
   echo -n "dsmoke_onboard "; sub dsmoke_onboard "$CD export DRAW=0 RESULT_TAG=_smoke HOLD=groups SMOKE=1 SAVE_BS=1 && $PY -u onboard_compare.py BBEH > $D/smoke_onboard.txt 2>&1; echo EXIT \$? >> $D/smoke_onboard.txt" 16 128
   ;;
+smoke2)
+  echo -n "dsmoke2_draws "; sub dsmoke2_draws "$CD export RESULT_TAG=_smoke2 NBOOT=3 && $PY -u tmlr_strengthen.py draws BBEH -1 1 > $D/smoke2_draws.txt 2>&1; echo EXIT \$? >> $D/smoke2_draws.txt" 16 128
+  ;;
 1)
-  for P in $ALL; do p=$(lc $P); [[ $P == LCB ]] && continue
+  [[ ${PART:-all} != rest ]] && for P in $ALL; do p=$(lc $P); [[ $P == LCB ]] && continue
     for a in -1 5; do b=$([[ $a == -1 ]] && echo 5 || echo 10); n=${p}_$((a < 0 ? 0 : a))
       echo -n "dr_$n "; sub dr_$n "$CD export RESULT_TAG=_pinned NBOOT=300 && $PY -u tmlr_strengthen.py draws $P $a $b > $D/draws_$n.txt 2>&1; echo EXIT \$? >> $D/draws_$n.txt" 16 128
     done
   done
+  [[ ${PART:-all} == draws ]] && exit 0
   for P in $FIVE; do p=$(lc $P)
     for s in 0 1 2 3 4 5 6 7 8 9; do
       echo -n "dl_${p}_$s "; sub dl_${p}_$s "$CD export DRAW=$s RESULT_TAG=_pinned_d$s SEEDS=2 NBOOT=200 SAVE_BS=1 && $PY -u cost_generalization.py labels $P > $D/labels_${p}_$s.txt 2>&1; echo EXIT \$? >> $D/labels_${p}_$s.txt" 16 128
