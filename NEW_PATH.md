@@ -2598,3 +2598,19 @@ draws (test resamples x draws). Draw -1 = paper split refitted the same way (con
   Not redrawn (one draw, stated in the paper): mechanism analyses, transfer (trains on other pools), non-reasoning, families,
   prefill size, fine-tuned arms on Omni / MMLU-Pro and LCB distilbert / jina, tab:deploy.
 Launcher: launchers/tmlr/launch_oct13_draws.sh (STAGE=smoke|smoke2|1 [PART=draws|rest]|2).
+
+### 4.A.93 Training draws: results and paper pass (2026-10-13; draws_summary_pinned.{json,txt}; 128 jobs, no failures)
+Ten training draws (mean; pooled-bootstrap interval). Ours vs median / headroom / capture:
+  LCB 27.8 [13.9, 35.6] / 40.1 / .69 (manifest split 33.7)   Omni 31.5 [23.9, 37.7] / 51.9 / .61 (34.8)   MMLU-Pro 23.4 [17.1, 29.0] / 58.0 / .40 (28.8)
+  AIME 14.9 / 29.2 / .51   APPS 16.8 / 34.4 / .49   BCB 0.4 [-9.5, 9.1] / 10.0 / .04   CC 9.4 [0.4, 19.8] / 35.8 / .26   SuperGPQA 33.0 / 60.6 / .54   BBEH 23.5 / 38.1 / .62
+All three main manifest splits were favourable draws (s.d. over draws 1.7-4.0). tab:fresh: every external interval excludes zero except
+ZeroRouter on Omni (14.2 [-4.7, 39.3]; sd 10.7, its (D, K) choice is unstable; significant in 7/10 draws). No estimator significantly
+cheaper than ours on any pool. LCB ft-qwen06 (10 draws, 20-epoch reruns for draws 4 and 9): ours +6.5 [-1.2, 12.2], 7/10 draws significant.
+Few labels (n=20, 2 subsets x 10 draws): ours 22.6 / 22.4 / 11.9 / 18.9 / 12.2 (LCB/Omni/MMLU-Pro/SuperGPQA/BBEH), externals < 10;
+bold LCB+Omni from n=20 (Omni not at 50), MMLU-Pro from 100, SuperGPQA from 200, BBEH never (text estimators tie).
+Onboarding k=10: ours 19.5 / 22.7 / 19.2 / 26.7 / 9.7, ahead of ZeroRouter on average everywhere but NO interval excludes zero at k=10
+(was MMLU-Pro, SuperGPQA); k=50 significant on LCB, SuperGPQA. Weaker claim, rewritten.
+Paper: abstract / contributions / tab:fresh / tab:pools / tab:allest / tab:labels / tab:onboard / fig:labels / fig:capture and the
+text citing them now use the ten-draw means ("training sets" in the paper, to avoid clashing with "draws per route"); protocol
+paragraph defines them; single-draw analyses say "manifest split"; re-split clauses removed from abstract / (ii) / Results;
+tab:resplit kept as the test-reshuffling robustness check; Limitations' refit-bootstrap sentence replaced.
