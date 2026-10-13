@@ -22,6 +22,16 @@ from pathlib import Path
 
 # REASON_ROOT points every script that imports R at a shadow root, e.g. the provider-pinned one (build_pinned_root.py)
 R = Path(os.environ.get("REASON_ROOT", "/mnt/llmd/results/exps/aristides/reason"))
+
+
+def split_manifest(old):
+    """the pool's split manifest; with DRAW=s (s >= 0) a training draw: the manifest's train + calibration problems reshuffled into
+    train / calibration of the same sizes (seed 2000 + s), test unchanged (NEW_PATH 4.A.92). Every analysis reads its split here."""
+    sp = json.loads((Path(old) / "split_manifest.json").read_text()); s = int(os.environ.get("DRAW", "-1"))
+    if s >= 0:
+        U = list(sp["train_problem_ids"]) + list(sp["calibration_problem_ids"]); perm = np.random.default_rng(2000 + s).permutation(len(U))
+        ntr = len(sp["train_problem_ids"]); sp = dict(sp, train_problem_ids=[U[i] for i in perm[:ntr]], calibration_problem_ids=[U[i] for i in perm[ntr:]])
+    return sp
 PR = {"oss20lo": 0.12, "oss20md": 0.57, "dsv4f": 0.111, "oss120md": 1.43, "oss120hi": 1.43}   # legacy blended $/M
 # market $/M (in, out), OpenRouter list 2026-09-25 (build_pass_matrix.P); Qwen3-4B scout self-hosted, priced at 20b
 MK = {"scout": (0.018, 0.09), "oss20": (0.018, 0.09), "oss20lo": (0.018, 0.09), "oss20md": (0.018, 0.09),

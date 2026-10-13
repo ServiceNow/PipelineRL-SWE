@@ -31,7 +31,7 @@ from zr_dimsweep import fit_stage1, fit_theta
 torch.set_num_threads(int(os.environ.get("NTHREADS", "8")))
 
 sig = lambda z: 1 / (1 + np.exp(-z))
-KS, NDRAW, NBOOT = [5, 10, 20, 50], 20, int(os.environ.get("NBOOT", "200"))
+KS, NDRAW, NBOOT = [5, 10, 20, 50], int(os.environ.get("NDRAW", "20")), int(os.environ.get("NBOOT", "200"))
 if os.environ.get("SMOKE"):
     KS, NDRAW, NBOOT = [5, 20], 2, 3
 ca = np.array([idx[str(p)] for p in sp["calibration_problem_ids"]]); ca = ca[(v[ca].sum(2) > 0).all(1)]
@@ -157,6 +157,8 @@ for k in KS:
         if a != "ours":
             dd = np.nanmean(bs["ours"] - bs[a], 1) * 100
             r_["ours_minus_it"] = [float(np.nanmean(pt_["ours"] - pt_[a]) * 100), *map(float, np.nanpercentile(dd, [2.5, 97.5]))]
+            if os.environ.get("SAVE_BS"):          # bootstrap replicates, pooled over training draws by draws_aggregate.py
+                r_["ours_minus_it_bs"] = dd.tolist()
             r_["ours_minus_it_by_route"] = {GN[h]: float(np.nanmean(pt_["ours"][h] - pt_[a][h]) * 100) for h in range(NG)}
         row["arms"][a] = r_
     dd = np.nanmean(bs["ours-dopt"] - bs["zr-dopt"], 1) * 100

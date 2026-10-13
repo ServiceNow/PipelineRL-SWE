@@ -13,7 +13,7 @@ Usage: python finetune_cost_estimator.py --pool LCB|Omni|MMLU-Pro --enc distilbe
 import argparse, json, os, sys, time, numpy as np, torch
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
-from decompose import R
+from decompose import R, split_manifest
 
 ENC = {"distilbert": ("distilbert-base-uncased", 512, (2e-5, 5e-5), 16), "jina": ("jinaai/jina-embeddings-v2-base-code", 2048, (1e-5, 3e-5), 8),
        "qwen06": ("Qwen/Qwen3-0.6B", 2048, (5e-6, 2e-5), 8)}
@@ -28,7 +28,7 @@ name, maxlen, LRS, BATCH = ENC[a.enc]
 old, F = (R / d for d in POOL_DIRS[a.pool])
 t = np.load(F / "tensors.npz", allow_pickle=True)
 ids = [str(p) for p in t["problem_ids"]]; S = [str(s) for s in t["model_slots"]]; idx = {p: i for i, p in enumerate(ids)}; M = len(S)
-sp = json.loads((old / "split_manifest.json").read_text()); tr, ca = [np.array([idx[str(p)] for p in sp[k + "_problem_ids"]]) for k in ("train", "calibration")]
+sp = split_manifest(old); tr, ca = [np.array([idx[str(p)] for p in sp[k + "_problem_ids"]]) for k in ("train", "calibration")]
 v = t["valid"].astype(bool); cnt = np.maximum(v.sum(2), 1); L = np.where(v, t["completion_tokens"], 0).sum(2) / cnt
 Y = np.log(np.maximum(L, 1)); Y[v.sum(2) == 0] = np.nan                  # same target as fresh_baselines (log mean output)
 probs = {json.loads(l)["problem_id"]: json.loads(l) for l in (F / "problems.jsonl").read_text().splitlines()}
@@ -97,7 +97,7 @@ for k in range(M):
     o = np.exp(P[:, k]) * np.mean(np.exp(Y[c, k] - P[c, k]))                # smearing on calibration
     O[:, k] = o * (L[c, k].mean() / o[c].mean())                          # level match on calibration
     tt = te[np.isfinite(Y[te, k])]; r2[S[k]] = float(1 - ((Y[tt, k] - P[tt, k]) ** 2).sum() / ((Y[tt, k] - Y[tt, k].mean()) ** 2).sum())
-out = Path(os.environ.get("OUT_DIR", ".")) / f"ft_cost_{a.pool}_{a.enc}.jsonl"
+out = Path(os.environ.get("OUT_DIR", ".")) / f"ft_cost_{a.pool}_{a.enc}{os.environ.get('DRAW_TAG', '')}.jsonl"
 with open(out, "w") as f:
     for i, p in enumerate(ids):
         f.write(json.dumps({"problem_id": p, "pred_tokens": [float(x) for x in O[i]]}) + "\n")

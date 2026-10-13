@@ -22,7 +22,14 @@ Modes:
                   arm is scored on B's mean outcome and cost. oracle_realized prices at B's own mean length (the paper's headroom
                   oracle, which also knows B's sampling noise); oracle_heldout prices at A's mean length (achievable by an
                   expected-cost predictor, noisy with |A| draws). Same training fits (ours, median) in every split.
-Usage: REASON_ROOT=.../reason_pinned RESULT_TAG=_pinned OUT_DIR=... python tmlr_strengthen.py deploy|resplit|resplit_tc|pricegap|splitdraw POOL [S0 S1]
+  draws POOL S0 S1  (NEW_PATH 4.A.92) the paper's numbers averaged over training draws: for each seed (DRAW=s of
+                  decompose.split_manifest: train + calibration reshuffled, test kept; -1 = the paper split) the success readouts are
+                  refitted and every cost arm of tab:fresh / tab:pools / tab:allest is fitted: ours, median, mean, fromsuccess, zr-bins
+                  (ten bins of the mean success logit), gbm, mixllm, knn, zr-pricing (ZeroRouter bins with our success),
+                  zerorouter (its own success and bins, zerorouter_full), ft-<enc> (FT_DIR/ft_cost_<pool>_<enc>_d<s>.jsonl if
+                  present), oracle (realized length). Per arm: saving vs median and the DIRECT saving of ours vs the arm, point and
+                  NBOOT test resamples (rng 0, the same resamples in every seed), saved for draws_aggregate.py.
+Usage: REASON_ROOT=.../reason_pinned RESULT_TAG=_pinned OUT_DIR=... python tmlr_strengthen.py deploy|resplit|resplit_tc|pricegap|splitdraw|draws POOL [S0 S1]
 """
 import json, os, sys
 from pathlib import Path
@@ -115,6 +122,34 @@ elif MODE_ in ("resplit", "resplit_tc"):
                                        for a in preds if a != "ours"), flush=True)
         json.dump(res, open(OUT / f"tmlr_strengthen_{MODE_}_{POOL_.lower().replace('-', '')}_{s0}_{s1}{TAG}.json", "w"), indent=1, default=float)
 
+elif MODE_ == "draws":
+    s0, s1 = int(sys.argv[3]), int(sys.argv[4]); res["seeds"] = {}; FT = Path(os.environ["FT_DIR"]) if os.environ.get("FT_DIR") else None
+    for s in range(s0, s1):
+        os.environ["DRAW"] = str(s); d = load(POOL_); N = len(d["ids"]); tr, ca, ev = d["tr"], d["ca"], d["ev"]
+        S, T, Ca = view(d, tr), view(d, np.arange(N)), view(d, ca); cfg = choose(d, S, Ca)
+        tk = {a: fit_predict(a, S, T, cfg.get(a)) for a in ARMS8 if a != "zerorouter"}; tk["zr-pricing"] = fit_predict("zerorouter", S, T, cfg["zerorouter"])
+        dbar = np.log(d["P"] / (1 - d["P"])).mean(1); e_ = np.quantile(dbar[tr], np.linspace(0, 1, 11)[1:-1]); b_ = np.searchsorted(e_, dbar)
+        zb = np.stack([np.array([d["L"][tr][b_[tr] == j, k].mean() if (b_[tr] == j).any() else d["L"][tr, k].mean() for j in range(10)])[b_] for k in range(d["M"])], 1)
+        tk["zr-bins"] = zb * (d["L"][tr].mean(0) / zb[tr].mean(0))          # level-matched to the train mean, as fresh_baselines.py
+        Pz, tk["zerorouter"], zcfg = zerorouter_full(S, Ca, T); Ps = {a: d["P"] for a in tk}; Ps["zerorouter"] = Pz
+        for f_ in sorted(FT.glob(f"ft_cost_{POOL_}_*_d{s}.jsonl")) if FT and s >= 0 else []:
+            tk["ft-" + f_.stem.split("_")[3]] = read_predictions(f_, d["ids"], "pred_tokens", d["M"]); Ps["ft-" + f_.stem.split("_")[3]] = d["P"]
+        tk["oracle"] = d["L"]; Ps["oracle"] = d["P"]
+        C = {a: cost_of(d, x) for a, x in tk.items()}; Cm = cost_of(d, np.repeat(d["med"][None], N, 0))
+        rb = np.random.default_rng(0); BS = [ev] + [ev[rb.integers(0, len(ev), len(ev))] for _ in range(NBOOT)]
+        Hs = [{a: curve(d, Ps[a], C[a], ii) for a in C} | {"median": curve(d, d["P"], Cm, ii)} for ii in BS]
+        r_ = {}
+        for a in C:
+            vm = np.array([saved(H[a], H["median"]) for H in Hs]) * 100; vd = np.array([saved(H["ours"], H[a]) for H in Hs]) * 100
+            r_[a] = dict(vs_median=float(vm[0]), vs_median_bs=vm[1:].tolist(), ours_vs_it=float(vd[0]), ours_vs_it_bs=vd[1:].tolist())
+        r_["_auc"] = [float(auc(d["y0"][ev, k], d["P"][ev, k])) for k in range(d["M"])]; r_["_cfg"] = {k: list(v) if isinstance(v, tuple) else v for k, v in cfg.items()}
+        r_["_cfg"]["zerorouter_full"] = list(zcfg); r_["_n"] = dict(train=len(tr), calibration=len(ca), test=len(ev))
+        res["seeds"][s] = r_
+        print(f"  seed {s:2d}: vs median " + "  ".join(f"{a} {r_[a]['vs_median']:+5.1f}" for a in C), flush=True)
+        print("           ours vs it " + "  ".join(f"{a} {r_[a]['ours_vs_it']:+5.1f} [{np.percentile(r_[a]['ours_vs_it_bs'], 2.5):+.1f}, {np.percentile(r_[a]['ours_vs_it_bs'], 97.5):+.1f}]"
+                                         for a in C if a != "ours"), flush=True)
+        json.dump(res, open(OUT / f"tmlr_strengthen_draws_{POOL_.lower().replace('-', '')}_{s0}_{s1}{TAG}.json", "w"), indent=1, default=float)
+
 elif MODE_ == "splitdraw":
     d = load(POOL_); N = len(d["ids"]); REPS = int(os.environ.get("REPS", "20"))
     name, feat, ds = POOLS[POOL_]; assert not ds, "splitdraw needs a pool evaluated on its own multi-draw split"
@@ -159,6 +194,6 @@ elif MODE_ == "pricegap":
               f"  fromsuccess {r_['fromsuccess']['vs_median']*100:+5.1f}   ours - fromsuccess {r_['fromsuccess']['ours_minus_it'][0]:+5.1f} "
               f"[{r_['fromsuccess']['ours_minus_it'][1]:+.1f}, {r_['fromsuccess']['ours_minus_it'][2]:+.1f}]", flush=True)
 
-if MODE_ not in ("resplit", "resplit_tc"):
+if MODE_ not in ("resplit", "resplit_tc", "draws"):
     json.dump(res, open(OUT / f"tmlr_strengthen_{MODE_}_{POOL_.lower().replace('-', '')}{TAG}.json", "w"), indent=1, default=float)
 print("DONE", flush=True)

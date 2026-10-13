@@ -49,7 +49,7 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 sys.path.insert(0, str(Path(__file__).parent))
 from carrot_compare import read_predictions
-from decompose import R, hull, cost_at
+from decompose import R, hull, cost_at, split_manifest
 from billed import RATE
 from baseline_cost_heads import rich, text_features
 import torch
@@ -80,7 +80,7 @@ def load(pool):
     F = R / "expanded_eval_20261001" / ds if ds else old; feat = Path(feat) if feat else F / "prefill_combined.npz"
     t = np.load(F / "tensors.npz", allow_pickle=True)
     ids, slots = list(map(str, t["problem_ids"])), list(map(str, t["model_slots"])); idx = {p: i for i, p in enumerate(ids)}; M = len(slots)
-    sp = json.loads((old / "split_manifest.json").read_text())
+    sp = split_manifest(old)
     tr, ca, te = [np.array([idx[str(p)] for p in sp[k + "_problem_ids"]]) for k in ("train", "calibration", "test")]
     n_old = len(np.load(old / "tensors.npz", allow_pickle=True)["problem_ids"]); ev = np.arange(n_old, len(ids)) if ds else te
     v = t["valid"].astype(bool); n = v.sum(2); cnt = np.maximum(n, 1); succ = np.where(v, t["final_outcome"], 0).sum(2)
@@ -104,6 +104,9 @@ def load(pool):
     fv = v.argmax(2)[..., None]; d["y0"] = np.take_along_axis(np.asarray(t["final_outcome"]).astype(int), fv, 2)[..., 0]
     CT = np.full(v.shape[:2] + (16,), np.nan); CT[:, :, :v.shape[2]] = np.where(v, t["completion_tokens"], np.nan); d["CT"] = CT
     d["med"] = np.array([np.median(t["completion_tokens"][d["tr"], k][v[d["tr"], k]]) for k in range(M)])   # the paper rule (over draws)
+    if int(os.environ.get("DRAW", "-1")) >= 0:     # a training draw: success readouts refitted on its train / calibration (paper recipe)
+        A = dict(X=d["X"], y0=d["y0"], succ=succ, n=n); sub = lambda ii: {k: x[ii] for k, x in A.items()}
+        d["P"] = success_linear("X", sub(d["tr"]), sub(d["ca"]), sub(np.arange(len(ids))))
     return d
 
 
@@ -285,6 +288,8 @@ def evaluate(d, preds, ev, Ps=None):
         if a != "ours" and "ours" in preds:
             dd = (bs["ours"] - bs[a]) * 100
             res[a]["ours_minus_it"] = [float((np.nanmean(pt["ours"]) - np.nanmean(pt[a])) * 100), *map(float, np.nanpercentile(dd, [2.5, 97.5]))]
+            if os.environ.get("SAVE_BS"):              # bootstrap replicates, pooled over training draws by draws_aggregate.py
+                res[a]["ours_minus_it_bs"] = dd.tolist()
     return res
 
 

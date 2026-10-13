@@ -16,7 +16,7 @@ from sklearn.linear_model import RidgeCV
 from sklearn.preprocessing import StandardScaler
 sys.path.insert(0, str(Path(__file__).parent))
 from carrot_compare import POOLS, read_predictions
-from decompose import MK, R, hull, cost_at
+from decompose import MK, R, hull, cost_at, split_manifest
 from billed import RATE
 from baseline_cost_heads import rich
 
@@ -35,7 +35,7 @@ else:
     feat = F / "prefill_combined.npz"
 t = np.load(F / "tensors.npz", allow_pickle=True)
 ids, slots = list(map(str, t["problem_ids"])), list(map(str, t["model_slots"])); idx = {p: i for i, p in enumerate(ids)}; M = len(slots)
-sp = json.loads((old / "split_manifest.json").read_text()); tr = np.array([idx[str(p)] for p in sp["train_problem_ids"]])
+sp = split_manifest(old); tr = np.array([idx[str(p)] for p in sp["train_problem_ids"]])
 n_old = len(np.load(old / "tensors.npz", allow_pickle=True)["problem_ids"])
 ev = np.array([idx[str(p)] for p in sp["test_problem_ids"]]) if POOL in SINGLE else np.arange(n_old, len(ids))
 v = t["valid"].astype(bool); cnt = np.maximum(v.sum(2), 1)
@@ -56,6 +56,11 @@ else:
     P = read_predictions(F / "success_preds.jsonl", ids, "p_successes", M); P[:n_old] = read_predictions(old / "content_preds.jsonl", ids[:n_old], "p_successes", M)
 P = np.clip(P, 1e-4, 1 - 1e-4)
 asg = np.array([[MK[s][0] / 1e6, MK[s][1] / 1e6] for s in slots]); tok = np.maximum((learned - I * asg[:, 0]) / asg[:, 1], 1)
+if int(os.environ.get("DRAW", "-1")) >= 0:   # a training draw (NEW_PATH 4.A.92): both readouts refitted on it, as cost_generalization.py does
+    _cg = {"__file__": str(Path(__file__).parent / "cost_generalization.py"), "__name__": "cg"}
+    exec(open(_cg["__file__"]).read().split('MODE, POOL = sys.argv[1], sys.argv[2]')[0], _cg)
+    _d = _cg["load"]({"Omni": "Omni"}.get(POOL, POOL)); assert _d["ids"] == ids
+    P = _d["P"]; tok = _cg["fit_predict"]("ours", _cg["view"](_d, _d["tr"]), _cg["view"](_d, np.arange(len(ids)))); del _d, _cg
 med = np.array([np.median(t["completion_tokens"][tr, k][v[tr, k]]) for k in range(M)])
 
 
