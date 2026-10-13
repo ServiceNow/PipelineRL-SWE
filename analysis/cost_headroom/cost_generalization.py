@@ -104,7 +104,8 @@ def load(pool):
     fv = v.argmax(2)[..., None]; d["y0"] = np.take_along_axis(np.asarray(t["final_outcome"]).astype(int), fv, 2)[..., 0]
     CT = np.full(v.shape[:2] + (16,), np.nan); CT[:, :, :v.shape[2]] = np.where(v, t["completion_tokens"], np.nan); d["CT"] = CT
     d["med"] = np.array([np.median(t["completion_tokens"][d["tr"], k][v[d["tr"], k]]) for k in range(M)])   # the paper rule (over draws)
-    if int(os.environ.get("DRAW", "-1")) >= 0:     # a training draw: success readouts refitted on its train / calibration (paper recipe)
+    if "DRAW" in os.environ:                       # a training draw (DRAW=-1: the paper split, refitted the same way as a matched control):
+                                                   # success readouts refitted on its train / calibration (paper recipe)
         A = dict(X=d["X"], y0=d["y0"], succ=succ, n=n); sub = lambda ii: {k: x[ii] for k, x in A.items()}
         d["P"] = success_linear("X", sub(d["tr"]), sub(d["ca"]), sub(np.arange(len(ids))))
     return d
