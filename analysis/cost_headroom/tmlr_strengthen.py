@@ -196,6 +196,58 @@ elif MODE_ == "singles":
         print(f"  set {s}: " + "  ".join(f"{sl} acc {r_['_routes'][sl]['acc']:.3f}: ours saves {r_['ours'][sl]['saving'][0]:+5.1f}% (gap {r_['ours'][sl]['acc_gap'][0]:+4.1f} pt)" for sl in d["slots"]), flush=True)
     json.dump(res, open(OUT / f"tmlr_strengthen_singles_{POOL_.lower().replace('-', '')}{TAG}.json", "w"), indent=1, default=float)
 
+elif MODE_ == "drop":
+    # (NEW_PATH 4.A.98) route subsets of the five-route pool on the 10 training sets (DRAW=s as `draws`): the full pool, every
+    # leave-one-route-out pool and every pair of routes. Per subset the router is refitted on those routes only (success readouts and
+    # our cost readout are per route, so sliced; pricing from success and difficulty bins use the subset's success logits; median is
+    # per route). Arms: ours, median, fromsuccess, zr-bins, oracle: saving vs median and ours vs it, point + NBOOT test resamples
+    # (rng 0). trade (practitioner view): for the subset's most accurate route ("best") and, if present, deepseek-v4-flash ("dsv4f"):
+    # the cost saved relative to calling that route alone when giving up DELTA accuracy points, by our router, the median-pricing
+    # router and a random mix of single routes (convex hull of the subset's routes); NaN if the frontier does not reach that accuracy.
+    import itertools
+    DELTAS = (0.5, 1.0, 2.0, 3.0, 5.0); res["seeds"] = {}
+
+    def sub_routes(d, cols):
+        d2 = dict(d); d2.update(slots=[d["slots"][k] for k in cols], M=len(cols), rates=d["rates"][cols], med=d["med"][cols], CT=d["CT"][:, cols])
+        for k_ in ("n", "succ", "q", "L", "I", "paid", "P", "y0"):
+            d2[k_] = d[k_][:, cols]
+        return d2
+
+    def cost_or_floor(H, t):
+        return H[0][0] if t < H[0][1] else cost_at(H, t)
+    for s in range(int(sys.argv[3]), int(sys.argv[4])):
+        os.environ["DRAW"] = str(s); d = load(POOL_); N = len(d["ids"]); tr, ev, M = d["tr"], d["ev"], d["M"]
+        tok_ours = fit_predict("ours", view(d, tr), view(d, np.arange(N)))
+        rb = np.random.default_rng(0); BS = [ev] + [ev[rb.integers(0, len(ev), len(ev))] for _ in range(NBOOT)]
+        subsets = {"full": list(range(M))} | {"-" + d["slots"][k]: [j for j in range(M) if j != k] for k in range(M)} \
+                  | {"+".join(d["slots"][j] for j in c): list(c) for c in itertools.combinations(range(M), 2)}
+        r_s = {}
+        for nm, cols in subsets.items():
+            d2 = sub_routes(d, cols); S2, T2 = view(d2, tr), view(d2, np.arange(N))
+            tk = {"ours": tok_ours[:, cols], "fromsuccess": fit_predict("fromsuccess", S2, T2)}
+            dbar = np.log(d2["P"] / (1 - d2["P"])).mean(1); e_ = np.quantile(dbar[tr], np.linspace(0, 1, 11)[1:-1]); b_ = np.searchsorted(e_, dbar)
+            zb = np.stack([np.array([d2["L"][tr][b_[tr] == j, k].mean() if (b_[tr] == j).any() else d2["L"][tr, k].mean() for j in range(10)])[b_] for k in range(len(cols))], 1)
+            tk["zr-bins"] = zb * (d2["L"][tr].mean(0) / zb[tr].mean(0)); tk["oracle"] = d2["L"]
+            C = {a: cost_of(d2, x) for a, x in tk.items()} | {"median": cost_of(d2, np.repeat(d2["med"][None], N, 0))}
+            refs = {"best": int(np.argmax(d2["q"][ev].mean(0)))} | ({"dsv4f": d2["slots"].index("dsv4f")} if "dsv4f" in d2["slots"] else {})
+            r_ = {a: dict(vs_median=[], ours_vs_it=[]) for a in C}; tr_ = {rf: {a: {str(dl): [] for dl in DELTAS} for a in ("ours", "median", "mix")} for rf in refs}
+            for ii in BS:
+                H = {a: curve(d2, d2["P"], C[a], ii) for a in C}; Hm = hull([(d2["paid"][ii, k].mean(), d2["q"][ii, k].mean()) for k in range(len(cols))])
+                for a in C:
+                    r_[a]["vs_median"].append(saved(H[a], H["median"]) * 100); r_[a]["ours_vs_it"].append(saved(H["ours"], H[a]) * 100)
+                for rf, k in refs.items():
+                    am, cm = d2["q"][ii, k].mean(), d2["paid"][ii, k].mean()
+                    for dl in DELTAS:
+                        for a, h in (("ours", H["ours"]), ("median", H["median"]), ("mix", Hm)):
+                            c_ = cost_or_floor(h, am - dl / 100); tr_[rf][a][str(dl)].append(float(1 - c_ / cm) * 100 if np.isfinite(c_) else np.nan)
+            r_["_trade"] = tr_; r_["_refs"] = {rf: dict(slot=d2["slots"][k], acc=float(d2["q"][ev, k].mean()), usd_per_1k=float(d2["paid"][ev, k].mean() * 1e3)) for rf, k in refs.items()}
+            r_s[nm] = r_
+            print(f"  set {s} {nm:<18}: vs median " + " ".join(f"{a} {r_[a]['vs_median'][0]:+5.1f}" for a in C if a != "median")
+                  + " | " + " ".join(f"{rf}={r_['_refs'][rf]['slot']}: give up 1/2/5 pt ours " + "/".join(f"{tr_[rf]['ours'][str(x)][0]:+.0f}" for x in (1.0, 2.0, 5.0))
+                                     + " mix " + "/".join(f"{tr_[rf]['mix'][str(x)][0]:+.0f}" for x in (1.0, 2.0, 5.0)) for rf in refs), flush=True)
+        res["seeds"][s] = r_s
+        json.dump(res, open(OUT / f"tmlr_strengthen_drop_{POOL_.lower().replace('-', '')}_{sys.argv[3]}_{sys.argv[4]}{TAG}.json", "w"), indent=1, default=float)
+
 elif MODE_ == "splitdraw":
     d = load(POOL_); N = len(d["ids"]); REPS = int(os.environ.get("REPS", "20"))
     name, feat, ds = POOLS[POOL_]; assert not ds, "splitdraw needs a pool evaluated on its own multi-draw split"
@@ -240,6 +292,6 @@ elif MODE_ == "pricegap":
               f"  fromsuccess {r_['fromsuccess']['vs_median']*100:+5.1f}   ours - fromsuccess {r_['fromsuccess']['ours_minus_it'][0]:+5.1f} "
               f"[{r_['fromsuccess']['ours_minus_it'][1]:+.1f}, {r_['fromsuccess']['ours_minus_it'][2]:+.1f}]", flush=True)
 
-if MODE_ not in ("resplit", "resplit_tc", "draws", "singles"):
+if MODE_ not in ("resplit", "resplit_tc", "draws", "singles", "drop"):
     json.dump(res, open(OUT / f"tmlr_strengthen_{MODE_}_{POOL_.lower().replace('-', '')}{TAG}.json", "w"), indent=1, default=float)
 print("DONE", flush=True)
