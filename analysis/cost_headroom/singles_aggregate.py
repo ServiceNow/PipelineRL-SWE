@@ -24,5 +24,14 @@ for f in sorted(D.glob("tmlr_strengthen_singles_*_pinned.json")):
         print(f"  {sl:<9} acc {acc * 100:5.1f}  ${usd:6.2f}/1k | ours saves {sv} (reached in {o['reach_sets']}/10 sets, {o['reach']:.0%} of resamples)"
               f" | router max acc - route {o['acc_gap'][0]:+5.1f} [{o['acc_gap'][1]:+.1f}, {o['acc_gap'][2]:+.1f}] pt | median-pricing router saves "
               + ("n/a" if row["median"]["saving"] is None or row["median"]["saving"][0] is None else f"{row['median']['saving'][0]:+.1f}"))
+    if "_mix" in next(iter(seeds.values())):
+        res["_mix"] = {}
+        for a in ("ours", "median"):
+            pts = np.array([s["_mix"][a]["saving"][0] for s in seeds.values()], float); bs = np.concatenate([s["_mix"][a]["saving"][1:] for s in seeds.values()]).astype(float)
+            gp = np.array([s["_mix"][a]["acc_gap"][0] for s in seeds.values()]); gb = np.concatenate([s["_mix"][a]["acc_gap"][1:] for s in seeds.values()])
+            res["_mix"][a] = dict(saving=[float(np.nanmean(pts)), *map(float, np.nanpercentile(bs, [2.5, 97.5]))], acc_gap=[float(gp.mean()), *map(float, np.percentile(gb, [2.5, 97.5]))])
+        m = res["_mix"]; print(f"  vs a random mix of single routes: ours {m['ours']['saving'][0]:+.1f} [{m['ours']['saving'][1]:+.1f}, {m['ours']['saving'][2]:+.1f}]"
+                               f"  median pricing {m['median']['saving'][0]:+.1f} [{m['median']['saving'][1]:+.1f}, {m['median']['saving'][2]:+.1f}]"
+                               f"  | router max acc - best route {m['ours']['acc_gap'][0]:+.1f}")
     out[pool] = res
 json.dump(out, open(Path(__file__).parent / "singles_summary_pinned.json", "w"), indent=1)

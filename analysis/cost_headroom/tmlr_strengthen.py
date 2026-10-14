@@ -173,7 +173,8 @@ elif MODE_ == "draws":
 elif MODE_ == "singles":
     # (NEW_PATH 4.A.95) the router vs every SINGLE route, on the 10 training sets (DRAW=s as `draws`): for each route m, the cost our
     # router (and the median-pricing router) needs to reach m's test accuracy, relative to m's own cost (1 - C_router(acc_m) / cost_m;
-    # NaN if the router's frontier does not reach acc_m), and the router's most accurate point minus acc_m. NBOOT paired test resamples
+    # NaN if the router's frontier does not reach acc_m), and the router's most accurate point minus acc_m; _mix: saving vs the convex hull
+    # of the single routes (random mixing, no router; NEW_PATH 4.A.97) and max-accuracy gap to the best route. NBOOT paired test resamples
     # per set (rng 0), pooled over sets by the caller.
     res["seeds"] = {}
     for s in range(int(sys.argv[3]), int(sys.argv[4])):
@@ -181,15 +182,17 @@ elif MODE_ == "singles":
         S, T = view(d, d["tr"]), view(d, np.arange(N))
         C = {"ours": cost_of(d, fit_predict("ours", S, T)), "median": cost_of(d, np.repeat(d["med"][None], N, 0))}
         rb = np.random.default_rng(0); BS = [ev] + [ev[rb.integers(0, len(ev), len(ev))] for _ in range(NBOOT)]
-        r_ = {a: {sl: dict(saving=[], acc_gap=[]) for sl in d["slots"]} for a in C}
+        r_ = {a: {sl: dict(saving=[], acc_gap=[]) for sl in d["slots"]} for a in C}; r_["_mix"] = {a: dict(saving=[], acc_gap=[]) for a in C}
         for ii in BS:
+            Hm = hull([(d["paid"][ii, k].mean(), d["q"][ii, k].mean()) for k in range(d["M"])])   # random mixes of single routes (no router)
             for a, c in C.items():
-                H = curve(d, d["P"], c, ii)
+                H = curve(d, d["P"], c, ii); r_["_mix"][a]["saving"].append(saved(H, Hm) * 100); r_["_mix"][a]["acc_gap"].append(float(H[-1][1] - Hm[-1][1]) * 100)
                 for k, sl in enumerate(d["slots"]):
                     am, cm = d["q"][ii, k].mean(), d["paid"][ii, k].mean(); cr = H[0][0] if am < H[0][1] else cost_at(H, am)   # below the frontier's cheapest point: that point already beats m
                     r_[a][sl]["saving"].append(float(1 - cr / cm) * 100 if np.isfinite(cr) else np.nan); r_[a][sl]["acc_gap"].append(float(H[-1][1] - am) * 100)
         r_["_routes"] = {sl: dict(acc=float(d["q"][ev, k].mean()), usd_per_1k=float(d["paid"][ev, k].mean() * 1e3)) for k, sl in enumerate(d["slots"])}
         res["seeds"][s] = r_
+        print(f"  set {s}: vs a random mix of single routes ours {r_['_mix']['ours']['saving'][0]:+5.1f} median {r_['_mix']['median']['saving'][0]:+5.1f}", flush=True)
         print(f"  set {s}: " + "  ".join(f"{sl} acc {r_['_routes'][sl]['acc']:.3f}: ours saves {r_['ours'][sl]['saving'][0]:+5.1f}% (gap {r_['ours'][sl]['acc_gap'][0]:+4.1f} pt)" for sl in d["slots"]), flush=True)
     json.dump(res, open(OUT / f"tmlr_strengthen_singles_{POOL_.lower().replace('-', '')}{TAG}.json", "w"), indent=1, default=float)
 
