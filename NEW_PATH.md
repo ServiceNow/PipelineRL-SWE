@@ -2666,3 +2666,17 @@ reached (+4.1 at 1 pt); perfect-cost headroom of that pair 11-36%. Full pool: Om
 2-6 n.s.), LCB -9 at 0 pt (before -50). => a second comparably priced strong model would add a modest top-of-frontier gain on math;
 the two-strong-model headroom is mostly not captured (readouts cannot tell which strong model will write less). Recommendation: no
 purchase for this purpose.
+### 4.A.101 Size-matched text baselines: Qwen3-Embedding-4B (and 8B) on 9 pools x 10 training sets (2026-10-14 16:24 MT; free; `embed_qwen3.py` GPU, `tmlr_strengthen.py textemb`, 45 jobs temb_*, `textemb_aggregate.py` -> textemb_summary_pinned.json)
+Ours vs each (mean, pooled CI; sets with ours ahead significantly). Cost-only arms use our success readouts; q4b-router = text success + text cost.
+- LCB: q4b ridge +16.9 [8.8, 23.9] 10/10, MixLLM +19.5 10/10, kNN +23.1 10/10, router +12.0 [2.5, 19.0] 8/10; 8B ridge +11.5 10/10, 8B router +6.9 [-1.8, 15.1] 6/10
+- Omni: +15.8 / +18.8 / +19.6 (10/10 each), router +18.5 [4.9, 31.2] 10/10
+- MMLU-Pro: +15.8 / +13.3 / +12.0 (10/10), router +12.6 [0.1, 22.6] 9/10
+- AIME: +9.7 / +10.1 / +12.2 (10/10), router +6.8 [0.6, 12.1] 8/10 (8B the same)
+- APPS, BCB, CC, SuperGPQA, BBEH: ours ahead 1-13 pt, mostly n.s. (SuperGPQA kNN +13.3 sig.; BBEH ridge +5.4 [-0.0, 10.2] 8/10);
+  CC text router -4.7 n.s. Text success AUC below ours on every pool (e.g. LCB .748 vs .826, Omni .733 vs .830).
+(8B for Omni / MMLU-Pro lives in text_embeddings.npz:qwen3emb8b and was not read by textemb; tab:grid has it on the manifest split.)
+### 4.A.104 Out-of-sample test of the "when it works" condition (2026-10-14; `when_law.py` -> when_law_pinned.json): NEGATIVE
+headroom ~ log(within-route cost s.d. / between-route price-gap s.d.) on the 5-route subsets: R2 in-sample .11, leave-one-pool-out
+-.01, held-out 8-route pools -3.3 (underpredicts by ~15 pt). Saving ~ headroom x calibration readout R2: leave-one-pool-out .69,
+held-out 8-route MAE 4.1 pt (R2 .31; Omni without dsv4f over-predicted 19-22 vs 11-12). => capture is predictable from legibility;
+headroom is not predictable from a pooled spread / price-gap ratio (which routes are present, esp. a cheap route, dominates).
