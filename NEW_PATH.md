@@ -2646,3 +2646,16 @@ MMLU-Pro 22.9 [13.5, 28.8] / -0.7; AIME 14.9 / 0.0; SuperGPQA 40.3 / 10.5; BBEH 
 Router max acc - best route: -0.2..-2.7 on 7 pools, AIME 0.0, BBEH +2.0.
 Paper: new paragraph "Routing versus single models" (sec:deploy); tab:routes caption no longer says "no route dominates";
 sec:general families paragraph and app:families on the 10-set numbers + the deepseek-free pool; one Limitations sentence.
+### 4.A.98 Route subsets of the five-route pools + practitioner trade-off, 10 training sets (2026-10-14 17:50 ET; free; `tmlr_strengthen.py drop`, 45 jobs drp_*, `drop_aggregate.py` -> drop_summary_pinned.json)
+Leave-one-route-out, ours vs median: removing the CHEAPEST route (oss20lo) hurts most (LCB 27.8 -> 6.5, Omni 31.5 -> 16.2, AIME
+14.9 -> -0.2, SuperGPQA 33.0 -> 0.7, BBEH 23.5 -> 3.8; MMLU-Pro undefined: without oss20lo deepseek has the lowest median cost
+per call, so the median router's frontier (83.6-86.1%) does not overlap ours). Removing dsv4f: LCB 22.4, Omni 15.2, MMLU-Pro 17.0,
+AIME 7.0, SuperGPQA 15.4, BBEH 26.2 (no drop). Other routes: no change. Pairs: the saving lives in cheap route + strong high-variance
+route (Omni oss20lo+dsv4f 33.8 > full; LCB oss20lo+oss120hi 32.1, oss20lo+dsv4f 29.0; MMLU-Pro oss20lo+dsv4f 27.0).
+Practitioner (cost saved vs calling dsv4f alone, giving up 1 / 2 / 5 accuracy points; ours): AIME 5.1 / 7.7 / 14.9, SuperGPQA 9.4 /
+13.6 / 28.1, BBEH 20.6 n.s. / 26.6 / 40.3, Omni 2.0 / 5.5 n.s. / 33.1, LCB -18.7 / 8.4 n.s. / 32.6, MMLU-Pro not reached / 7.7 n.s. /
+26.9; median pricing and random mix get roughly half at 5 points.
+### 4.A.99 Per-route length spread (2026-10-14; `route_spread.py` -> route_spread_pinned.json; manifest split)
+deepseek-v4-flash has the widest log-length s.d. on all 9 pools (LCB 1.72 vs next 1.40; Omni 1.72 vs 1.47; MMLU-Pro 1.29 vs 1.05)
+and its within-route log-cost s.d. exceeds the between-route price-gap s.d. on 7/9 pools; its predictability beyond difficulty
+(R2 ours - R2 from success) is ordinary (.03-.45, like the other routes).
