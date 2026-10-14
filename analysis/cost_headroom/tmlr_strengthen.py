@@ -256,6 +256,46 @@ elif MODE_ == "drop":
         res["seeds"][s] = r_s
         json.dump(res, open(OUT / f"tmlr_strengthen_drop{'_rp_' + RP.replace(':', '_as_') if RP else ''}_{POOL_.lower().replace('-', '')}_{sys.argv[3]}_{sys.argv[4]}{TAG}.json", "w"), indent=1, default=float)
 
+elif MODE_ == "textemb":
+    # (NEW_PATH 4.A.101) size-matched text baselines on the 10 training sets: Qwen3-Embedding-4B (and 8B where present) embeddings of
+    # the problem text. Cost-only arms (our success readouts): q<sz>-ridge (our cost recipe on the embedding), q<sz>-mixllm (MixLLM-style
+    # ensemble), q<sz>-knn (nn chosen on calibration as choose()). Full text router q<sz>-router: success = the paper's logistic recipe
+    # on the embedding (C and Platt on calibration) + q<sz>-ridge cost. Per arm: saving vs the median rule (our success, as every table)
+    # and ours vs it, point + NBOOT test resamples (rng 0); text-success AUC.
+    res["seeds"] = {}; name_, _, ds_ = POOLS[POOL_]; Fd = R / "expanded_eval_20261001" / ds_ if ds_ else R / name_
+    EMB = {}
+    for sz in ("4b", "8b"):
+        f_ = Fd / f"qwen3emb{sz}.npz"
+        if f_.exists():
+            z = np.load(f_, allow_pickle=True); EMB[sz] = (list(map(str, z["problem_ids"])), z["emb"].astype(np.float32))
+    assert "4b" in EMB, f"no Qwen3-Embedding-4B embeddings in {Fd}"
+    for s in range(int(sys.argv[3]), int(sys.argv[4])):
+        os.environ["DRAW"] = str(s); d = load(POOL_); N = len(d["ids"]); tr, ca, ev = d["tr"], d["ca"], d["ev"]
+        T0 = view(d, np.arange(N)); tk = {"ours": fit_predict("ours", view(d, tr), T0)}; Ps = {"ours": d["P"]}; aucs = {}
+        for sz, (eids, E_) in EMB.items():
+            ei = {p_: i for i, p_ in enumerate(eids)}; Ez = E_[[ei[p_] for p_ in d["ids"]]]
+            dE = dict(d, X=Ez, E=Ez); S, T, Ca = view(dE, tr), view(dE, np.arange(N)), view(dE, ca)
+            tk[f"q{sz}-ridge"] = fit_predict("ours", S, T); Ps[f"q{sz}-ridge"] = d["P"]
+            if sz == "4b":
+                tk["q4b-mixllm"] = fit_predict("mixllm", S, T); Ps["q4b-mixllm"] = d["P"]
+                H0c = curve(d, d["P"], cost_of(d, np.repeat(d["med"][None], N, 0)), ca); sc = {}
+                for nn in (1, 3, 5, 10, 20):
+                    t_ = np.zeros((N, d["M"])); t_[ca] = fit_predict("knn", S, Ca, nn); sc[nn] = saved(curve(d, d["P"], cost_of(d, t_), ca), H0c)
+                nn = max(sc, key=lambda c: -np.inf if np.isnan(sc[c]) else sc[c]); tk["q4b-knn"] = fit_predict("knn", S, T, nn); Ps["q4b-knn"] = d["P"]
+            Pt = np.clip(success_linear("E", S, Ca, T), 1e-4, 1 - 1e-4); tk[f"q{sz}-router"] = tk[f"q{sz}-ridge"]; Ps[f"q{sz}-router"] = Pt
+            aucs[sz] = [float(auc(d["y0"][ev, k], Pt[ev, k])) for k in range(d["M"])]
+        C = {a: cost_of(d, x) for a, x in tk.items()}; Cm = cost_of(d, np.repeat(d["med"][None], N, 0))
+        rb = np.random.default_rng(0); BS = [ev] + [ev[rb.integers(0, len(ev), len(ev))] for _ in range(NBOOT)]
+        Hs = [{a: curve(d, Ps[a], C[a], ii) for a in C} | {"median": curve(d, d["P"], Cm, ii)} for ii in BS]; r_ = {}
+        for a in C:
+            vm = np.array([saved(H[a], H["median"]) for H in Hs]) * 100; vd = np.array([saved(H["ours"], H[a]) for H in Hs]) * 100
+            r_[a] = dict(vs_median=float(vm[0]), vs_median_bs=vm[1:].tolist(), ours_vs_it=float(vd[0]), ours_vs_it_bs=vd[1:].tolist())
+        r_["_auc_text"] = aucs; r_["_auc_ours"] = [float(auc(d["y0"][ev, k], d["P"][ev, k])) for k in range(d["M"])]; res["seeds"][s] = r_
+        print(f"  set {s}: vs median " + " ".join(f"{a} {r_[a]['vs_median']:+5.1f}" for a in C) + " | ours vs it " + " ".join(
+            f"{a} {r_[a]['ours_vs_it']:+5.1f} [{np.nanpercentile(r_[a]['ours_vs_it_bs'], 2.5):+.1f}, {np.nanpercentile(r_[a]['ours_vs_it_bs'], 97.5):+.1f}]" for a in C if a != "ours")
+              + f" | success AUC ours {np.mean(r_['_auc_ours']):.3f} text " + " ".join(f"{z} {np.mean(v):.3f}" for z, v in aucs.items()), flush=True)
+        json.dump(res, open(OUT / f"tmlr_strengthen_textemb_{POOL_.lower().replace('-', '')}_{sys.argv[3]}_{sys.argv[4]}{TAG}.json", "w"), indent=1, default=float)
+
 elif MODE_ == "splitdraw":
     d = load(POOL_); N = len(d["ids"]); REPS = int(os.environ.get("REPS", "20"))
     name, feat, ds = POOLS[POOL_]; assert not ds, "splitdraw needs a pool evaluated on its own multi-draw split"
@@ -300,6 +340,6 @@ elif MODE_ == "pricegap":
               f"  fromsuccess {r_['fromsuccess']['vs_median']*100:+5.1f}   ours - fromsuccess {r_['fromsuccess']['ours_minus_it'][0]:+5.1f} "
               f"[{r_['fromsuccess']['ours_minus_it'][1]:+.1f}, {r_['fromsuccess']['ours_minus_it'][2]:+.1f}]", flush=True)
 
-if MODE_ not in ("resplit", "resplit_tc", "draws", "singles", "drop"):
+if MODE_ not in ("resplit", "resplit_tc", "draws", "singles", "drop", "textemb"):
     json.dump(res, open(OUT / f"tmlr_strengthen_{MODE_}_{POOL_.lower().replace('-', '')}{TAG}.json", "w"), indent=1, default=float)
 print("DONE", flush=True)
