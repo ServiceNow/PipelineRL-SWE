@@ -7,6 +7,8 @@ success predictions:
   median          one median length per route (the paper's rule, over the mixture)
   median_by_ds    median length per (route, benchmark): a router that knows which benchmark a query comes from; the control for
                   "segmenting by dataset" -- ours vs it is the per-query value beyond benchmark identity
+  fromsuccess_by_ds, bins_by_ds  (4.A.105) difficulty-aware pricing fitted within each benchmark (ridge on the success logits;
+                  ten bins of the mean success logit), level-matched per benchmark; fromsuccess: the same over the whole mixture
   mean_by_ds      mean length per (route, benchmark)
   oracle          realized length (headroom)
 Saving vs median and vs median_by_ds, and ours vs each arm; point + NBOOT test resamples stratified by pool (rng 0).
@@ -46,6 +48,16 @@ for j in range(len(PL)):
     tj, ij = tr[pool_of[tr] == j], pool_of == j
     mbd[ij] = np.array([np.nanmedian(D["CT"][tj, k]) for k in range(M)])[None]; abd[ij] = D["L"][tj].mean(0)[None]
 tk["median_by_ds"], tk["mean_by_ds"] = mbd, abd
+# (4.A.105) difficulty-aware pricing WITHIN each benchmark: a router that knows the benchmark and prices from the success readouts there
+fsd, bnd = np.zeros((N, M)), np.zeros((N, M)); lgD = np.log(D["P"] / (1 - D["P"]))
+for j in range(len(PL)):
+    tj, ij = tr[pool_of[tr] == j], np.where(pool_of == j)[0]
+    fsd[ij] = fit_predict("fromsuccess", view(D, tj), view(D, ij))
+    db = lgD.mean(1); e_ = np.quantile(db[tj], np.linspace(0, 1, 11)[1:-1]); b_ = np.searchsorted(e_, db[ij]); bt = np.searchsorted(e_, db[tj])
+    zb = np.stack([np.array([D["L"][tj][bt == q, k].mean() if (bt == q).any() else D["L"][tj, k].mean() for q in range(10)])[b_] for k in range(M)], 1)
+    bnd[ij] = zb * (D["L"][tj].mean(0) / np.stack([np.array([D["L"][tj][bt == q, k].mean() if (bt == q).any() else D["L"][tj, k].mean() for q in range(10)])[bt] for k in range(M)], 1).mean(0))
+tk["fromsuccess_by_ds"], tk["bins_by_ds"] = fsd, bnd
+tk["fromsuccess"] = fit_predict("fromsuccess", view(D, tr), view(D, np.arange(N)))
 C = {a: cost_of(D, x) for a, x in tk.items()}
 BS = [ev] + [np.concatenate([e[rng.integers(0, len(e), len(e))] for e in evs]) for _ in range(NBOOT)]
 Hs = [{a: curve(D, D["P"], C[a], ii) for a in C} for ii in BS]
