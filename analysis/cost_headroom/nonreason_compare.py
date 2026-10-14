@@ -23,7 +23,7 @@ exec(open(Path(__file__).parent / "tmlr_free_analyses.py").read().split("# -----
      .replace('print(f"===== {POOL}', 'print(f"===== reasoning pool {POOL}'))
 REALR = Path("/mnt/llmd/results/exps/aristides/reason"); PY = sys.executable
 NR = ["nr_ds4off", "nr_llama8", "nr_qw30", "nr_llama70", "nr_qw235"]; ds_ = {"Omni": "omni500", "MMLU-Pro": "mmlupro", "LCB": "lcb"}[POOL]
-OUT = REALR / "nonreason_eval_20261009" / ds_; OUT.mkdir(parents=True, exist_ok=True)
+OUT = REALR / "nonreason_eval_20261009" / ds_ / (f"d{os.environ['DRAW']}" if "DRAW" in os.environ else ""); OUT.mkdir(parents=True, exist_ok=True)   # DRAW=s (NEW_PATH 4.A.102): own dir per training set
 
 
 def latest_valid(files, rule):
@@ -69,7 +69,8 @@ print("valid per route (train / test): " + "  ".join(f"{s} {vN[tr, k].sum()}/{vN
 np.savez(OUT / "tensors.npz", final_outcome=qN[:, :, None] > 0, execution_outcome=qN[:, :, None] > 0, weak_verifier_outcome=qN[:, :, None] > 0,
          valid=vN[:, :, None], prompt_tokens=IN[:, :, None].astype(np.float32), completion_tokens=LN[:, :, None].astype(np.float32),
          problem_ids=np.array(ids), model_slots=np.array(NR), schema_version=3)
-(OUT / "split_manifest.json").write_text((old / "split_manifest.json").read_text())
+from decompose import split_manifest
+(OUT / "split_manifest.json").write_text(json.dumps(split_manifest(old)))      # the training set's split (manifest split if DRAW unset)
 for fn in ("problems.jsonl",):
     if not (OUT / fn).exists():
         (OUT / fn).symlink_to((F / fn).resolve() if (F / fn).exists() else (old / fn).resolve())
