@@ -2692,3 +2692,11 @@ miss 2.2-5.6 pt. Ours - best deployed external: LCB +16.3, MMLU-Pro +12.7, Omni 
 AIME +9.4 (9/10), BBEH -1.0 (0/10 either way). Ours - fromsuccess: MMLU-Pro +17.3, BBEH +28.7 (10/10), SuperGPQA +15.4 (7/10).
 Reasoning vs non-reasoning (common test problems): LCB headroom 40.1 / 21.4, ours 27.8 / 12.1 (capture .69 / .53); Omni500 53.1 /
 40.5, ours 31.5 / 6.8 (.59 / .17); MMLU-Pro 59.8 / 26.0, ours 25.8 / 0.8 (.43 / .03).
+### 4.A.105 Mixed traffic with difficulty-aware controls within each benchmark (2026-10-14 17:40 MT; free; mixed_pool.py + fromsuccess_by_ds / bins_by_ds, 10 jobs mixed2_*, mixed2_summary_pinned.json)
+Saving vs global median (10-set mean, pooled CI, all 10/10 sets significant): benchmark identity (median per route x benchmark) 12.2;
++ difficulty within each benchmark (pricing from success fitted per benchmark / ten difficulty bins per benchmark) 24.4 / 24.1;
+ours 31.8. Ours beyond benchmark identity AND within-benchmark difficulty: +9.9 [5.2, 14.2] vs fromsuccess_by_ds, +10.1 [4.4, 15.1]
+vs bins_by_ds (10/10 each). Pricing from success fitted on the mixture without benchmark identity: 11.7 (ours +22.8 over it).
+Literature check (same day): dataset/task identity is a known strong baseline for QUALITY routing (LLMRouterBench "Dataset Oracle",
+2601.07206; "Most of the LLM Routing Gap Is Task Type", 2608.23023; task/session-level routing eval 2608.14641); no dataset-aware
+COST baseline found.
