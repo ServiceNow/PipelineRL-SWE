@@ -205,7 +205,9 @@ elif MODE_ == "drop":
     # the cost saved relative to calling that route alone when giving up DELTA accuracy points, by our router, the median-pricing
     # router and a random mix of single routes (convex hull of the subset's routes); NaN if the frontier does not reach that accuracy.
     import itertools
-    DELTAS = (0.5, 1.0, 2.0, 3.0, 5.0); res["seeds"] = {}
+    # REPRICE=a:b (NEW_PATH 4.A.100): route a billed at route b's token rates (its own lengths and outcomes): a simulated second
+    # strong model priced like b. SUBSETS=comma list restricts the subsets. DELTAS include 0 (cost at the reference route's accuracy).
+    DELTAS = (0.0, 0.5, 1.0, 2.0, 3.0, 5.0); res["seeds"] = {}; RP = os.environ.get("REPRICE"); res["reprice"] = RP
 
     def sub_routes(d, cols):
         d2 = dict(d); d2.update(slots=[d["slots"][k] for k in cols], M=len(cols), rates=d["rates"][cols], med=d["med"][cols], CT=d["CT"][:, cols])
@@ -217,10 +219,16 @@ elif MODE_ == "drop":
         return H[0][0] if t < H[0][1] else cost_at(H, t)
     for s in range(int(sys.argv[3]), int(sys.argv[4])):
         os.environ["DRAW"] = str(s); d = load(POOL_); N = len(d["ids"]); tr, ev, M = d["tr"], d["ev"], d["M"]
+        if RP:
+            a_, b_ = (d["slots"].index(x) for x in RP.split(":")); d["rates"] = d["rates"].copy(); d["rates"][a_] = d["rates"][b_]
+            d["paid"] = d["paid"].copy(); d["paid"][:, a_] = d["I"][:, a_] * d["rates"][a_, 0] + d["L"][:, a_] * d["rates"][a_, 1]
+            print(f"  set {s}: {RP}: " + " ".join(f"{sl} {d['q'][ev, k].mean():.3f}@${d['paid'][ev, k].mean() * 1e3:.2f}/1k" for k, sl in enumerate(d["slots"])), flush=True)
         tok_ours = fit_predict("ours", view(d, tr), view(d, np.arange(N)))
         rb = np.random.default_rng(0); BS = [ev] + [ev[rb.integers(0, len(ev), len(ev))] for _ in range(NBOOT)]
         subsets = {"full": list(range(M))} | {"-" + d["slots"][k]: [j for j in range(M) if j != k] for k in range(M)} \
                   | {"+".join(d["slots"][j] for j in c): list(c) for c in itertools.combinations(range(M), 2)}
+        if os.environ.get("SUBSETS"):
+            subsets = {k: v for k, v in subsets.items() if k in os.environ["SUBSETS"].split(",")}
         r_s = {}
         for nm, cols in subsets.items():
             d2 = sub_routes(d, cols); S2, T2 = view(d2, tr), view(d2, np.arange(N))
@@ -243,10 +251,10 @@ elif MODE_ == "drop":
             r_["_trade"] = tr_; r_["_refs"] = {rf: dict(slot=d2["slots"][k], acc=float(d2["q"][ev, k].mean()), usd_per_1k=float(d2["paid"][ev, k].mean() * 1e3)) for rf, k in refs.items()}
             r_s[nm] = r_
             print(f"  set {s} {nm:<18}: vs median " + " ".join(f"{a} {r_[a]['vs_median'][0]:+5.1f}" for a in C if a != "median")
-                  + " | " + " ".join(f"{rf}={r_['_refs'][rf]['slot']}: give up 1/2/5 pt ours " + "/".join(f"{tr_[rf]['ours'][str(x)][0]:+.0f}" for x in (1.0, 2.0, 5.0))
-                                     + " mix " + "/".join(f"{tr_[rf]['mix'][str(x)][0]:+.0f}" for x in (1.0, 2.0, 5.0)) for rf in refs), flush=True)
+                  + " | " + " ".join(f"{rf}={r_['_refs'][rf]['slot']}: give up 0/1/2/5 pt ours " + "/".join(f"{tr_[rf]['ours'][str(x)][0]:+.0f}" for x in (0.0, 1.0, 2.0, 5.0))
+                                     + " mix " + "/".join(f"{tr_[rf]['mix'][str(x)][0]:+.0f}" for x in (0.0, 1.0, 2.0, 5.0)) for rf in refs), flush=True)
         res["seeds"][s] = r_s
-        json.dump(res, open(OUT / f"tmlr_strengthen_drop_{POOL_.lower().replace('-', '')}_{sys.argv[3]}_{sys.argv[4]}{TAG}.json", "w"), indent=1, default=float)
+        json.dump(res, open(OUT / f"tmlr_strengthen_drop{'_rp_' + RP.replace(':', '_as_') if RP else ''}_{POOL_.lower().replace('-', '')}_{sys.argv[3]}_{sys.argv[4]}{TAG}.json", "w"), indent=1, default=float)
 
 elif MODE_ == "splitdraw":
     d = load(POOL_); N = len(d["ids"]); REPS = int(os.environ.get("REPS", "20"))
