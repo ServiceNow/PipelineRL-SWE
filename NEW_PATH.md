@@ -2640,3 +2640,9 @@ In EVERY sub-pool the router's most accurate point is 1-3 points below the most 
 dsv4f); without dsv4f the top route is expensive (nemo120 $6.60/1k on LCB), so the router is far cheaper just below the top.
 Reading: no single model dominates without dsv4f; the general pattern is the argmax-success end of the router falling 1-3 points
 short of the best single route. The cost readout is what makes routing beat no-routing (median pricing often does not).
+### 4.A.97 Router vs a random mix of single routes, 9 pools, 10 training sets (2026-10-14 00:50 ET; free; singles mode + _mix, jobs dsm_*)
+Saving vs the convex hull of the single routes, ours / median pricing: LCB 37.3 [29.5, 44.3] / 12.9; Omni 39.2 [30.5, 45.8] / 11.2;
+MMLU-Pro 22.9 [13.5, 28.8] / -0.7; AIME 14.9 / 0.0; SuperGPQA 40.3 / 10.5; BBEH 46.6 / 29.1; APPS 6.7, CC 3.9, BCB -7.7 (n.s.).
+Router max acc - best route: -0.2..-2.7 on 7 pools, AIME 0.0, BBEH +2.0.
+Paper: new paragraph "Routing versus single models" (sec:deploy); tab:routes caption no longer says "no route dominates";
+sec:general families paragraph and app:families on the 10-set numbers + the deepseek-free pool; one Limitations sentence.
