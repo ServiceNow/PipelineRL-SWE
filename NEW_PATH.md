@@ -2624,3 +2624,19 @@ effort high = adaptive thinking (thinks on 24% of problems; a direct test call c
 temperature 1, max 64k, same collector / prompt / grader as the routes. Accuracy 94.0%, $21.90 per 1k calls, 954 output tokens mean.
 Same problems, 10 training sets: our router's most accurate point 87.7% at $1.62/1k (median pricing 87.8% at $1.39); routes: oss120hi
 89.3% at $3.36, dsv4f 88.8% at $0.81. Opus is off the router's frontier: +6 points for 13x the cost. Paper: "A frontier reference" (sec:deploy).
+### 4.A.95 Router vs every single route, 9 pools, 10 training sets (2026-10-13; `tmlr_strengthen.py singles`, `singles_aggregate.py` -> singles_summary_pinned.json)
+deepseek-v4-flash alone is not beaten at its own accuracy on any pool: the router's most accurate point is below it on LCB (-0.4),
+Omni (-1.6), MMLU-Pro (-2.7 [-4.2, -1.1]); ties on AIME / SuperGPQA; BBEH +10.7 n.s.; costs more on APPS / CC / BCB (n.s.). Against
+every other single route the router saves 21-92% at that route's accuracy. Not in the paper yet.
+### 4.A.96 Eight-route pools without deepseek-v4-flash, 10 training sets (2026-10-14 00:05 ET; free; `newfamily_draws.py`, 33 eai jobs nfd_*, `newfamily_draws_aggregate.py` -> newfamily_draws_summary_pinned.json)
+Sub-pools: newpool (oss20lo/md + qw32, glm47f, nemo120), no_dsv4f (all 8 minus dsv4f), all8. New: "mix" = saving vs the convex hull
+of the single routes (random mixing, no router). Ours vs median (10-set mean [pooled CI]):
+- LCB newpool 29.5 [17.3, 37.2], no_dsv4f 25.3 [14.1, 32.2], all8 28.8 (manifest 37.7 / 23.2 / 34.6)
+- MMLU-Pro 22.7 [9.9, 33.6] / 22.4 [11.1, 30.8] / 23.0;  Omni 12.4 [-0.2, 21.7] / 11.4 [0.9, 19.8] / 25.6
+- vs bins / fromsuccess as with five routes (LCB newpool bins +7.9 sig., MMLU-Pro bins +12.5 / +7.6 sig.; Omni ties both).
+Vs a random mix of single routes, ours / median pricing: LCB 44.7 / 21.4 (newpool), 24.1 / -1.6 (no_dsv4f), 38.0 / 13.0 (all8);
+Omni 22.7 / 10.9, 24.0 / 14.1, 34.8 / 12.2; MMLU-Pro -7.6 / -39.9, -8.8 / -41.3 (n.s. for ours), 17.9 / -6.3.
+In EVERY sub-pool the router's most accurate point is 1-3 points below the most accurate single route (nemo120 or oss120hi without
+dsv4f); without dsv4f the top route is expensive (nemo120 $6.60/1k on LCB), so the router is far cheaper just below the top.
+Reading: no single model dominates without dsv4f; the general pattern is the argmax-success end of the router falling 1-3 points
+short of the best single route. The cost readout is what makes routing beat no-routing (median pricing often does not).
