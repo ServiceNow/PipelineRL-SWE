@@ -2659,3 +2659,10 @@ Practitioner (cost saved vs calling dsv4f alone, giving up 1 / 2 / 5 accuracy po
 deepseek-v4-flash has the widest log-length s.d. on all 9 pools (LCB 1.72 vs next 1.40; Omni 1.72 vs 1.47; MMLU-Pro 1.29 vs 1.05)
 and its within-route log-cost s.d. exceeds the between-route price-gap s.d. on 7/9 pools; its predictability beyond difficulty
 (R2 ours - R2 from success) is ordinary (.03-.45, like the other routes).
+### 4.A.100 Simulated strong cheap peer: gpt-oss-120b-high billed at deepseek-v4-flash's token rates (2026-10-14; free; drop mode REPRICE, 18 jobs drr_*, drop_rp_summary_pinned.json)
+oss120hi then costs ~1.4x dsv4f per call at about its accuracy on LCB ($1.24 vs $0.90). Pair dsv4f + cheap oss120hi, cost saved vs
+dsv4f alone at ITS accuracy: Omni 7.0 [2.4, 14.0], BBEH 2.8 [0.3, 5.7], LCB / AIME / SuperGPQA / coding 0-2 n.s., MMLU-Pro not
+reached (+4.1 at 1 pt); perfect-cost headroom of that pair 11-36%. Full pool: Omni 1-2 pt given up now saves 15-19% (sig.; before
+2-6 n.s.), LCB -9 at 0 pt (before -50). => a second comparably priced strong model would add a modest top-of-frontier gain on math;
+the two-strong-model headroom is mostly not captured (readouts cannot tell which strong model will write less). Recommendation: no
+purchase for this purpose.
