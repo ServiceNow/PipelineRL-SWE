@@ -2680,3 +2680,15 @@ headroom ~ log(within-route cost s.d. / between-route price-gap s.d.) on the 5-r
 -.01, held-out 8-route pools -3.3 (underpredicts by ~15 pt). Saving ~ headroom x calibration readout R2: leave-one-pool-out .69,
 held-out 8-route MAE 4.1 pt (R2 .31; Omni without dsv4f over-predicted 19-22 vs 11-12). => capture is predictable from legibility;
 headroom is not predictable from a pooled spread / price-gap ratio (which routes are present, esp. a cheap route, dominates).
+### 4.A.103 Mixed traffic: one router over the nine pools (2026-10-14; free; `mixed_pool.py`, 10 jobs mix_*, `mixed_aggregate.py` -> mixed_summary_pinned.json)
+Train / cal = union of every pool's splits per training set; test = 150 per pool (1,350); readouts refitted on the union. Saving
+(10-set mean, pooled CI, sets significant): median per (route, benchmark) vs global median 12.2 [5.5, 17.6] (benchmark identity
+alone); ours vs global median 31.8 [26.1, 36.7] 10/10; ours vs median per (route, benchmark) 22.4 [16.5, 27.6] 10/10; mean per
+(route, benchmark) vs per-benchmark median 1.5 n.s.; headroom vs per-benchmark median 38.9 (capture .58).
+### 4.A.102 Remaining manifest-split analyses on the 10 training sets (2026-10-14; free; 100 jobs i6*; `item6_aggregate.py` -> item6_summary_pinned.json)
+Deployable policies (10-set means): ours vs median's deployed policies AIME 19.6, BBEH 24.0, LCB 31.3, MMLU-Pro 31.1, Omni 35.0,
+SuperGPQA 37.9 (APPS 23.3, CC 13.5, BCB 7.0); own-frontier loss 1.0-3.3 on those six (APPS 9.4, BCB 9.2, CC 6.3; median rule 2.0-16.5);
+miss 2.2-5.6 pt. Ours - best deployed external: LCB +16.3, MMLU-Pro +12.7, Omni +21.5 (10/10 sets sig.), SuperGPQA +14.1 (7/10),
+AIME +9.4 (9/10), BBEH -1.0 (0/10 either way). Ours - fromsuccess: MMLU-Pro +17.3, BBEH +28.7 (10/10), SuperGPQA +15.4 (7/10).
+Reasoning vs non-reasoning (common test problems): LCB headroom 40.1 / 21.4, ours 27.8 / 12.1 (capture .69 / .53); Omni500 53.1 /
+40.5, ours 31.5 / 6.8 (.59 / .17); MMLU-Pro 59.8 / 26.0, ours 25.8 / 0.8 (.43 / .03).
