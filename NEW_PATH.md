@@ -2724,3 +2724,18 @@ and SuperGPQA .23 (ceiling .96) -> low R2 on knowledge pools is the readout, not
 (R2 .73 vs .56 with the differential R2), since headroom dominates.
 (3) Pilot: 5-fold CV R2 within k labelled problems ranks pools like the full-data test R2 (Spearman .85 / .88 / .92 at k = 20 / 50 /
 100) but underestimates the level (mean .23 / .43 / .50 vs .59).
+### 4.A.108 Best pre-generation length predictor per route (2026-10-14 19:27 MT; free; `best_estimators.py`, 18 jobs best_*, `best_aggregate.py` -> best_estimators_summary_pinned.json)
+Over ours, pricing from success, ZeroRouter bins, GBM, MixLLM (jina), kNN, Qwen3-Embedding-4B ridge / MixLLM / kNN and the fine-tuned
+Qwen3-0.6B (LCB): OURS is the best test log-length predictor on every route of every pool (10-set means). Empirical bracket on
+legibility from the prompt: [best predictor, noise ceiling]; "other routes' realized lengths on the same problem" is also a
+prompt-only predictor (run other models) and is often far higher: deepseek-v4-flash MMLU-Pro ours .26, other routes .62, ceiling .92;
+SuperGPQA .23 / .46 / .96; LCB .72 / .92 / .99. => on the knowledge pools much of deepseek's length is a shared property of the question
+that the prefill does not read (a readout gap, not illegible data).
+### 4.A.109 Predictor-free data analyses (2026-10-14 19:27 MT; free; `data_decomp.py` 9 jobs dec_*, `data_law.py` -> data_law_pinned.json)
+Variance of log output length per draw (excluding route means): shared problem level 42-84%, problem x route interaction 8-29%, noise
+8-29% (LCB 84 / 8 / 8; MMLU-Pro 66 / 17 / 17; SuperGPQA 55 / 27 / 18; BBEH 42 / 29 / 29; APPS noise n/a). Headroom by source (10 sets):
+an oracle knowing only the route-specific part saves as much as or more than one knowing only the shared level on every pool (LCB 24.8 vs
+25.5, Omni 41.4 vs 23.3, MMLU-Pro 43.7 vs 25.4, SuperGPQA 54.1 vs 43.3; both 40.1 / 51.9 / 58.0 / 60.6): a small share of the length
+variance carries most of the routing value. Law retest, models fixed in advance, 138 subsets: headroom ~ price spread LOPO R2 .25;
+~ problem + interaction variance -.23; both .01; log((s_b + s_ab) / ps^2) -.01 => headroom is not predictable from length / price
+statistics alone (it also depends on the routes' accuracies). NEGATIVE.
