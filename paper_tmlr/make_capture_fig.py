@@ -1,7 +1,7 @@
 """Headroom x capture map (TMLR sec:when): per pool, x = headroom (oracle per-query cost vs median), y = cost saved vs median by our
 readouts (filled) and by the best external estimator on that pool (hollow: mean, prompt GBM, MixLLM-style, ZeroRouter); dotted line =
 full capture. Pinned, billed, test splits; means over 10 training draws from analysis/cost_headroom/draws_summary_pinned.json
-(draws_aggregate.py, NEW_PATH 4.A.92). Triangles (one training draw, the manifest split): five
+(draws_aggregate.py, NEW_PATH 4.A.92). Triangles (means over the ten training sets, NEW_PATH 4.A.102): five
 non-reasoning routes on the same LCB / Omni-MATH / MMLU-Pro test problems (nonreason_compare_*_pinned.json, 4.A.71). Usage: python make_capture_fig.py
 """
 import json
@@ -29,12 +29,12 @@ for p, r in rows.items():
     ax.scatter([h], [o], s=18, color=OURS, zorder=3)
     ax.annotate(NAMES[p], (h, o), xytext=OFF.get(p, (4, 2)), textcoords="offset points", fontsize=6)
 NR = Path("/mnt/llmd/results/exps/aristides/reason/reason_pinned_logs")      # non-reasoning routes on the same problems (NEW_PATH 4.A.71)
-OFFNR = {"lcb": (4, -6), "omni500": (5, 1), "mmlupro": (4, -2)}
+OFFNR = {"lcb": (-4, 3), "omni500": (5, 1), "mmlupro": (4, -2)}
 for ds, nm in (("lcb", "LCB"), ("omni500", "Omni-MATH"), ("mmlupro", "MMLU-Pro")):
-    r = json.load(open(NR / f"nonreason_compare_{ds}_pinned.json"))["routing"]["nonreasoning"]
-    h, o = r["headroom"][0] * 100, r["ours"][0] * 100
+    r = json.load(open(HERE.parent / "analysis/cost_headroom/item6_summary_pinned.json"))["nonreason"][ds]["nonreasoning"]   # 10 training sets (4.A.102)
+    h, o = r["headroom"]["mean"], r["ours"]["mean"]
     ax.scatter([h], [o], s=20, marker="^", facecolors="white", edgecolors=OURS, lw=.9, zorder=3)
-    ax.annotate(f"{nm}, non-reasoning", (h, o), xytext=OFFNR[ds], textcoords="offset points", fontsize=5.5, color=OURS)
+    ax.annotate(f"{nm}, non-reasoning", (h, o), xytext=OFFNR[ds], textcoords="offset points", fontsize=5.5, color=OURS, ha="right" if ds == "lcb" else "left")
 ax.scatter([], [], s=20, marker="^", facecolors="white", edgecolors=OURS, lw=.9, label="ours, non-reasoning routes")
 ax.scatter([], [], s=18, color=OURS, label="our readouts"); ax.scatter([], [], s=16, facecolors="white", edgecolors=EXT, label="best external estimator")
 ax.legend(frameon=False, fontsize=6, loc="upper left"); ax.set_xlim(0, 72); ax.set_ylim(-5, 45)

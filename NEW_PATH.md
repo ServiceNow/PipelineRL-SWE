@@ -2707,3 +2707,11 @@ COST baseline found.
   => the paper's "ours exceeds every other arm significantly on LCB, MMLU-Pro, AIME and BBEH" holds for LCB, MMLU-Pro, AIME; NOT BBEH.
   Families onboarding (newpool, Nemotron from k problems): k=10 ours 15.4 / 11.0 / 15.5 (LCB / Omni / MMLU-Pro) vs ZeroRouter
   -35.1 / -30.2 / -6.6, naive -77.3 / -49.0 / -26.7; ours - ZR sig. in 6 / 2 / 1 of 10 sets at k=10, 10 / 8 / 6 at k=50.
+### 4.A.107 Paper pass (2026-10-15 MT): everything since 4.A.95 written in
+Abstract + contributions (new (v) mixed traffic; (vi) adds the matched-size embedding); related work cites LLMRouterBench and the
+task-type paper; protocol paragraph lists what is now on 10 training sets. sec:headroom: "Which routes the saving needs" (leave-one-out,
+pairs, deepseek spread) replaces the old effort-subpool paragraph; tab:nonreason on 10 sets. sec:general: families onboarding,
+tab:transfer + text on 10 sets (BBEH claim removed), new "Mixed traffic" paragraph + tab:mixed. Ablations: tab:textemb
+(Qwen3-Embedding-4B, 9 pools) replaces tab:grid (8B removed by user decision). Deployment: practitioner trade-off vs deepseek alone;
+tab:deploy + text on 10 sets. Limitations: two-strong-routes simulation, cheap-route dependence. New appendix app:subsets
+(tab:subsets, tab:spread). fig:capture triangles now 10-set means. 26 pages.
