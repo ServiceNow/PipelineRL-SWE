@@ -27,7 +27,10 @@ t = np.load(F / "tensors.npz", allow_pickle=True); v = t["valid"].astype(bool); 
 LD = np.log(np.maximum(CTd, 1)); nD = v.sum(2); M = LD.shape[1]
 ceil = {}
 for k in range(M):
-    m = nD[:, k] >= 2; x = LD[m, k]; s_w2 = float(np.nanmean(np.nanvar(x, 1, ddof=1)))
+    m = nD[:, k] >= 2; x = LD[m, k]
+    if m.sum() < 20:                                  # one draw per problem (APPS): no ceiling
+        ceil[k] = dict(icc=None, s_b2=None, s_w2=None, n_problems=int(m.sum())); continue
+    s_w2 = float(np.nanmean(np.nanvar(x, 1, ddof=1)))
     s_b2 = max(float(np.nanvar(np.nanmean(x, 1))) - s_w2 * float(np.mean(1 / nD[m, k])), 0)
     ceil[k] = dict(icc=s_b2 / (s_b2 + s_w2), s_b2=s_b2, s_w2=s_w2, n_problems=int(m.sum()))
 res = {"pool": POOL_, "ceiling": {}, "seeds": {}}
@@ -37,15 +40,15 @@ for s in range(S0, S1):
     T = view(d, np.arange(N)); tok = fit_predict("ours", view(d, tr), T); fs = fit_predict("fromsuccess", view(d, tr), T)
     Y, Yh, Yf = np.log(d["L"]), np.log(np.maximum(tok, 1)), np.log(np.maximum(fs, 1))
     nte = np.maximum(nD[ev], 1)
-    rel = {k: ceil[k]["s_b2"] / (ceil[k]["s_b2"] + float(np.mean(ceil[k]["s_w2"] / nte[:, k]))) for k in range(M)}
+    rel = {k: (ceil[k]["s_b2"] / (ceil[k]["s_b2"] + float(np.mean(ceil[k]["s_w2"] / nte[:, k]))) if ceil[k]["s_b2"] is not None else None) for k in range(M)}
     r_ = {"routes": {}, "pairs": {}, "pilot": {}}
     for k in range(M):
-        rk = r2(Y[ev, k], Yh[ev, k]); r_["routes"][slots[k]] = dict(r2_ours=rk, r2_fromsuccess=r2(Y[ev, k], Yf[ev, k]), reliability=rel[k], efficiency=rk / rel[k] if rel[k] > 0 else None)
+        rk = r2(Y[ev, k], Yh[ev, k]); r_["routes"][slots[k]] = dict(r2_ours=rk, r2_fromsuccess=r2(Y[ev, k], Yf[ev, k]), reliability=rel[k], efficiency=rk / rel[k] if rel[k] else None)
     for a, b in itertools.combinations(range(M), 2):
         dy, dh, df = Y[ev, a] - Y[ev, b], Yh[ev, a] - Yh[ev, b], Yf[ev, a] - Yf[ev, b]
         # reliability of the difference: between-problem variance of the difference over its total, noise of the two routes independent
-        s_bd = max(float(np.var(dy)) - float(np.mean(ceil[a]["s_w2"] / nte[:, a] + ceil[b]["s_w2"] / nte[:, b])), 0)
-        reld = s_bd / max(float(np.var(dy)), 1e-9)
+        reld = None if ceil[a]["s_w2"] is None or ceil[b]["s_w2"] is None else \
+            max(float(np.var(dy)) - float(np.mean(ceil[a]["s_w2"] / nte[:, a] + ceil[b]["s_w2"] / nte[:, b])), 0) / max(float(np.var(dy)), 1e-9)
         r_["pairs"][f"{slots[a]}+{slots[b]}"] = dict(r2_diff_ours=r2(dy, dh), r2_diff_fromsuccess=r2(dy, df), reliability_diff=reld, sd_diff=float(dy.std()),
                                                       corr_routes=float(np.corrcoef(Y[ev, a], Y[ev, b])[0, 1]), r2_mean_routes=(r_["routes"][slots[a]]["r2_ours"] + r_["routes"][slots[b]]["r2_ours"]) / 2)
     rng = np.random.default_rng(100 + s)
@@ -60,7 +63,8 @@ for s in range(S0, S1):
             est.append([r2(Y[sub, k], cv[:, k]) for k in range(M)])
         r_["pilot"][str(kk)] = dict(cv_r2=np.mean(est, 0).tolist(), cv_r2_sd=np.std(est, 0).tolist())
     res["seeds"][s] = r_
-    print(f"  set {s}: R2 ours / reliability / efficiency " + "  ".join(f"{sl} {r_['routes'][sl]['r2_ours']:.2f}/{r_['routes'][sl]['reliability']:.2f}/{r_['routes'][sl]['efficiency']:.2f}" for sl in slots)
+    f2 = lambda x: "n/a" if x is None else f"{x:.2f}"
+    print(f"  set {s}: R2 ours / reliability / efficiency " + "  ".join(f"{sl} {r_['routes'][sl]['r2_ours']:.2f}/{f2(r_['routes'][sl]['reliability'])}/{f2(r_['routes'][sl]['efficiency'])}" for sl in slots)
           + " | pilot CV R2 (mean over routes) " + " ".join(f"k={kk} {np.mean(r_['pilot'][str(kk)]['cv_r2']):.2f}" for kk in KS if str(kk) in r_["pilot"]), flush=True)
     res["ceiling"] = {slots[k]: ceil[k] for k in range(M)}
     json.dump(res, open(OUT / f"legibility_{POOL_.lower().replace('-', '')}_{S0}_{S1}{os.environ.get('RESULT_TAG', '')}.json", "w"), indent=1, default=float)
