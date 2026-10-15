@@ -2715,3 +2715,12 @@ tab:transfer + text on 10 sets (BBEH claim removed), new "Mixed traffic" paragra
 (Qwen3-Embedding-4B, 9 pools) replaces tab:grid (8B removed by user decision). Deployment: practitioner trade-off vs deepseek alone;
 tab:deploy + text on 10 sets. Limitations: two-strong-routes simulation, cheap-route dependence. New appendix app:subsets
 (tab:subsets, tab:spread). fig:capture triangles now 10-set means. 26 pages.
+### 4.A.106 Legibility drill-down (2026-10-14 18:40 MT; free; `legibility.py`, 18+2 jobs leg_*, `legibility_aggregate.py` -> legibility_summary_pinned.json)
+(1) Noise ceiling (between-problem share of log-length variance, at the test draw counts): .71-.99 per route (LCB .98-.99; APPS has
+one draw: n/a). Efficiency = R2 / ceiling: LCB .72-.77, Omni .74-.82, BBEH .69-.97; deepseek-v4-flash on MMLU-Pro .29 (ceiling .92)
+and SuperGPQA .23 (ceiling .96) -> low R2 on knowledge pools is the readout, not sampling noise.
+(2) Differential legibility (R2 of predicted vs realized log length ratio) vs pair capture, 75 pairs with headroom > 5 pt: Spearman
++.49 (per-route mean R2 +.18; correlation of the two routes' log lengths -.43). Saving ~ headroom x per-route R2 still fits better
+(R2 .73 vs .56 with the differential R2), since headroom dominates.
+(3) Pilot: 5-fold CV R2 within k labelled problems ranks pools like the full-data test R2 (Spearman .85 / .88 / .92 at k = 20 / 50 /
+100) but underestimates the level (mean .23 / .43 / .50 vs .59).

@@ -1,0 +1,1442 @@
+{
+ "routes": {
+  "AIME": {
+   "oss20lo": {
+    "r2_ours": 0.4053272802733175,
+    "r2_fromsuccess": 0.277256714200999,
+    "reliability": 0.887185298540371,
+    "efficiency": 0.4568687972401892,
+    "icc": 0.66337759502676
+   },
+   "oss20md": {
+    "r2_ours": 0.440024307043369,
+    "r2_fromsuccess": 0.41661069393346456,
+    "reliability": 0.9284966141790661,
+    "efficiency": 0.4739105133220309,
+    "icc": 0.815527868135581
+   },
+   "dsv4f": {
+    "r2_ours": 0.49815259685943625,
+    "r2_fromsuccess": 0.4692943750194895,
+    "reliability": 0.9670166834554157,
+    "efficiency": 0.5151437461031183,
+    "icc": 0.9071735019069068
+   },
+   "oss120md": {
+    "r2_ours": 0.4896606048180062,
+    "r2_fromsuccess": 0.41804186292278767,
+    "reliability": 0.9172754202762228,
+    "efficiency": 0.5338206976815674,
+    "icc": 0.8494611432338033
+   },
+   "oss120hi": {
+    "r2_ours": 0.5100185053925916,
+    "r2_fromsuccess": 0.47578080598497313,
+    "reliability": 0.9386393109625134,
+    "efficiency": 0.5433594133934162,
+    "icc": 0.8861648716394604
+   }
+  },
+  "APPS": {
+   "oss20lo": {
+    "r2_ours": 0.5555240026757694,
+    "r2_fromsuccess": 0.5258688411146564,
+    "reliability": null,
+    "efficiency": null,
+    "icc": null
+   },
+   "oss20md": {
+    "r2_ours": 0.5374389886056112,
+    "r2_fromsuccess": 0.5050393777420692,
+    "reliability": null,
+    "efficiency": null,
+    "icc": null
+   },
+   "dsv4f": {
+    "r2_ours": 0.6299127692120416,
+    "r2_fromsuccess": 0.5765708227047404,
+    "reliability": null,
+    "efficiency": null,
+    "icc": null
+   },
+   "oss120md": {
+    "r2_ours": 0.6298777350906546,
+    "r2_fromsuccess": 0.5862387926085348,
+    "reliability": null,
+    "efficiency": null,
+    "icc": null
+   },
+   "oss120hi": {
+    "r2_ours": 0.6790870894561685,
+    "r2_fromsuccess": 0.6190746012818219,
+    "reliability": null,
+    "efficiency": null,
+    "icc": null
+   }
+  },
+  "BBEH": {
+   "oss20lo": {
+    "r2_ours": 0.557106607906994,
+    "r2_fromsuccess": -0.08007714404271812,
+    "reliability": 0.8109686040549613,
+    "efficiency": 0.68696445845299,
+    "icc": 0.5174983165340467
+   },
+   "oss20md": {
+    "r2_ours": 0.8119644941310933,
+    "r2_fromsuccess": 0.4413720796432776,
+    "reliability": 0.8916671280261396,
+    "efficiency": 0.910613914778397,
+    "icc": 0.7344991443624979
+   },
+   "dsv4f": {
+    "r2_ours": 0.8263255128163541,
+    "r2_fromsuccess": 0.39466731575934205,
+    "reliability": 0.9634272367940634,
+    "efficiency": 0.8576937429816347,
+    "icc": 0.8977601015729346
+   },
+   "oss120md": {
+    "r2_ours": 0.8976772527630746,
+    "r2_fromsuccess": 0.47503081860751806,
+    "reliability": 0.9241305206710825,
+    "efficiency": 0.9713749656392714,
+    "icc": 0.8589615547487381
+   },
+   "oss120hi": {
+    "r2_ours": 0.8405334628404993,
+    "r2_fromsuccess": 0.4273598002721177,
+    "reliability": 0.9443316762967466,
+    "efficiency": 0.8900828850057236,
+    "icc": 0.8957775180066375
+   }
+  },
+  "BCB": {
+   "oss20lo": {
+    "r2_ours": 0.6949415856396689,
+    "r2_fromsuccess": 0.27643407219153604,
+    "reliability": 0.9674846463201495,
+    "efficiency": 0.7182972756031792,
+    "icc": 0.6503091608337874
+   },
+   "oss20md": {
+    "r2_ours": 0.6128371684938004,
+    "r2_fromsuccess": 0.1940687151881522,
+    "reliability": 0.9604919906902458,
+    "efficiency": 0.6380450586093824,
+    "icc": 0.6695245757848559
+   },
+   "dsv4f": {
+    "r2_ours": 0.4659410888423234,
+    "r2_fromsuccess": 0.06307383076830554,
+    "reliability": 0.9526518869477542,
+    "efficiency": 0.4890990037663954,
+    "icc": 0.7155066565124525
+   },
+   "oss120md": {
+    "r2_ours": 0.7079932017607093,
+    "r2_fromsuccess": 0.24865084509147578,
+    "reliability": 0.9675143302944971,
+    "efficiency": 0.7317650804667737,
+    "icc": 0.8323216923607192
+   },
+   "oss120hi": {
+    "r2_ours": 0.4492692956592708,
+    "r2_fromsuccess": 0.01883517049294836,
+    "reliability": 0.8823284206470923,
+    "efficiency": 0.5091860186593338,
+    "icc": 0.7149628685930595
+   }
+  },
+  "CC": {
+   "oss20lo": {
+    "r2_ours": 0.45725563196333796,
+    "r2_fromsuccess": 0.42049192582208283,
+    "reliability": 0.920921047420436,
+    "efficiency": 0.49651990607027896,
+    "icc": 0.7443369001337476
+   },
+   "oss20md": {
+    "r2_ours": 0.34964798948646947,
+    "r2_fromsuccess": 0.31599614538914667,
+    "reliability": 0.9299153610108217,
+    "efficiency": 0.3759997997090839,
+    "icc": 0.8158763965084583
+   },
+   "dsv4f": {
+    "r2_ours": 0.5173271542815441,
+    "r2_fromsuccess": 0.43735536334429453,
+    "reliability": 0.9642406929376971,
+    "efficiency": 0.5365124683811392,
+    "icc": 0.9028405812340625
+   },
+   "oss120md": {
+    "r2_ours": 0.4184546334212504,
+    "r2_fromsuccess": 0.3788409391370105,
+    "reliability": 0.9414333543824857,
+    "efficiency": 0.44448673023246277,
+    "icc": 0.8893472681007256
+   },
+   "oss120hi": {
+    "r2_ours": 0.43492817303233283,
+    "r2_fromsuccess": 0.38349155860069256,
+    "reliability": 0.9484251818359558,
+    "efficiency": 0.45857931797045026,
+    "icc": 0.9028970921318511
+   }
+  },
+  "LCB": {
+   "oss20lo": {
+    "r2_ours": 0.7360979905510753,
+    "r2_fromsuccess": 0.6516435414808728,
+    "reliability": 0.9912012071336711,
+    "efficiency": 0.7426322579647613,
+    "icc": 0.8756334472022415
+   },
+   "oss20md": {
+    "r2_ours": 0.7097640344229338,
+    "r2_fromsuccess": 0.6378849886268674,
+    "reliability": 0.99052583269183,
+    "efficiency": 0.7165527753012715,
+    "icc": 0.8974048084813022
+   },
+   "dsv4f": {
+    "r2_ours": 0.7208431225034644,
+    "r2_fromsuccess": 0.6377870670791614,
+    "reliability": 0.9926379695447615,
+    "efficiency": 0.7261893506189911,
+    "icc": 0.9440565505418531
+   },
+   "oss120md": {
+    "r2_ours": 0.7273827963886577,
+    "r2_fromsuccess": 0.6448759017604143,
+    "reliability": 0.9897524528725532,
+    "efficiency": 0.7349138608119418,
+    "icc": 0.9415438136713364
+   },
+   "oss120hi": {
+    "r2_ours": 0.7515157902222293,
+    "r2_fromsuccess": 0.669117772771268,
+    "reliability": 0.9807345540833333,
+    "efficiency": 0.7662784869700561,
+    "icc": 0.9446545259151473
+   }
+  },
+  "MMLU-Pro": {
+   "oss20lo": {
+    "r2_ours": 0.607807637536572,
+    "r2_fromsuccess": 0.05480681987662954,
+    "reliability": 0.7100811485129864,
+    "efficiency": 0.8559692632446445,
+    "icc": 0.7100811485129865
+   },
+   "oss20md": {
+    "r2_ours": 0.5184742152228936,
+    "r2_fromsuccess": 0.2308326177594524,
+    "reliability": 0.7904171112977468,
+    "efficiency": 0.6559501405171206,
+    "icc": 0.7904171112977467
+   },
+   "dsv4f": {
+    "r2_ours": 0.2561976260692518,
+    "r2_fromsuccess": -0.14421023061882346,
+    "reliability": 0.9243161241031892,
+    "efficiency": 0.2771753292931307,
+    "icc": 0.9243161241031892
+   },
+   "oss120md": {
+    "r2_ours": 0.62339763610939,
+    "r2_fromsuccess": 0.20166244012591586,
+    "reliability": 0.8796263760450491,
+    "efficiency": 0.70870730242571,
+    "icc": 0.8796263760450492
+   },
+   "oss120hi": {
+    "r2_ours": 0.4524175522295974,
+    "r2_fromsuccess": 0.26037254707738117,
+    "reliability": 0.8869835597477385,
+    "efficiency": 0.5100630640304841,
+    "icc": 0.8869835597477386
+   }
+  },
+  "Omni": {
+   "oss20lo": {
+    "r2_ours": 0.6803289579779567,
+    "r2_fromsuccess": 0.5417404640758506,
+    "reliability": 0.8351921777779283,
+    "efficiency": 0.8145777416019471,
+    "icc": 0.8351921777779283
+   },
+   "oss20md": {
+    "r2_ours": 0.6646688837326354,
+    "r2_fromsuccess": 0.611222605518373,
+    "reliability": 0.8855133517310259,
+    "efficiency": 0.7506028931504221,
+    "icc": 0.885513351731026
+   },
+   "dsv4f": {
+    "r2_ours": 0.7059868923648066,
+    "r2_fromsuccess": 0.6858857067897846,
+    "reliability": 0.9538491971248261,
+    "efficiency": 0.7401451869885227,
+    "icc": 0.9538491971248261
+   },
+   "oss120md": {
+    "r2_ours": 0.7174185164824716,
+    "r2_fromsuccess": 0.6409522137228427,
+    "reliability": 0.9384396934186621,
+    "efficiency": 0.7644801488191237,
+    "icc": 0.938439693418662
+   },
+   "oss120hi": {
+    "r2_ours": 0.7291695935345488,
+    "r2_fromsuccess": 0.693275097076552,
+    "reliability": 0.9484883815300778,
+    "efficiency": 0.768770190266612,
+    "icc": 0.9484883815300778
+   }
+  },
+  "SuperGPQA": {
+   "oss20lo": {
+    "r2_ours": 0.7546228019782975,
+    "r2_fromsuccess": 0.534024120224284,
+    "reliability": 0.9389742668513714,
+    "efficiency": 0.8036671809002254,
+    "icc": 0.7936711714934204
+   },
+   "oss20md": {
+    "r2_ours": 0.46742475817682133,
+    "r2_fromsuccess": 0.22648744012117125,
+    "reliability": 0.8802333358672463,
+    "efficiency": 0.5310236946619308,
+    "icc": 0.7101328506422384
+   },
+   "dsv4f": {
+    "r2_ours": 0.22473828778424393,
+    "r2_fromsuccess": -0.08372730870623621,
+    "reliability": 0.9569063060205842,
+    "efficiency": 0.23485924000108901,
+    "icc": 0.8809771837056651
+   },
+   "oss120md": {
+    "r2_ours": 0.6285486390487625,
+    "r2_fromsuccess": 0.36138373121813,
+    "reliability": 0.9237369202498031,
+    "efficiency": 0.6804411789438773,
+    "icc": 0.8582817134860787
+   },
+   "oss120hi": {
+    "r2_ours": 0.340894119074063,
+    "r2_fromsuccess": 0.10759330839764022,
+    "reliability": 0.8991147065081057,
+    "efficiency": 0.3791441921776527,
+    "icc": 0.8167196998846324
+   }
+  }
+ },
+ "pairs": [
+  {
+   "r2_diff_ours": 0.21970142791368544,
+   "r2_diff_fromsuccess": 0.26840337125695657,
+   "reliability_diff": 0.8265351224979677,
+   "sd_diff": 0.70269121511439,
+   "corr_routes": 0.6970664200841846,
+   "r2_mean_routes": 0.42267579365834324,
+   "pool": "AIME",
+   "pair": "oss20lo+oss20md",
+   "ours": 9.815172312829839,
+   "headroom": 30.436142102259858
+  },
+  {
+   "r2_diff_ours": 0.3494750706863434,
+   "r2_diff_fromsuccess": 0.330080049856334,
+   "reliability_diff": 0.8993128054146625,
+   "sd_diff": 0.8010209070699368,
+   "corr_routes": 0.6636800670369654,
+   "r2_mean_routes": 0.45173993856637684,
+   "pool": "AIME",
+   "pair": "oss20lo+dsv4f",
+   "ours": 15.026657259393826,
+   "headroom": 28.236200919651605
+  },
+  {
+   "r2_diff_ours": 0.2147711950844673,
+   "r2_diff_fromsuccess": 0.23842543798833327,
+   "reliability_diff": 0.7446088506370427,
+   "sd_diff": 0.5509230666710316,
+   "corr_routes": 0.735405224475268,
+   "r2_mean_routes": 0.44749394254566177,
+   "pool": "AIME",
+   "pair": "oss20lo+oss120md",
+   "ours": 8.030642330088343,
+   "headroom": 23.585076628569826
+  },
+  {
+   "r2_diff_ours": 0.28867493847813186,
+   "r2_diff_fromsuccess": 0.29741295688562025,
+   "reliability_diff": 0.8253814995819667,
+   "sd_diff": 0.6556368500992021,
+   "corr_routes": 0.6789061545582591,
+   "r2_mean_routes": 0.4576728928329546,
+   "pool": "AIME",
+   "pair": "oss20lo+oss120hi",
+   "ours": 10.670883985623131,
+   "headroom": 23.636595923916197
+  },
+  {
+   "r2_diff_ours": 0.13110530258127354,
+   "r2_diff_fromsuccess": 0.06299369570254978,
+   "reliability_diff": 0.6765517053855714,
+   "sd_diff": 0.536125618513713,
+   "corr_routes": 0.859426281735727,
+   "r2_mean_routes": 0.4690884519514026,
+   "pool": "AIME",
+   "pair": "oss20md+dsv4f",
+   "ours": 0.07732848033856765,
+   "headroom": 2.9720175403370295
+  },
+  {
+   "r2_diff_ours": -0.023622305866457704,
+   "r2_diff_fromsuccess": 0.04615079533079854,
+   "reliability_diff": 0.3939788635369482,
+   "sd_diff": 0.41798718262466467,
+   "corr_routes": 0.901083609961612,
+   "r2_mean_routes": 0.4648424559306875,
+   "pool": "AIME",
+   "pair": "oss20md+oss120md",
+   "ours": -1.1231905216884368,
+   "headroom": 9.00683607821193
+  },
+  {
+   "r2_diff_ours": -0.02562729875451116,
+   "r2_diff_fromsuccess": -0.014048967491083341,
+   "reliability_diff": 0.38969853293784695,
+   "sd_diff": 0.411663856179975,
+   "corr_routes": 0.9026068054059329,
+   "r2_mean_routes": 0.47502140621798034,
+   "pool": "AIME",
+   "pair": "oss20md+oss120hi",
+   "ours": -3.8697995699578747,
+   "headroom": 0.6694403462482279
+  },
+  {
+   "r2_diff_ours": 0.03935596797630431,
+   "r2_diff_fromsuccess": 0.06324193642261344,
+   "reliability_diff": 0.32203794462201085,
+   "sd_diff": 0.37490238464345504,
+   "corr_routes": 0.9056301956393856,
+   "r2_mean_routes": 0.49983955510529887,
+   "pool": "AIME",
+   "pair": "oss120md+oss120hi",
+   "ours": -0.6272342791260777,
+   "headroom": 1.5780864745092071
+  },
+  {
+   "r2_diff_ours": 0.15223855245801424,
+   "r2_diff_fromsuccess": 0.1740289102801166,
+   "reliability_diff": null,
+   "sd_diff": 0.8600664092715207,
+   "corr_routes": 0.7785025756073212,
+   "r2_mean_routes": 0.5464814956406903,
+   "pool": "APPS",
+   "pair": "oss20lo+oss20md",
+   "ours": 13.48756058965372,
+   "headroom": 29.132441077524003
+  },
+  {
+   "r2_diff_ours": 0.3566488566727877,
+   "r2_diff_fromsuccess": 0.3473712262302972,
+   "reliability_diff": null,
+   "sd_diff": 1.1243250410371286,
+   "corr_routes": 0.7944804319391626,
+   "r2_mean_routes": 0.5927183859439056,
+   "pool": "APPS",
+   "pair": "oss20lo+dsv4f",
+   "ours": 16.313705690469334,
+   "headroom": 34.03095683832688
+  },
+  {
+   "r2_diff_ours": 0.13634463513668338,
+   "r2_diff_fromsuccess": 0.17038845774371061,
+   "reliability_diff": null,
+   "sd_diff": 0.6583643580529169,
+   "corr_routes": 0.8158295731179376,
+   "r2_mean_routes": 0.592700868883212,
+   "pool": "APPS",
+   "pair": "oss20lo+oss120md",
+   "ours": 5.22152735056337,
+   "headroom": 22.885199865496077
+  },
+  {
+   "r2_diff_ours": 0.3254891327114635,
+   "r2_diff_fromsuccess": 0.30857512851503954,
+   "reliability_diff": null,
+   "sd_diff": 0.8902438865488304,
+   "corr_routes": 0.7990866614751816,
+   "r2_mean_routes": 0.6173055460659691,
+   "pool": "APPS",
+   "pair": "oss20lo+oss120hi",
+   "ours": 9.10424844435277,
+   "headroom": 29.218573068714967
+  },
+  {
+   "r2_diff_ours": 0.1259178941600929,
+   "r2_diff_fromsuccess": 0.13886786793151948,
+   "reliability_diff": null,
+   "sd_diff": 0.8701785043678619,
+   "corr_routes": 0.8575433747656399,
+   "r2_mean_routes": 0.5836758789088264,
+   "pool": "APPS",
+   "pair": "oss20md+dsv4f",
+   "ours": 3.854284953265215,
+   "headroom": 21.718739981202134
+  },
+  {
+   "r2_diff_ours": -0.026722947775952743,
+   "r2_diff_fromsuccess": -0.010907562748975318,
+   "reliability_diff": null,
+   "sd_diff": 0.6567656203035555,
+   "corr_routes": 0.872006961067451,
+   "r2_mean_routes": 0.5836583618481328,
+   "pool": "APPS",
+   "pair": "oss20md+oss120md",
+   "ours": 4.528386569878168,
+   "headroom": 13.425740050546366
+  },
+  {
+   "r2_diff_ours": 0.04177972994702841,
+   "r2_diff_fromsuccess": 0.037577247681678784,
+   "reliability_diff": null,
+   "sd_diff": 0.7148940621152577,
+   "corr_routes": 0.8664219787990396,
+   "r2_mean_routes": 0.6082630390308899,
+   "pool": "APPS",
+   "pair": "oss20md+oss120hi",
+   "ours": 1.5242342311615118,
+   "headroom": 15.39518105650654
+  },
+  {
+   "r2_diff_ours": 0.18640417493058167,
+   "r2_diff_fromsuccess": 0.22101305423224696,
+   "reliability_diff": null,
+   "sd_diff": 0.8080230711399817,
+   "corr_routes": 0.9070669353703004,
+   "r2_mean_routes": 0.629895252151348,
+   "pool": "APPS",
+   "pair": "dsv4f+oss120md",
+   "ours": 4.536558172663754,
+   "headroom": 20.905634139914007
+  },
+  {
+   "r2_diff_ours": -0.09752191006849387,
+   "r2_diff_fromsuccess": -7.67591305910309e-05,
+   "reliability_diff": null,
+   "sd_diff": 0.6769253186793073,
+   "corr_routes": 0.918532301225752,
+   "r2_mean_routes": 0.6544999293341051,
+   "pool": "APPS",
+   "pair": "dsv4f+oss120hi",
+   "ours": -4.83818430960876,
+   "headroom": -3.1049758398774525
+  },
+  {
+   "r2_diff_ours": 0.17755313442379395,
+   "r2_diff_fromsuccess": 0.16691537711389248,
+   "reliability_diff": null,
+   "sd_diff": 0.5863377450944498,
+   "corr_routes": 0.9170477482037128,
+   "r2_mean_routes": 0.6544824122734115,
+   "pool": "APPS",
+   "pair": "oss120md+oss120hi",
+   "ours": -4.4014017351978625,
+   "headroom": 5.897501182089216
+  },
+  {
+   "r2_diff_ours": 0.7113150899260895,
+   "r2_diff_fromsuccess": 0.2998874584795942,
+   "reliability_diff": 0.8418309977267524,
+   "sd_diff": 1.534055106058553,
+   "corr_routes": 0.15098762852536823,
+   "r2_mean_routes": 0.6845355510190434,
+   "pool": "BBEH",
+   "pair": "oss20lo+oss20md",
+   "ours": 26.38811317033651,
+   "headroom": 27.337837393876566
+  },
+  {
+   "r2_diff_ours": 0.7114311144395924,
+   "r2_diff_fromsuccess": 0.24453947263049053,
+   "reliability_diff": 0.9025102985963891,
+   "sd_diff": 1.6660059710966628,
+   "corr_routes": 0.041258392790602054,
+   "r2_mean_routes": 0.6917160603616741,
+   "pool": "BBEH",
+   "pair": "oss20lo+dsv4f",
+   "ours": 20.885885478187436,
+   "headroom": 36.39102913103564
+  },
+  {
+   "r2_diff_ours": 0.7426641297551659,
+   "r2_diff_fromsuccess": 0.24809277234437235,
+   "reliability_diff": 0.8797428214036194,
+   "sd_diff": 1.6109517627789196,
+   "corr_routes": 0.025213591209729557,
+   "r2_mean_routes": 0.7273919303350342,
+   "pool": "BBEH",
+   "pair": "oss20lo+oss120md",
+   "ours": 32.654752537888825,
+   "headroom": 35.9042286771854
+  },
+  {
+   "r2_diff_ours": 0.7219368875843838,
+   "r2_diff_fromsuccess": 0.20273499883773036,
+   "reliability_diff": 0.8881446073826341,
+   "sd_diff": 1.5573191773918469,
+   "corr_routes": -0.03439748409065213,
+   "r2_mean_routes": 0.6988200353737466,
+   "pool": "BBEH",
+   "pair": "oss20lo+oss120hi",
+   "ours": 33.52280186101811,
+   "headroom": 42.373325723326715
+  },
+  {
+   "r2_diff_ours": 0.24040709413775413,
+   "r2_diff_fromsuccess": 0.052546119741485396,
+   "reliability_diff": 0.49810226074077935,
+   "sd_diff": 0.6574425049521413,
+   "corr_routes": 0.8601000336126511,
+   "r2_mean_routes": 0.8191450034737237,
+   "pool": "BBEH",
+   "pair": "oss20md+dsv4f",
+   "ours": 3.558333725142192,
+   "headroom": 14.774896305477693
+  },
+  {
+   "r2_diff_ours": 0.20456143663307383,
+   "r2_diff_fromsuccess": 0.004414904933781915,
+   "reliability_diff": 0.12254477750234487,
+   "sd_diff": 0.5427019019001855,
+   "corr_routes": 0.8970297482635388,
+   "r2_mean_routes": 0.8548208734470839,
+   "pool": "BBEH",
+   "pair": "oss20md+oss120md",
+   "ours": 3.173265111847382,
+   "headroom": 12.721051781385063
+  },
+  {
+   "r2_diff_ours": 0.3909089208970856,
+   "r2_diff_fromsuccess": 0.10107379367832033,
+   "reliability_diff": 0.4701342892530504,
+   "sd_diff": 0.6408679018180142,
+   "corr_routes": 0.8495060706851107,
+   "r2_mean_routes": 0.8262489784857963,
+   "pool": "BBEH",
+   "pair": "oss20md+oss120hi",
+   "ours": 7.192706239520538,
+   "headroom": 11.819156106118545
+  },
+  {
+   "r2_diff_ours": 0.28391737839179126,
+   "r2_diff_fromsuccess": 0.11210589990280892,
+   "reliability_diff": 0.6105599413261682,
+   "sd_diff": 0.6345304058832134,
+   "corr_routes": 0.866899497695564,
+   "r2_mean_routes": 0.8620013827897145,
+   "pool": "BBEH",
+   "pair": "dsv4f+oss120md",
+   "ours": 6.2949376438419975,
+   "headroom": 16.746690006917653
+  },
+  {
+   "r2_diff_ours": 0.3284375672120966,
+   "r2_diff_fromsuccess": 0.06781083955637807,
+   "reliability_diff": 0.7012436736907246,
+   "sd_diff": 0.6230887046241251,
+   "corr_routes": 0.8723823497590427,
+   "r2_mean_routes": 0.8334294878284269,
+   "pool": "BBEH",
+   "pair": "dsv4f+oss120hi",
+   "ours": 1.763679749883319,
+   "headroom": 5.497449025448207
+  },
+  {
+   "r2_diff_ours": 0.3582038897486143,
+   "r2_diff_fromsuccess": 0.207642363743996,
+   "reliability_diff": 0.4960159578323318,
+   "sd_diff": 0.5590014286123444,
+   "corr_routes": 0.878287734276903,
+   "r2_mean_routes": 0.869105357801787,
+   "pool": "BBEH",
+   "pair": "oss120md+oss120hi",
+   "ours": 0.7626371489523489,
+   "headroom": 8.712539749896871
+  },
+  {
+   "r2_diff_ours": 0.24565475800655437,
+   "r2_diff_fromsuccess": 0.012439962658835435,
+   "reliability_diff": 0.7421437971556151,
+   "sd_diff": 0.18542156481308142,
+   "corr_routes": 0.8562376576155868,
+   "r2_mean_routes": 0.6538893770667346,
+   "pool": "BCB",
+   "pair": "oss20lo+oss20md",
+   "ours": 1.8334160043886492,
+   "headroom": 3.1000938597796033
+  },
+  {
+   "r2_diff_ours": 0.20217806642514832,
+   "r2_diff_fromsuccess": -0.11368935806438321,
+   "reliability_diff": 0.89290853686219,
+   "sd_diff": 0.4207915139366688,
+   "corr_routes": 0.6980218213121965,
+   "r2_mean_routes": 0.5804413372409962,
+   "pool": "BCB",
+   "pair": "oss20lo+dsv4f",
+   "ours": 2.9228987009978864,
+   "headroom": 8.442479614123087
+  },
+  {
+   "r2_diff_ours": 0.21828098555280082,
+   "r2_diff_fromsuccess": 0.02898038508485685,
+   "reliability_diff": 0.7324683549089703,
+   "sd_diff": 0.16672333871130302,
+   "corr_routes": 0.8737482525273274,
+   "r2_mean_routes": 0.7014673937001892,
+   "pool": "BCB",
+   "pair": "oss20lo+oss120md",
+   "ours": 1.0837757440294493,
+   "headroom": 2.7264715096144765
+  },
+  {
+   "r2_diff_ours": 0.23959815355486058,
+   "r2_diff_fromsuccess": -0.11066450561745973,
+   "reliability_diff": 0.7563020102503415,
+   "sd_diff": 0.37445409194944335,
+   "corr_routes": 0.6789986290133541,
+   "r2_mean_routes": 0.5721054406494699,
+   "pool": "BCB",
+   "pair": "oss20lo+oss120hi",
+   "ours": 6.157751107953338,
+   "headroom": 12.840235825573865
+  },
+  {
+   "r2_diff_ours": -0.05803812994451023,
+   "r2_diff_fromsuccess": -0.025512559922933775,
+   "reliability_diff": 0.513663220679936,
+   "sd_diff": 0.13682643014319915,
+   "corr_routes": 0.9246034848497541,
+   "r2_mean_routes": 0.6604151851272548,
+   "pool": "BCB",
+   "pair": "oss20md+oss120md",
+   "ours": 0.3884112997382916,
+   "headroom": 2.1335657417152496
+  },
+  {
+   "r2_diff_ours": 0.10305904037199949,
+   "r2_diff_fromsuccess": -0.11944933278534671,
+   "reliability_diff": 0.6234959957480567,
+   "sd_diff": 0.3085260114173537,
+   "corr_routes": 0.8007734694321513,
+   "r2_mean_routes": 0.5310532320765355,
+   "pool": "BCB",
+   "pair": "oss20md+oss120hi",
+   "ours": 4.024126944832107,
+   "headroom": 10.083771132087595
+  },
+  {
+   "r2_diff_ours": 0.08660977145966779,
+   "r2_diff_fromsuccess": -0.1666073146648299,
+   "reliability_diff": 0.8507579903378026,
+   "sd_diff": 0.3586946107489285,
+   "corr_routes": 0.8128012538595153,
+   "r2_mean_routes": 0.5869671453015164,
+   "pool": "BCB",
+   "pair": "dsv4f+oss120md",
+   "ours": 4.186795166503919,
+   "headroom": 16.316411884538613
+  },
+  {
+   "r2_diff_ours": 0.08619578325712438,
+   "r2_diff_fromsuccess": 0.01442376684607668,
+   "reliability_diff": 0.6625816413834141,
+   "sd_diff": 0.36896933240324037,
+   "corr_routes": 0.775140016466951,
+   "r2_mean_routes": 0.4576051922507971,
+   "pool": "BCB",
+   "pair": "dsv4f+oss120hi",
+   "ours": -1.8703110501491023,
+   "headroom": 15.369973614783406
+  },
+  {
+   "r2_diff_ours": 0.1050678566896713,
+   "r2_diff_fromsuccess": -0.1690071983356245,
+   "reliability_diff": 0.6544716770998404,
+   "sd_diff": 0.3155728955957241,
+   "corr_routes": 0.794082485045984,
+   "r2_mean_routes": 0.57863124870999,
+   "pool": "BCB",
+   "pair": "oss120md+oss120hi",
+   "ours": 4.565177786687842,
+   "headroom": 5.376802245471296
+  },
+  {
+   "r2_diff_ours": 0.06613840465224881,
+   "r2_diff_fromsuccess": 0.058171705407917516,
+   "reliability_diff": 0.7800306924146553,
+   "sd_diff": 0.7024347075547165,
+   "corr_routes": 0.7963384792103357,
+   "r2_mean_routes": 0.40345181072490366,
+   "pool": "CC",
+   "pair": "oss20lo+oss20md",
+   "ours": 8.525299999933582,
+   "headroom": 29.204998669684596
+  },
+  {
+   "r2_diff_ours": 0.2966263753608229,
+   "r2_diff_fromsuccess": 0.23193248276850253,
+   "reliability_diff": 0.8959385151540399,
+   "sd_diff": 0.9382340653772558,
+   "corr_routes": 0.7638566025591423,
+   "r2_mean_routes": 0.487291393122441,
+   "pool": "CC",
+   "pair": "oss20lo+dsv4f",
+   "ours": 10.706006046651458,
+   "headroom": 28.37985803891947
+  },
+  {
+   "r2_diff_ours": 0.07702103080067266,
+   "r2_diff_fromsuccess": 0.07669052226193518,
+   "reliability_diff": 0.7587154183007624,
+   "sd_diff": 0.5803564293763187,
+   "corr_routes": 0.8140248262273534,
+   "r2_mean_routes": 0.4378551326922942,
+   "pool": "CC",
+   "pair": "oss20lo+oss120md",
+   "ours": 7.046593255390178,
+   "headroom": 26.686790341471703
+  },
+  {
+   "r2_diff_ours": 0.13245439521823715,
+   "r2_diff_fromsuccess": 0.11152283478371779,
+   "reliability_diff": 0.8308858845187481,
+   "sd_diff": 0.7237745125046571,
+   "corr_routes": 0.7633290501230274,
+   "r2_mean_routes": 0.4460919024978353,
+   "pool": "CC",
+   "pair": "oss20lo+oss120hi",
+   "ours": 11.212162029984365,
+   "headroom": 27.19953946924997
+  },
+  {
+   "r2_diff_ours": 0.12820679226763074,
+   "r2_diff_fromsuccess": 0.10034542423827095,
+   "reliability_diff": 0.7467887035577289,
+   "sd_diff": 0.7317043223401225,
+   "corr_routes": 0.8387913296796683,
+   "r2_mean_routes": 0.4334875718840068,
+   "pool": "CC",
+   "pair": "oss20md+dsv4f",
+   "ours": 2.9091753089585137,
+   "headroom": 20.179875007857937
+  },
+  {
+   "r2_diff_ours": -0.14648474042315013,
+   "r2_diff_fromsuccess": -0.04861951027544738,
+   "reliability_diff": 0.33992400693404845,
+   "sd_diff": 0.43557179113565053,
+   "corr_routes": 0.9200568012637931,
+   "r2_mean_routes": 0.38405131145385996,
+   "pool": "CC",
+   "pair": "oss20md+oss120md",
+   "ours": 0.5719981139378015,
+   "headroom": 10.513517393355038
+  },
+  {
+   "r2_diff_ours": -0.11259686219002865,
+   "r2_diff_fromsuccess": -0.016175349554115148,
+   "reliability_diff": 0.5686776245880638,
+   "sd_diff": 0.5543642728946281,
+   "corr_routes": 0.8727843251272331,
+   "r2_mean_routes": 0.3922880812594011,
+   "pool": "CC",
+   "pair": "oss20md+oss120hi",
+   "ours": -0.24246565343425175,
+   "headroom": 8.501611523023977
+  },
+  {
+   "r2_diff_ours": 0.16752984264878554,
+   "r2_diff_fromsuccess": 0.13232090617674888,
+   "reliability_diff": 0.780452894199881,
+   "sd_diff": 0.7023414866088944,
+   "corr_routes": 0.8634715404966498,
+   "r2_mean_routes": 0.4678908938513973,
+   "pool": "CC",
+   "pair": "dsv4f+oss120md",
+   "ours": -0.19248590680629452,
+   "headroom": 14.217657955903546
+  },
+  {
+   "r2_diff_ours": 0.09148273414231689,
+   "r2_diff_fromsuccess": 0.09162652110806767,
+   "reliability_diff": 0.6808512512074485,
+   "sd_diff": 0.6018975152375018,
+   "corr_routes": 0.8981549876290643,
+   "r2_mean_routes": 0.4761276636569384,
+   "pool": "CC",
+   "pair": "dsv4f+oss120hi",
+   "ours": 12.189462836046054,
+   "headroom": 34.01618191876513
+  },
+  {
+   "r2_diff_ours": -0.07294900065098267,
+   "r2_diff_fromsuccess": 0.0016179141721428536,
+   "reliability_diff": 0.5461184595675125,
+   "sd_diff": 0.4816300267189056,
+   "corr_routes": 0.8972574479700969,
+   "r2_mean_routes": 0.4266914032267916,
+   "pool": "CC",
+   "pair": "oss120md+oss120hi",
+   "ours": 0.1593878275555282,
+   "headroom": -3.707497849953017
+  },
+  {
+   "r2_diff_ours": 0.3801253449418328,
+   "r2_diff_fromsuccess": 0.34668290744198654,
+   "reliability_diff": 0.9381282405943864,
+   "sd_diff": 0.6100673340043965,
+   "corr_routes": 0.9223803385511612,
+   "r2_mean_routes": 0.7229310124870045,
+   "pool": "LCB",
+   "pair": "oss20lo+oss20md",
+   "ours": 20.249301707666593,
+   "headroom": 30.72346625154025
+  },
+  {
+   "r2_diff_ours": 0.4738174849505786,
+   "r2_diff_fromsuccess": 0.43602151826962,
+   "reliability_diff": 0.9726759132846894,
+   "sd_diff": 1.0117617868545217,
+   "corr_routes": 0.8844738549679743,
+   "r2_mean_routes": 0.7284705565272698,
+   "pool": "LCB",
+   "pair": "oss20lo+dsv4f",
+   "ours": 29.03640133335992,
+   "headroom": 40.20398761043249
+  },
+  {
+   "r2_diff_ours": 0.2622923399287723,
+   "r2_diff_fromsuccess": 0.248249245255797,
+   "reliability_diff": 0.9134098434869562,
+   "sd_diff": 0.48907290170971474,
+   "corr_routes": 0.9213747300903444,
+   "r2_mean_routes": 0.7317403934698664,
+   "pool": "LCB",
+   "pair": "oss20lo+oss120md",
+   "ours": 13.52322454968628,
+   "headroom": 19.86434489433919
+  },
+  {
+   "r2_diff_ours": 0.40370865805972506,
+   "r2_diff_fromsuccess": 0.3785444498889371,
+   "reliability_diff": 0.9118916503425337,
+   "sd_diff": 0.7113143531787223,
+   "corr_routes": 0.8978156966438942,
+   "r2_mean_routes": 0.7438068903866523,
+   "pool": "LCB",
+   "pair": "oss20lo+oss120hi",
+   "ours": 32.09476116728892,
+   "headroom": 40.63834205067086
+  },
+  {
+   "r2_diff_ours": 0.25156827673321536,
+   "r2_diff_fromsuccess": 0.248637124481625,
+   "reliability_diff": 0.8994581639567916,
+   "sd_diff": 0.6108048246091339,
+   "corr_routes": 0.9505605894974838,
+   "r2_mean_routes": 0.715303578463199,
+   "pool": "LCB",
+   "pair": "oss20md+dsv4f",
+   "ours": 3.329608953918817,
+   "headroom": 15.345790611570553
+  },
+  {
+   "r2_diff_ours": 0.09526537073047488,
+   "r2_diff_fromsuccess": 0.1268340595453864,
+   "reliability_diff": 0.7221459148379415,
+   "sd_diff": 0.3299627271266864,
+   "corr_routes": 0.9731242622493873,
+   "r2_mean_routes": 0.7185734154057956,
+   "pool": "LCB",
+   "pair": "oss20md+oss120md",
+   "ours": 2.0977475954581912,
+   "headroom": 8.111720459009186
+  },
+  {
+   "r2_diff_ours": 0.005775479067519773,
+   "r2_diff_fromsuccess": 0.047542163750849395,
+   "reliability_diff": 0.6560932678371199,
+   "sd_diff": 0.39669590478133754,
+   "corr_routes": 0.9587623520020159,
+   "r2_mean_routes": 0.7306399123225815,
+   "pool": "LCB",
+   "pair": "oss20md+oss120hi",
+   "ours": 14.885440695364247,
+   "headroom": 20.174362030176198
+  },
+  {
+   "r2_diff_ours": 0.4118487824208251,
+   "r2_diff_fromsuccess": 0.37570363770425225,
+   "reliability_diff": 0.9286445207480986,
+   "sd_diff": 0.7023020992367188,
+   "corr_routes": 0.9508791469619263,
+   "r2_mean_routes": 0.724112959446061,
+   "pool": "LCB",
+   "pair": "dsv4f+oss120md",
+   "ours": -0.3726896921524059,
+   "headroom": 4.9818011529866535
+  },
+  {
+   "r2_diff_ours": 0.15782250666318717,
+   "r2_diff_fromsuccess": 0.15820301685001675,
+   "reliability_diff": 0.8182873230625095,
+   "sd_diff": 0.5701177981897325,
+   "corr_routes": 0.9530815859608092,
+   "r2_mean_routes": 0.7361794563628469,
+   "pool": "LCB",
+   "pair": "dsv4f+oss120hi",
+   "ours": -7.5794949533046205,
+   "headroom": 16.61038332431632
+  },
+  {
+   "r2_diff_ours": 0.24548765204561626,
+   "r2_diff_fromsuccess": 0.22049428049170233,
+   "reliability_diff": 0.7415023315940141,
+   "sd_diff": 0.4476648752822287,
+   "corr_routes": 0.9543632425229781,
+   "r2_mean_routes": 0.7394492933054433,
+   "pool": "LCB",
+   "pair": "oss120md+oss120hi",
+   "ours": 0.23551744034299057,
+   "headroom": 9.553923743736387
+  },
+  {
+   "r2_diff_ours": 0.24225648878341938,
+   "r2_diff_fromsuccess": 0.18280402012113428,
+   "reliability_diff": 0.23388250256775628,
+   "sd_diff": 0.7174231298529193,
+   "corr_routes": 0.6549656830112047,
+   "r2_mean_routes": 0.5631409263797329,
+   "pool": "MMLU-Pro",
+   "pair": "oss20lo+oss20md",
+   "ours": 8.978014884405784,
+   "headroom": 23.89966895462423
+  },
+  {
+   "r2_diff_ours": 0.10698088222627895,
+   "r2_diff_fromsuccess": -0.0036364443398636537,
+   "reliability_diff": 0.7089862811361864,
+   "sd_diff": 1.0936771831302932,
+   "corr_routes": 0.5361259050864338,
+   "r2_mean_routes": 0.4320026318029119,
+   "pool": "MMLU-Pro",
+   "pair": "oss20lo+dsv4f",
+   "ours": 26.97641681995834,
+   "headroom": 57.59536482339208
+  },
+  {
+   "r2_diff_ours": 0.20003292830319216,
+   "r2_diff_fromsuccess": 0.06906486519296878,
+   "reliability_diff": 0.1975376697404549,
+   "sd_diff": 0.5951942161528512,
+   "corr_routes": 0.712578221062411,
+   "r2_mean_routes": 0.6156026368229811,
+   "pool": "MMLU-Pro",
+   "pair": "oss20lo+oss120md",
+   "ours": 10.526157187023156,
+   "headroom": 20.21402549750274
+  },
+  {
+   "r2_diff_ours": 0.3606813035488483,
+   "r2_diff_fromsuccess": 0.2849066379554324,
+   "reliability_diff": 0.623591756983358,
+   "sd_diff": 0.9426180541155367,
+   "corr_routes": 0.5154965498301676,
+   "r2_mean_routes": 0.5301125948830847,
+   "pool": "MMLU-Pro",
+   "pair": "oss20lo+oss120hi",
+   "ours": 25.880992548167065,
+   "headroom": 47.990284842881245
+  },
+  {
+   "r2_diff_ours": -0.1252984715232242,
+   "r2_diff_fromsuccess": -0.292183108395457,
+   "reliability_diff": 0.6393318864510811,
+   "sd_diff": 0.9249548056744523,
+   "corr_routes": 0.6956988134660864,
+   "r2_mean_routes": 0.38733592064607275,
+   "pool": "MMLU-Pro",
+   "pair": "oss20md+dsv4f",
+   "ours": 1.467547703827246,
+   "headroom": 11.62138119486162
+  },
+  {
+   "r2_diff_ours": 0.06837712624857695,
+   "r2_diff_fromsuccess": 0.04744912136395313,
+   "reliability_diff": 0.23784335697951073,
+   "sd_diff": 0.566685858146185,
+   "corr_routes": 0.7806012082841123,
+   "r2_mean_routes": 0.5709359256661418,
+   "pool": "MMLU-Pro",
+   "pair": "oss20md+oss120md",
+   "ours": 2.415727534269987,
+   "headroom": 18.187276417431786
+  },
+  {
+   "r2_diff_ours": 0.04135029947241549,
+   "r2_diff_fromsuccess": 0.05708399775099149,
+   "reliability_diff": 0.38286049151280294,
+   "sd_diff": 0.6912971591663389,
+   "corr_routes": 0.7612175352257393,
+   "r2_mean_routes": 0.4854458837262456,
+   "pool": "MMLU-Pro",
+   "pair": "oss20md+oss120hi",
+   "ours": 13.98499288336588,
+   "headroom": 34.40352681218357
+  },
+  {
+   "r2_diff_ours": -0.13952612132426143,
+   "r2_diff_fromsuccess": -0.32723051063691455,
+   "reliability_diff": 0.7476150799042348,
+   "sd_diff": 0.886905110845776,
+   "corr_routes": 0.7420994439242297,
+   "r2_mean_routes": 0.43979763108932096,
+   "pool": "MMLU-Pro",
+   "pair": "dsv4f+oss120md",
+   "ours": 0.24602564742890465,
+   "headroom": 5.708441091134837
+  },
+  {
+   "r2_diff_ours": 0.1773972467522018,
+   "r2_diff_fromsuccess": 0.1885664334928632,
+   "reliability_diff": 0.5812247126636522,
+   "sd_diff": 0.6644479188829979,
+   "corr_routes": 0.779437563227788,
+   "r2_mean_routes": 0.5379075941694937,
+   "pool": "MMLU-Pro",
+   "pair": "oss120md+oss120hi",
+   "ours": 5.989428217787902,
+   "headroom": 22.75665780756399
+  },
+  {
+   "r2_diff_ours": 0.27606360721993956,
+   "r2_diff_fromsuccess": 0.2787661217303639,
+   "reliability_diff": 0.5412916560153092,
+   "sd_diff": 0.8552692429641997,
+   "corr_routes": 0.7810087137564252,
+   "r2_mean_routes": 0.672498920855296,
+   "pool": "Omni",
+   "pair": "oss20lo+oss20md",
+   "ours": 16.82379733315672,
+   "headroom": 31.84094258323092
+  },
+  {
+   "r2_diff_ours": 0.49610014063075025,
+   "r2_diff_fromsuccess": 0.45248764846006384,
+   "reliability_diff": 0.8429058516045396,
+   "sd_diff": 1.310091418603511,
+   "corr_routes": 0.6620869145575561,
+   "r2_mean_routes": 0.6931579251713818,
+   "pool": "Omni",
+   "pair": "oss20lo+dsv4f",
+   "ours": 33.78203284912088,
+   "headroom": 52.8554891913342
+  },
+  {
+   "r2_diff_ours": 0.20380514319663937,
+   "r2_diff_fromsuccess": 0.20384958653046398,
+   "reliability_diff": 0.4910321738298776,
+   "sd_diff": 0.6454008811112697,
+   "corr_routes": 0.8274597895264207,
+   "r2_mean_routes": 0.6988737372302141,
+   "pool": "Omni",
+   "pair": "oss20lo+oss120md",
+   "ours": 7.530474155645433,
+   "headroom": 18.844850740048027
+  },
+  {
+   "r2_diff_ours": 0.4360311136098572,
+   "r2_diff_fromsuccess": 0.40776727298718896,
+   "reliability_diff": 0.774351144504143,
+   "sd_diff": 1.0257055918596933,
+   "corr_routes": 0.7304744433245233,
+   "r2_mean_routes": 0.7047492757562528,
+   "pool": "Omni",
+   "pair": "oss20lo+oss120hi",
+   "ours": 22.419404974875903,
+   "headroom": 38.62246622734475
+  },
+  {
+   "r2_diff_ours": 0.27268129208995584,
+   "r2_diff_fromsuccess": 0.22684311823397887,
+   "reliability_diff": 0.5663856154332338,
+   "sd_diff": 0.8928435173269749,
+   "corr_routes": 0.8577664971495282,
+   "r2_mean_routes": 0.685327888048721,
+   "pool": "Omni",
+   "pair": "oss20md+dsv4f",
+   "ours": 11.552899728294701,
+   "headroom": 31.94213529557563
+  },
+  {
+   "r2_diff_ours": 0.06104133955068811,
+   "r2_diff_fromsuccess": 0.05046599011391435,
+   "reliability_diff": 0.1606709765517831,
+   "sd_diff": 0.5858187005406021,
+   "corr_routes": 0.902090246897575,
+   "r2_mean_routes": 0.6910437001075534,
+   "pool": "Omni",
+   "pair": "oss20md+oss120md",
+   "ours": 3.386094355933189,
+   "headroom": 16.37488846620856
+  },
+  {
+   "r2_diff_ours": 0.07695258083309295,
+   "r2_diff_fromsuccess": 0.07755082358290324,
+   "reliability_diff": 0.2831179243678697,
+   "sd_diff": 0.6612271242977699,
+   "corr_routes": 0.8946330300014862,
+   "r2_mean_routes": 0.6969192386335921,
+   "pool": "Omni",
+   "pair": "oss20md+oss120hi",
+   "ours": 2.750208091742551,
+   "headroom": 16.545293036304596
+  },
+  {
+   "r2_diff_ours": 0.4129354903984287,
+   "r2_diff_fromsuccess": 0.3699318158271794,
+   "reliability_diff": 0.7557848537727594,
+   "sd_diff": 0.953717114671678,
+   "corr_routes": 0.8525337247337508,
+   "r2_mean_routes": 0.711702704423639,
+   "pool": "Omni",
+   "pair": "dsv4f+oss120md",
+   "ours": 1.3983518237796977,
+   "headroom": 15.644241249148806
+  },
+  {
+   "r2_diff_ours": 0.10512004319992889,
+   "r2_diff_fromsuccess": 0.08857446445628474,
+   "reliability_diff": 0.46272401376060995,
+   "sd_diff": 0.6787508742153748,
+   "corr_routes": 0.920769949617083,
+   "r2_mean_routes": 0.7175782429496776,
+   "pool": "Omni",
+   "pair": "dsv4f+oss120hi",
+   "ours": 5.2360265498099725,
+   "headroom": 17.960865343147823
+  },
+  {
+   "r2_diff_ours": 0.26892176347831814,
+   "r2_diff_fromsuccess": 0.2516571328150321,
+   "reliability_diff": 0.6005852967349437,
+   "sd_diff": 0.6895334265727076,
+   "corr_routes": 0.892387929580185,
+   "r2_mean_routes": 0.7232940550085102,
+   "pool": "Omni",
+   "pair": "oss120md+oss120hi",
+   "ours": 6.960825996327307,
+   "headroom": 15.846962029019675
+  },
+  {
+   "r2_diff_ours": 0.2533384220586297,
+   "r2_diff_fromsuccess": 0.10490260314924389,
+   "reliability_diff": 0.6778407135640414,
+   "sd_diff": 0.566426153884079,
+   "corr_routes": 0.7229993030494732,
+   "r2_mean_routes": 0.6110237800775595,
+   "pool": "SuperGPQA",
+   "pair": "oss20lo+oss20md",
+   "ours": 4.2897354759866975,
+   "headroom": 23.579685447830293
+  },
+  {
+   "r2_diff_ours": -0.07845502474013563,
+   "r2_diff_fromsuccess": -0.2737586833296259,
+   "reliability_diff": 0.9126782292070121,
+   "sd_diff": 1.0488742085674505,
+   "corr_routes": 0.5472974852043373,
+   "r2_mean_routes": 0.4896805448812708,
+   "pool": "SuperGPQA",
+   "pair": "oss20lo+dsv4f",
+   "ours": 34.644409015061605,
+   "headroom": 60.51796195692657
+  },
+  {
+   "r2_diff_ours": 0.13123670805996496,
+   "r2_diff_fromsuccess": 0.047249422293950315,
+   "reliability_diff": 0.6741536666264929,
+   "sd_diff": 0.4681609373400651,
+   "corr_routes": 0.7969389534637369,
+   "r2_mean_routes": 0.69158572051353,
+   "pool": "SuperGPQA",
+   "pair": "oss20lo+oss120md",
+   "ours": 11.242537190495005,
+   "headroom": 26.378291308532784
+  },
+  {
+   "r2_diff_ours": 0.24522293711708443,
+   "r2_diff_fromsuccess": 0.12147402785724312,
+   "reliability_diff": 0.8375470644899199,
+   "sd_diff": 0.8705590570754713,
+   "corr_routes": 0.493524241084779,
+   "r2_mean_routes": 0.5477584605261804,
+   "pool": "SuperGPQA",
+   "pair": "oss20lo+oss120hi",
+   "ours": 24.121498098492612,
+   "headroom": 61.447607900251015
+  },
+  {
+   "r2_diff_ours": 0.07090514699794631,
+   "r2_diff_fromsuccess": -0.07860382584655307,
+   "reliability_diff": 0.8712970643656085,
+   "sd_diff": 1.0275523041336072,
+   "corr_routes": 0.5723326234594496,
+   "r2_mean_routes": 0.34608152298053263,
+   "pool": "SuperGPQA",
+   "pair": "oss20md+dsv4f",
+   "ours": 4.009807410387686,
+   "headroom": 10.830330606987365
+  },
+  {
+   "r2_diff_ours": 0.09526393551720638,
+   "r2_diff_fromsuccess": 0.06195203125669121,
+   "reliability_diff": 0.5185119473787233,
+   "sd_diff": 0.48066858779147914,
+   "corr_routes": 0.7956033407971591,
+   "r2_mean_routes": 0.547986698612792,
+   "pool": "SuperGPQA",
+   "pair": "oss20md+oss120md",
+   "ours": 4.431686396097321,
+   "headroom": 12.606259991454891
+  },
+  {
+   "r2_diff_ours": 0.029654516626527794,
+   "r2_diff_fromsuccess": 0.03388598211605345,
+   "reliability_diff": 0.6296282116423171,
+   "sd_diff": 0.6632882440052125,
+   "corr_routes": 0.721123548003191,
+   "r2_mean_routes": 0.40415943862544224,
+   "pool": "SuperGPQA",
+   "pair": "oss20md+oss120hi",
+   "ours": 14.979245282637795,
+   "headroom": 43.27360865381503
+  },
+  {
+   "r2_diff_ours": 0.14961549152147097,
+   "r2_diff_fromsuccess": 0.061341306601298794,
+   "reliability_diff": 0.8452133561968449,
+   "sd_diff": 1.00278606774365,
+   "corr_routes": 0.6148659122119031,
+   "r2_mean_routes": 0.28281620342915337,
+   "pool": "SuperGPQA",
+   "pair": "dsv4f+oss120hi",
+   "ours": 0.0,
+   "headroom": 4.81462522667746
+  },
+  {
+   "r2_diff_ours": 0.19141145487420141,
+   "r2_diff_fromsuccess": 0.11483156667886729,
+   "reliability_diff": 0.6823161388420155,
+   "sd_diff": 0.642156454983164,
+   "corr_routes": 0.7363499224299013,
+   "r2_mean_routes": 0.4847213790614127,
+   "pool": "SuperGPQA",
+   "pair": "oss120md+oss120hi",
+   "ours": 28.994907688661904,
+   "headroom": 13.825755636916742
+  }
+ ],
+ "pilot": {
+  "AIME": {
+   "20": 0.0668407946976951,
+   "50": 0.27894780925345664,
+   "100": 0.3192145255654525,
+   "full_test": 0.4686366588773441
+  },
+  "APPS": {
+   "20": 0.24739492349812978,
+   "50": 0.43306752603412235,
+   "100": 0.5112597163205296,
+   "full_test": 0.606368117008049
+  },
+  "BBEH": {
+   "20": 0.4264922515273052,
+   "50": 0.6120833328695504,
+   "100": 0.6996364920057557,
+   "full_test": 0.786721466091603
+  },
+  "BCB": {
+   "20": 0.03236553621072398,
+   "50": 0.31351901131860654,
+   "100": 0.4351276254062893,
+   "full_test": 0.5861964680791545
+  },
+  "CC": {
+   "20": 0.009295760419254662,
+   "50": 0.1928394159127473,
+   "100": 0.27511027901785007,
+   "full_test": 0.435522716436987
+  },
+  "LCB": {
+   "20": 0.4998097607221016,
+   "50": 0.6354974435527226,
+   "100": 0.7004559085657773,
+   "full_test": 0.729120746817672
+  },
+  "MMLU-Pro": {
+   "20": 0.1688745942282519,
+   "50": 0.3876889004891091,
+   "100": 0.4675861324093026,
+   "full_test": 0.49165893343354095
+  },
+  "Omni": {
+   "20": 0.4569670276858445,
+   "50": 0.6626327101047682,
+   "100": 0.7026866918440517,
+   "full_test": 0.6995145688184838
+  },
+  "SuperGPQA": {
+   "20": 0.12487787353551032,
+   "50": 0.3396003061004499,
+   "100": 0.3811143730540556,
+   "full_test": 0.48324572121243764
+  }
+ },
+ "spearman_capture_r2_diff_ours": 0.48773826458036973,
+ "spearman_saving_r2_diff_ours": 0.4578378378378378,
+ "spearman_capture_r2_mean_routes": 0.17743954480796587,
+ "spearman_saving_r2_mean_routes": 0.04483641536273115,
+ "spearman_capture_corr_routes": -0.42583214793741103,
+ "spearman_saving_corr_routes": -0.4906401137980085,
+ "spearman_capture_reliability_diff": 0.3616115228055527,
+ "spearman_saving_reliability_diff": 0.39526145496294757,
+ "spearman_capture_r2_diff_fromsuccess": 0.332375533428165,
+ "spearman_saving_r2_diff_fromsuccess": 0.4417069701280228,
+ "fit_saving_headroom x per-route R2": {
+  "coef": [
+   -4.997736103001457,
+   1.090973196522225
+  ],
+  "r2": 0.7289585630759512
+ },
+ "fit_saving_headroom x differential R2": {
+  "coef": [
+   3.6935118258592383,
+   1.0861582093775155
+  ],
+  "r2": 0.5642763262121666
+ },
+ "pilot_spearman_k20": 0.8499999999999999,
+ "pilot_spearman_k50": 0.8833333333333333,
+ "pilot_spearman_k100": 0.9166666666666666
+}
