@@ -2700,3 +2700,10 @@ vs bins_by_ds (10/10 each). Pricing from success fitted on the mixture without b
 Literature check (same day): dataset/task identity is a known strong baseline for QUALITY routing (LLMRouterBench "Dataset Oracle",
 2601.07206; "Most of the LLM Routing Gap Is Task Type", 2608.23023; task/session-level routing eval 2608.14641); no dataset-aware
 COST baseline found.
+- 4.A.102 cont. (transfer and families, 2026-10-14 18:07 MT). Full transfer, same-domain zero-shot, 10-set means (manifest split in
+  parentheses): ours LCB 26.0 (32.1), APPS 31.5 (21.7), MMLU-Pro 26.6 (27.3), AIME 14.3 (14.1), SuperGPQA 22.5 (19.3), BBEH -3.4 (8.6),
+  Omni500 4.0 (7.8); prefill-router rule (transferred success + median) -23.4..+9.0. Ours - best transferred external: LCB +28.9,
+  MMLU-Pro +8.5 (10/10 sets sig.), AIME +7.5 (9/10), APPS +7.8 (5/10), SuperGPQA +4.9, BBEH +3.2, Omni500 +2.4 (0-2/10).
+  => the paper's "ours exceeds every other arm significantly on LCB, MMLU-Pro, AIME and BBEH" holds for LCB, MMLU-Pro, AIME; NOT BBEH.
+  Families onboarding (newpool, Nemotron from k problems): k=10 ours 15.4 / 11.0 / 15.5 (LCB / Omni / MMLU-Pro) vs ZeroRouter
+  -35.1 / -30.2 / -6.6, naive -77.3 / -49.0 / -26.7; ours - ZR sig. in 6 / 2 / 1 of 10 sets at k=10, 10 / 8 / 6 at k=50.

@@ -48,16 +48,15 @@ for ds in ("lcb", "omni500", "mmlupro"):
 out["transfer"] = {}
 for f in sorted((D / "transfer").glob("cost_generalization_fulltransfer_*_pinned_d0.json")):
     runs = [json.load(open(g)) for g in sorted((D / "transfer").glob(f.name.replace("_d0.json", "_d*.json")))]; pool = runs[0]["pool"]
-    o = {"n": len(runs), "in_domain_ours": m_([r["in_domain_ours"]["vs_median"] * 100 for r in runs]), "raw": runs[0].keys().__len__()}
-    for k in runs[0]:
-        if k.startswith("same_domain") or k.startswith("all_other"):
-            v = runs[0][k]
-            if isinstance(v, dict):
-                o[k] = {a: m_([r[k][a]["vs_median"] * 100 for r in runs if a in r.get(k, {})]) for a in v if isinstance(v[a], dict) and "vs_median" in v[a]}
-                o[k + "|ours_minus"] = {a: triples([r[k][a].get("ours_minus_it") for r in runs if a in r.get(k, {})]) for a in v if isinstance(v[a], dict) and v[a].get("ours_minus_it")}
-    out["transfer"][pool] = o
-    print(f"transfer {pool:<9} in-domain ours {o['in_domain_ours'][0]:+5.1f} | " + " | ".join(
-        f"{k}: " + " ".join(f"{a} {v[0]:+.1f}" for a, v in o[k].items()) for k in o if isinstance(o[k], dict) and "|" not in k and k not in ("n",)))
+    o = {"n": len(runs), "in_domain_ours": m_([r["in_domain_ours"]["vs_median"] * 100 for r in runs])}
+    for src in ("same_domain", "all_other"):
+        for var in ("zero_shot", "level10"):
+            arms = runs[0][src][var]
+            o[f"{src}|{var}"] = {a_: {"vs_median": m_([r[src][var][a_]["vs_median"] * 100 for r in runs])}
+                                 | ({"ours_minus_it": triples([r[src][var][a_]["ours_minus_it"] for r in runs])} if "ours_minus_it" in arms[a_] else {}) for a_ in arms}
+    out["transfer"][pool] = o; z = o["same_domain|zero_shot"]; ext = {a_: z[a_]["vs_median"][0] for a_ in ("mixllm", "knn", "zerorouter")}; best = max(ext, key=ext.get)
+    print(f"transfer {pool:<9} in-domain {o['in_domain_ours'][0]:+5.1f} | same-domain zero-shot: ours {z['ours']['vs_median'][0]:+5.1f}  prefill rule {z['prefill_router']['vs_median'][0]:+5.1f}"
+          f"  best external {best} {z[best]['vs_median'][0]:+5.1f}; ours - best external {fmt(z[best]['ours_minus_it'])}; ours - prefill rule {fmt(z['prefill_router']['ours_minus_it'])}")
 # ---- new families (routing + onboarding)
 runs = [json.load(open(g)) for g in sorted((D / "families").glob("newfamily_eval_pinned_d*.json"))]
 if runs:
