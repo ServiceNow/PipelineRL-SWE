@@ -2746,3 +2746,16 @@ short" (ours best on every route; bracket ours <= legibility <= ceiling; deepsee
 difference sentence kept, labelled manifest split). sec:when: condition (b) restated (variation fixed by the problem; estimator reads
 it), law retest sentence; CodeContests retitled "Headroom no estimator reads" with ceiling .92-.96 / other routes .67-.88 / ours
 .35-.52. Discussion sentence updated. New appendix app:legibility (tab:bracket, tab:decomp, law models). 28 pages; main text to p.17.
+### 4.A.111 Paper number-consistency pass (2026-10-15 21:32 MT)
+Every number in main text, tables and appendix checked against the pinned summaries (draws, textemb, item6, mixed2, drop, singles,
+newfamily, best_estimators, data_law, legibility, per-set onboarding logs). Fixes: Results calibration-policy loss 1.0-4.7 -> 1.0-3.3
+(10-set deploy); "significant in all ten sets" scoped to the four external estimators on the three main sets; headroom "seven of
+nine" -> eight (29-61%), capture "two fifths to (over) two thirds" (.69); "six pools where we save most" replaced by the explicit six
+(not APPS/BCB/CC; APPS saves more than AIME); subsets "at most 2" -> 2.1 points; oracle defined as realized output at billed rates
+(nonreason table caption explains Omni 53.1 vs 51.9: billed-cost oracle); mechanism opening uses 10-set test R2 (tab:bracket) instead
+of within-test CV numbers that conflicted with it; CodeEmbedding text: CC text router -4.7 is not "ahead on average"; ablation
+"R2 ~ .19 / 60% of gap" (untraceable) replaced by pointer to sec:mechanism; agents appendix ".43-.83" -> tab:bracket; tab:poolstats
+APPS 489/123, CC 86 calibration (as used). Manifest-split labels added: held-out oracle, price rescaling, MMLU-Pro drivers, true-solve-
+rate pricing, transfer of pricing-from-success, CC difficulty gap, SWE-Smith, prefill-router pipeline, cascade bound, budgets,
+app:mechanism; protocol paragraph lists all one-set analyses. Verified unchanged: tab:fresh, tab:pools, tab:labels, tab:onboard
+(Fisher 3.5-12.9; dsv4f onboarding lead 13.1-30.7), tab:transfer, tab:mixed, tab:textemb, tab:deploy, deployment/singles/mix text.
