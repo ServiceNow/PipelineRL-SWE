@@ -2739,3 +2739,10 @@ an oracle knowing only the route-specific part saves as much as or more than one
 variance carries most of the routing value. Law retest, models fixed in advance, 138 subsets: headroom ~ price spread LOPO R2 .25;
 ~ problem + interaction variance -.23; both .01; log((s_b + s_ab) / ps^2) -.01 => headroom is not predictable from length / price
 statistics alone (it also depends on the routes' accuracies). NEGATIVE.
+### 4.A.110 Paper: data-only framing of legibility (2026-10-15 21:05 MT)
+sec:mechanism: "The shared level carries most of the value" (manifest LCB 82% / 86%) replaced by "What the data fix, independent of any
+predictor" (noise ceiling, other routes' lengths, variance decomposition, headroom by source on 10 sets) and "Where our readout falls
+short" (ours best on every route; bracket ours <= legibility <= ceiling; deepseek on knowledge pools; differential R2; LCB level-vs-
+difference sentence kept, labelled manifest split). sec:when: condition (b) restated (variation fixed by the problem; estimator reads
+it), law retest sentence; CodeContests retitled "Headroom no estimator reads" with ceiling .92-.96 / other routes .67-.88 / ours
+.35-.52. Discussion sentence updated. New appendix app:legibility (tab:bracket, tab:decomp, law models). 28 pages; main text to p.17.

@@ -198,8 +198,11 @@ MMLU-Pro (2,000) & 59.8 & 26.0 & 25.8 & 0.8 (2.2) & .43 & .03 \\
 \paragraph{Length is mostly a property of the problem.}
 The prefill explains much of each route's log output length on held-out problems (5-fold cross-validated $R^2$: .73--.77 on LCB, .74--.83 on Omni-MATH, .52--.66 on MMLU-Pro, .43--.57 on AIME). On LCB, Omni-MATH and AIME most of this is shared with difficulty: a problem's empirical solve rate across routes alone reaches $R^2$ .48--.65, and the prefill misses at most .07 of what difficulty explains (.10--.22 on AIME). Within a problem, failed and solved draws are about equally long ($\times$0.83--1.16), with one exception: deepseek-v4-flash writes 2.5$\times$ (Omni-MATH) and 1.9$\times$ (AIME) longer when it fails on hard math.
 
-\paragraph{The shared level carries most of the value.}
-A problem's lengths across routes can be split into a shared level (their mean) and route-specific differences. On LCB, an oracle that knows only each problem's level captures 82\% of the headroom, about as much as one that knows only the differences (86\%). The prefill reads the level far better ($R^2$ .75) than the differences (.41); pricing with the predicted level alone keeps 93\% of the full readout's saving (32.2\% against 34.5\% relative to median pricing).
+\paragraph{What the data fix, independent of any predictor.}
+Three quantities need no predictor (\cref{app:legibility}). First, the share of a route's log-length variance that is fixed by the problem rather than by sampling (a noise ceiling from repeated draws: the $R^2$ no predictor of the prompt can exceed) is .71--.99 for every reasoning route on every pool where we have repeated draws. Second, other routes' realized lengths on the same problem explain .42--.96 of a route's log length (every route except gpt-oss-20b at low effort on BIG-Bench Extra Hard), so much of what fixes a route's length is a property of the question that models agree on. Third, the variance of log length (excluding route means) splits into a shared problem level (42--84\%), a problem-by-route interaction (8--29\%) and run-to-run noise (8--29\%). The interaction is small, but it carries as much routing value as the level or more: an oracle that knows each test problem's route-specific part only saves 24.8\%, 41.4\% and 43.7\% relative to median pricing on LCB, Omni-MATH and MMLU-Pro, against 25.5\%, 23.3\% and 25.4\% for one that knows its shared level only (headroom 40.1\%, 51.9\% and 58.0\%; ten training sets). On every pool the route-specific part is worth at least as much as the level, within a point.
+
+\paragraph{Where our readout falls short.}
+Our readout is the best pre-generation length predictor we have on every route of every pool, ahead of pricing from success, ZeroRouter's latent, prompt features, MixLLM-style and nearest-neighbour readouts of a text encoder, three readouts of Qwen3-Embedding-4B and, on LCB, the fine-tuned Qwen3-0.6B (\cref{tab:bracket}). Its $R^2$ is a lower bound on how legible length is, and the noise ceiling an upper bound. The two are close on LCB, Omni-MATH and BIG-Bench Extra Hard (e.g.\ LCB .71--.75 against .98--.99), and far apart on the knowledge pools, for deepseek-v4-flash above all: on MMLU-Pro and SuperGPQA we read .26 and .22 of its log length, other routes' lengths explain .62 and .46, and the ceiling is .92 and .96. Its length there is fixed by the question and largely shared with other models, but the prefill misses it. Route differences are what predictors read worst: across route pairs, our $R^2$ for the log length ratio is .06--.47 per pool, against a ceiling of .48--.85, and this differential $R^2$ tracks the share of a pair's headroom we capture (Spearman .49 over the 75 pairs with headroom above 5 points) better than per-route $R^2$ does (.18). On LCB (manifest split), the prefill reads the level ($R^2$ .75) far better than the differences (.41), and pricing with the predicted level alone keeps 93\% of the full readout's saving.
 
 \paragraph{Where length tracks work rather than difficulty.}
 On MMLU-Pro, difficulty explains log length only in part (test $R^2$ .18--.37), subject labels about as much (.17--.25), and the two together .34--.44, against .41--.66 for the prefill. Engineering and law questions are both long (6.4k and 4.1k output tokens on average) and hard. On the 300-problem test split of the MMLU-Pro pool, pricing from difficulty and subject together saves 32.6\%, against 43.9\% for the prefill (headroom 61.5\%): the prefill reads how much work a question requires, beyond its difficulty and topic.
@@ -335,13 +338,13 @@ Success readouts, fitted on the mixture & 11.7 & $-$0.5 & 22.8 [17.8, 27.8] \\
 \end{table}
 
 \section{When it works and when it does not}\label{sec:when}
-Per-query cost pays under two conditions: (a) output length varies within a route by more than prices differ between routes, which creates headroom, and (b) that variation can be read from the prompt, which lets an estimator capture it. Each of our two failures violates one condition, and neither is specific to our estimator (\cref{fig:capture}).
+Per-query cost pays under two conditions: (a) output length varies within a route by more than prices differ between routes, which creates headroom, and (b) an estimator can read that variation from the prompt, which lets it capture the headroom. For every reasoning route here the variation is fixed by the problem rather than by sampling (\cref{sec:mechanism}), so (b) is a property of the problem and the estimator together. Each of our two failures violates one condition, and neither is specific to our estimator (\cref{fig:capture}). Neither condition reduces to a law in length and price statistics alone: across 138 route subsets of the nine pools, headroom is not predicted out of sample by the price spread between routes, the variance shares of \cref{sec:mechanism}, or their ratio (leave-one-pool-out $R^2$ at most .25, for the price spread alone; \cref{app:legibility}), because it also depends on which routes solve which problems.
 
 \paragraph{Little headroom: BigCodeBench.}
 BigCodeBench tasks are library-usage functions with short, similar solutions; perfect cost knowledge saves only 10.0\% [$-$1.1, 20.1]. No estimator's saving relative to median pricing has an interval excluding zero: ours 0.4 [$-$9.5, 9.1], ZeroRouter 8.5 [$-$13.0, 26.5], MixLLM-style $-$1.2, cost-from-success $-$2.0, prompt features $-$1.1. Here length is the least tied to difficulty of any pool (the prefill-only share of length variance is largest on BigCodeBench), but there is little to gain from reading it.
 
-\paragraph{Illegible headroom: CodeContests.}
-CodeContests has as much headroom as APPS (35.8\% [26.5, 43.7]), but no estimator captures more than about a quarter of it: ours saves 9.4\% [0.4, 19.8] and difficulty bins 7.7\% [0.1, 18.1], barely excluding zero; ZeroRouter (9.9\% [$-$4.3, 23.6]), pricing from success (9.9\% [$-$0.4, 21.4]) and the rest are within noise of zero. Length again tracks difficulty, but difficulty itself is hard to read from these prompts: the prefill misses .11--.18 of the length $R^2$ that empirical difficulty explains, against at most .07 on LCB and Omni-MATH.
+\paragraph{Headroom no estimator reads: CodeContests.}
+CodeContests has as much headroom as APPS (35.8\% [26.5, 43.7]), but no estimator captures more than about a quarter of it: ours saves 9.4\% [0.4, 19.8] and difficulty bins 7.7\% [0.1, 18.1], barely excluding zero; ZeroRouter (9.9\% [$-$4.3, 23.6]), pricing from success (9.9\% [$-$0.4, 21.4]) and the rest are within noise of zero. Length again tracks difficulty, but difficulty itself is hard to read from these prompts: the prefill misses .11--.18 of the length $R^2$ that empirical difficulty explains, against at most .07 on LCB and Omni-MATH. The lengths themselves are fixed by the problem (noise ceiling .92--.96) and shared across routes (other routes' lengths explain .67--.88), against our $R^2$ of .35--.52, so the shortfall is in reading them from these prompts, for every estimator we tried.
 
 \begin{figure}[t]
 \centering
@@ -418,7 +421,7 @@ The features come from one forward pass of Qwen3-4B over the prompt: 127--1,216 
 
 \section{Discussion and Limitations}
 \paragraph{When does per-query cost pay?}
-It pays when output length varies within a model more than prices differ between models: here lengths span 11--121$\times$ within a route (\cref{fig:spread}) while per-call costs span 17--29$\times$ across routes (\cref{tab:routes}), leaving 40--58\% headroom over median pricing. In practice the saving comes from deciding, query by query, whether a strong route whose cost varies widely is worth calling instead of a cheap one (\cref{sec:headroom}). It is captured when that variation is legible from the prompt. Where length tracks difficulty (LCB, Omni-MATH), even difficulty-only pricing captures most of it; where it tracks the work a question requires (MMLU-Pro), only a dedicated readout does, and that is also where we capture least (40\%), leaving the most room for better cost predictors.
+It pays when output length varies within a model more than prices differ between models: here lengths span 11--121$\times$ within a route (\cref{fig:spread}) while per-call costs span 17--29$\times$ across routes (\cref{tab:routes}), leaving 40--58\% headroom over median pricing. In practice the saving comes from deciding, query by query, whether a strong route whose cost varies widely is worth calling instead of a cheap one (\cref{sec:headroom}). It is captured when an estimator can read that variation from the prompt; for reasoning routes it is fixed by the problem (\cref{sec:mechanism}), so what limits capture is the estimator, most of all on route differences and on knowledge questions. Where length tracks difficulty (LCB, Omni-MATH), even difficulty-only pricing captures most of it; where it tracks the work a question requires (MMLU-Pro), only a dedicated readout does, and that is also where we capture least (40\%), leaving the most room for better cost predictors.
 
 \paragraph{Generalisation.}
 In-domain and with full training data, a router could price from difficulty and lose little on most pools. The case for a dedicated cost readout is that it holds up where a deployed router actually operates: with few labels, with new models and on new benchmarks, where both difficulty-only pricing and text estimators lose most of their saving (\cref{sec:general}).
@@ -516,6 +519,61 @@ At matched accuracy in the middle of the band, 31--66\% of problems change route
 
 \paragraph{The part of predicted length that difficulty does not explain.}
 The part of the predicted length that the true solve rates do not explain is real. It correlates with the same part of the realized length at .56--.92 across six pools (MMLU-Pro .81: engineering questions are predicted 0.95 log units longer than their difficulty implies, and are 0.95 longer). It also predicts the length of five held-out non-reasoning models on MMLU-Pro (partial correlation .40--.71) while saying almost nothing about whether the stronger of them succeed ($|r| \le .05$ for deepseek-v4-flash without thinking and Qwen3-235B-Instruct).
+
+\section{What the data fix, and what our readout reads}\label{app:legibility}
+\Cref{tab:bracket} gives, per route, three test $R^2$ values of log mean output length: our readout's, which is the highest of every pre-generation estimator we evaluated (pricing from success, ZeroRouter's latent, prompt features, MixLLM-style and nearest-neighbour readouts of the text encoder of \cref{app:baselines}, ridge, MixLLM-style and nearest-neighbour readouts of Qwen3-Embedding-4B, and on LCB the fine-tuned Qwen3-0.6B) on every route of every pool; that of a linear map from the mean realized log length of the other four routes on the same problem, which is not a deployable estimator but shows how much of a route's length is shared with other models; and the noise ceiling, the share of the variance of a route's per-problem log length over test problems that is between problems rather than between draws (from the routes' repeated draws; APPS has one draw per problem). Means over ten training sets.
+
+\Cref{tab:decomp} decomposes log length with no predictor. Over problems, routes and draws (problems with a valid draw on every route), after removing route means, a two-way random-effects decomposition (method of moments, harmonic-mean draw count) splits the variance into a shared problem level, a problem-by-route interaction and within-cell noise. Headroom by source compares oracles that know, for each test problem, its realized shared level only (with each route's training-mean offset), its route-specific part only (with the training-mean level), or both (the headroom of the main text); each is level-matched to the route's training mean like the readouts.
+
+We fixed four models of headroom in advance, fitted by least squares over the 138 route subsets of \cref{app:subsets} (full pools, leave-one-out subsets and pairs), using only predictor-free statistics: (A) the price spread (s.d.\ over routes of log mean cost per call), (B) the problem and interaction variances, (C) both, and (D) the log ratio of query-driven variance to squared price spread. In-sample $R^2$ is .32, .18, .37 and .11; leave-one-pool-out $R^2$ is .25, $-$.23, .01 and $-$.01. Headroom depends on which routes solve which problems, not only on how lengths and prices vary.
+
+\begin{table}[h]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{lccccc}
+\toprule
+Pool & 20b low & 20b med. & deepseek & 120b med. & 120b high \\
+\midrule
+LiveCodeBench & .74 / .85 / .99 & .71 / .96 / .99 & .72 / .92 / .99 & .73 / .95 / .99 & .75 / .94 / .98 \\
+Omni-MATH & .68 / .60 / .84 & .66 / .86 / .89 & .71 / .79 / .95 & .72 / .87 / .94 & .73 / .88 / .95 \\
+MMLU-Pro & .61 / .42 / .71 & .52 / .68 / .79 & .26 / .62 / .92 & .62 / .76 / .88 & .45 / .67 / .89 \\
+AIME & .41 / .52 / .89 & .44 / .85 / .93 & .50 / .79 / .97 & .49 / .86 / .92 & .51 / .87 / .94 \\
+APPS & .56 / .69 / -- & .54 / .80 / -- & .63 / .86 / -- & .63 / .88 / -- & .68 / .88 / -- \\
+BigCodeBench & .69 / .66 / .97 & .61 / .86 / .96 & .47 / .71 / .95 & .71 / .85 / .97 & .45 / .67 / .88 \\
+CodeContests & .46 / .67 / .92 & .35 / .83 / .93 & .52 / .80 / .96 & .42 / .88 / .94 & .43 / .86 / .95 \\
+SuperGPQA & .75 / .50 / .94 & .47 / .64 / .88 & .22 / .46 / .96 & .63 / .77 / .92 & .34 / .54 / .90 \\
+BIG-Bench Extra Hard & .56 / $-$.01 / .81 & .81 / .82 / .89 & .83 / .72 / .96 & .90 / .75 / .92 & .84 / .69 / .94 \\
+\bottomrule
+\end{tabular}}
+\caption{\textbf{How much of each route's length we read, and how much the data fix.} Test $R^2$ of log mean output length: our readout / a linear map from the other routes' realized lengths on the same problem / noise ceiling (upper bound for any predictor of the problem). Mean over ten training sets; --: one draw per problem.}
+\label{tab:bracket}
+\end{table}
+\begin{table}[h]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrrrrr}
+\toprule
+ & \multicolumn{3}{c}{Share of log-length variance (\%)} & & \multicolumn{3}{c}{Headroom by source (\%)} \\
+\cmidrule(lr){2-4}\cmidrule(lr){6-8}
+Pool & Problem & Interaction & Noise & Corr. & Level only & Route-specific only & Both \\
+\midrule
+LiveCodeBench & 84 & 8 & 8 & .94 & 25.5 & 24.8 & 40.1 \\
+Omni-MATH & 80 & 12 & 8 & .85 & 23.3 & 41.4 & 51.9 \\
+MMLU-Pro & 66 & 17 & 17 & .70 & 25.4 & 43.7 & 58.0 \\
+AIME & 70 & 15 & 16 & .79 & 15.6 & 23.8 & 29.2 \\
+APPS & 81 & 19 & -- & .86 & 18.3 & 24.6 & 34.4 \\
+BigCodeBench & 57 & 15 & 28 & .80 & $-$0.4 & 8.7 & 10.0 \\
+CodeContests & 73 & 13 & 14 & .83 & 18.8 & 28.9 & 35.8 \\
+SuperGPQA & 55 & 27 & 18 & .67 & 43.3 & 54.1 & 60.6 \\
+BIG-Bench Extra Hard & 42 & 29 & 29 & .49 & 20.9 & 31.5 & 38.1 \\
+\bottomrule
+\end{tabular}
+\caption{\textbf{Where the routing value lies, without a predictor.} Left: variance of log output length after removing route means, split into the shared problem level, the problem-by-route interaction and run-to-run noise (APPS: one draw per problem, so the interaction includes noise); Corr.: mean correlation between two routes' mean log lengths over problems. Right: cost saved relative to median pricing by oracles that know each test problem's shared level only, its route-specific part only, or both (the headroom); mean over ten training sets.}
+\label{tab:decomp}
+\end{table}
 
 \section{Three further model families}\label{app:families}
 \paragraph{Three further model families.}
