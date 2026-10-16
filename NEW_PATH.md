@@ -2759,3 +2759,18 @@ APPS 489/123, CC 86 calibration (as used). Manifest-split labels added: held-out
 rate pricing, transfer of pricing-from-success, CC difficulty gap, SWE-Smith, prefill-router pipeline, cascade bound, budgets,
 app:mechanism; protocol paragraph lists all one-set analyses. Verified unchanged: tab:fresh, tab:pools, tab:labels, tab:onboard
 (Fisher 3.5-12.9; dsv4f onboarding lead 13.1-30.7), tab:transfer, tab:mixed, tab:textemb, tab:deploy, deployment/singles/mix text.
+### 4.A.112 Other prefills on 10 training sets, no Qwen3-8B (2026-10-15 22:49 MT; free; `prefill_draws.py`, 24 jobs pfd_*, `prefill_nonreason_aggregate.py` -> prefill_draws_summary_pinned.json)
+Complete router per prefill (success + cost refitted per set). vs median with own success, MMLU-Pro / Omni: Qwen3-0.6B 17.0 / 27.9,
+1.7B 19.4 / 29.0, 4B-hybrid 20.6 / 28.1, Phi-4-mini 21.4 / 28.2, Granite 18.2 / 25.1, SmolLM2 16.9 / 25.2 (ours 23.4 / 31.5). Ours vs
+each: MMLU-Pro +8.2* / +5.2 / +3.4 / +2.0 / +7.1* / +7.5*; Omni +7.3 / +4.1 / +3.6 / +7.6 / +5.6 / +5.9 (* pooled CI excludes 0).
+Length R2 rises with Qwen3 size (MMLU .33/.40/.44, Omni .61/.65/.66; ours .49/.70). Never significantly behind except 1 set vs
+Phi-4-mini on MMLU-Pro. The manifest-split tab:size had 1.7B within 2.8-3.0 and Phi-4-mini tied on MMLU-Pro: consistent.
+Paper: tab:size + ablation text replaced; 8B row and "0.6--8B" / "up to 8B" removed (user decision, memory updated).
+### 4.A.113 Every cost estimator on the non-reasoning routes, 10 training sets (2026-10-15 22:49 MT; free; `nonreason_estimators.py`, 6 jobs nre_*)
+Training restricted to problems with all 5 non-reasoning routes valid (ours here: LCB 12.1 / Omni 6.6 / MMLU-Pro -0.6, vs tab:nonreason
+12.1 / 6.8 / 0.8). External estimators vs median: Omni at most +1.9 (q4b-knn), none significant; MMLU-Pro at most +1.1, none
+significant; LCB q4b-ridge 10.4* and fromsuccess 11.3* close to ours. Ours vs externals on Omni +4.8..+12.2 (8-10/10 sets).
+R2 (Omni): ours .60 / -.02 / .75 / .55 / .73 (ds4off, llama8, qw30, llama70, qw235); other nr routes .62 / .14 / .70 / .48 / .65;
+reasoning routes .72 / .10 / .86 / .39 / .82. Llama-3.1-8B unreadable by any estimator (best .10-.22) or by other models' lengths
+(.14-.40). => non-reasoning length is mostly readable but worth little; the erratic route is unreadable. Paper: sec:when paragraph,
+contribution (i), fig:capture caption.
