@@ -2782,3 +2782,13 @@ Motivation: at deepseek's accuracy no router beats calling it alone (sec:deploy 
 ds_alone, single_train, single_test, median, constant, derived (ridge + empirical residuals), direct_fit (logistic [L<=cap] readout),
 direct_joint (logistic [solved & L<=cap]), oracle (own draws). Smoke (LCB set 0, local 3.2 min): derived/direct_fit vs ds_alone
 +8.5 at p50, +0.8 p70, ~0 p80-p95; oracle +10.6 / +4.2 / +2.6 / +0.3 / -0.6; direct ~= derived (AUC fit ds .92 vs .92).
+
+### 4.A.115 Full paper audit against pinned results (2026-10-18 MT)
+Re-derived from the pinned summaries / result files: abstract, intro, tab:fresh, tab:routes, tab:pools, tab:nonreason, tab:bracket,
+tab:decomp + law fits, tab:labels, tab:onboard, families (all8 / newpool / no_dsv4f, mix, Nemotron), tab:transfer, tab:mixed,
+sec:when (BCB, CC, non-reasoning estimators), ablations, tab:textemb, tab:size, routing vs single models + give-up trade-off, tab:deploy,
+Opus paragraph, limitations pair numbers, tab:poolstats (recomputed from tensors), tab:allest, tab:subsets (incl. bolding), tab:spread,
+tab:resplit (recomputed). All match. Fixes: cost spread 17-29x -> 17-30x (LCB 29.7x; tab:routes caption, Discussion); protocol
+appendix said success C chosen on calibration log loss -> AUC (activation_content_preds.py and success_linear both use AUC).
+Per-query budgets paragraph flagged with a red NUMBERS NOT UPDATED box (4.A.114 running). Manifest-only analyses unchanged since 4.A.111
+were checked against their NEW_PATH entries, not re-run.
