@@ -2774,3 +2774,11 @@ R2 (Omni): ours .60 / -.02 / .75 / .55 / .73 (ds4off, llama8, qw30, llama70, qw2
 reasoning routes .72 / .10 / .86 / .39 / .82. Llama-3.1-8B unreadable by any estimator (best .10-.22) or by other models' lengths
 (.14-.40). => non-reasoning length is mostly readable but worth little; the erratic route is unreadable. Paper: sec:when paragraph,
 contribution (i), fig:capture caption.
+
+### 4.A.114 Per-query hard budgets vs deepseek-v4-flash alone, 10 training sets (2026-10-18 17:42 MT; free; `budget_draws.py`, 6 jobs bud_*)
+Motivation: at deepseek's accuracy no router beats calling it alone (sec:deploy "Routing versus single models"); under a per-query cap
+(truncation = failure) knowing when deepseek overruns could. budget_cap.py (app paragraph "Per-query budgets") is manifest-only, old
+150/300 tests, vs median/constant only. Pre-registered: caps = deepseek per-draw cost p50/70/80/90/95 over train+calibration; arms
+ds_alone, single_train, single_test, median, constant, derived (ridge + empirical residuals), direct_fit (logistic [L<=cap] readout),
+direct_joint (logistic [solved & L<=cap]), oracle (own draws). Smoke (LCB set 0, local 3.2 min): derived/direct_fit vs ds_alone
++8.5 at p50, +0.8 p70, ~0 p80-p95; oracle +10.6 / +4.2 / +2.6 / +0.3 / -0.6; direct ~= derived (AUC fit ds .92 vs .92).
