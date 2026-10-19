@@ -14,7 +14,7 @@ Per training set (DRAW=s; success readouts refitted as tmlr_strengthen.py `draws
 median and ours vs the arm, point + NBOOT test resamples (rng 0, the same in every set), for draws_aggregate-style pooling.
 Usage: (GPU) REASON_ROOT=.../reason_pinned RESULT_TAG=_pinned NBOOT=300 OUT_DIR=... python zr_faithful_draws.py POOL S0 S1
 """
-import json, os, sys
+import json, os, re, sys
 from pathlib import Path
 import numpy as np
 sys.path.insert(0, str(Path(__file__).parent))
