@@ -2792,3 +2792,11 @@ tab:resplit (recomputed). All match. Fixes: cost spread 17-29x -> 17-30x (LCB 29
 appendix said success C chosen on calibration log loss -> AUC (activation_content_preds.py and success_linear both use AUC).
 Per-query budgets paragraph flagged with a red NUMBERS NOT UPDATED box (4.A.114 running). Manifest-only analyses unchanged since 4.A.111
 were checked against their NEW_PATH entries, not re-run.
+Results 4.A.114 (10 sets, all 6 jobs; `budget_draws_aggregate.py` -> budget_draws_summary_pinned.json). Ours (derived) - ds_alone at caps
+p50/70/80/90/95: LCB +8.2* / +0.8 / -0.2 / -1.0 / -1.4; MMLU-Pro +7.0* / -0.2 / -1.4 / -1.8* / -2.8*; Omni +1.8 / -1.2 / -1.7 / -2.4* / -2.5*.
+Ours - best single route at p50: LCB +5.3*, MMLU-Pro +0.9*. Oracle (known lengths) - ds_alone: p50 +9.3..+15.5, p70 +3.9..+9.7, p95 -1.0..-1.1
+(=> at loose caps the limit is the success readouts). Direct fit / joint readouts within 1.4 / 2.0 points of derived everywhere, same
+AUC for ds fit (.81-.93): NEGATIVE, the tail is no more legible than the mean. Ours - median pricing: up to +12.6* (LCB p90), never
+significantly behind. Spend vs ds alone: -19% .. +11%. Omni p90 = p95 cap ($5.38/1k-equiv; deepseek's output cap).
+Paper: app:deploy "Per-query budgets" rewritten (flag removed), one sentence in sec:deploy "Routing versus single models", one clause
+in Limitations, protocol paragraph moves per-query budgets to the 10-set list.
