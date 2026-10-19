@@ -249,7 +249,7 @@ Omni-MATH (500-problem dataset) & 17.8 & 4.0 & $-$23.4 & 1.7 (MixLLM) \\
 \end{table}
 
 \paragraph{Mixed traffic.}
-Much of what quality routers gain can be had by knowing a query's dataset or task type~\citep{llmrouterbench,tasktype}; a cost router might likewise get most of its saving by segmenting traffic. We route one mixture of all nine benchmarks~\citep{routerbench,llmrouterbench} and compare with routers told each query's benchmark (\cref{tab:mixed}). Median pricing per benchmark saves 12.2\% over one median per route, and adding difficulty within the benchmark raises this to about 24\%. Our single probe, not told the benchmark, saves 31.8\%: 22.4\% [16.5, 27.6] beyond benchmark identity and 9.9\% [5.2, 14.2] beyond benchmark and difficulty together, with intervals excluding zero in all ten training sets.
+Much of what quality routers gain can be had by knowing a query's dataset or task type~\citep{llmrouterbench,tasktype}; a cost router might likewise get most of its saving by segmenting traffic. We route one mixture of all nine benchmarks~\citep{routerbench,llmrouterbench} and compare with routers told each query's benchmark (\cref{tab:mixed}). These baselines are optimistic: they are given each query's true benchmark, which a deployed router would have to infer with some error, while their difficulty is predicted, by our success probes mapped to length separately within each benchmark. Median pricing per benchmark saves 12.2\% over one median per route, and adding difficulty within the benchmark raises this to about 24\%. Our single probe, not told the benchmark, saves 31.8\%: 22.4\% [16.5, 27.6] beyond benchmark identity and 9.9\% [5.2, 14.2] beyond benchmark and difficulty together, with intervals excluding zero in all ten training sets.
 
 \begin{table}[t]
 \centering
@@ -272,7 +272,7 @@ Success probes, fitted on the mixture & 11.7 & $-$0.5 & 22.8 [17.8, 27.8] \\
 \emph{Realized cost (headroom)} & 46.4 & 38.9 & \\
 \bottomrule
 \end{tabular}
-\caption{\textbf{One router for mixed traffic.} All nine benchmarks in one mixture (150 test problems each), the same five routes and the same success probes in every row, fitted on the mixture. Cost saved (\%) at matched accuracy, mean over ten training sets; 95\% paired bootstrap intervals (resampled within each benchmark) pooled over training sets. Every ``ours vs.\ it'' interval excludes zero in all ten training sets. Per-benchmark arms are told each query's benchmark; ours is not.}
+\caption{\textbf{One router for mixed traffic.} All nine benchmarks in one mixture (150 test problems each), the same five routes and the same success probes in every row, fitted on the mixture. Cost saved (\%) at matched accuracy, mean over ten training sets; 95\% paired bootstrap intervals (resampled within each benchmark) pooled over training sets. Every ``ours vs.\ it'' interval excludes zero in all ten training sets. Per-benchmark arms are told each query's true benchmark, an optimistic baseline; ours is not.}
 \label{tab:mixed}
 \end{table}
 
