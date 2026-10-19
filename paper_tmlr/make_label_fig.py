@@ -21,7 +21,7 @@ fig, axes = plt.subplots(1, len(panels), figsize=(1.45 * len(panels) + .3, 1.75)
                          gridspec_kw=dict(left=.07, right=.99, bottom=.24, top=.86, wspace=.12))
 for ax, (title, a) in zip(np.atleast_1d(axes), panels):
     n = a[:, 0]
-    for col, sd, c, lab in ((1, 2, OURS, "dedicated cost readout"), (3, 4, ABL, "from success readouts")):
+    for col, sd, c, lab in ((1, 2, OURS, "dedicated cost probe"), (3, 4, ABL, "from success probes")):
         ax.plot(n, a[:, col], "o-", color=c, lw=1.2, ms=2.5, label=lab)
         ax.fill_between(n, a[:, col] - a[:, sd], a[:, col] + a[:, sd], color=c, alpha=.15, lw=0)
     ax.set_xscale("log"); ax.set_title(title, fontsize=7.5); ax.axhline(0, color=INK, lw=.5)

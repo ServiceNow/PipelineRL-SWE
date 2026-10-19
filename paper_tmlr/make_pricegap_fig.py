@@ -22,8 +22,8 @@ fig, axes = plt.subplots(2, 4, figsize=(6.5, 3.2), sharex=True, sharey=True,
 for ax, (title, p) in zip(axes.flat, PANELS):
     rows = json.load(open(L / f"tmlr_strengthen_pricegap_{p}_pinned.json"))["rows"]
     x = np.array([r["out_price_ratio"] for r in rows])
-    for key, c, ls, lab in (("oracle", HEAD, "--", "headroom (perfect cost knowledge)"), ("ours", OURS, "-", "dedicated cost readout"),
-                            ("fromsuccess", ABL, "-", "from success readouts")):
+    for key, c, ls, lab in (("oracle", HEAD, "--", "headroom (perfect cost knowledge)"), ("ours", OURS, "-", "dedicated cost probe"),
+                            ("fromsuccess", ABL, "-", "from success probes")):
         ax.plot(x, [r[key]["vs_median"] * 100 for r in rows], ls, marker="o", color=c, lw=1.2, ms=2.5, label=lab)
     ax.axvline(3.1, color=INK, lw=.5, ls=":"); ax.axhline(0, color=INK, lw=.5)
     ax.set_xscale("log"); ax.set_title(title, fontsize=7.5); ax.set_ylim(-10, 65); ax.grid(True, color=GRID, lw=.6); ax.set_axisbelow(True)
