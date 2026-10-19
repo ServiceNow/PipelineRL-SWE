@@ -88,7 +88,7 @@ def load(pool):
     rates = np.array([rate_of(s) for s in slots]); paid = I * rates[:, 0] + L * rates[:, 1]
     if ds:
         import glob
-        for f in glob.glob(f"{R}/math_expand_20261001/{ds}/*_d0.jsonl"):
+        for f in ([] if os.environ.get("NO_BILLED") else glob.glob(f"{R}/math_expand_20261001/{ds}/*_d0.jsonl")):   # NO_BILLED=1: tokens x rate
             for l in open(f):
                 r = json.loads(l)
                 if r.get("finish_reason") != "error" and r.get("usage_cost") is not None and r["problem_id"] in idx and r["route_label"] in slots:
