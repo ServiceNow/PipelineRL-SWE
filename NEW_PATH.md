@@ -2800,3 +2800,10 @@ AUC for ds fit (.81-.93): NEGATIVE, the tail is no more legible than the mean. O
 significantly behind. Spend vs ds alone: -19% .. +11%. Omni p90 = p95 cap ($5.38/1k-equiv; deepseek's output cap).
 Paper: app:deploy "Per-query budgets" rewritten (flag removed), one sentence in sec:deploy "Routing versus single models", one clause
 in Limitations, protocol paragraph moves per-query budgets to the 10-set list.
+
+### 4.A.116 Pricing robustness of tab:fresh, 10 training sets (2026-10-19 19:14 MT; free; 10 jobs rft_* / nob_*, `price_checks_aggregate.py` -> price_checks_summary_pinned.txt)
+Rates fitted on training calls only (RATE_FIT=train; $/M out: dsv4f .084 = .084, oss120 .257 = .257, oss20 .154 vs .134): ours vs median
+LCB 26.7 (27.8), Omni 32.3 (31.5), MMLU-Pro 24.2 (23.4); every external comparison within 1.2 points except ZeroRouter on Omni +4.3
+(its interval now excludes zero); no comparison changes sign or loses significance. Omni / MMLU-Pro test calls costed as tokens x rate
+instead of billed (NO_BILLED=1): ours vs median 31.3 / 23.6 (31.5 / 23.4), every comparison within 1.0. => keep the pinned numbers;
+the Prices paragraph reports both checks in one sentence.
