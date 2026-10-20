@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 2026-10-20 (user-approved; free, GPU): Route-To-Reason (faithful: frozen mpnet + route embeddings + shared MLP) and SCX-style shared length
-# 10 training sets (extra_estimators_draws.py; NEW_PATH 4.A.118), one GPU job per (pool, 5 training sets).
-# Usage: SUBMIT=1 bash launch_oct19_zr_faithful.sh      SMOKE=1: one LCB training set, NBOOT=3, into $D/smoke
+# 10 training sets (extra_estimators_draws.py; NEW_PATH 4.A.120), one GPU job per (pool, 5 training sets).
+# Usage: SUBMIT=1 bash launch_oct20_extra_estimators.sh      SMOKE=1: one LCB training set, NBOOT=3, into $D/smoke
 set -euo pipefail
 R=/mnt/llmd/results/exps/aristides/reason; D=$R/reason_pinned_logs/extraest; PY=/home/toolkit/.conda/envs/pipeline-rl/bin/python3; mkdir -p $D/smoke
 CD="cd /home/toolkit/PipelineRL-SWE/analysis/cost_headroom && export REASON_ROOT=$R/../reason_pinned NTHREADS=8 RESULT_TAG=_pinned HF_HOME=/home/toolkit/.cache/huggingface HF_HUB_OFFLINE=1"
