@@ -61,8 +61,8 @@ Cascades instead call models in sequence and stop when an answer is accepted: Fr
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\linewidth]{figures/shared_prefill_overview.pdf}
-\caption{\textbf{Cost--accuracy frontiers at billed prices.} Prefill cost probes (blue) versus training-median length (orange), with the same success predictions and the same encoder pass. Dots: the deterministic policy at each $V$; lines: their frontiers; hollow circles: policies selected on calibration for fixed accuracy targets. Arrows run from the median rule's frontier to ours at matched accuracy and give the cost saved. One training set is shown; averaged over the shared accuracy band and over ten training sets, the saving is 28\% on LiveCodeBench, 23\% on MMLU-Pro and 32\% on Omni-MATH (\cref{tab:fresh}).}
+\includegraphics[width=\linewidth]{figures/headline.pdf}
+\caption{\textbf{Cost saved at matched accuracy, billed prices.} Left: cost--accuracy frontiers on LiveCodeBench (one training set) of our prefill cost probes (blue) and training-median length (orange), with the same success predictions and the same encoder pass; dots are the deterministic policy at each $V$, and arrows run from the median rule's frontier to ours at matched accuracy. Right: cost saved relative to median pricing on all nine datasets, mean over ten training sets: ours with its 95\% interval, ZeroRouter as published (its own success model and pricing) and the headroom of perfect per-query cost knowledge. Gap: ours minus ZeroRouter, from paired resamples; bold where its 95\% interval excludes zero (\cref{tab:fresh,tab:allest}).}
 \label{fig:overview}
 \end{figure}
 
@@ -99,12 +99,13 @@ Training-median length & 27.8 [13.9, 35.6] & 31.5 [23.9, 37.7] & 23.4 [17.1, 29.
 Training-mean length & 27.8 [19.5, 34.6] & 34.3 [26.3, 40.1] & 25.8 [20.4, 30.6] \\
 Prompt-feature GBM & 20.7 [10.1, 29.0] & 25.8 [15.9, 35.0] & 20.0 [13.9, 25.9] \\
 MixLLM-style embeddings & 16.2 [7.9, 22.6] & 24.7 [15.9, 31.7] & 15.5 [10.6, 20.5] \\
-ZeroRouter (reimplemented) & 19.3 [7.7, 28.2] & 14.2 [$-$4.7, 39.3] & 18.4 [5.9, 24.2] \\
+ZeroRouter (as published, DistilBERT) & 23.5 [4.7, 38.2] & 19.6 [3.0, 31.3] & 19.5 [6.3, 25.8] \\
+ZeroRouter (4B prefill) & 19.3 [7.7, 28.2] & 14.2 [$-$4.7, 39.3] & 18.4 [5.9, 24.2] \\
 \midrule
 \emph{Headroom: oracle vs.\ median} & 40.1 [29.0, 46.9] & 51.9 [44.3, 56.8] & 58.0 [53.9, 60.8] \\
 \bottomrule
 \end{tabular}}
-\caption{\textbf{Cost saved at matched accuracy, billed costs.} Cost saved (\%) by our prefill cost probes relative to each estimator, mean over ten training sets with 95\% paired bootstrap intervals pooled over training sets; same success predictions for every arm except ZeroRouter, which uses its own. All intervals exclude zero except ZeroRouter's on Omni-MATH (ours is ahead in 7 of 10 training sets). Last row: the headroom, the saving of perfect per-query cost knowledge over median pricing with the same success predictions; our probes capture 69\%, 61\% and 40\% of it. Test sets as in \cref{fig:overview}; estimators as in \cref{app:baselines}.}
+\caption{\textbf{Cost saved at matched accuracy, billed costs.} Cost saved (\%) by our prefill cost probes relative to each estimator, mean over ten training sets with 95\% paired bootstrap intervals pooled over training sets; same success predictions for every arm except ZeroRouter, which uses its own. ZeroRouter (4B prefill) reads its item parameters from our prefill instead of a fine-tuned DistilBERT; it is the stronger of the two. All intervals exclude zero except its on Omni-MATH (ours is ahead in 7 of 10 training sets). Last row: the headroom, the saving of perfect per-query cost knowledge over median pricing with the same success predictions; our probes capture 69\%, 61\% and 40\% of it. Estimators as in \cref{app:baselines}.}
 \label{tab:fresh}
 \end{table}
 
@@ -132,13 +133,13 @@ gpt-oss-120b, high & 89.5 & 3.73 & 66.6 & 4.57 & 79.3 & 0.90 \\
 
 \section{Results}
 \paragraph{Cost probes beat every estimator.}
-At matched accuracy, prefill cost probes spend 27.8\% less than median-length pricing on LCB, 31.5\% less on Omni-MATH and 23.4\% less on MMLU-Pro (\cref{tab:fresh}), 69\%, 61\% and 40\% of the headroom. Every external estimator loses, by 14--34 points, with intervals excluding zero except ZeroRouter on Omni-MATH, and ours is significantly ahead of each in every training set on all three test sets except in 3 of the 10 Omni-MATH sets against ZeroRouter. A text-embedding model of the prefill's own size loses by 12--23 points under every probe (\cref{tab:textemb}).
+At matched accuracy, prefill cost probes spend 27.8\% less than median-length pricing on LCB, 31.5\% less on Omni-MATH and 23.4\% less on MMLU-Pro (\cref{tab:fresh}), 69\%, 61\% and 40\% of the headroom. Every external estimator loses, by 14--34 points, with intervals excluding zero except ZeroRouter with our prefill on Omni-MATH. Ours is significantly ahead of each in every training set on all three test sets, except against ZeroRouter: as published, in 9 of 10 sets on LCB and Omni-MATH; with our prefill, in 7 of 10 on Omni-MATH. A text-embedding model of the prefill's own size loses by 12--23 points under every probe (\cref{tab:textemb}).
 
 \paragraph{Other datasets.}
 On the other six datasets (\cref{tab:pools}) our probes save 14.9\% [10.8, 20.1] on AIME, 16.8\% [4.2, 30.4] on APPS, 33.0\% [14.6, 45.7] on SuperGPQA and 23.5\% [9.4, 35.2] on BIG-Bench Extra Hard relative to median pricing; \cref{sec:when} treats BigCodeBench and CodeContests, where they save little. No external estimator is significantly cheaper than ours on any dataset (\cref{tab:allest}), also on random re-splits that reshuffle the test problems (\cref{tab:resplit}).
 
 \section{How much is per-query cost worth?}\label{sec:headroom}
-A cost estimator can be no better than knowing each query's realized cost. \Cref{tab:pools} reports this headroom on all nine datasets, with our saving and the share of it we capture.
+A cost estimator can be no better than knowing each query's realized cost. \Cref{tab:pools} reports this headroom on all nine datasets, with our saving and the share of it we capture; \cref{fig:shares} shows which routes the saving moves traffic between.
 
 \begin{table}[t]
 \centering
@@ -384,7 +385,7 @@ The features are the mean- and last-token activations of eight layers of Qwen3-4
 \paragraph{Analyses on one training set.} Every table and every number in the main text is a mean over the ten training sets unless marked ``one training set''. Those marked use one fixed split of each dataset and compare arms within it: held-out draws, rescaled prices, the within-test variance decomposition and length drivers of \cref{sec:mechanism}, fine-tuned encoders on Omni-MATH and MMLU-Pro, parts of the transfer analysis, the prefill router's success pipeline, the perfect-judge cascade and the software-engineering datasets.
 
 \subsection{Reimplemented estimators}\label{app:baselines}
-Every estimator predicts each route's log mean output length from information available before generation, is fitted on the training problems only, and is post-processed like our probe (residual smearing, level matched to the route's training mean); configurations are chosen on the calibration split. \emph{Prompt-feature GBM} follows latency-aware routing~\citep{latencyrouting}: histogram gradient boosting (300 iterations, learning rate 0.05, minimum leaf 10) on 44 prompt statistics (length, line count, count and magnitude of numbers, math delimiters, examples, constraint markers, code fences, inequality signs and 34 keyword counts), with scikit-learn's histogram boosting in place of LightGBM. \emph{MixLLM-style}~\citep{mixllm}: a jina-embeddings-v2 137M embedding~\citep{jina} of the prompt (the code variant on LiveCodeBench), read by the average of an MLP, a random forest and a $k$-nearest-neighbour regressor per route; MixLLM used a BERT-family encoder. \emph{CARROT-style $k$NN}~\citep{carrot}: the authors' local variant, MiniLM-L12~\citep{minilm} sentence embeddings with uniform cosine $k$NN, $k$ chosen by five-fold cross-validation on training problems. \emph{ZeroRouter}~\citep{zerorouter}: stage 1 fits a $D$-dimensional two-parameter item-response model to the five routes' training outcomes (MAP with Gaussian priors; the paper uses stochastic variational inference over about 200 leaderboard models); stage 2 regresses each problem's item parameters $(\log\alpha, b)$ on our 4B prefill features (PCA to 256 dimensions, ridge), a stronger reader on our datasets than its fine-tuned DistilBERT~\citep{distilbert}, which we also ran; cost is the route's mean training length within $K$ quantile bins of $s=\alpha^\top b$. $D\in\{1,5\}$ and $K\in\{5,10,20\}$ are chosen on calibration. With five routes a higher-dimensional latent does not improve its success predictions, and on MMLU-Pro adding up to 53 Open LLM Leaderboard models to stage 1 did not either. In a component swap during development, ZeroRouter's success model paired with our cost probe came close to our router, while our success probes paired with its bin pricing did not: its shortfall is in the pricing. The fine-tuned encoders of \cref{sec:ablations} are mean-pooled with a linear head on per-route standardised log length, trained with masked squared error (AdamW, 6\% warm-up then linear decay, maximum 512 tokens for DistilBERT and 2,048 for the others); learning rate (two values per encoder) and epoch (up to 10, or 20 when the best epoch was the last) are chosen on calibration error, and smearing and level match use the calibration problems.
+Every estimator predicts each route's log mean output length from information available before generation, is fitted on the training problems only, and is post-processed like our probe (residual smearing, level matched to the route's training mean); configurations are chosen on the calibration split. \emph{Prompt-feature GBM} follows latency-aware routing~\citep{latencyrouting}: histogram gradient boosting (300 iterations, learning rate 0.05, minimum leaf 10) on 44 prompt statistics (length, line count, count and magnitude of numbers, math delimiters, examples, constraint markers, code fences, inequality signs and 34 keyword counts), with scikit-learn's histogram boosting in place of LightGBM. \emph{MixLLM-style}~\citep{mixllm}: a jina-embeddings-v2 137M embedding~\citep{jina} of the prompt (the code variant on LiveCodeBench), read by the average of an MLP, a random forest and a $k$-nearest-neighbour regressor per route; MixLLM used a BERT-family encoder. \emph{CARROT-style $k$NN}~\citep{carrot}: the authors' local variant, MiniLM-L12~\citep{minilm} sentence embeddings with uniform cosine $k$NN, $k$ chosen by five-fold cross-validation on training problems. \emph{ZeroRouter}~\citep{zerorouter}: stage 1 fits a $D$-dimensional two-parameter item-response model to the five routes' training outcomes (MAP with Gaussian priors; the paper uses stochastic variational inference over about 200 leaderboard models). Stage 2 places a new query in this latent space by regressing its item parameters $(\log\alpha, b)$ on the query. \emph{As published}, stage 2 fine-tunes DistilBERT~\citep{distilbert} with 11 linguistic features of the prompt (40 epochs, batch 32, learning rate $3\cdot10^{-5}$, squared error on the standardized parameters, the epoch chosen on a held-out tenth of the training problems; the paper does not list its features, so ours are length, word and sentence statistics, two readability scores, the shares of digits and math symbols, and bracket depth). \emph{With our 4B prefill}, stage 2 is a ridge regression on our prefill features after PCA to 256 dimensions. Both use the paper's success model $\sigma(\alpha^\top(\theta_m-b))$ and its pricing, the route's mean training length within $K$ quantile bins of $s=\alpha^\top b$, with $D\in\{1,5\}$ and $K\in\{5,10,20\}$ chosen on calibration. Both versions were also fitted together with our probes in one run on the ten training sets, where the 4B-prefill version's gaps match \cref{tab:allest} to within 0.4 points; that run gives the as-published column. The 4B prefill is the better reader on every dataset (success AUC .55--.81 against .52--.73), but it changes ZeroRouter's gap to ours by at most 5.4 points: given our success probes, its bin pricing still trails our cost probe by 9.2--34.8 points on LCB, Omni-MATH, MMLU-Pro, AIME, SuperGPQA and BIG-Bench Extra Hard with our prefill (14.2--35.5 with DistilBERT), so its shortfall is in the pricing. Elsewhere in the paper ZeroRouter means the 4B-prefill version, the stronger of the two. With five routes a higher-dimensional latent does not improve its success predictions, and on MMLU-Pro adding up to 53 Open LLM Leaderboard models to stage 1 did not either. The fine-tuned encoders of \cref{sec:ablations} are mean-pooled with a linear head on per-route standardised log length, trained with masked squared error (AdamW, 6\% warm-up then linear decay, maximum 512 tokens for DistilBERT and 2,048 for the others); learning rate (two values per encoder) and epoch (up to 10, or 20 when the best epoch was the last) are chosen on calibration error, and smearing and level match use the calibration problems.
 
 \subsection{Experiment settings}\label{app:settings}
 \paragraph{Non-reasoning routes.} deepseek-v4-flash with thinking disabled uses the same provider and sampling as with thinking; the four other non-reasoning models are each pinned to one provider. Every non-reasoning route has one draw per problem, with output capped at 16k tokens. Qwen3-235B-A22B-Instruct has training answers for 241 of 275 Omni-MATH and 485 of 550 MMLU-Pro problems (rate limits).
@@ -397,25 +398,27 @@ Every estimator predicts each route's log mean output length from information av
 \begin{table}[h]
 \centering
 \footnotesize
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{lrrrrrrr}
+\setlength{\tabcolsep}{2.7pt}
+\begin{tabular}{lrrrrrrrr}
 \toprule
- & \multicolumn{5}{c}{External estimators} & \multicolumn{2}{c}{Our ablations} \\
-\cmidrule(lr){2-6}\cmidrule(lr){7-8}
-Dataset & Median & Mean & Prompt GBM & MixLLM-style & ZeroRouter & Difficulty bins & From success \\
+ & \multicolumn{6}{c}{External estimators} & \multicolumn{2}{c}{Our ablations} \\
+\cmidrule(lr){2-7}\cmidrule(lr){8-9}
+ & & & & & \multicolumn{2}{c}{ZeroRouter} & & \\
+\cmidrule(lr){6-7}
+Dataset & Median & Mean & Prompt GBM & MixLLM-style & DistilBERT & 4B prefill & Difficulty bins & From success \\
 \midrule
-LiveCodeBench & \textbf{27.8} & \textbf{27.8} & \textbf{20.7} & \textbf{16.2} & \textbf{19.3} & 5.7 & 3.2 \\
-Omni-MATH & \textbf{31.5} & \textbf{34.3} & \textbf{25.8} & \textbf{24.7} & 14.2 & 5.8 & $-$3.0 \\
-MMLU-Pro & \textbf{23.4} & \textbf{25.8} & \textbf{20.0} & \textbf{15.5} & \textbf{18.4} & \textbf{16.7} & \textbf{18.4} \\
-AIME & \textbf{14.9} & \textbf{15.0} & \textbf{14.2} & \textbf{13.5} & \textbf{8.3} & \textbf{7.9} & 4.3 \\
-APPS & \textbf{16.8} & \textbf{13.3} & 9.7 & \textbf{16.4} & 2.3 & 2.2 & $-$2.2 \\
-BigCodeBench & 0.4 & 3.8 & 1.4 & 1.7 & $-$10.7 & 2.4 & 2.4 \\
-CodeContests & \textbf{9.4} & \textbf{9.4} & 8.0 & 4.3 & $-$1.0 & 1.7 & $-$0.8 \\
-SuperGPQA & \textbf{33.0} & \textbf{35.8} & \textbf{19.1} & \textbf{15.7} & \textbf{35.2} & \textbf{25.1} & 15.3 \\
-BIG-Bench Extra Hard & \textbf{23.5} & \textbf{22.7} & 2.1 & $-$1.3 & \textbf{24.5} & \textbf{14.2} & \textbf{22.6} \\
+LiveCodeBench & \textbf{27.8} & \textbf{27.8} & \textbf{20.7} & \textbf{16.2} & \textbf{23.5} & \textbf{19.3} & 5.7 & 3.2 \\
+Omni-MATH & \textbf{31.5} & \textbf{34.3} & \textbf{25.8} & \textbf{24.7} & \textbf{19.6} & 14.2 & 5.8 & $-$3.0 \\
+MMLU-Pro & \textbf{23.4} & \textbf{25.8} & \textbf{20.0} & \textbf{15.5} & \textbf{19.5} & \textbf{18.4} & \textbf{16.7} & \textbf{18.4} \\
+AIME & \textbf{14.9} & \textbf{15.0} & \textbf{14.2} & \textbf{13.5} & \textbf{11.6} & \textbf{8.3} & \textbf{7.9} & 4.3 \\
+APPS & \textbf{16.8} & \textbf{13.3} & 9.7 & \textbf{16.4} & 7.1 & 2.3 & 2.2 & $-$2.2 \\
+BigCodeBench & 0.4 & 3.8 & 1.4 & 1.7 & $-$10.6 & $-$10.7 & 2.4 & 2.4 \\
+CodeContests & \textbf{9.4} & \textbf{9.4} & 8.0 & 4.3 & 3.3 & $-$1.0 & 1.7 & $-$0.8 \\
+SuperGPQA & \textbf{33.0} & \textbf{35.8} & \textbf{19.1} & \textbf{15.7} & \textbf{35.9} & \textbf{35.2} & \textbf{25.1} & 15.3 \\
+BIG-Bench Extra Hard & \textbf{23.5} & \textbf{22.7} & 2.1 & $-$1.3 & \textbf{28.6} & \textbf{24.5} & \textbf{14.2} & \textbf{22.6} \\
 \bottomrule
 \end{tabular}
-\caption{\textbf{Cost saved (\%) by our probes relative to each estimator} at matched accuracy on each dataset's test set, mean over ten training sets; billed costs, deepseek-v4-flash pinned, same success predictions for every arm except ZeroRouter (its own). Bold: 95\% paired bootstrap interval, pooled over training sets, excludes zero. No external estimator is significantly cheaper than ours on any dataset. Difficulty bins: ZeroRouter's ten-bin lookup on our mean success logit; from success: ridge of log length on our success logits and their squares.}
+\caption{\textbf{Cost saved (\%) by our probes relative to each estimator} at matched accuracy on each dataset's test set, mean over ten training sets; billed costs, deepseek-v4-flash pinned, same success predictions for every arm except ZeroRouter (its own), whose item parameters are read either by its fine-tuned DistilBERT, as published, or from our 4B prefill. Bold: 95\% paired bootstrap interval, pooled over training sets, excludes zero. No external estimator is significantly cheaper than ours on any dataset. Difficulty bins: ZeroRouter's ten-bin lookup on our mean success logit; from success: ridge of log length on our success logits and their squares.}
 \label{tab:allest}
 \end{table}
 
@@ -445,6 +448,15 @@ Non-reasoning routes combine both failures (\cref{tab:nonreason}): less headroom
 
 \section{Further mechanism results}\label{app:mechanism}
 All results in this appendix are on one training set.
+\paragraph{Where the saving goes.}
+At the middle of each dataset's shared accuracy band, our router sends fewer queries than median pricing to gpt-oss-20b at low effort, the route with the lowest typical cost, and more to deepseek-v4-flash or gpt-oss-120b at medium effort (\cref{fig:shares}); on every dataset but MMLU-Pro, SuperGPQA and BigCodeBench, pricing at realized length shifts traffic the same way. The mix is not the whole story: on MMLU-Pro and SuperGPQA, realized-length pricing sends about the same shares as median pricing at a third of its spend, so its saving lies in which queries go to each route rather than how many. gpt-oss-120b at high effort receives at most 1\% of queries under any of the three.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/route_shares.pdf}
+\caption{\textbf{Route shares at matched accuracy} (one training set). Share of test queries (\%) sent to each route at the middle of the accuracy band that median pricing, our cost probes and realized-length pricing all reach, with the same success predictions; right: spend per 1,000 queries. Routes are ordered by mean cost per query; shares below 10\% are not labelled.}
+\label{fig:shares}
+\end{figure}
 \paragraph{The headroom is an upper bound.}
 Pricing each problem at its realized cost also knows the sampling noise of the draws it is scored on, which no predictor of expected cost can. Where test problems have several draws per route, we split each problem's draws at random into a half that prices and a half that is scored (20 splits). On one training set, pricing at the held-out half's mean length, a target an expected-cost predictor could reach, saves 41.2\% on LiveCodeBench against 45.9\% for the realized-cost oracle on the same halves; the gap is larger where draws are few (AIME 20.1 against 30.1, Omni-MATH-500 23.6 against 35.9, CodeContests 23.4 against 38.9) and small on SuperGPQA (52.7 against 57.1). With one or two draws per half the held-out oracle is itself noisy, so the achievable headroom lies between the two; on LiveCodeBench, where it is tightest, our probes capture .81 of the held-out bound against .72 of the realized one. The capture figures in \cref{tab:pools} are therefore conservative.
 

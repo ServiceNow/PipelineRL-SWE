@@ -1,8 +1,8 @@
 """Figure 1 (draft, frontier + forest). Left: LiveCodeBench cost-accuracy frontiers at billed prices, ours vs median-length pricing
 (same success predictions, one training set; paper_nowai/data/fresh_billed_curves_pinned.json), arrows at matched accuracy. Right: cost
 saved relative to median pricing on all nine datasets, mean over ten training sets with 95% intervals of the pooled test resamples:
-ours, ZeroRouter as published (its own success model and pricing) and headroom (realized length); from
-analysis/cost_headroom/zr_faithful_draws_summary_pinned.json (one matched run).
+ours and headroom (realized length) from the main runs (draws_summary_pinned.json, as in the tables), ZeroRouter as published
+(its own success model and pricing) and the paired gap ours - ZeroRouter from zr_faithful_draws_summary_pinned.json (one matched run).
 Usage: python make_headline_fig.py
 """
 import json, os
@@ -15,6 +15,7 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 CUR = json.load(open(HERE.parent / "paper_nowai/data/fresh_billed_curves_pinned.json"))["datasets"]["lcb"]
 SUM = json.load(open(HERE.parent / "analysis/cost_headroom/zr_faithful_draws_summary_pinned.json"))
+MAIN = json.load(open(HERE.parent / "analysis/cost_headroom/draws_summary_pinned.json"))["draws"]
 INK, MUTED, GRID = "#263240", "#5A6470", "#E6EBF0"; OURS, MED, ZR, HEAD = "#2166AC", "#D67C27", "#6250D6", "#7F8C99"
 NAMES = {"LCB": "LiveCodeBench", "Omni": "Omni-MATH", "MMLU-Pro": "MMLU-Pro", "AIME": "AIME", "APPS": "APPS", "BCB": "BigCodeBench",
          "CC": "CodeContests", "SuperGPQA": "SuperGPQA", "BBEH": "BIG-Bench Extra Hard"}
@@ -36,9 +37,9 @@ a1.set_title("LiveCodeBench: same accuracy, lower cost", loc="left", fontsize=7.
 a1.legend(frameon=False, fontsize=6.3, loc="lower right")
 
 # right: forest over the nine datasets
-order = sorted(SUM, key=lambda p: SUM[p]["ours"]["vs_median"][0])
+order = sorted(SUM, key=lambda p: MAIN[p]["ours"]["vs_median"][0])
 for y, p in enumerate(order):
-    r = SUM[p]; o, z, h = r["ours"]["vs_median"], r["zr_pub"]["vs_median"], r["oracle"]["vs_median"]
+    r = SUM[p]; o, z, h = MAIN[p]["ours"]["vs_median"], r["zr_pub"]["vs_median"], MAIN[p]["oracle"]["vs_median"]
     a2.plot(z[0], y, "^", color=ZR, ms=4, zorder=4)
     a2.plot([o[1], o[2]], [y] * 2, color=OURS, lw=1.4, solid_capstyle="round", zorder=4)
     a2.plot(o[0], y, "o", color=OURS, ms=4.5, zorder=5)

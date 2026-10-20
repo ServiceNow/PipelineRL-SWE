@@ -34,7 +34,7 @@ for ax, (p, title) in zip(axes.flat, PANELS):
     ax.set_yticks(range(3)); ax.set_yticklabels([l for _, l in ARMS] if ax in axes[:, 0] else [], fontsize=6.2)
     ax.invert_yaxis(); ax.set_xlim(0, 1.13); ax.set_xticks([0, .5, 1]); ax.set_xticklabels(["0", "50", "100%"], fontsize=5.8)
     ax.text(0, 1.30, title, transform=ax.transAxes, fontsize=7, fontweight="bold", va="bottom")
-    ax.text(0, 1.06, f"at {o['accuracy'] * 100:.0f}% accuracy; ours saves {o['saving_vs_median'] * 100:.0f}%", transform=ax.transAxes, fontsize=6, color=MUTED, va="bottom")
+    ax.text(0, 1.06, f"at {o['accuracy'] * 100:.0f}% accuracy", transform=ax.transAxes, fontsize=6, color=MUTED, va="bottom")
     ax.tick_params(length=0)
     for sp in ax.spines.values():
         sp.set_visible(False)
