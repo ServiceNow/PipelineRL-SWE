@@ -57,6 +57,7 @@ def main() -> None:
     p = argparse.ArgumentParser("Evaluate SWE-smith predictions with one eai job per instance.")
     p.add_argument("--predictions-path")
     p.add_argument("--gold", type=int, default=0)
+    p.add_argument("--instances", default="", help="comma-separated subset of instance ids")
     p.add_argument("--empty", action="store_true", help="with --gold: empty patches (negative control)")
     p.add_argument("--hf-dataset", default="SWE-bench/SWE-smith")
     p.add_argument("--run-id", required=True)
@@ -89,6 +90,8 @@ def main() -> None:
         preds = {r[KEY_INSTANCE_ID]: normalize_prediction(r) for r in map(json.loads, open(args.predictions_path)) if r}
         inst = {r["instance_id"]: dict(r) for r in rows if r["instance_id"] in preds}
         preds = {i: v for i, v in preds.items() if i in inst}
+    if args.instances:
+        keep = set(args.instances.split(",")); preds = {i: v for i, v in preds.items() if i in keep}
     print(f"{len(preds)} instances on {len({inst[i]['image_name'] for i in preds})} images", flush=True)
 
     run_dir = ROOT / args.run_id; t0 = time.time(); todo = {}; mrt = {}
