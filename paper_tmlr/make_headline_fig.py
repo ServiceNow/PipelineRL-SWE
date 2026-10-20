@@ -20,7 +20,7 @@ NAMES = {"LCB": "LiveCodeBench", "Omni": "Omni-MATH", "MMLU-Pro": "MMLU-Pro", "A
          "CC": "CodeContests", "SuperGPQA": "SuperGPQA", "BBEH": "BIG-Bench Extra Hard"}
 plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 7, "text.color": INK, "axes.labelcolor": INK, "xtick.color": INK,
                      "ytick.color": INK, "pdf.fonttype": 42, "ps.fonttype": 42})
-fig, (a1, a2) = plt.subplots(1, 2, figsize=(7.0, 2.7), gridspec_kw=dict(width_ratios=[1, 1.15], wspace=.42, left=.07, right=.99, bottom=.25, top=.9))
+fig, (a1, a2) = plt.subplots(1, 2, figsize=(7.0, 2.7), gridspec_kw=dict(width_ratios=[1, 1.15], wspace=.42, left=.07, right=.95, bottom=.25, top=.9))
 
 # left: frontiers
 for arm, col, lab in (("median", MED, "Median pricing"), ("learned", OURS, "Ours (prefill cost probes)")):
@@ -39,20 +39,23 @@ a1.legend(frameon=False, fontsize=6.3, loc="lower right")
 order = sorted(SUM, key=lambda p: SUM[p]["ours"]["vs_median"][0])
 for y, p in enumerate(order):
     r = SUM[p]; o, z, h = r["ours"]["vs_median"], r["zr_pub"]["vs_median"], r["oracle"]["vs_median"]
-    a2.plot([z[1], z[2]], [y + .18] * 2, color=ZR, lw=.8, alpha=.55, solid_capstyle="round")
-    a2.plot(z[0], y + .18, "^", color=ZR, ms=4, zorder=4)
-    a2.plot([o[1], o[2]], [y - .1] * 2, color=OURS, lw=1.4, solid_capstyle="round")
-    a2.plot(o[0], y - .1, "o", color=OURS, ms=4.5, zorder=5)
+    a2.plot(z[0], y, "^", color=ZR, ms=4, zorder=4)
+    a2.plot([o[1], o[2]], [y] * 2, color=OURS, lw=1.4, solid_capstyle="round", zorder=4)
+    a2.plot(o[0], y, "o", color=OURS, ms=4.5, zorder=5)
+    g = r["zr_pub"]["ours_vs_it"]; sig = g[1] > 0                     # paired: ours minus ZeroRouter, pooled test resamples
+    a2.text(1.02, y, f"{g[0]:+.0f}", transform=a2.get_yaxis_transform(), ha="right" if False else "left", va="center", fontsize=6.3,
+            color=INK if sig else MUTED, fontweight="bold" if sig else "normal")
     a2.plot(h[0], y, "D", mfc="white", mec=HEAD, mew=.9, ms=3.8, zorder=3)
 a2.axvline(0, color=INK, lw=.6); a2.set_yticks(range(len(order))); a2.set_yticklabels([NAMES[p] for p in order], fontsize=6.4)
 a2.set_xlabel("Cost saved relative to median pricing (%)"); a2.grid(axis="x", color=GRID, lw=.6); a2.set_axisbelow(True)
 a2.set_title("All nine datasets (ten training sets)", loc="left", fontsize=7.5, fontweight="bold", pad=4)
 a2.tick_params(axis="y", length=0)
+a2.text(1.02, len(order) - .55, "gap", transform=a2.get_yaxis_transform(), ha="left", va="bottom", fontsize=5.8, color=MUTED, linespacing=.95)
 for ax in (a1, a2):
     for sp in ("top", "right"):
         ax.spines[sp].set_visible(False)
 a2.spines["left"].set_visible(False)
-hs = [plt.Line2D([], [], color=OURS, marker="o", ms=4.5, lw=1.4), plt.Line2D([], [], color=ZR, marker="^", ms=4, lw=.8),
+hs = [plt.Line2D([], [], color=OURS, marker="o", ms=4.5, lw=1.4), plt.Line2D([], [], color=ZR, marker="^", ms=4, lw=0),
       plt.Line2D([], [], color=HEAD, marker="D", mfc="white", ms=3.8, lw=0)]
 a2.legend(hs, ["Ours", "ZeroRouter (as published)", "Headroom (realized length)"], frameon=False, fontsize=6.2, loc="upper center",
           bbox_to_anchor=(.36, -.2), ncol=3, handlelength=1.4, columnspacing=1.0)
