@@ -62,7 +62,7 @@ Cascades instead call models in sequence and stop when an answer is accepted: Fr
 \begin{figure}[t]
 \centering
 \includegraphics[width=\linewidth]{figures/headline.pdf}
-\caption{\textbf{Cost saved at matched accuracy, billed prices.} Left: cost--accuracy frontiers on LiveCodeBench (one training set) of our prefill cost probes (blue) and training-median length (orange), with the same success predictions and the same encoder pass; dots are the deterministic policy at each $V$, and arrows run from the median rule's frontier to ours at matched accuracy. Right: cost saved relative to median pricing on all nine datasets, mean over ten training sets: ours with its 95\% interval, ZeroRouter as published (its own success model and pricing) and the headroom of perfect per-query cost knowledge. Gap: ours minus ZeroRouter, from paired resamples; bold where its 95\% interval excludes zero (\cref{tab:fresh,tab:allest}).}
+\caption{\textbf{Cost saved at matched accuracy, billed prices.} Left: cost--accuracy frontiers on LiveCodeBench (one training set) of our prefill cost probes (blue) and training-median length (orange), with the same success predictions and the same encoder pass; dots are the deterministic policy at each $V$, and arrows run from the median rule's frontier to ours at matched accuracy. Middle: cost saved by ours relative to median pricing on all nine datasets, mean over ten training sets with 95\% intervals, and the headroom of perfect per-query cost knowledge. Right: cost saved by ours relative to ZeroRouter as published (its own success model and pricing), with paired 95\% intervals; hollow where the interval includes zero (\cref{tab:fresh,tab:allest}).}
 \label{fig:overview}
 \end{figure}
 
