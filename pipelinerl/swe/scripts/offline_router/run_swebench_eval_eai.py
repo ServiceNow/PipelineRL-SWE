@@ -46,7 +46,7 @@ def _image_name(instance_id: str) -> str:
 
 def submit(iid: str, d: Path, args, image: str, prefix: str = "swev") -> str:
     """submit one job; returns its id, or 'error: ...' (recorded, not raised, so a rejected job does not stop the batch)"""
-    name = re.sub(r"[^a-z0-9_]", "_", f"{prefix}_{args.run_id}_{iid}".lower())[:60]
+    name = re.sub(r"[^a-z0-9_]", "_", f"{prefix}_{args.run_id}_{iid}".lower())[:52] + f"_{int(time.time() * 1000) % 10 ** 7}"  # names must be unique
     cmd = ["eai", "job", "new", "--restartable", "--name", name, "--account", args.account, "--image", image,
            "--cpu", str(args.cpu), "--mem", str(args.mem), "--gpu", "0", "--max-run-time", str(args.max_run_time),
            "--data", f"{args.results_obj}:/mnt/llmd/results", "--field", "id", "--", "/bin/bash", str(d / "run.sh")]

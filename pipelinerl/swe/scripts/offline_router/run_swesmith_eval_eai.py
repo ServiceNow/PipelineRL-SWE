@@ -24,6 +24,7 @@ from pathlib import Path
 from swebench.harness.constants import KEY_INSTANCE_ID, KEY_MODEL, KEY_PREDICTION
 from swesmith.harness.grading import get_eval_report
 from swesmith.profiles import registry
+from swesmith.profiles.python import PythonProfile
 
 sys.path.insert(0, str(Path(__file__).parent))
 from run_swebench_eval_daytona import GIT_APPLY_CMDS  # noqa: F401  (same fallbacks, spelled out in RUN_SH)
@@ -71,8 +72,11 @@ def main() -> None:
     rows = load_dataset(args.hf_dataset, split="train")
     if args.gold:                                                  # round-robin over images, first instance of each first
         by_img: dict[str, list[int]] = {}
-        for j, im in enumerate(rows["image_name"]):
-            by_img.setdefault(im, []).append(j)
+        for j, (im, f2p) in enumerate(zip(rows["image_name"], rows["FAIL_TO_PASS"])):  # Python only (the Go test command is malformed)
+            if f2p:
+                by_img.setdefault(im, []).append(j)
+        py = {im for im, v in by_img.items() if isinstance(registry.get_from_inst(dict(rows[v[0]])), PythonProfile)}
+        by_img = {im: v for im, v in by_img.items() if im in py}
         pick, k = [], 0
         while len(pick) < args.gold and any(k < len(v) for v in by_img.values()):
             pick += [v[k] for v in by_img.values() if k < len(v)][:args.gold - len(pick)]; k += 1
@@ -103,7 +107,14 @@ def main() -> None:
     submit_all(todo, args, lambda i: inst[i]["image_name"], prefix="swes")
     if args.dry_run:
         return
-    grade_wait(run_dir, preds, args, t0, lambda iid, pred, log: get_eval_report(pred, inst[iid], Path(log), f2p_only=True))
+    grade_wait(run_dir, preds, args, t0, lambda iid, pred, log: nonvacuous(get_eval_report(pred, inst[iid], Path(log), f2p_only=True)))
+
+
+def nonvacuous(rep: dict) -> dict:
+    """the grader reports resolved when no FAIL_TO_PASS test appears in the log at all; count that as not resolved"""
+    if rep.get("resolved") and not rep.get("tests_status", {}).get("FAIL_TO_PASS", {}).get("success"):
+        rep["resolved"], rep["vacuous"] = False, True
+    return rep
 
 
 if __name__ == "__main__":
