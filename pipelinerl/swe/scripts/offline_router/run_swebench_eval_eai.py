@@ -17,6 +17,7 @@ import re
 import shlex
 import subprocess
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from swebench.harness.constants import KEY_INSTANCE_ID, KEY_MODEL, KEY_PREDICTION
@@ -27,7 +28,7 @@ ROOT = Path("/mnt/llmd/results/exps/aristides/swebench/eai_eval")
 ARCH = "x86_64"
 RUN_SH = """#!/bin/bash
 D={d}
-echo "uid=$(id -u) user=$(whoami) host=$(hostname)" > $D/env.txt
+echo "uid=$(id -u) user=$(whoami) host=$(hostname)" > $D/env.txt; ls -ld /testbed >> $D/env.txt
 date +%s > $D/started
 cd /testbed
 applied=0
@@ -43,14 +44,27 @@ def _image_name(instance_id: str) -> str:
     return f"ghcr.io/epoch-research/swe-bench.eval.{ARCH}.{instance_id.lower()}:latest"
 
 
-def submit(iid: str, d: Path, args) -> str:
-    name = re.sub(r"[^a-z0-9_]", "_", f"swev_{args.run_id}_{iid}".lower())[:60]
-    cmd = ["eai", "job", "new", "--restartable", "--name", name, "--account", args.account, "--image", _image_name(iid),
+def submit(iid: str, d: Path, args, image: str, prefix: str = "swev") -> str:
+    """submit one job; returns its id, or 'error: ...' (recorded, not raised, so a rejected job does not stop the batch)"""
+    name = re.sub(r"[^a-z0-9_]", "_", f"{prefix}_{args.run_id}_{iid}".lower())[:60]
+    cmd = ["eai", "job", "new", "--restartable", "--name", name, "--account", args.account, "--image", image,
            "--cpu", str(args.cpu), "--mem", str(args.mem), "--gpu", "0", "--max-run-time", str(args.max_run_time),
            "--data", f"{args.results_obj}:/mnt/llmd/results", "--field", "id", "--", "/bin/bash", str(d / "run.sh")]
     if args.dry_run:
         print(" ".join(shlex.quote(c) for c in cmd)); return "dry"
-    return subprocess.run(cmd, check=True, capture_output=True, text=True).stdout.strip()
+    t = time.time(); r = subprocess.run(cmd, capture_output=True, text=True)
+    jid = r.stdout.strip() if r.returncode == 0 else "error: " + (r.stderr or r.stdout).strip()[-300:]
+    if not args.dry_run:
+        (d / "submitted").write_text(f"{t}\n{jid}\n{time.time() - t:.2f}\n")
+    return jid
+
+
+def submit_all(todo: dict, args, image_of, prefix: str = "swev") -> dict:
+    with ThreadPoolExecutor(args.submit_threads) as ex:
+        ids = dict(zip(todo, ex.map(lambda i: submit(i, todo[i], args, image_of(i), prefix), todo)))
+    n_err = sum(v.startswith("error") for v in ids.values())
+    print(f"submitted {len(ids) - n_err}/{len(ids)} jobs" + (f"; first error: {next(v for v in ids.values() if v.startswith('error'))}" if n_err else ""), flush=True)
+    return ids
 
 
 def main() -> None:
@@ -65,6 +79,7 @@ def main() -> None:
     p.add_argument("--mem", type=int, default=8)
     p.add_argument("--max-run-time", type=int, default=1200)
     p.add_argument("--wait", type=int, default=1800, help="seconds to wait for all jobs before grading what finished")
+    p.add_argument("--submit-threads", type=int, default=16)
     p.add_argument("--dry-run", action="store_true")
     args = p.parse_args()
 
@@ -82,35 +97,40 @@ def main() -> None:
         keep = set(args.instances.split(",")); preds = {i: v for i, v in preds.items() if i in keep}
     preds = {i: v for i, v in preds.items() if i in inst}
 
-    run_dir = ROOT / args.run_id; t0 = time.time(); jobs, specs = {}, {}
+    run_dir = ROOT / args.run_id; t0 = time.time(); todo, specs = {}, {}
     for iid, pred in preds.items():
         d = run_dir / iid; d.mkdir(parents=True, exist_ok=True)
         if (d / "submitted").exists():                                    # already submitted: rerun only waits and grades
             continue
         specs[iid] = make_test_spec(inst[iid]); patch = pred[KEY_PREDICTION]
         (d / "patch.diff").write_text(patch if not patch.strip() or patch.endswith("\n") else patch + "\n")
-        (d / "eval.sh").write_text(specs[iid].eval_script); (d / "run.sh").write_text(RUN_SH.format(d=d))
-        jobs[iid] = submit(iid, d, args); (d / "submitted").write_text(f"{time.time()}\n{jobs[iid]}\n")
-        print(f"submitted {iid}: {jobs[iid]}", flush=True)
+        (d / "eval.sh").write_text(specs[iid].eval_script); (d / "run.sh").write_text(RUN_SH.format(d=d)); todo[iid] = d
+    submit_all(todo, args, _image_name)
     if args.dry_run:
         return
+    grade_wait(run_dir, preds, args, t0, lambda iid, pred, log: get_eval_report(
+        test_spec=specs.get(iid) or make_test_spec(inst[iid]), prediction=pred, test_log_path=log, include_tests_status=True).get(iid, {}))
+
+
+def grade_wait(run_dir: Path, preds: dict, args, t0: float, report_of) -> None:
 
     while time.time() - t0 < args.wait and not all((run_dir / i / "done").exists() for i in preds):
         time.sleep(10)
     out = []
     for iid, pred in preds.items():
-        d = run_dir / iid; r = {"instance_id": iid, "job_id": jobs.get(iid)}
+        d = run_dir / iid; sub = (d / "submitted").read_text().split("\n") if (d / "submitted").exists() else ["nan", "none", "nan"]
+        r = {"instance_id": iid, "job_id": sub[1], "submit_call_s": float(sub[2] or "nan")}
+        if sub[1].startswith("error"):
+            r |= {"status": "submit_error", "resolved": False}; out.append(r); continue
         if (d / "started").exists():
-            r["queue_to_start_s"] = float((d / "started").read_text()) - float((d / "submitted").read_text().split()[0])
+            r["queue_to_start_s"] = float((d / "started").read_text()) - float(sub[0])
         if not (d / "done").exists():
             r |= {"status": "unfinished", "resolved": False}
         elif (d / "patch_failed").exists():
             r |= {"status": "patch_failed", "resolved": False}
         else:
-            rep = get_eval_report(test_spec=specs.get(iid) or make_test_spec(inst[iid]), prediction=pred,
-                                  test_log_path=str(d / "test_output.txt"), include_tests_status=True)
-            (d / "report.json").write_text(json.dumps(rep, indent=2))
-            r |= {"status": "completed", "resolved": bool(rep.get(iid, rep).get("resolved", False)),
+            rep = report_of(iid, pred, str(d / "test_output.txt")); (d / "report.json").write_text(json.dumps(rep, indent=2, default=str))
+            r |= {"status": "completed", "resolved": bool(rep.get("resolved", False)),
                   "run_s": float((d / "done").read_text()) - float((d / "started").read_text())}
         out.append(r); print(json.dumps(r), flush=True)
     (run_dir / "results.jsonl").write_text("".join(json.dumps(r) + "\n" for r in out))
