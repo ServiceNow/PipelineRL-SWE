@@ -64,6 +64,7 @@ def main() -> None:
     p.add_argument("--results-obj", default="snow.research.tapes.results")
     p.add_argument("--cpu", type=int, default=2)
     p.add_argument("--mem", type=int, default=8)
+    p.add_argument("--max-run-time", type=int, default=0, help="floor on the job time limit (default: profile timeout + 300 s)")
     p.add_argument("--wait", type=int, default=1800)
     p.add_argument("--submit-threads", type=int, default=16)
     p.add_argument("--no-root", dest="root", action="store_false")
@@ -107,7 +108,7 @@ def main() -> None:
         (d / "run.sh").write_text(RUN_SH.format(d=d, iid=iid, copy=copy, tb=tb, rev="-R" if args.gold else "", activate=ACTIVATE,
                                                 revert=f"git checkout -- {tf} >> $D/apply.txt 2>&1" if tf else ":"))
         todo[iid] = d; mrt[iid] = rp.timeout + 300
-    args.max_run_time = max(mrt.values(), default=1200)
+    args.max_run_time = max([args.max_run_time, *mrt.values()]) if mrt else 1200
     submit_all(todo, args, lambda i: inst[i]["image_name"], prefix="swes")
     if args.dry_run:
         return
