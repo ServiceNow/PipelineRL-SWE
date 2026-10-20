@@ -49,7 +49,8 @@ def submit(iid: str, d: Path, args, image: str, prefix: str = "swev") -> str:
     name = re.sub(r"[^a-z0-9_]", "_", f"{prefix}_{args.run_id}_{iid}".lower())[:52] + f"_{int(time.time() * 1000) % 10 ** 7}"  # names must be unique
     cmd = ["eai", "job", "new", "--restartable", "--name", name, "--account", args.account, "--image", image,
            "--cpu", str(args.cpu), "--mem", str(args.mem), "--gpu", "0", "--max-run-time", str(args.max_run_time),
-           "--data", f"{args.results_obj}:/mnt/llmd/results", "--field", "id", "--", "/bin/bash", str(d / "run.sh")]
+           "--data", f"{args.results_obj}:/mnt/llmd/results", "--field", "id"] + (["-a", "run-as-root=true"] if args.root else []) \
+        + ["--", "/bin/bash", str(d / "run.sh")]
     if args.dry_run:
         print(" ".join(shlex.quote(c) for c in cmd)); return "dry"
     t = time.time(); r = subprocess.run(cmd, capture_output=True, text=True)
@@ -80,6 +81,7 @@ def main() -> None:
     p.add_argument("--max-run-time", type=int, default=1200)
     p.add_argument("--wait", type=int, default=1800, help="seconds to wait for all jobs before grading what finished")
     p.add_argument("--submit-threads", type=int, default=16)
+    p.add_argument("--no-root", dest="root", action="store_false", help="run as the toolkit user (uid 13011) instead of root")
     p.add_argument("--dry-run", action="store_true")
     args = p.parse_args()
 

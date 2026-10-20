@@ -5,9 +5,10 @@ Same per-instance steps as run_swesmith_eval_daytona.py (checkout the instance b
 files, run the profile's test command in the testbed env), run as an eai job on the instance's image; grading is local with
 swesmith's get_eval_report (F2P only by default). --gold N evaluates the gold fix, i.e. the instance's bug patch reversed, for N
 instances spread across as many repository images as possible; --gold N --empty is the negative control (no patch: must fail).
-eai jobs run as uid 13011, not root, and SWE-smith images keep /testbed root-owned (755), so the job copies /testbed to
-/tmp/testbed and runs there (test command paths rewritten, PYTHONPATH pointed at the copy); the --empty control checks that
-the tests really import the copy and not the image's install in /testbed.
+Jobs run as root (eai alphabit run-as-root=true), as in Daytona. With --no-root they run as uid 13011, and since SWE-smith images
+keep /testbed root-owned (755) the job then copies /testbed to /tmp/testbed and runs there (test command paths rewritten,
+PYTHONPATH pointed at the copy; tools under /root, e.g. pydantic's uv, stay unreadable); the --empty control checks that the
+tests really import the copy and not the image's install in /testbed.
 
 Usage:
   python run_swesmith_eval_eai.py --gold 300 --run-id smith_gold --wait 0     # submit, then rerun the same command to grade
@@ -36,8 +37,8 @@ D={d}
 export HOME=/tmp; git config --global --add safe.directory '*'
 echo "uid=$(id -u) user=$(whoami) host=$(hostname)" > $D/env.txt; ls -ld /testbed >> $D/env.txt
 date +%s > $D/started
-cp -r /testbed /tmp/testbed 2> $D/copy.txt; du -sh /tmp/testbed >> $D/env.txt
-cd /tmp/testbed
+{copy}
+cd {tb}
 (timeout 60 git fetch || true) > $D/checkout.txt 2>&1
 if ! (git checkout {iid} && git checkout HEAD~1) >> $D/checkout.txt 2>&1; then echo checkout_failed > $D/patch_failed; date +%s > $D/done; exit 0; fi
 applied=0
@@ -65,6 +66,7 @@ def main() -> None:
     p.add_argument("--mem", type=int, default=8)
     p.add_argument("--wait", type=int, default=1800)
     p.add_argument("--submit-threads", type=int, default=16)
+    p.add_argument("--no-root", dest="root", action="store_false")
     p.add_argument("--dry-run", action="store_true")
     args = p.parse_args()
 
@@ -97,10 +99,12 @@ def main() -> None:
         f2p, p2p = rp.get_test_files(inst[iid]); tf = " ".join(f2p + p2p)
         patch = "" if args.empty else pred[KEY_PREDICTION] if args.gold else repair_patch(pred[KEY_PREDICTION], inst[iid])
         (d / "patch.diff").write_text(patch if not patch.strip() or patch.endswith("\n") else patch + "\n")
-        (d / "eval.sh").write_text("\n".join(["#!/bin/bash", "set -uxo pipefail", "cd /tmp/testbed",
-                                              "export PYTHONPATH=/tmp/testbed:/tmp/testbed/src${PYTHONPATH:+:$PYTHONPATH}",
-                                              ": '>>>>> Start Test Output'", test_cmd.replace("/testbed", "/tmp/testbed"), ": '>>>>> End Test Output'", ""]))
-        (d / "run.sh").write_text(RUN_SH.format(d=d, iid=iid, rev="-R" if args.gold else "", activate=ACTIVATE,
+        tb = "/testbed" if args.root else "/tmp/testbed"
+        (d / "eval.sh").write_text("\n".join(["#!/bin/bash", "set -uxo pipefail", f"cd {tb}"]
+                                             + ([] if args.root else ["export PYTHONPATH=/tmp/testbed:/tmp/testbed/src${PYTHONPATH:+:$PYTHONPATH}"])
+                                             + [": '>>>>> Start Test Output'", test_cmd.replace("/testbed", tb), ": '>>>>> End Test Output'", ""]))
+        copy = ":" if args.root else "cp -r /testbed /tmp/testbed 2> $D/copy.txt; du -sh /tmp/testbed >> $D/env.txt"
+        (d / "run.sh").write_text(RUN_SH.format(d=d, iid=iid, copy=copy, tb=tb, rev="-R" if args.gold else "", activate=ACTIVATE,
                                                 revert=f"git checkout -- {tf} >> $D/apply.txt 2>&1" if tf else ":"))
         todo[iid] = d; mrt[iid] = rp.timeout + 300
     args.max_run_time = max(mrt.values(), default=1200)
