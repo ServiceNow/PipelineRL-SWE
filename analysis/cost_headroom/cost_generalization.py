@@ -67,7 +67,8 @@ POOLS = {   # tensors dir, Qwen3-4B-Instruct-2507 prefill (all: layers 9..36, th
     "MMLU-Pro": ("mmlupro_tensors", None, "mmlupro"),
     "AIME": ("aime_tensors", f"{REAL}/aime_probe/instruct.npz", None),
     "SuperGPQA": ("supergpqa_tensors", f"{REAL}/supergpqa_probe/instruct.npz", None),
-    "BBEH": ("bbeh_tensors", f"{REAL}/bbeh_probe/instruct.npz", None)}
+    "BBEH": ("bbeh_tensors", f"{REAL}/bbeh_probe/instruct.npz", None),
+    "SWESmith": ("swesmith_v2_tensors", f"{REAL}/swesmith_costhead/scout_prefill.npz", None)}   # one-shot patches (NEW_PATH 4.A.124); not in DOMAIN
 DOMAIN = {"coding": ["LCB", "APPS", "BCB", "CC"], "reasoning": ["Omni500", "MMLU-Pro", "AIME", "SuperGPQA", "BBEH"]}
 VALUES = np.geomspace(1e-7, 1, 300); sig = lambda z: 1 / (1 + np.exp(-z))
 rate_of = lambda s: RATE["oss120" if "120" in s else ("oss20" if s.startswith("oss20") else "dsv4f")]
