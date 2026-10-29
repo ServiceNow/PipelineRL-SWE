@@ -2814,3 +2814,9 @@ the Prices paragraph reports both checks in one sentence.
 - Panel system: whole routers on n with their own success: ours (success refitted on n), ours-median, zr_4b, zr_pub (DistilBERT), carrot.
 - One fixed reference for every n: full-set median pricing with the full-set success probes. Per-problem token and success predictions saved (.npz) so the curves can be re-scored under any pricing (e.g. tokens instead of billed on Omni-MATH / MMLU-Pro) without refitting.
 - Smoke (LCB set 0, NBOOT=3): cost panel ours 27.8 (n=50) / 30.4 (all); mixllm 2.9 / 17.3; knn 0.5 / 12.6; gbm -6.9 / 11.7; zr-pricing 1.1 / 11.5; rtr 6.9 / 15.8; system zr_pub -23.0 / 13.4, carrot 6.3 / 22.7.
+
+### 4.A.122 Prefill-size scale table (2026-10-29 MT; free; launch_oct29_prefill_scale.sh, logs in reason_pinned_logs/prefillscale)
+- User decision: show how savings vary with prefill size, net of the prefill's own cost; 8B and 14B allowed for this table only (exception to the 4B cap).
+- Qwen3 hybrid 0.6B / 1.7B / 4B / 8B / 14B (14B from /mnt/llmd/base_models) + the paper's 4B-2507, on LCB, Omni-MATH, MMLU-Pro; 10 training sets (prefill_draws.py, now with LCB and no 8B guard).
+- Prefill cost: every model's batch-1 latency and batch-16 throughput on one H100 (prefill_overhead.py, PREFILL_MODELS), priced at the paper's $2 per H100-hour.
+- Prior one-training-set sweep (4.A.50): savings flat from 1.7B; 8B no better than 4B; 1.7B ahead on MMLU-Pro once its pass is priced. Report whatever the table shows (the "goldilocks" may be 1.7-4B, and release 2507 vs hybrid matters as much as size).
