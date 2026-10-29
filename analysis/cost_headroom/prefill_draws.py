@@ -5,8 +5,9 @@ logistic recipe (success_linear, C and Platt on calibration), cost = our ridge r
   (a) median pricing with the SAME prefill's success readouts (the row's "vs median"), and
   (b) our router (Qwen3-4B-2507 prefill, success and cost refitted on the same training set): ours vs it.
 Point + NBOOT test resamples (rng 0, the same in every set); mean test success AUC and log-length R2 over routes.
-Tags: q06b, q17b, q4bhyb (Qwen3 0.6B / 1.7B / 4B hybrid), phi4mini, granite2b, smol17b. Qwen3-8B is deliberately excluded.
-Usage: REASON_ROOT=.../reason_pinned OUT_DIR=... python prefill_draws.py Omni|MMLU-Pro TAG S0 S1
+Tags: q06b, q17b, q4bhyb (Qwen3 0.6B / 1.7B / 4B hybrid), phi4mini, granite2b, smol17b; for the prefill-size scale table only
+(NEW_PATH 4.A.122, user decision 2026-10-29) also q8b and q14b (Qwen3 8B / 14B hybrid), and LCB as a pool.
+Usage: REASON_ROOT=.../reason_pinned OUT_DIR=... python prefill_draws.py LCB|Omni|MMLU-Pro TAG S0 S1
 """
 import json, os, sys
 from pathlib import Path
@@ -16,8 +17,7 @@ POOL_, TAG_, S0, S1 = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4
 exec(open(Path(__file__).parent / "cost_generalization.py").read().split('MODE, POOL = sys.argv[1], sys.argv[2]')[0])
 from baseline_cost_heads import rich
 OUT = Path(os.environ.get("OUT_DIR", Path(__file__).parent))
-assert TAG_ != "q8b", "Qwen3-8B is not reported (parameter-matched comparisons only)"
-ds_ = {"Omni": "omni500", "MMLU-Pro": "mmlupro"}[POOL_]; FEAT = R / "prefill_size_20261005" / TAG_ / f"{ds_}.npz"
+ds_ = {"LCB": "lcb", "Omni": "omni500", "MMLU-Pro": "mmlupro"}[POOL_]; FEAT = R / "prefill_size_20261005" / TAG_ / f"{ds_}.npz"
 r2 = lambda y, yh: float(1 - ((y - yh) ** 2).sum() / ((y - y.mean()) ** 2).sum())
 res = {"pool": POOL_, "tag": TAG_, "seeds": {}}
 for s in range(S0, S1):
