@@ -1,7 +1,6 @@
-"""Figure 1 (frontier + two forests). Left: LiveCodeBench cost-accuracy frontiers at billed prices, ours vs median-length pricing
-(same success predictions, one training set; paper_nowai/data/fresh_billed_curves_pinned.json), arrows at matched accuracy. Middle: cost
-saved relative to median pricing on all nine datasets, mean over ten training sets with 95% intervals of the pooled test resamples:
-ours and headroom (realized length) from the main runs (draws_summary_pinned.json, as in the tables). Right: cost saved by ours relative
+"""Figure 2 (frontier + forest; the nine-dataset saving vs median moved to Figure 1, make_hero_fig.py). Left: LiveCodeBench cost-accuracy
+frontiers at billed prices, ours vs median-length pricing (same success predictions, one training set;
+paper_nowai/data/fresh_billed_curves_pinned.json), arrows at matched accuracy. Right: cost saved by ours relative
 to ZeroRouter as published (its own success model and pricing), paired intervals, from zr_faithful_draws_summary_pinned.json (one matched
 run). Each interval is drawn against its own zero line, so no interval invites a comparison it cannot support.
 Usage: python make_headline_fig.py
@@ -22,7 +21,7 @@ NAMES = {"LCB": "LiveCodeBench", "Omni": "Omni-MATH", "MMLU-Pro": "MMLU-Pro", "A
          "CC": "CodeContests", "SuperGPQA": "SuperGPQA", "BBEH": "BIG-Bench Extra Hard"}
 plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 7, "text.color": INK, "axes.labelcolor": INK, "xtick.color": INK,
                      "ytick.color": INK, "pdf.fonttype": 42, "ps.fonttype": 42})
-fig, (a1, sp_, a2, a3) = plt.subplots(1, 4, figsize=(7.0, 2.7), gridspec_kw=dict(width_ratios=[1, .43, .85, .6], wspace=.1, left=.065, right=.99, bottom=.25, top=.88))
+fig, (a1, sp_, a3) = plt.subplots(1, 3, figsize=(7.0, 2.6), gridspec_kw=dict(width_ratios=[1, .42, .8], wspace=.1, left=.065, right=.99, bottom=.25, top=.88))
 sp_.axis("off")                                                                   # room for the dataset labels
 
 # left: frontiers
@@ -38,31 +37,24 @@ a1.set_xlim(0, 1.0); a1.set_ylim(48, 92); a1.set_xlabel("Billed spend ($ / 1,000
 a1.set_title("LiveCodeBench: same accuracy, lower cost", loc="left", fontsize=7.5, fontweight="bold", pad=4)
 a1.legend(frameon=False, fontsize=6.3, loc="lower right")
 
-# middle: saving vs median; right: ours vs ZeroRouter as published (paired)
+# right: ours vs ZeroRouter as published (paired), datasets in Figure 1's order
 order = sorted(SUM, key=lambda p: MAIN[p]["ours"]["vs_median"][0])
 for y, p in enumerate(order):
-    o, h, g = MAIN[p]["ours"]["vs_median"], MAIN[p]["oracle"]["vs_median"], SUM[p]["zr_pub"]["ours_vs_it"]
-    a2.plot([o[1], o[2]], [y] * 2, color=OURS, lw=1.4, solid_capstyle="round", zorder=4)
-    a2.plot(o[0], y, "o", color=OURS, ms=4.5, zorder=5)
-    a2.plot(h[0], y, "D", mfc="white", mec=HEAD, mew=.9, ms=3.8, zorder=3)
-    sig = g[1] > 0
+    g = SUM[p]["zr_pub"]["ours_vs_it"]; sig = g[1] > 0
     a3.plot([g[1], g[2]], [y] * 2, color=ZR, lw=1.4, solid_capstyle="round", zorder=4)
     a3.plot(g[0], y, "o", color=ZR, mfc=ZR if sig else "white", mew=1.1, ms=4.5, zorder=5)
-a2.set_yticks(range(len(order))); a2.set_yticklabels([NAMES[p] for p in order], fontsize=6.4)
-a2.set_xlabel("Saved vs. median pricing (%)"); a2.set_title("Ours, all nine datasets", loc="left", fontsize=7.5, fontweight="bold", pad=4)
-a3.set_yticks(range(len(order))); a3.set_yticklabels([]); a3.set_xlabel("Saved vs. ZeroRouter (%)")
-a3.set_title("Ours vs. ZeroRouter", loc="left", fontsize=7.5, fontweight="bold", pad=4)
-for ax in (a2, a3):
+a3.set_yticks(range(len(order))); a3.set_yticklabels([NAMES[p] for p in order], fontsize=6.4); a3.set_xlabel("Cost saved vs. ZeroRouter as published (%)")
+a3.set_title("Ours vs. ZeroRouter, all nine datasets", loc="left", fontsize=7.5, fontweight="bold", pad=4)
+for ax in (a3,):
     ax.axvline(0, color=INK, lw=.6); ax.grid(axis="x", color=GRID, lw=.6); ax.set_axisbelow(True); ax.tick_params(axis="y", length=0)
     ax.set_ylim(-.6, len(order) - .4); ax.spines["left"].set_visible(False)
-a2.set_xlim(-12, 65); a3.set_xlim(-42, 52)
-for ax in (a1, a2, a3):
+a3.set_xlim(-42, 52)
+for ax in (a1, a3):
     for sp in ("top", "right"):
         ax.spines[sp].set_visible(False)
-hs = [plt.Line2D([], [], color=OURS, marker="o", ms=4.5, lw=1.4), plt.Line2D([], [], color=HEAD, marker="D", mfc="white", ms=3.8, lw=0),
-      plt.Line2D([], [], color=ZR, marker="o", ms=4.5, lw=1.4), plt.Line2D([], [], color=ZR, marker="o", mfc="white", ms=4.5, lw=1.4)]
-fig.legend(hs, ["Ours vs. median", "Headroom (realized length)", "Ours vs. ZeroRouter as published", "(hollow: interval includes 0)"],
-           frameon=False, fontsize=6.2, loc="lower center", bbox_to_anchor=(.68, 0), ncol=2, handlelength=1.4, columnspacing=1.2)
+hs = [plt.Line2D([], [], color=ZR, marker="o", ms=4.5, lw=1.4), plt.Line2D([], [], color=ZR, marker="o", mfc="white", ms=4.5, lw=1.4)]
+fig.legend(hs, ["Paired 95% interval excludes 0", "Interval includes 0"],
+           frameon=False, fontsize=6.2, loc="lower center", bbox_to_anchor=(.78, 0), ncol=2, handlelength=1.4, columnspacing=1.2)
 for s in ("pdf", "png"):
     fig.savefig(HERE / "figures" / f"headline.{s}", dpi=220)
 print("saved")
