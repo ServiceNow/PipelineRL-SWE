@@ -12,7 +12,7 @@ full-set success probes (the paper's median rule), point + NBOOT test resamples 
 arm at the same n and panel (paired). Configurations ((D, K), kNN size, epochs) are chosen on calibration as in the source scripts.
 Usage: (GPU) REASON_ROOT=.../reason_pinned RESULT_TAG=_pinned NBOOT=200 OUT_DIR=... python learning_curve.py POOL S0 S1
 """
-import json, os, sys
+import json, os, re, sys
 from pathlib import Path
 import numpy as np
 sys.path.insert(0, str(Path(__file__).parent))
