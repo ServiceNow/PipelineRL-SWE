@@ -10,6 +10,8 @@ training sets. Per training set (DRAW=s) and n in NS (default 50, 100, 200, all)
 Saving at matched accuracy relative to ONE fixed reference for every n and panel: median pricing from the full training set with the
 full-set success probes (the paper's median rule), point + NBOOT test resamples (rng 0, the same in every set and n); and ours vs each
 arm at the same n and panel (paired). Configurations ((D, K), kNN size, epochs) are chosen on calibration as in the source scripts.
+Per-problem predictions are saved next to the JSON (.npz: token predictions and success predictions of every arm, n and panel, the
+subsampled training indices, calibration and test indices), so the curves can be re-scored under any pricing without refitting.
 Usage: (GPU) REASON_ROOT=.../reason_pinned RESULT_TAG=_pinned NBOOT=200 OUT_DIR=... python learning_curve.py POOL S0 S1
 """
 import json, os, re, sys
@@ -82,17 +84,18 @@ def carrot(d, S, Ca, T):
 texts = texts_of(POOL_); Q = encode(texts)
 enc = tok(texts, truncation=True, max_length=512, padding="max_length", return_tensors="pt"); Fraw = np.array([feats(x) for x in texts], np.float32)
 res = {"pool": POOL_, "ns": NS, "seeds": {}}
-outf = OUT / f"learning_curve_{POOL_.lower().replace('-', '')}_{S0}_{S1}{TAG}.json"
+outf = OUT / f"learning_curve_{POOL_.lower().replace('-', '')}_{S0}_{S1}{TAG}.json"; SAVE = {}
 for s in range(S0, S1):
     os.environ["DRAW"] = str(s); d = load(POOL_); N = len(d["ids"]); tr_full, ca, ev = d["tr"], d["ca"], d["ev"]; Pfull, medfull = d["P"], d["med"]
     Cm = cost_of(d, np.repeat(medfull[None], N, 0)); rb = np.random.default_rng(0); BS = [ev] + [ev[rb.integers(0, len(ev), len(ev))] for _ in range(NBOOT)]
+    SAVE[f"s{s}_ca"], SAVE[f"s{s}_ev"], SAVE[f"s{s}_P_full"] = ca, ev, Pfull.astype(np.float32)
     H0 = [curve(d, Pfull, Cm, ii) for ii in BS]; res["seeds"][s] = {"_n": dict(train=len(tr_full), calibration=len(ca), test=len(ev))}
     Ho = [curve(d, Pfull, cost_of(d, d["L"]), ii) for ii in BS]; res["seeds"][s]["oracle"] = dict(vs_ref=[saved(h, h0) * 100 for h, h0 in zip(Ho, H0)][0])
     for n in NS:
         tr = tr_full if n == 0 or n >= len(tr_full) else np.sort(np.random.default_rng(3000 + 1000 * s + n).choice(tr_full, n, replace=False))
         key = "all" if tr is tr_full else str(n); CT = d["CT"]
         med = np.array([np.nanmedian(CT[tr, k]) for k in range(d["M"])])
-        out = {"n_train": int(len(tr))}
+        out = {"n_train": int(len(tr))}; SAVE[f"s{s}_{key}_tr"] = tr
         for panel in ("cost", "system"):
             Pn = Pfull if panel == "cost" else (Pfull if tr is tr_full else success_n(d, tr))
             dn = dict(d, tr=tr, P=Pn, med=med); S, T, Ca = view(dn, tr), view(dn, np.arange(N)), view(dn, ca); tk, Ps, cfg_ = {}, {}, {}
@@ -115,8 +118,10 @@ for s in range(S0, S1):
                 r_[a] = dict(vs_ref=float(vm[0]), vs_ref_bs=vm[1:].tolist(), ours_vs_it=float(vd[0]), ours_vs_it_bs=vd[1:].tolist(),
                              auc=float(np.mean([auc(d["y0"][ev, m], Pa(a)[ev, m]) for m in range(d["M"])])), r2=float(np.mean(r2_routes(d, tk[a], ev))))
             out[panel] = r_
+            for a in C:
+                SAVE[f"s{s}_{key}_{panel}_{a}_tok"] = tk[a].astype(np.float32); SAVE[f"s{s}_{key}_{panel}_{a}_P"] = Pa(a).astype(np.float32)
             print(f"  set {s} n={key:>3s} {panel:6s}: vs ref " + "  ".join(f"{a} {r_[a]['vs_ref']:+5.1f}" for a in C)
                   + " | ours vs it " + "  ".join(f"{a} {r_[a]['ours_vs_it']:+5.1f}" for a in C if a != "ours"), flush=True)
         res["seeds"][s][key] = out
-        json.dump(res, open(outf, "w"), indent=1, default=float)
+        json.dump(res, open(outf, "w"), indent=1, default=float); np.savez_compressed(outf.with_suffix(".npz"), ids=np.array(d["ids"]), slots=np.array(d["slots"]), **SAVE)
 print("DONE", flush=True)
