@@ -1,6 +1,7 @@
 """Figure 2 (frontier + forest; the nine-dataset saving vs median moved to Figure 1, make_hero_fig.py). Left: LiveCodeBench cost-accuracy
 frontiers at billed prices, ours vs median-length pricing (same success predictions, one training set;
-paper_nowai/data/fresh_billed_curves_pinned.json), arrows at matched accuracy. Right: cost saved by ours relative
+paper_nowai/data/fresh_billed_curves_pinned.json), arrows at matched accuracy, and deepseek-v4-flash called on every query
+(analysis/cost_headroom/single_routes_pinned.json, the same test problems). Right: cost saved by ours relative
 to ZeroRouter as published (its own success model and pricing), paired intervals, from zr_faithful_draws_summary_pinned.json (one matched
 run). Each interval is drawn against its own zero line, so no interval invites a comparison it cannot support.
 Usage: python make_headline_fig.py
@@ -16,6 +17,7 @@ HERE = Path(__file__).resolve().parent
 CUR = json.load(open(HERE.parent / "paper_nowai/data/fresh_billed_curves_pinned.json"))["datasets"]["lcb"]
 SUM = json.load(open(HERE.parent / "analysis/cost_headroom/zr_faithful_draws_summary_pinned.json"))
 MAIN = json.load(open(HERE.parent / "analysis/cost_headroom/draws_summary_pinned.json"))["draws"]
+DS = json.load(open(HERE.parent / "analysis/cost_headroom/single_routes_pinned.json"))["LCB"]["dsv4f"]
 INK, MUTED, GRID = "#263240", "#5A6470", "#E6EBF0"; OURS, MED, ZR, HEAD = "#2166AC", "#D67C27", "#6250D6", "#7F8C99"
 NAMES = {"LCB": "LiveCodeBench", "Omni": "Omni-MATH", "MMLU-Pro": "MMLU-Pro", "AIME": "AIME", "APPS": "APPS", "BCB": "BigCodeBench",
          "CC": "CodeContests", "SuperGPQA": "SuperGPQA", "BBEH": "BIG-Bench Extra Hard"}
@@ -33,6 +35,7 @@ for k in CUR["connectors"]:
     y, x0, x1 = k["accuracy"] * 100, k["median_cost_usd"] * 1000, k["ours_cost_usd"] * 1000
     a1.annotate("", xy=(x1, y), xytext=(x0, y), arrowprops=dict(arrowstyle="-|>", color=INK, lw=.7, mutation_scale=6, shrinkA=0, shrinkB=1), zorder=4)
     a1.text(x0 + .012, y - .6, f"−{k['saved'] * 100:.0f}%", fontsize=6, color=INK, ha="left", va="top")
+a1.plot(DS["usd_per_1k"], DS["accuracy"] * 100, "D", mfc="white", mec=INK, mew=.9, ms=4, zorder=5, label="deepseek-v4-flash alone")
 a1.set_xlim(0, 1.0); a1.set_ylim(48, 92); a1.set_xlabel("Billed spend ($ / 1,000 queries)"); a1.set_ylabel("Accuracy (%)")
 a1.set_title("LiveCodeBench: same accuracy, lower cost", loc="left", fontsize=7.5, fontweight="bold", pad=4)
 a1.legend(frameon=False, fontsize=6.3, loc="lower right")
