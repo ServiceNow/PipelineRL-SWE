@@ -12,7 +12,8 @@ loss pooled over routes, Platt per route as our probes. One fixed rule for every
   mirt-raw    the same without Platt
   auto        per training set, whichever of ours / shared / mirt has the lowest calibration log loss (a deployable choice)
   zr4b+cost   ZeroRouter's success from our 4B prefill, the reference
-The fit is exact on the training rows' span (success_pool.project). Reports as success_pool.py.
+The fit is exact on the training rows' span (success_pool.project). Reports as success_pool.py; per-problem success predictions of every
+arm and our cost probe's tokens are saved (.npz) for top-of-frontier diagnostics.
 Usage: (GPU) REASON_ROOT=.../reason_pinned RESULT_TAG=_pinned NBOOT=200 OUT_DIR=... python success_mirt.py POOL S0 S1
 """
 import json, os, sys
@@ -63,7 +64,7 @@ def mirt(d, Z, tr, ca):
     return np.clip(cal, 1e-4, 1 - 1e-4), np.clip(sig(lo), 1e-4, 1 - 1e-4), dict(D=D, pen=pen, pth=pth)
 
 
-res = {"pool": POOL_, "seeds": {}}; outf = OUT / f"success_mirt_{POOL_.lower().replace('-', '')}_{S0}_{S1}{TAG}.json"
+res = {"pool": POOL_, "seeds": {}}; outf = OUT / f"success_mirt_{POOL_.lower().replace('-', '')}_{S0}_{S1}{TAG}.json"; SAVE = {}
 for s in range(S0, S1):
     os.environ["DRAW"] = str(s); d = load(POOL_); N = len(d["ids"]); tr, ca, ev = d["tr"], d["ca"], d["ev"]
     S, T = view(d, tr), view(d, np.arange(N)); tk = fit_predict("ours", S, T); C = cost_of(d, tk)
@@ -86,7 +87,10 @@ for s in range(S0, S1):
         out[a] = {k: float(x[0]) for k, x in v.items()} | {k + "_bs": [float(y) for y in x[1:]] for k, x in v.items()}
         out[a]["auc"] = float(np.mean([auc(d["y0"][ev, m], Ps[a][ev, m]) for m in range(d["M"])])); out[a]["pair_acc"] = pair_acc(d["q"][ev], Ps[a][ev])
     res["seeds"][s] = out
+    SAVE[f"s{s}_ev"] = ev; SAVE[f"s{s}_cost_ours_tok"] = tk.astype(np.float32)
+    for a, P in Ps.items():
+        SAVE[f"s{s}_{a}_P"] = P.astype(np.float32)
     print(f"  set {s}: {out['_cfg']}  " + "  ".join(f"{a}: vs median {o['vs_median']:+5.1f} AUC {o['auc']:.3f} pair {o['pair_acc']:.3f}"
                                                for a, o in out.items() if a != "_cfg"), flush=True)
-    json.dump(res, open(outf, "w"), indent=1, default=float)
+    json.dump(res, open(outf, "w"), indent=1, default=float); np.savez_compressed(outf.with_suffix(".npz"), ids=np.array(d["ids"]), slots=np.array(d["slots"]), **SAVE)
 print("DONE", flush=True)
