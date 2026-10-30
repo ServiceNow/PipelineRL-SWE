@@ -2820,3 +2820,23 @@ the Prices paragraph reports both checks in one sentence.
 - Qwen3 hybrid 0.6B / 1.7B / 4B / 8B / 14B (14B from /mnt/llmd/base_models) + the paper's 4B-2507, on LCB, Omni-MATH, MMLU-Pro; 10 training sets (prefill_draws.py, now with LCB and no 8B guard).
 - Prefill cost: every model's batch-1 latency and batch-16 throughput on one H100 (prefill_overhead.py, PREFILL_MODELS), priced at the paper's $2 per H100-hour.
 - Prior one-training-set sweep (4.A.50): savings flat from 1.7B; 8B no better than 4B; 1.7B ahead on MMLU-Pro once its pass is priced. Report whatever the table shows (the "goldilocks" may be 1.7-4B, and release 2507 vs hybrid matters as much as size).
+
+### 4.A.123 Every estimator vs a random mix of single routes (2026-10-29 ET; free; 20 GPU jobs mx_*, `mix_check.py`, reason_pinned_logs/mixcheck)
+- Question (user): where our router does not beat a random mix of routes (APPS, CC, BCB), does any other estimator? 10 training sets, NBOOT=200, pooled bootstrap.
+- Result: on APPS, BCB, CC and SWE-Smith no arm beats the mix significantly (every interval crosses zero). Perfect cost knowledge does on APPS (+26.1), CC (+32.0), SWE-Smith (+20.2), not on BCB (+2.2 [-20.8, 21.8]): BCB has no cost headroom over the mix. On the other six ours is the top arm or within 1.7 of it (fromsuccess on Omni +40.9 vs +39.2; mixllm on BBEH +47.3 vs +46.8).
+
+### 4.A.124 SWE-Smith one-shot patches on the main protocol (2026-10-29 ET; free; dr/xe/zrf/mx/lc_swesmith)
+- Pool registered in cost_generalization.POOLS (tr/ca/ev 673/182/389). All runs done; draws_aggregate / extra_estimators_draws_aggregate / zr_faithful_draws_aggregate still need SWESmith in their POOLS lists.
+- Ours vs median 7.4 (10 sets); vs mix +2.3 [-11.8, 17.3]; ours vs ZeroRouter-4B -5.9 [-22.5, 11.6].
+
+### 4.A.125 ZeroRouter's success with our cost probe (2026-10-29 ET; free; 20 GPU jobs sc_*, `success_combo.py`, reason_pinned_logs/succcombo)
+- Same cost probe, success from ours / ZeroRouter-4B / ZeroRouter as published / fixed logit ensemble (mean of ours and ZR-4B). 10 sets, NBOOT=200.
+- ZR success + our cost beats our router significantly on MMLU-Pro (ours vs it -12.2 for ZR-4B, -12.5 published); ahead on the point on BCB (-18.9), SWE-Smith (-13.3), APPS (-3.8), not significant; behind on BBEH (+11.5). Ensemble: MMLU-Pro -11.6 (significant), BBEH +6.9.
+- Diagnosis (succ_diag, scratch, from the 4.A.121 .npz): ZR's per-route AUC is lower on every dataset, but its pairwise route-ordering accuracy within a query is higher on every dataset (BCB .52 -> .63, SWE-Smith .66 -> .78, MMLU-Pro .74 -> .80, LCB .86 -> .90; BBEH .75 vs .76, the one place it does not help). Our probes rank queries within a route; ZR orders routes within a query. ZR is worse calibrated (mean |bias| .04-.10 vs ours .02-.05).
+- Whole systems unchanged: ours vs ZeroRouter-4B significant on AIME, BBEH, LCB, MMLU-Pro, SuperGPQA; never significantly behind.
+
+### 4.A.126 Sharing information across our success probes (2026-10-30 ET; free; GPU jobs sp_*, `success_pool.py`, reason_pinned_logs/succpool)
+- User go-ahead ("if there's any interesting follow-up experiments you wanna run, go for it"). One fixed rule for every dataset, our cost probe in every arm.
+- Arms: ours (paper); ours-ll (independent probes, C by calibration log loss instead of AUC: isolates the selection criterion); shared (multi-task shrinkage w_m = w0 + lam v_m, route intercepts free, (C, lam) by pooled calibration log loss, Platt per route); shared-raw (no Platt); zr4b+cost (reference). lam = 0 is one shared slope.
+- Exact high-dimensional fit by projecting onto the span of the standardized training rows (L2 representer). Reports vs median (our success), vs mix, ours vs it, AUC, pairwise route-ordering accuracy.
+- Decision rule set before results: adopt "shared" in the paper only if it is never significantly behind ours and is ahead on the pooled mean over datasets; otherwise report it as a control.
