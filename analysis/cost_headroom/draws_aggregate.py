@@ -8,12 +8,12 @@ is printed as a control only.
   onboard onboard_compare_<pool>_groups_pinned_d<s>      -> per k and arm: saving, ours - arm (points)
 Usage: python draws_aggregate.py [DIR]  (default /mnt/.../reason_pinned_logs/draws) -> draws_summary_pinned.json
 """
-import glob, json, sys
+import os, glob, json, sys
 from pathlib import Path
 import numpy as np
 
 D = Path(sys.argv[1] if len(sys.argv) > 1 else "/mnt/llmd/results/exps/aristides/reason/reason_pinned_logs/draws")
-POOLS = ["LCB", "Omni", "MMLU-Pro", "AIME", "APPS", "BCB", "CC", "SuperGPQA", "BBEH"]; DRAWS = [str(s) for s in range(10)]
+POOLS = os.environ.get("POOLS", "LCB Omni MMLU-Pro AIME APPS BCB CC SuperGPQA BBEH").split(); DRAWS = [str(s) for s in range(10)]   # POOLS=SWESmith SUMMARY_TAG=_swesmith: a separate summary
 lc = lambda p: p.lower().replace("-", "")
 ci = lambda x: [float(np.nanpercentile(x, 2.5)), float(np.nanpercentile(x, 97.5))]
 out = {"draws": {}, "labels": {}, "onboard": {}}
@@ -72,4 +72,4 @@ for kind, pat, top in (("labels", "cost_generalization_labels_{p}_pinned_d{s}.js
                 continue
             print(f"  {top[3:]}={key:<4} " + "  ".join(f"{a} {r['vs_median']:+5.1f}" + (f" (d {r['ours_minus_it'][0]:+.1f} [{r['ours_minus_it'][1]:+.1f}, {r['ours_minus_it'][2]:+.1f}])" if "ours_minus_it" in r else "")
                                                for a, r in row.items()))
-json.dump(out, open(Path(__file__).parent / "draws_summary_pinned.json", "w"), indent=1)
+json.dump(out, open(Path(__file__).parent / f"draws_summary{os.environ.get('SUMMARY_TAG', '')}_pinned.json", "w"), indent=1)
