@@ -144,7 +144,7 @@ A cost estimator can be no better than knowing each query's realized cost. \Cref
 \begin{table}[t]
 \centering
 \footnotesize
-\setlength{\tabcolsep}{4pt}
+\setlength{\tabcolsep}{3.3pt}
 \begin{tabular}{llrrrrr}
 \toprule
 Dataset & Domain & Test $n$ & Headroom & Ours vs.\ median & Capture & Ours vs.\ length from predicted success \\
@@ -172,7 +172,7 @@ We also collected five non-reasoning routes on the same problems (deepseek-v4-fl
 
 \section{How much of it the cost probe captures}\label{sec:capture}
 \paragraph{Against median pricing.}
-At matched accuracy, our router spends significantly less than median pricing on eight of the nine datasets, from 9.4\% on CodeContests to 33.0\% on SuperGPQA (\cref{fig:hero,tab:pools}), and on seven of them the cost probe captures two fifths to over two thirds of the headroom (.40--.69). The headroom also knows the sampling noise of the scored draws, which no predictor can, so these capture figures are conservative (\cref{app:mechanism}). \Cref{sec:when} treats BigCodeBench, where the probe saves nothing, and CodeContests.
+At matched accuracy, our router spends significantly less than median pricing on eight of the nine datasets, from 9.4\% on CodeContests to 33.0\% on SuperGPQA (\cref{fig:hero,tab:pools}), and on seven of them the cost probe captures two fifths to over two thirds of the headroom (.40--.69). In absolute terms, on LiveCodeBench our router reaches 90\% of deepseek-v4-flash's accuracy at 49\% of what calling it on every query costs, against 69\% for median pricing (geometric mean over ten training sets). The headroom also knows the sampling noise of the scored draws, which no predictor can, so these capture figures are conservative (\cref{app:mechanism}). \Cref{sec:when} treats BigCodeBench, where the probe saves nothing, and CodeContests.
 
 \paragraph{No estimator beats the cost probe.}
 Against the external estimators (\cref{tab:allest}), ours is ahead in 59 of 63 comparisons, significantly in 44, and significantly behind in none, also on random re-splits that reshuffle the test problems (\cref{tab:resplit}). Of the other 19, one is ZeroRouter with our prefill on Omni-MATH (behind ours in 7 of 10 training sets), and the rest fall on four datasets. On BigCodeBench no estimator, not even perfect cost knowledge, is distinguishable from median pricing. On APPS and CodeContests ours is the only estimator significantly cheaper than median pricing, and three to five others lie between the two, distinguishable from neither. On BIG-Bench Extra Hard three text-based estimators save as much as ours, all significantly more than median pricing (\cref{sec:mechanism}). On LCB, Omni-MATH and MMLU-Pro, every external estimator loses by 14--34 points, with intervals excluding zero except ZeroRouter with our prefill on Omni-MATH (\cref{tab:fresh}). Ours is significantly ahead of each in every training set there, except against ZeroRouter: as published, in 9 of 10 sets on LCB and Omni-MATH; with our prefill, in 7 of 10 on Omni-MATH.
