@@ -1,16 +1,17 @@
-"""Figure 1 (hero + breadth). Left: where Omni-MATH queries go at one matched accuracy (the middle of the shared accuracy band, paper
+"""Figure 1 (hero + breadth). Left: where APPS queries go at one matched accuracy (the middle of the shared accuracy band, paper
 split): share of test queries per route under median-length pricing, our cost probes and realized length, with the spend per 1,000
 queries (analysis/cost_headroom/route_shares_pinned.json, as fig:shares). Right: cost saved by ours relative to median pricing on all
 nine datasets, mean over ten training sets with 95% intervals, and the headroom (draws_summary_pinned.json, as the tables).
-Usage: python make_hero_fig.py
+Usage: python make_hero_fig.py [POOL]  (default APPS)
 """
 import json
 from pathlib import Path
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import sys
 
-HERE = Path(__file__).resolve().parent
+HERE = Path(__file__).resolve().parent; POOL = sys.argv[1] if len(sys.argv) > 1 else "APPS"
 S = json.load(open(HERE.parent / "analysis/cost_headroom/route_shares_pinned.json"))
 MAIN = json.load(open(HERE.parent / "analysis/cost_headroom/draws_summary_pinned.json"))["draws"]
 INK, MUTED, GRID, SURF = "#263240", "#5A6470", "#E6EBF0", "#FFFFFF"; OURS, HEAD = "#2166AC", "#7F8C99"
@@ -24,8 +25,8 @@ plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 7, "text.color":
 fig, (a1, sp_, a2) = plt.subplots(1, 3, figsize=(7.0, 2.3), gridspec_kw=dict(width_ratios=[1.25, .36, .8], wspace=.08, left=.13, right=.99, bottom=.3, top=.86))
 sp_.axis("off")
 
-# left: route shares on Omni-MATH
-o = S["Omni"]; sl = o["slots"]
+# left: route shares on one dataset
+o = S[POOL]; sl = o["slots"]
 for y, (a, lab) in enumerate(ARMS):
     left = 0.
     for key, _, col in ROUTES:
@@ -41,7 +42,7 @@ a1.set_yticks(range(3)); a1.set_yticklabels([l for _, l in ARMS], fontsize=7); a
 a1.set_xlim(0, 1.16); a1.set_xticks([]); a1.tick_params(length=0)
 for sp in a1.spines.values():
     sp.set_visible(False)
-a1.set_title(f"Omni-MATH at {o['accuracy'] * 100:.0f}% accuracy: where the queries go", loc="left", fontsize=7.5, fontweight="bold", pad=10)
+a1.set_title(f"{NAMES[POOL]} at {o['accuracy'] * 100:.0f}% accuracy: where the queries go", loc="left", fontsize=7.5, fontweight="bold", pad=10)
 hs = [plt.Rectangle((0, 0), 1, 1, color=c) for _, _, c in ROUTES]
 a1.legend(hs, [l for _, l, _ in ROUTES], ncol=3, frameon=False, fontsize=5.9, loc="upper left", bbox_to_anchor=(-.01, -.04), handlelength=1.0,
           columnspacing=.9, handletextpad=.4)
