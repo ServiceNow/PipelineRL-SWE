@@ -1,7 +1,7 @@
 \documentclass[10pt]{article}
-\usepackage{tmlr}
+\usepackage[preprint]{tmlr}   % arXiv
+% \usepackage{tmlr}             % submission (anonymous)
 % \usepackage[accepted]{tmlr}   % camera-ready
-% \usepackage[preprint]{tmlr}   % arXiv
 \input{math_commands.tex}
 \usepackage{hyperref}
 \usepackage{url}
@@ -12,15 +12,21 @@
 \usepackage[capitalize]{cleveref}
 \newcommand{\todo}[1]{\par\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{\small\color{red!70!black}\textbf{TODO:} #1}}\par}
 
-\title{Scout Before You Route: Predicting Both Per-Query Success and Cost from a Small LLM Prefill}
-% Authors must not appear in the submitted version.
-\author{Anonymous Authors}
+\title{Scout Before You Route: Predicting Both\\Per-Query Success and Cost from a Small LLM Prefill}
+\author{\name Aristides Milios \\
+\addr Mila -- Quebec Artificial Intelligence Institute, Universit\'e de Montr\'eal \\
+\addr ServiceNow Research
+\AND
+\name Christopher Pal \\
+\addr Mila -- Quebec Artificial Intelligence Institute, Polytechnique Montr\'eal \\
+\addr ServiceNow Research}
 \def\month{10}
 \def\year{2026}
 \def\openreview{\url{https://openreview.net/forum?id=XXXX}}
 
 \begin{document}
 \maketitle
+\lhead{}   % tmlr.sty's \maketitle sets "Under review as submission to TMLR" even in preprint mode
 \begin{abstract}
     Routers typically choose a model per query by trading predicted correctness against cost, but most price each model at a fixed cost, as if every query drew the same number of output tokens. The output length of reasoning models varies by an order of magnitude across queries. When is per-query cost worth predicting? What factors drive cost? How cheaply can predictions be made? We predict \textbf{both} the success probability \textbf{and} the output length of candidate models from a single small frozen LLM \emph{scout's} prefill activations. Perfect per-query cost knowledge is worth 29--61\% of spending with reasoning routes, and much less with non-reasoning ones on the same problems. Across nine datasets, our predicted costs reduce spending at matched accuracy by 9--33\% relative to median-length pricing on eight, up to two thirds of that headroom, and no alternative estimator we evaluated is significantly cheaper on any dataset, including reimplementations of ZeroRouter and MixLLM and a similarly sized text-embedding model. Output length depends mostly on the problem: where it tracks difficulty, pricing from predicted difficulty is nearly enough, and where it does not, only a dedicated length probe captures it among the estimators we tried. The probe keeps most of its saving with 20 labelled problems, transfers without labels to four of seven new benchmarks, and on a mixture of all nine benchmarks saves 22\% beyond pricing each benchmark at its own median length. Savings saturate by a 2B prefill and do not grow with size, so above 4B a larger prefill costs more than it adds.
 \end{abstract}
@@ -363,6 +369,9 @@ A frozen prefill that already predicts success also predicts cost. Per-query cos
 \section*{Reproducibility}
 Every number in the paper is computed from stored per-call records (prompt, response, grade, token counts, billed cost and serving provider) and stored prefill activations, with every split fixed by a seed; no analysis issues a new model call. \Cref{app:protocol} gives the evaluation protocol, \cref{app:baselines} the reimplemented estimators, and \cref{app:pools} the datasets, splits and billed rates. Collection used OpenRouter with deepseek-v4-flash pinned to one provider; prices and provider behaviour change over time, so rerunning collection will not reproduce billed costs exactly, while every analysis reproduces from the released records.
 \todo{Confirm what is released (code, per-call records, prefill features) and add the anonymised link.}
+
+\section*{Acknowledgements}
+This research was funded by Mitacs through the Mitacs Accelerate program. Compute was provided by ServiceNow Research.
 
 \bibliography{references}
 \bibliographystyle{tmlr}
