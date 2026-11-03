@@ -1,7 +1,7 @@
-"""Figure 2 (frontier + forest; the nine-dataset saving vs median moved to Figure 1, make_hero_fig.py). Left: LiveCodeBench cost-accuracy
+"""Figure 2 (forest + frontier; the nine-dataset saving vs median moved to Figure 1, make_hero_fig.py). Right: LiveCodeBench cost-accuracy
 frontiers at billed prices, ours vs median-length pricing (same success predictions, one training set;
 paper_nowai/data/fresh_billed_curves_pinned.json), arrows at matched accuracy, and deepseek-v4-flash called on every query
-(analysis/cost_headroom/single_routes_pinned.json, the same test problems). Right: cost saved by ours relative
+(analysis/cost_headroom/single_routes_pinned.json, the same test problems). Left: cost saved by ours relative
 to ZeroRouter as published (its own success model and pricing), paired intervals, from zr_faithful_draws_summary_pinned.json (one matched
 run). Each interval is drawn against its own zero line, so no interval invites a comparison it cannot support.
 Usage: python make_headline_fig.py [POOL]  (default LCB -> figures/headline.*; another POOL -> figures/headline_<pool>.*, a candidate, with its
@@ -25,10 +25,10 @@ NAMES = {"LCB": "LiveCodeBench", "Omni": "Omni-MATH", "MMLU-Pro": "MMLU-Pro", "A
          "CC": "CodeContests", "SuperGPQA": "SuperGPQA", "BBEH": "BIG-Bench Extra Hard"}
 plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 7, "text.color": INK, "axes.labelcolor": INK, "xtick.color": INK,
                      "ytick.color": INK, "pdf.fonttype": 42, "ps.fonttype": 42})
-fig, (a1, sp_, a3) = plt.subplots(1, 3, figsize=(7.0, 2.6), gridspec_kw=dict(width_ratios=[1, .42, .8], wspace=.1, left=.065, right=.99, bottom=.25, top=.88))
-sp_.axis("off")                                                                   # room for the dataset labels
+fig, (a3, sp_, a1) = plt.subplots(1, 3, figsize=(7.0, 2.6), gridspec_kw=dict(width_ratios=[.8, .2, 1], wspace=.1, left=.155, right=.985, bottom=.25, top=.88))
+sp_.axis("off")                                                                   # room for the frontier's y axis
 
-# left: frontiers
+# right: frontiers
 for arm, col, lab in (("median", MED, "Median pricing"), ("learned", OURS, "Ours (cost probes)")):
     c = CUR["curves"][arm]
     a1.scatter(np.array(c["mean_cost_usd"]) * 1000, np.array(c["accuracy"]) * 100, s=1.2, color=col, alpha=.25, lw=0, zorder=2)
@@ -42,7 +42,7 @@ LIM = {"LCB": ((0, 1.0), (48, 92)), "APPS": ((0, 1.2), (55, 88))}[POOL]; a1.set_
 a1.set_title(f"{NAMES[POOL]}: same accuracy, lower cost", loc="left", fontsize=7.5, fontweight="bold", pad=4)
 a1.legend(frameon=False, fontsize=6.3, loc="lower right")
 
-# right: ours vs ZeroRouter as published (paired), datasets in Figure 1's order
+# left: ours vs ZeroRouter as published (paired), datasets in Figure 1's order
 order = sorted(SUM, key=lambda p: MAIN[p]["ours"]["vs_median"][0])
 for y, p in enumerate(order):
     g = SUM[p]["zr_pub"]["ours_vs_it"]; sig = g[1] > 0
@@ -59,7 +59,7 @@ for ax in (a1, a3):
         ax.spines[sp].set_visible(False)
 hs = [plt.Line2D([], [], color=ZR, marker="o", ms=4.5, lw=1.4), plt.Line2D([], [], color=ZR, marker="o", mfc="white", ms=4.5, lw=1.4)]
 fig.legend(hs, ["Paired 95% interval excludes 0", "Interval includes 0"],
-           frameon=False, fontsize=6.2, loc="lower center", bbox_to_anchor=(.78, 0), ncol=2, handlelength=1.4, columnspacing=1.2)
+           frameon=False, fontsize=6.2, loc="lower center", bbox_to_anchor=(.3, 0), ncol=2, handlelength=1.4, columnspacing=1.2)
 for s in ("pdf", "png"):
     fig.savefig(HERE / "figures" / (f"headline.{s}" if POOL == "LCB" else f"headline_{POOL.lower()}.{s}"), dpi=220)
 print("saved")

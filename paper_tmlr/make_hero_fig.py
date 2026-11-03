@@ -1,8 +1,8 @@
-"""Figure 1 (hero + breadth). Left: where APPS queries go at one matched accuracy (the middle of the shared accuracy band, paper
+"""Figure 1 (breadth + hero). Right: where LiveCodeBench queries go at one matched accuracy (the middle of the shared accuracy band, paper
 split): share of test queries per route under median-length pricing, our cost probes and realized length, with the spend per 1,000
-queries (analysis/cost_headroom/route_shares_pinned.json, as fig:shares). Right: cost saved by ours relative to median pricing on all
+queries (analysis/cost_headroom/route_shares_pinned.json, as fig:shares). Left: cost saved by ours relative to median pricing on all
 nine datasets, mean over ten training sets with 95% intervals, and the headroom (draws_summary_pinned.json, as the tables).
-Usage: python make_hero_fig.py [POOL]  (default APPS)
+Usage: python make_hero_fig.py [POOL]  (default LCB)
 """
 import json
 from pathlib import Path
@@ -11,7 +11,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import sys
 
-HERE = Path(__file__).resolve().parent; POOL = sys.argv[1] if len(sys.argv) > 1 else "APPS"
+HERE = Path(__file__).resolve().parent; POOL = sys.argv[1] if len(sys.argv) > 1 else "LCB"
 S = json.load(open(HERE.parent / "analysis/cost_headroom/route_shares_pinned.json"))
 MAIN = json.load(open(HERE.parent / "analysis/cost_headroom/draws_summary_pinned.json"))["draws"]
 INK, MUTED, GRID, SURF = "#263240", "#5A6470", "#E6EBF0", "#FFFFFF"; OURS, HEAD = "#2166AC", "#7F8C99"
@@ -22,10 +22,10 @@ NAMES = {"LCB": "LiveCodeBench", "Omni": "Omni-MATH", "MMLU-Pro": "MMLU-Pro", "A
          "CC": "CodeContests", "SuperGPQA": "SuperGPQA", "BBEH": "BIG-Bench Extra Hard"}
 plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 7, "text.color": INK, "axes.labelcolor": INK, "xtick.color": INK,
                      "ytick.color": INK, "pdf.fonttype": 42, "ps.fonttype": 42})
-fig, (a1, sp_, a2) = plt.subplots(1, 3, figsize=(7.0, 2.3), gridspec_kw=dict(width_ratios=[1.25, .36, .8], wspace=.08, left=.13, right=.99, bottom=.3, top=.86))
+fig, (a2, sp_, a1) = plt.subplots(1, 3, figsize=(7.0, 2.3), gridspec_kw=dict(width_ratios=[.7, .36, 1.2], wspace=.08, left=.155, right=.9, bottom=.3, top=.86))
 sp_.axis("off")
 
-# left: route shares on one dataset
+# right: route shares on one dataset
 o = S[POOL]; sl = o["slots"]
 for y, (a, lab) in enumerate(ARMS):
     left = 0.
@@ -47,7 +47,7 @@ hs = [plt.Rectangle((0, 0), 1, 1, color=c) for _, _, c in ROUTES]
 a1.legend(hs, [l for _, l, _ in ROUTES], ncol=3, frameon=False, fontsize=5.9, loc="upper left", bbox_to_anchor=(-.01, -.04), handlelength=1.0,
           columnspacing=.9, handletextpad=.4)
 
-# right: saving relative to median pricing on all nine datasets
+# left: saving relative to median pricing on all nine datasets
 order = sorted(MAIN, key=lambda p: MAIN[p]["ours"]["vs_median"][0])
 for y, p in enumerate(order):
     g, h = MAIN[p]["ours"]["vs_median"], MAIN[p]["oracle"]["vs_median"]
