@@ -2871,3 +2871,8 @@ APPS .38, Omni .33, BBEH .17, MMLU-Pro .13, BCB .10, SuperGPQA -.04. Adding it t
 (max .07 on LCB/APPS, .03 Omni). So "the prefill misses <= .07 of difficulty" holds on LCB/Omni/APPS but not AIME (as CC). Omni is
 only a third difficulty, not "most". Recalibrated prefill R2 here exceeds tab:bracket's raw R2 on MMLU-Pro/SuperGPQA (dsv4f .44 vs .26:
 level shift on the expanded test set); the paper keeps tab:bracket's numbers. Paper Section 7 rewritten around this (user-approved).
+- MMLU-Pro full test set (6,500; `oracle_subject_mmlupro.py` -> oracle_subject_mmlupro_pinned.json; one training set, NBOOT 200): pricing
+  from ORACLE difficulty (+ square) saves -0.8 [-1.9, 0.1] vs median; + subject one-hot 1.7 [-0.6, 4.6] (single-draw training solve rates,
+  matching the one-draw test set: 3.7 [1.5, 6.8]); cost probe 28.8 [26.0, 31.9]; ours vs oracle+subject 26.1-27.6 points. Test R2
+  oracle+subject .11-.28 vs probe .29-.63. The old "difficulty + subject 32.6 vs probe 43.9" (4.A.88) used PREDICTED success logits as
+  "difficulty", on a 300-problem split -- it was never an oracle. Paper sentence replaced.
