@@ -2882,3 +2882,10 @@ level shift on the expanded test set); the paper keeps tab:bracket's numbers. Pa
 - Caveat on earlier MMLU-Pro/Omni oracle R2: train has 3 draws per candidate, the expanded test 1, so a map fitted on training understates the oracle on test. Best any-shape oracle fit on the MMLU-Pro test set itself: R2 .03-.28 vs predicted success (no level shift) .22-.37 -- a modest gap, not .20 vs -.01 (best_estimators medians, which also include the post-processing level shift).
 - Squares in the ablation: matched (no post-processing both) they add 0-.07 R2 (most on Omni, BBEH), never hurt.
 - Paper: app:baselines now defines the ablation; app:mechanism keeps LCB 21.5 vs 34.4 and drops the Omni-500 -4.1 vs 18.0 clause (draw-mismatch risk, unchecked), replaced by the LCB stratum Spearman.
+
+### 4.A.132 One ablation name (2026-11-03 ET; paper only, no new numbers)
+- Paper keeps ONE difficulty/success ablation, "length from predicted success" (fromsuccess: ridge on all five success logits + squares).
+  Dropped from the paper: "length from predicted difficulty (bins)" (10 bins of the mean success logit; tab:allest and tab:mixed rows,
+  Families numbers), and the one-feature mean-logit linear map in the transfer appendix. ZeroRouter's bin rule is always "ZeroRouter's pricing".
+- Code naming collision to remember: `zr-bins` = mean-logit bins in tmlr_strengthen.py / learning_curve.py / mix_check.py, but
+  = ZeroRouter's pricing (fit_predict("zerorouter")) in best_estimators.py (tab:bracket's "ZeroRouter's pricing" column).
