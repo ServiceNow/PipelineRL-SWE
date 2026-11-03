@@ -2889,3 +2889,10 @@ level shift on the expanded test set); the paper keeps tab:bracket's numbers. Pa
   Families numbers), and the one-feature mean-logit linear map in the transfer appendix. ZeroRouter's bin rule is always "ZeroRouter's pricing".
 - Code naming collision to remember: `zr-bins` = mean-logit bins in tmlr_strengthen.py / learning_curve.py / mix_check.py, but
   = ZeroRouter's pricing (fit_predict("zerorouter")) in best_estimators.py (tab:bracket's "ZeroRouter's pricing" column).
+
+### 4.A.133 Shared length alone, one protocol (2026-11-03 ET; free, local; `analysis/cost_headroom/level_vs_scx.py` -> level_vs_scx_<pool>_pinned.json)
+- Ten training sets, billed, tab:allest protocol. Saving vs median: ours / our probe reduced to its shared part / SCX-style / true shared part:
+  LCB 27.8 / 19.0 / 19.0 / 25.4; Omni 31.8 / 13.3 / 13.4 / 23.7; MMLU-Pro 23.4 / 14.5 / 14.5 / 25.4; AIME 14.9 / 6.7 / 6.7 / 15.6.
+  Shared-only keeps 68%, 42%, 62%, 45% of the full probe's saving. Reduced probe == SCX-style (both linear readouts of the shared part).
+- The paper's old appendix "keeps 93%" on LCB came from 4.A.88 (one training set, list prices; 32.2 of 34.5) and does not hold on the
+  paper protocol. Consistent with tab:allest's SCX-style row (ours saves 8.8-21.1 points more on these four).
