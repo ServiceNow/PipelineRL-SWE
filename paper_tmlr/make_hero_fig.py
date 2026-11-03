@@ -18,7 +18,7 @@ MAIN = json.load(open(HERE.parent / "analysis/cost_headroom/draws_summary_pinned
 INK, MUTED, GRID, SURF = "#263240", "#5A6470", "#E6EBF0", "#FFFFFF"; OURS, HEAD = "#2166AC", "#7F8C99"
 ROUTES = [("oss20lo", "gpt-oss-20b, low", "#2a78d6"), ("oss20md", "gpt-oss-20b, medium", "#eb6834"), ("oss120md", "gpt-oss-120b, medium", "#1baf7a"),
           ("dsv4f", "deepseek-v4-flash", "#eda100"), ("oss120hi", "gpt-oss-120b, high", "#e87ba4")]
-ARMS = [("median", "Median pricing"), ("ours", "Ours"), ("realized", "Realized length")]
+ARMS = [("median", "Median pricing"), ("ours", "Ours"), ("realized", "Actual length")]
 NAMES = {"LCB": "LiveCodeBench", "Omni": "Omni-MATH", "MMLU-Pro": "MMLU-Pro", "AIME": "AIME", "APPS": "APPS", "BCB": "BigCodeBench",
          "CC": "CodeContests", "SuperGPQA": "SuperGPQA", "BBEH": "BIG-Bench Extra Hard"}
 plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 7, "text.color": INK, "axes.labelcolor": INK, "xtick.color": INK,

@@ -13,7 +13,7 @@ HERE = Path(__file__).resolve().parent; S = json.load(open(HERE.parent / "analys
 INK, MUTED, SURF = "#263240", "#5A6470", "#FFFFFF"
 ROUTES = [("oss20lo", "gpt-oss-20b, low", "#2a78d6"), ("oss20md", "gpt-oss-20b, medium", "#eb6834"), ("oss120md", "gpt-oss-120b, medium", "#1baf7a"),
           ("dsv4f", "deepseek-v4-flash", "#eda100"), ("oss120hi", "gpt-oss-120b, high", "#e87ba4")]
-ARMS = [("median", "Median pricing"), ("ours", "Ours"), ("realized", "Realized length")]
+ARMS = [("median", "Median pricing"), ("ours", "Ours"), ("realized", "Actual length")]
 PANELS = [("LCB", "LiveCodeBench"), ("Omni", "Omni-MATH"), ("MMLU-Pro", "MMLU-Pro"), ("AIME", "AIME"), ("APPS", "APPS"),
           ("CC", "CodeContests"), ("SuperGPQA", "SuperGPQA"), ("BBEH", "BIG-Bench Extra Hard"), ("BCB", "BigCodeBench")]
 plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 7, "text.color": INK, "axes.labelcolor": INK, "xtick.color": MUTED,
