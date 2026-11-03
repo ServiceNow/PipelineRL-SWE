@@ -31,7 +31,7 @@ for ax, (title, p) in zip(axes.flat, PANELS):
         ax.spines[sp].set_visible(False)
 for ax in axes.flat:
     ax.set_xticks([1, 10, 100]); ax.set_xticklabels(["1x", "10x", "100x"])
-fig.supxlabel("output-price ratio between the most and least expensive route (billed: 3.1x, dotted)", fontsize=7, y=.01)
+fig.supxlabel("output-price ratio between the most and least expensive candidate (billed: 3.1x, dotted)", fontsize=7, y=.01)
 for ax in axes[:, 0]:
     ax.set_ylabel("cost saved vs median (%)")
 h, l = axes[0, 0].get_legend_handles_labels(); fig.legend(h, l, frameon=False, fontsize=6.5, loc="upper center", ncol=3, bbox_to_anchor=(.54, 1.0))

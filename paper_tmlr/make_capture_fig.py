@@ -35,7 +35,7 @@ for ds, nm in (("lcb", "LCB"), ("omni500", "Omni-MATH"), ("mmlupro", "MMLU-Pro")
     h, o = r["headroom"]["mean"], r["ours"]["mean"]
     ax.scatter([h], [o], s=20, marker="^", facecolors="white", edgecolors=OURS, lw=.9, zorder=3)
     ax.annotate(f"{nm}, non-reasoning", (h, o), xytext=OFFNR[ds], textcoords="offset points", fontsize=5.5, color=OURS, ha="right" if ds == "lcb" else "left")
-ax.scatter([], [], s=20, marker="^", facecolors="white", edgecolors=OURS, lw=.9, label="ours, non-reasoning routes")
+ax.scatter([], [], s=20, marker="^", facecolors="white", edgecolors=OURS, lw=.9, label="ours, non-reasoning candidates")
 ax.scatter([], [], s=18, color=OURS, label="our probes"); ax.scatter([], [], s=16, facecolors="white", edgecolors=EXT, label="best external estimator")
 ax.legend(frameon=False, fontsize=6, loc="upper left"); ax.set_xlim(0, 72); ax.set_ylim(-5, 45)
 ax.set_xlabel("headroom: perfect per-query cost vs median (%)"); ax.set_ylabel("cost saved vs median (%)")

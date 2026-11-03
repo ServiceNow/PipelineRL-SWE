@@ -40,7 +40,7 @@ for ax, (p, title) in zip(axes.flat, PANELS):
         sp.set_visible(False)
 h = [plt.Rectangle((0, 0), 1, 1, color=c) for _, _, c in ROUTES]
 fig.legend(h, [l for _, l, _ in ROUTES], ncol=5, frameon=False, fontsize=6.4, loc="upper center", bbox_to_anchor=(.54, 1.0), handlelength=1.2, columnspacing=1.2)
-fig.text(.54, .935, "Share of test queries per route (%), routes ordered by cost per query; right: spend per 1,000 queries", ha="center", fontsize=6.2, color=MUTED)
+fig.text(.54, .935, "Share of test queries per candidate (%), candidates ordered by cost per query; right: spend per 1,000 queries", ha="center", fontsize=6.2, color=MUTED)
 for s in ("pdf", "png"):
     fig.savefig(HERE / "figures" / f"route_shares.{s}", dpi=220)
 print("saved")
