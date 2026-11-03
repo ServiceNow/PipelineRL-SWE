@@ -2876,3 +2876,9 @@ level shift on the expanded test set); the paper keeps tab:bracket's numbers. Pa
   matching the one-draw test set: 3.7 [1.5, 6.8]); cost probe 28.8 [26.0, 31.9]; ours vs oracle+subject 26.1-27.6 points. Test R2
   oracle+subject .11-.28 vs probe .29-.63. The old "difficulty + subject 32.6 vs probe 43.9" (4.A.88) used PREDICTED success logits as
   "difficulty", on a 300-problem split -- it was never an oracle. Paper sentence replaced.
+
+### 4.A.131 Predicted success vs oracle difficulty: what the float carries (2026-11-03 ET; free, local; `analysis/cost_headroom/oracle_stratum_check.py`)
+- Among test problems every OTHER candidate solved on every draw (oracle constant), the predicted success logit still ranks log length: LCB (8 draws train and test; 59-95 problems) Spearman -.65 to -.85; MMLU-Pro (3,300-4,000) -.18 to -.38. The probe's number is the success rate of problems that LOOK like this one, so it carries length cues the measured outcome cannot.
+- Caveat on earlier MMLU-Pro/Omni oracle R2: train has 3 draws per candidate, the expanded test 1, so a map fitted on training understates the oracle on test. Best any-shape oracle fit on the MMLU-Pro test set itself: R2 .03-.28 vs predicted success (no level shift) .22-.37 -- a modest gap, not .20 vs -.01 (best_estimators medians, which also include the post-processing level shift).
+- Squares in the ablation: matched (no post-processing both) they add 0-.07 R2 (most on Omni, BBEH), never hurt.
+- Paper: app:baselines now defines the ablation; app:mechanism keeps LCB 21.5 vs 34.4 and drops the Omni-500 -4.1 vs 18.0 clause (draw-mismatch risk, unchecked), replaced by the LCB stratum Spearman.
