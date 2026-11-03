@@ -1,4 +1,4 @@
-"""Figure 1 (breadth + hero). Right: where LiveCodeBench queries go at one matched accuracy (the middle of the shared accuracy band, paper
+"""Figure 1 (breadth + hero). Right: where LiveCodeBench queries go at one matched accuracy (77%, from route_snapshot.py; paper
 split): share of test queries per route under median-length pricing, our cost probes and realized length, with the spend per 1,000
 queries (analysis/cost_headroom/route_shares_pinned.json, as fig:shares). Left: cost saved by ours relative to median pricing on all
 nine datasets, mean over ten training sets with 95% intervals, and the headroom (draws_summary_pinned.json, as the tables).
@@ -12,7 +12,8 @@ import matplotlib.pyplot as plt
 import sys
 
 HERE = Path(__file__).resolve().parent; POOL = sys.argv[1] if len(sys.argv) > 1 else "LCB"
-S = json.load(open(HERE.parent / "analysis/cost_headroom/route_shares_pinned.json"))
+S = json.load(open(HERE.parent / "analysis/cost_headroom/route_shares_pinned.json"))   # middle of the band (fig:shares)
+S.update(json.load(open(HERE.parent / "analysis/cost_headroom/route_snapshot_pinned.json")))  # chosen snapshot (LCB at 77%), route_snapshot.py
 MAIN = json.load(open(HERE.parent / "analysis/cost_headroom/draws_summary_pinned.json"))["draws"]
 INK, MUTED, GRID, SURF = "#263240", "#5A6470", "#E6EBF0", "#FFFFFF"; OURS, HEAD = "#2166AC", "#7F8C99"
 ROUTES = [("oss20lo", "gpt-oss-20b, low", "#2a78d6"), ("oss20md", "gpt-oss-20b, medium", "#eb6834"), ("oss120md", "gpt-oss-120b, medium", "#1baf7a"),

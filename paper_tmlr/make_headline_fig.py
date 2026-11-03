@@ -33,7 +33,14 @@ for arm, col, lab in (("median", MED, "Median pricing"), ("learned", OURS, "Ours
     c = CUR["curves"][arm]
     a1.scatter(np.array(c["mean_cost_usd"]) * 1000, np.array(c["accuracy"]) * 100, s=1.2, color=col, alpha=.25, lw=0, zorder=2)
     a1.plot(np.array(c["hull_cost_usd"]) * 1000, np.array(c["hull_accuracy"]) * 100, color=col, lw=1.5, label=lab, zorder=3)
-for k in CUR["connectors"]:
+SNAP = {"LCB": .77}.get(POOL)                                                       # Figure 1's snapshot accuracy: the middle arrow
+def _cost_at(arm, y):
+    c = CUR["curves"][arm]; return float(np.interp(y, c["hull_accuracy"], c["hull_cost_usd"]))
+CON = list(CUR["connectors"])
+if SNAP is not None:
+    CON[1] = dict(accuracy=SNAP, ours_cost_usd=_cost_at("learned", SNAP), median_cost_usd=_cost_at("median", SNAP))
+    CON[1]["saved"] = 1 - CON[1]["ours_cost_usd"] / CON[1]["median_cost_usd"]; print("middle arrow", CON[1])
+for k in CON:
     y, x0, x1 = k["accuracy"] * 100, k["median_cost_usd"] * 1000, k["ours_cost_usd"] * 1000
     a1.annotate("", xy=(x1, y), xytext=(x0, y), arrowprops=dict(arrowstyle="-|>", color=INK, lw=.7, mutation_scale=6, shrinkA=0, shrinkB=1), zorder=4)
     a1.text(x0 + .012, y - .6, f"−{k['saved'] * 100:.0f}%", fontsize=6, color=INK, ha="left", va="top")
