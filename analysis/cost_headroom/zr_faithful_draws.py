@@ -30,6 +30,15 @@ OUT = Path(os.environ.get("OUT_DIR", Path(__file__).parent)); TAG = os.environ.g
 tok = AutoTokenizer.from_pretrained("distilbert-base-uncased")
 
 
+def saved_at(H, H0):
+    """saved()'s 12 matched accuracies and the saving (%) at each, low to high; their geometric mean is saved()"""
+    lo, hi = max(H[0][1], H0[0][1]), min(H[-1][1], H0[-1][1])
+    if hi <= lo:
+        return dict(accuracy=[], saved=[])
+    T = np.linspace(lo + .05 * (hi - lo), hi - .05 * (hi - lo), 12)
+    return dict(accuracy=T.tolist(), saved=[100 * (1 - float(cost_at(H, x) / cost_at(H0, x))) for x in T])
+
+
 def texts_of(pool):
     name, _, ds = POOLS[pool]; F = R / "expanded_eval_20261001" / ds if ds else R / name
     return [str(json.loads(l)["problem_statement"]) for l in open(F / "problems.jsonl")]
@@ -93,7 +102,8 @@ for s in range(S0, S1):
     for a in C:
         vm = np.array([saved(H[a], H["median"]) for H in Hs]) * 100; vd = np.array([saved(H["ours"], H[a]) for H in Hs]) * 100
         r_[a] = dict(vs_median=float(vm[0]), vs_median_bs=vm[1:].tolist(), ours_vs_it=float(vd[0]), ours_vs_it_bs=vd[1:].tolist(),
-                     auc=[float(auc(d["y0"][ev, m], Ps[a][ev, m])) for m in range(d["M"])])
+                     auc=[float(auc(d["y0"][ev, m], Ps[a][ev, m])) for m in range(d["M"])],
+                     vs_median_at=saved_at(Hs[0][a], Hs[0]["median"]), ours_vs_it_at=saved_at(Hs[0]["ours"], Hs[0][a]))
     r_["_cfg"] = dict(zr_pub=list(cfg_pub), zr_4b=list(cfg_4b), epochs={str(k): v for k, v in eps.items()}); r_["_n"] = dict(train=len(tr), calibration=len(ca), test=len(ev))
     res["seeds"][s] = r_
     print(f"  set {s}: vs median " + "  ".join(f"{a} {r_[a]['vs_median']:+5.1f}" for a in C) + f" | cfg pub {cfg_pub} 4b {cfg_4b} epochs {eps}", flush=True)
