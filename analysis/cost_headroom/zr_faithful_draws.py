@@ -12,6 +12,8 @@ NEW query in the latent:
 Also zr_pub-pricing / zr_4b-pricing: their bin pricing with OUR success probes (the tab:allest-style cost-only comparison).
 Per training set (DRAW=s; success readouts refitted as tmlr_strengthen.py `draws`): ours, the four ZeroRouter arms, oracle; saving vs
 median and ours vs the arm, point + NBOOT test resamples (rng 0, the same in every set), for draws_aggregate-style pooling.
+Also zr_pub+cost / zr_4b+cost: their success with our cost probe, with _plus_vs_whole the direct, paired saving over the same ZeroRouter;
+SAVE_PREDS=1 writes each set's per-query predictions.
 Usage: (GPU) REASON_ROOT=.../reason_pinned RESULT_TAG=_pinned NBOOT=300 OUT_DIR=... python zr_faithful_draws.py POOL S0 S1
 """
 import json, os, re, sys
@@ -94,7 +96,8 @@ for s in range(S0, S1):
     best = max(cands, key=lambda c: -np.inf if np.isnan(c[0]) else c[0]); Ppub, tkpub, cfg_pub = best[1], best[2], best[3]
     P4b, tk4b, cfg_4b = zr_paper(d, S)
     tk = {"ours": fit_predict("ours", S, T), "zr_pub": tkpub, "zr_pub-pricing": tkpub, "zr_4b": tk4b, "zr_4b-pricing": tk4b, "oracle": d["L"]}
-    Ps = {a: d["P"] for a in tk}; Ps["zr_pub"] = Ppub; Ps["zr_4b"] = P4b
+    tk["zr_pub+cost"] = tk["ours"]; tk["zr_4b+cost"] = tk["ours"]                       # their success, our cost probe (NEW_PATH 4.A.125, direct here)
+    Ps = {a: d["P"] for a in tk}; Ps["zr_pub"] = Ps["zr_pub+cost"] = Ppub; Ps["zr_4b"] = Ps["zr_4b+cost"] = P4b
     C = {a: cost_of(d, x) for a, x in tk.items()}; Cm = cost_of(d, np.repeat(d["med"][None], N, 0))
     rb = np.random.default_rng(0); BS = [ev] + [ev[rb.integers(0, len(ev), len(ev))] for _ in range(NBOOT)]
     Hs = [{a: curve(d, Ps[a], C[a], ii) for a in C} | {"median": curve(d, d["P"], Cm, ii)} for ii in BS]
@@ -104,6 +107,11 @@ for s in range(S0, S1):
         r_[a] = dict(vs_median=float(vm[0]), vs_median_bs=vm[1:].tolist(), ours_vs_it=float(vd[0]), ours_vs_it_bs=vd[1:].tolist(),
                      auc=[float(auc(d["y0"][ev, m], Ps[a][ev, m])) for m in range(d["M"])],
                      vs_median_at=saved_at(Hs[0][a], Hs[0]["median"]), ours_vs_it_at=saved_at(Hs[0]["ours"], Hs[0][a]))
+    r_["_plus_vs_whole"] = {w: dict(saved=float(x[0]), saved_bs=x[1:].tolist(), at=saved_at(Hs[0][w + "+cost"], Hs[0][w]))
+                            for w in ("zr_pub", "zr_4b") for x in [np.array([saved(H[w + "+cost"], H[w]) for H in Hs]) * 100]}   # adding our cost probe to each ZeroRouter
+    if os.environ.get("SAVE_PREDS"):
+        np.savez_compressed(OUT / f"preds_{POOL_.lower().replace('-', '')}_{s}.npz", ids=np.array(d["ids"], dtype=str), tr=tr, ca=ca, ev=ev, P_ours=d["P"], P_pub=Ppub, P_4b=P4b,
+                            len_ours=tk["ours"], len_pub=tkpub, len_4b=tk4b, cfg_pub=np.array(cfg_pub), cfg_4b=np.array(cfg_4b))
     r_["_cfg"] = dict(zr_pub=list(cfg_pub), zr_4b=list(cfg_4b), epochs={str(k): v for k, v in eps.items()}); r_["_n"] = dict(train=len(tr), calibration=len(ca), test=len(ev))
     res["seeds"][s] = r_
     print(f"  set {s}: vs median " + "  ".join(f"{a} {r_[a]['vs_median']:+5.1f}" for a in C) + f" | cfg pub {cfg_pub} 4b {cfg_4b} epochs {eps}", flush=True)
