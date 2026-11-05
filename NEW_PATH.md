@@ -2896,3 +2896,8 @@ level shift on the expanded test set); the paper keeps tab:bracket's numbers. Pa
   Shared-only keeps 68%, 42%, 62%, 45% of the full probe's saving. Reduced probe == SCX-style (both linear readouts of the shared part).
 - The paper's old appendix "keeps 93%" on LCB came from 4.A.88 (one training set, list prices; 32.2 of 34.5) and does not hold on the
   paper protocol. Consistent with tab:allest's SCX-style row (ours saves 8.8-21.1 points more on these four).
+
+### 4.A.134 Saving at each matched accuracy (Nov 5)
+- fig:hero's left panel now shows the saving vs median at each of saved()'s 12 accuracies, mean over ten training sets, in place of the 95% intervals (those stay in tab:pools). per_accuracy_savings.py -> per_accuracy_savings_pinned.json. saved() kept only the band's geometric mean, so nothing stored had these.
+- The saving arches over the accuracy range (SuperGPQA 12 -> 48 -> 8) and is negative at the highest accuracies on APPS (-11), BigCodeBench (-6) and CodeContests (-4).
+- The rerun does not match the stored Oct 13 draws exactly: dataset means differ by at most .27 (Omni 31.8 vs 31.5), single sets by up to 2.66 (Omni set 9: 32.9 vs 30.3); AIME is exact. Refitting Omni set 9 locally is stable (32.916 with 8 and 2 threads). Cause not determined (eai hardware or code since Oct 13). Tables unchanged; ticks use the table values.

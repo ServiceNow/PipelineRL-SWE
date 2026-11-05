@@ -40,7 +40,7 @@ Routing reasoning models requires predicting both correctness and cost before ge
 \begin{figure}[t]
 \centering
 \includegraphics[width=\linewidth]{figures/hero.pdf}
-\caption{\textbf{What predicting cost saves, and where the queries go.} Left: cost saved relative to median pricing on all nine datasets, with 95\% intervals, and the saving of perfect per-query cost knowledge (\cref{tab:pools}). Right: share of LiveCodeBench test queries sent to each candidate at 77\% accuracy by three routers that price a query by median length, by our cost probes, or by its actual length (perfect knowledge), with the spend per 1,000 queries (one training set). Ours moves queries from gpt-oss-20b at low effort to gpt-oss-120b at medium effort.}
+\caption{\textbf{What predicting cost saves, and where the queries go.} Left: cost saved relative to median pricing on all nine datasets at each of 12 matched accuracies, from the lowest (light, low in the row) to the highest (dark, high in the row) in the range both routers reach, averaged over ten training sets. Ticks mark the average over the range and diamonds the saving of perfect per-query cost knowledge (\cref{tab:pools} gives 95\% intervals). Right: share of LiveCodeBench test queries sent to each candidate at 77\% accuracy by three routers that price a query by median length, by our cost probes, or by its actual length (perfect knowledge), with the spend per 1,000 queries (one training set). Ours moves queries from gpt-oss-20b at low effort to gpt-oss-120b at medium effort.}
 \label{fig:hero}
 \end{figure}
 
