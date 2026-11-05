@@ -2,8 +2,7 @@
 frontiers at billed prices, ours vs median-length pricing (same success predictions, one training set;
 paper_nowai/data/fresh_billed_curves_pinned.json), arrows at matched accuracy, and deepseek-v4-flash called on every query
 (analysis/cost_headroom/single_routes_pinned.json, the same test problems). Left: cost saved by ours relative
-to ZeroRouter as published (its own success model and pricing), paired intervals, from zr_faithful_draws_summary_pinned.json (one matched
-run). Each interval is drawn against its own zero line, so no interval invites a comparison it cannot support.
+to ZeroRouter's pricing, both with our success predictions and our 4B scout, paired intervals, from draws_summary_pinned.json (the tables' run). Each interval is drawn against its own zero line, so no interval invites a comparison it cannot support.
 Usage: python make_headline_fig.py [POOL]  (default LCB -> figures/headline.*; another POOL -> figures/headline_<pool>.*, a candidate, with its
 frontiers from analysis/cost_headroom/frontier_curves_pinned.json, the same protocol)
 """
@@ -49,18 +48,18 @@ LIM = {"LCB": ((0, 1.0), (48, 92)), "APPS": ((0, 1.2), (55, 88))}[POOL]; a1.set_
 a1.set_title(f"{NAMES[POOL]}: same accuracy, lower cost", loc="left", fontsize=7.5, fontweight="bold", pad=4)
 a1.legend(frameon=False, fontsize=6.3, loc="lower right")
 
-# left: ours vs ZeroRouter as published (paired), datasets in Figure 1's order
+# left: ours vs ZeroRouter's pricing with our success (paired), datasets in Figure 1's order
 order = sorted(SUM, key=lambda p: MAIN[p]["ours"]["vs_median"][0])
 for y, p in enumerate(order):
-    g = SUM[p]["zr_pub"]["ours_vs_it"]; sig = g[1] > 0
+    g = MAIN[p]["zr-pricing"]["ours_vs_it"]; sig = g[1] > 0
     a3.plot([g[1], g[2]], [y] * 2, color=ZR, lw=1.4, solid_capstyle="round", zorder=4)
     a3.plot(g[0], y, "o", color=ZR, mfc=ZR if sig else "white", mew=1.1, ms=4.5, zorder=5)
-a3.set_yticks(range(len(order))); a3.set_yticklabels([NAMES[p] for p in order], fontsize=6.4); a3.set_xlabel("Cost saved vs. ZeroRouter as published (%)")
-a3.set_title("Ours vs. ZeroRouter, all nine datasets", loc="left", fontsize=7.5, fontweight="bold", pad=4)
+a3.set_yticks(range(len(order))); a3.set_yticklabels([NAMES[p] for p in order], fontsize=6.4); a3.set_xlabel("Cost saved vs. ZeroRouter pricing (%)")
+a3.set_title("Ours vs. ZeroRouter pricing, all nine datasets", loc="left", fontsize=7.5, fontweight="bold", pad=4)
 for ax in (a3,):
     ax.axvline(0, color=INK, lw=.6); ax.grid(axis="x", color=GRID, lw=.6); ax.set_axisbelow(True); ax.tick_params(axis="y", length=0)
     ax.set_ylim(-.6, len(order) - .4); ax.spines["left"].set_visible(False)
-a3.set_xlim(-42, 52)
+a3.set_xlim(-15, 52)
 for ax in (a1, a3):
     for sp in ("top", "right"):
         ax.spines[sp].set_visible(False)
