@@ -1,6 +1,6 @@
 """Label-efficiency figure (NEW_PATH 4.A.67/4.A.70): cost saved vs median pricing as a function of the number of labelled training
 problems, dedicated cost readout vs pricing from the success readouts; mean over 10 training draws (2 random subsets each), band = +-1
-sd over draws (NEW_PATH 4.A.92). Reads analysis/cost_headroom/draws_summary_pinned.json (draws_aggregate.py). Usage: python make_label_fig.py
+sd over draws (NEW_PATH 4.A.92). Reads analysis/cost_headroom/labels_samen_summary_pinned.json (labels_samen_aggregate.py). Usage: python make_label_fig.py
 """
 import json
 from pathlib import Path
@@ -12,10 +12,10 @@ import numpy as np
 HERE = Path(__file__).resolve().parent; L = Path("/mnt/llmd/results/exps/aristides/reason/reason_pinned_logs")
 INK, GRID, OURS, ABL = "#263240", "#E6EBF0", "#2166AC", "#B2182B"
 PANELS = [("LiveCodeBench", "LCB"), ("Omni-MATH", "Omni"), ("MMLU-Pro", "MMLU-Pro"), ("BIG-Bench Extra Hard", "BBEH"), ("SuperGPQA", "SuperGPQA")]
-LAB = json.load(open(HERE.parent / "analysis" / "cost_headroom" / "draws_summary_pinned.json"))["labels"]
+LAB = json.load(open(HERE.parent / "analysis" / "cost_headroom" / "labels_samen_summary_pinned.json"))   # saving vs the median fitted on the same n problems
 plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 7, "text.color": INK, "axes.labelcolor": INK, "xtick.color": INK,
                      "ytick.color": INK, "pdf.fonttype": 42, "ps.fonttype": 42})
-panels = [(t, np.array([[int(n), r["ours"]["vs_median"], r["ours"]["sd"], r["fromsuccess"]["vs_median"], r["fromsuccess"]["sd"]]
+panels = [(t, np.array([[int(n), r["ours"]["vs_same_n"], r["ours"]["sd"], r["fromsuccess"]["vs_same_n"], r["fromsuccess"]["sd"]]
                         for n, r in sorted(LAB[k].items(), key=lambda x: int(x[0]) if x[0].isdigit() else -1) if n.isdigit()])) for t, k in PANELS if k in LAB]
 fig, axes = plt.subplots(1, len(panels), figsize=(1.45 * len(panels) + .3, 1.75), sharey=True,
                          gridspec_kw=dict(left=.07, right=.99, bottom=.24, top=.86, wspace=.12))

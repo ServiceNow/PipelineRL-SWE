@@ -214,7 +214,7 @@ Our probe predicts length better than every other estimator we tried on every ca
 A deployed router has few labels, adds models, meets benchmarks it was not trained on and serves mixed traffic; we test the cost estimators in all four settings (protocols in \cref{app:settings}) and then ask how small the scout can be.
 
 \paragraph{Few labels.}
-\Cref{tab:labels} refits every cost estimator on 20 random training problems. Our probe keeps 51--81\% of its full-data saving on each of the five datasets, while the external estimators save less than 10\%; at 100 problems ours saves 17.9\% on MMLU-Pro against at most 6.5\% for any of them. With more training problems the external estimators improve but do not catch up: on LCB, Omni-MATH, MMLU-Pro and AIME every one of them still saves significantly less than our probe at the full training set, while ours is within 4.5--6.4 points of its full-data saving at 50 problems. The exception is BIG-Bench Extra Hard, where the task format is visible in the text and the text estimators catch up with more data. Length from predicted success matches ours on LCB and Omni-MATH from 20 problems on, but stays below 7\% at every $n$ on MMLU-Pro and BIG-Bench Extra Hard (\cref{fig:labels}).
+\Cref{tab:labels} refits every cost estimator on 20 random training problems and compares it with median pricing fitted on the same problems. Our probe keeps 51--81\% of its full-data saving on each of the five datasets, while the external estimators save at most 10.3\%; at 100 problems ours saves 17.8\% on MMLU-Pro against at most 6.3\% for any of them. With more training problems the external estimators improve but do not catch up: on LCB, Omni-MATH, MMLU-Pro and AIME every one of them still saves significantly less than our probe at the full training set, while ours is within 4.0--6.7 points of its full-data saving at 50 problems on every dataset except MMLU-Pro (11.6). The exception is BIG-Bench Extra Hard, where the task format is visible in the text and the text estimators catch up with more data. Length from predicted success matches ours on LCB and Omni-MATH from 20 problems on, but stays below 7\% at every $n$ on MMLU-Pro and BIG-Bench Extra Hard (\cref{fig:labels}).
 
 \begin{table}[t]
 \centering
@@ -224,18 +224,18 @@ A deployed router has few labels, adds models, meets benchmarks it was not train
 \toprule
 Cost estimator, 20 training problems & LCB & Omni-MATH & MMLU-Pro & SuperGPQA & BBEH \\
 \midrule
-Ours (cost probe) & 22.6$^\dagger$ & 22.4$^\dagger$ & 11.9 & 18.9 & 12.2 \\
+Ours (cost probe) & 22.3$^\dagger$ & 22.5$^\dagger$ & 11.9 & 19.5 & 14.2 \\
 \midrule
-Prompt-feature GBM & $-$1.0 & $-$2.3 & 2.2 & 8.1 & 0.9 \\
-MixLLM-style embeddings & $-$2.9 & 1.9 & $-$0.5 & 5.0 & $-$5.4 \\
-CARROT-style $k$NN & 1.7 & 3.7 & 2.3 & 9.5 & 3.9 \\
-ZeroRouter pricing & 1.7 & 5.4 & 0.2 & $-$2.7 & $-$1.0 \\
+Prompt-feature GBM & $-$1.3 & $-$2.4 & 2.2 & 8.8 & 2.9 \\
+MixLLM-style embeddings & $-$3.1 & 2.0 & $-$0.6 & 5.9 & $-$3.2 \\
+CARROT-style $k$NN & 1.4 & 3.8 & 2.3 & 10.3 & 6.2 \\
+ZeroRouter pricing & 1.2 & 5.6 & 0.1 & $-$1.9 & 1.1 \\
 \midrule
-\emph{Our ablation: length from predicted success} & 22.5 & 26.6 & 3.2 & 6.3 & $-$12.3 \\
-\emph{Ours, all training problems} & 27.8 & 31.5 & 23.4 & 33.0 & 23.5 \\
+\emph{Our ablation: length from predicted success} & 22.3 & 26.7 & 3.2 & 7.0 & $-$10.0 \\
+\emph{Ours, fitted on all training problems} & 27.8 & 31.5 & 23.4 & 33.0 & 23.5 \\
 \bottomrule
 \end{tabular}
-\caption{\textbf{Few labels.} Cost saved (\%) relative to median pricing (fitted on the full training set) when each cost estimator is fitted on 20 random training problems, two subsets per training set. $^\dagger$: ours exceeds every external estimator (95\% intervals exclude zero). Below the line, for reference: our ablation, which exceeds ours on Omni-MATH, and ours with all training problems.}
+\caption{\textbf{Few labels.} Cost saved (\%) relative to median pricing fitted on the same problems, when each cost estimator is fitted on 20 random training problems, two subsets per training set. $^\dagger$: ours exceeds every external estimator (95\% intervals exclude zero). Below the line, for reference: our ablation, which exceeds ours on Omni-MATH, and ours fitted on all training problems, relative to median pricing fitted on all of them.}
 \label{tab:labels}
 \end{table}
 
@@ -617,7 +617,7 @@ Where length from predicted success ties the cost probe (LCB, Omni-MATH), it doe
 \FloatBarrier
 \section{Generalisation}\label{app:transfer}
 \subsection{Settings}\label{app:settings}
-\paragraph{Few labels.} Each cost estimator is refitted on $n$ random training problems, two subsets in each of the ten training sets, with the same success probes for every estimator. ZeroRouter's pricing (its item-response latent, the map to it from the scout's activations, and its bin lookup) is fitted on the $n$ problems; the $k$NN neighbour count and ZeroRouter's dimension and bin count are chosen on calibration.
+\paragraph{Few labels.} Each cost estimator is refitted on $n$ random training problems, two subsets in each of the ten training sets, with the same success probes for every estimator; savings are relative to median pricing fitted on the same $n$ problems. ZeroRouter's pricing (its item-response latent, the map to it from the scout's activations, and its bin lookup) is fitted on the $n$ problems; the $k$NN neighbour count and ZeroRouter's dimension and bin count are chosen on calibration.
 \paragraph{Onboarding.} The held-out model is gpt-oss-20b (both efforts), gpt-oss-120b (both efforts) or deepseek-v4-flash, so that no sibling effort remains in the pool, with four random choices of the $k$ labelled problems in each training set, the same for every method. ZeroRouter's onboarding fits the new model's ability on the $k$ labelled problems in an item-response latent fitted on the remaining candidates and fills its per-bin length table from them~\citep{zerorouter}; the CARROT-style method averages those problems' outcomes and lengths over nearest neighbours. ZeroRouter's dimension and bin count and the $k$NN neighbour count are chosen on calibration.
 \paragraph{Transfer.} The domains are coding (LCB, APPS, BigCodeBench, CodeContests) and math and knowledge (Omni-MATH, MMLU-Pro, AIME, SuperGPQA, BIG-Bench Extra Hard). Every choice (regularization, Platt scaling, neighbour counts, latent dimension, bin count) is made on the source datasets' calibration splits, and each training set reshuffles every dataset's splits with the same seed. External estimators are transferred the same way, each with its own success model (MixLLM-style: a logistic probe on the text embedding; $k$NN; ZeroRouter: its latent and bins). Omni-MATH enters as its 500-problem set (test 150), whose scout, the Instruct model, matches the other datasets'. BigCodeBench and CodeContests, where no in-domain estimator saves significantly, are not used as targets: there the transferred success probes are badly miscalibrated (BigCodeBench log loss 1.17 against .67 in-domain) and the apparent gains are not robust. Transferred success predictions are weaker than in-domain ones (LCB AUC .67 against .83), so the transferred router's saving comes from its cost probe.
 \paragraph{Mixed traffic.} Training and calibration problems are the union of each dataset's splits; the test set has 150 problems from each dataset (1,350); Omni-MATH enters as its 500-problem set. Both probes are refitted on the mixture, and bootstrap resamples are drawn within each benchmark.
@@ -626,10 +626,10 @@ Where length from predicted success ties the cost probe (LCB, Omni-MATH), it doe
 \begin{figure}[h]
 \centering
 \includegraphics[width=\linewidth]{figures/label_efficiency.pdf}
-\caption{\textbf{Length labels needed.} Cost saved relative to median pricing when cost is fitted on $n$ labelled training problems: our cost probe (blue) versus length from predicted success (red), which needs length labels only to map success logits to length. Two random subsets per training set; bands: $\pm$1 s.d.\ over training sets.}
+\caption{\textbf{Length labels needed.} Cost saved relative to median pricing fitted on the same problems, when cost is fitted on $n$ labelled training problems: our cost probe (blue) versus length from predicted success (red), which needs length labels only to map success logits to length. Two random subsets per training set; bands: $\pm$1 s.d.\ over training sets.}
 \label{fig:labels}
 \end{figure}
-\paragraph{Few labels.} Ours exceeds every external estimator with paired intervals excluding zero on LCB and Omni-MATH from $n$=20 (except Omni-MATH at $n$=50), on MMLU-Pro from $n$=100 and on SuperGPQA from $n$=200. On BIG-Bench Extra Hard the text estimators stay within noise of ours at every $n$; below 100 problems ours leads on average (by 16.5 points over MixLLM-style embeddings at 50), with intervals that include zero. Labelling one sampled output per training problem instead of all of them gives up 1--3 points (one training set).
+\paragraph{Few labels.} Ours exceeds every external estimator with paired intervals excluding zero on LCB and Omni-MATH from $n$=20 (except Omni-MATH at $n$=50), on MMLU-Pro from $n$=100 and on SuperGPQA from $n$=200. On BIG-Bench Extra Hard the text estimators stay within noise of ours at every $n$; below 100 problems ours leads on average (by 16.3 points over MixLLM-style embeddings at 50), with intervals that include zero. Labelling one sampled output per training problem instead of all of them gives up 1--3 points (one training set).
 
 \begin{table}[h]
 \centering
