@@ -292,6 +292,14 @@ def evaluate(d, preds, ev, Ps=None):
             res[a]["ours_minus_it"] = [float((np.nanmean(pt["ours"]) - np.nanmean(pt[a])) * 100), *map(float, np.nanpercentile(dd, [2.5, 97.5]))]
             if os.environ.get("SAVE_BS"):              # bootstrap replicates, pooled over training draws by draws_aggregate.py
                 res[a]["ours_minus_it_bs"] = dd.tolist()
+    if os.environ.get("SAME_N_MEDIAN") and "median" in preds:   # labels mode: saving vs the median fitted on the SAME subset, paired by subset
+        med = [cost_of(d, tk) for tk in preds["median"]]; Hm = [curve(d, d["P"], c, ev) for c in med]; Hmb = [curve(d, d["P"], med[b % len(med)], ii) for b, ii in enumerate(BS)]
+        pts = {a: [saved(curve(d, Pa(a), cost_of(d, tk), ev), Hm[k]) for k, tk in enumerate(r)] for a, r in preds.items()}
+        bsn = {a: np.array([saved(curve(d, Pa(a), cost_of(d, r[b % len(r)]), ii), Hmb[b]) for b, ii in enumerate(BS)]) for a, r in preds.items()}
+        for a in preds:
+            res[a]["vs_same_n"] = float(np.nanmean(pts[a]))
+            if a != "ours":
+                res[a]["ours_minus_it_same_n_bs"] = ((bsn["ours"] - bsn[a]) * 100).tolist()
     return res
 
 
