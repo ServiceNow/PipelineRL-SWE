@@ -37,7 +37,6 @@ DATASETS = {
     "aime": ("aime_tensors", "aime_probe/instruct.npz", None),
     "supergpqa": ("supergpqa_tensors", "supergpqa_probe/instruct.npz", None),
     "bbeh": ("bbeh_tensors", "bbeh_probe/instruct.npz", None),
-    "swesmith": ("swesmith_v2_tensors", "swesmith_costhead/scout_prefill.npz", None),
 }
 FIELDS = ("final_outcome", "valid", "prompt_tokens", "completion_tokens")
 # raw API row collections the scripts read (relative to P, falling back to R), and the fields kept
