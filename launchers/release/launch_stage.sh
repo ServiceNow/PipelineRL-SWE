@@ -11,7 +11,7 @@ i=0
 while IFS= read -r c; do
   i=$((i + 1)); [[ -z $c ]] && continue
   [[ -n ${GREP:-} && ! $c =~ $GREP ]] && continue; [[ -n ${SKIP:-} && $c =~ $SKIP ]] && continue
-  c=${c//python /$PY }; c=${c//--model q14b/--model q14b --model-path \/mnt\/llmd\/base_models\/Qwen3-14B}
+  c=${c//python /$PY }; c=${c//--model q14b/--model q14b --model-path \/mnt\/llmd\/base_models\/Qwen3-14B}; c=${c//q14b=Qwen\/Qwen3-14B/q14b=\/mnt\/llmd\/base_models\/Qwen3-14B}
   g=0; m=0; [[ $ST =~ ^(features|embeddings|finetune)$ || $c == *"# GPU"* ]] && { g=1; m=40; }; [[ $c == *q14b* && $ST == features ]] && m=80
   n="rel_${ST:0:4}${TAG:-}_$i"; echo "$i $c" > $O/$i.cmd
   [[ ${SUBMIT:-0} == 1 ]] || { echo "[dry] $n g=$g m=$m: ${c:0:150}"; continue; }
