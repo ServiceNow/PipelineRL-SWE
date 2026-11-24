@@ -11,19 +11,19 @@ export OUT_DIR=$GOUT/draws && python -u ../experiments/labels.py LCB --set 0 --t
 export OUT_DIR=$GOUT/draws && python -u ../experiments/onboard.py LCB --set 0 --tag _pinned_d0 --nboot 20 --out $OUT_DIR
 export OUT_DIR=$GOUT/drop && python -u ../experiments/subsets.py LCB --sets 0 1 --nboot 20 --out $OUT_DIR
 export OUT_DIR=$GOUT/textemb && python -u ../experiments/text_embeddings.py LCB --sets 0 1 --nboot 20 --out $OUT_DIR
-export OUT_DIR=$GOUT/bestest RESULT_TAG=_pinned && python -u best_estimators.py LCB 0 1
-export OUT_DIR=$GOUT/extraest RESULT_TAG=_pinned NBOOT=20 && python -u extra_estimators_draws.py LCB 0 1   # GPU
-export OUT_DIR=$GOUT/zrfaithful RESULT_TAG=_pinned NBOOT=20 && python -u zr_faithful_draws.py LCB 0 1   # GPU
+export OUT_DIR=$GOUT/bestest && python -u ../experiments/length.py LCB --sets 0 1 --ft-dir $GOUT/draws --out $OUT_DIR
+export OUT_DIR=$GOUT/extraest && python -u ../experiments/extra_estimators.py LCB --sets 0 1 --nboot 20 --out $OUT_DIR   # GPU
+export OUT_DIR=$GOUT/zrfaithful && python -u ../experiments/zerorouter_published.py LCB --sets 0 1 --nboot 20 --out $OUT_DIR   # GPU
 export OUT_DIR=$GOUT && python -u ../experiments/resplit.py LCB --sets 0 1 --nboot 20 --out $OUT_DIR
 export OUT_DIR=$GOUT/item6/deploy && python -u ../experiments/deploy.py LCB --set 0 --tag _pinned_d0 --nboot 20 --out $OUT_DIR
 export OUT_DIR=$GOUT/item6/transfer && python -u ../experiments/transfer.py LCB --set 0 --tag _pinned_d0 --nboot 20 --out $OUT_DIR
-export DRAW=0 RESULT_TAG=_pinned_d0 NBOOT=20 OUT_DIR=$GOUT/item6/nonreason && python -u nonreason_compare.py LCB
-export DRAW=0 RESULT_TAG=_pinned_d0 NBOOT=20 OUT_DIR=$GOUT/item6/families && python -u newfamily_eval.py LCB,Omni,MMLU-Pro
-export DRAW=0 RESULT_TAG=_pinned_d0 NBOOT=20 OUT_DIR=$GOUT/mixed2 && python -u mixed_pool.py
-export DRAW=0 RESULT_TAG=_pinned_d0 NBOOT=20 OUT_DIR=$GOUT/mixllmmixed && python -u mixllm_mixed.py   # GPU
-export OUT_DIR=$GOUT/prefilldraws RESULT_TAG=_pinned NBOOT=20 && python -u prefill_draws.py Omni q06b 0 1
-export OUT_DIR=$GOUT/prefilldraws RESULT_TAG=_pinned NBOOT=20 && python -u prefill_draws.py Omni phi4mini 0 1
-export OUT_DIR=$GOUT/prefillscale RESULT_TAG=_pinned NBOOT=20 && python -u prefill_draws.py LCB q14b 0 1
+export OUT_DIR=$GOUT/item6/nonreason && python -u ../experiments/nonreasoning.py LCB --set 0 --tag _pinned_d0 --readouts $GOUT/nonreason_readouts --out $OUT_DIR
+export OUT_DIR=$GOUT/item6/families && python -u ../experiments/families.py LCB,Omni,MMLU-Pro --set 0 --tag _pinned_d0 --out $OUT_DIR
+export OUT_DIR=$GOUT/mixed2 && python -u ../experiments/mixed.py --set 0 --tag _pinned_d0 --nboot 20 --out $OUT_DIR
+export OUT_DIR=$GOUT/mixllmmixed && python -u ../experiments/mixed_mixllm.py --set 0 --tag _pinned_d0 --nboot 20 --out $OUT_DIR   # GPU
+export OUT_DIR=$GOUT/prefilldraws && python -u ../experiments/scouts.py Omni q06b --sets 0 1 --nboot 20 --out $OUT_DIR
+export OUT_DIR=$GOUT/prefilldraws && python -u ../experiments/scouts.py Omni phi4mini --sets 0 1 --nboot 20 --out $OUT_DIR
+export OUT_DIR=$GOUT/prefillscale && python -u ../experiments/scouts.py LCB q14b --sets 0 1 --nboot 20 --out $OUT_DIR
 export OUT_DIR=$GOUT/draws/labels_samen && python -u ../experiments/labels.py LCB --set 0 --tag _pinned_d0 --nboot 20 --same-n --out $OUT_DIR
 wait
-export OUT_DIR=$GOUT/nrest RESULT_TAG=_pinned NBOOT=20 && python -u nonreason_estimators.py LCB 0 1
+export OUT_DIR=$GOUT/nrest && python -u ../experiments/nonreasoning_estimators.py LCB --sets 0 1 --nboot 20 --readouts $GOUT/nonreason_readouts --out $OUT_DIR
