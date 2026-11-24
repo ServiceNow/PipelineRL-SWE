@@ -1,0 +1,11 @@
+export OUT_DIR=$GOUT/probes && python -m scoutroute.probes --features features/lcb/scout.npz --pool-dir data/lcb --out $GOUT/probes/lcb.jsonl
+export OUT_DIR=$GOUT/probes && python -m scoutroute.probes --features features/apps/scout.npz --pool-dir data/apps --out $GOUT/probes/apps.jsonl
+export OUT_DIR=$GOUT/probes && python -m scoutroute.probes --features features/bcb/scout.npz --pool-dir data/bcb --out $GOUT/probes/bcb.jsonl
+export OUT_DIR=$GOUT/probes && python -m scoutroute.probes --features features/cc/scout.npz --pool-dir data/cc --out $GOUT/probes/cc.jsonl
+export OUT_DIR=$GOUT/probes && python -m scoutroute.probes --features features/omni_expanded/scout.npz --pool-dir data/omni --out $GOUT/probes/omni.jsonl
+export OUT_DIR=$GOUT/probes && python -m scoutroute.probes --features features/mmlupro/scout.npz --pool-dir data/mmlupro --out $GOUT/probes/mmlupro.jsonl
+export OUT_DIR=$GOUT/probes && python -m scoutroute.probes --features features/aime/scout.npz --pool-dir data/aime --out $GOUT/probes/aime.jsonl
+export OUT_DIR=$GOUT/probes && python -m scoutroute.probes --features features/supergpqa/scout.npz --pool-dir data/supergpqa --out $GOUT/probes/supergpqa.jsonl
+export OUT_DIR=$GOUT/probes && python -m scoutroute.probes --features features/bbeh/scout.npz --pool-dir data/bbeh --out $GOUT/probes/bbeh.jsonl
+export OUT_DIR=$GOUT/probes && python -m scoutroute.probes --features features/omni_expanded/scout.npz --pool-dir data/omni/expanded --out $GOUT/probes/omni_expanded.jsonl
+export OUT_DIR=$GOUT/probes && python -m scoutroute.probes --features features/mmlupro_expanded/scout.npz --pool-dir data/mmlupro/expanded --out $GOUT/probes/mmlupro_expanded.jsonl
