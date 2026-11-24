@@ -1,0 +1,28 @@
+export OUT_DIR=$GOUT/draws RESULT_TAG=_pinned NBOOT=20 FT_DIR=$FT && python -u tmlr_strengthen.py draws LCB -1 0
+export OUT_DIR=$GOUT/draws RESULT_TAG=_pinned NBOOT=20 FT_DIR=$FT && python -u tmlr_strengthen.py draws Omni -1 0
+export OUT_DIR=$GOUT/draws RESULT_TAG=_pinned NBOOT=20 FT_DIR=$FT && python -u tmlr_strengthen.py draws MMLU-Pro -1 0
+export OUT_DIR=$GOUT/draws RESULT_TAG=_pinned NBOOT=20 FT_DIR=$FT && python -u tmlr_strengthen.py draws AIME -1 0
+export OUT_DIR=$GOUT/draws RESULT_TAG=_pinned NBOOT=20 FT_DIR=$FT && python -u tmlr_strengthen.py draws APPS -1 0
+export OUT_DIR=$GOUT/draws RESULT_TAG=_pinned NBOOT=20 FT_DIR=$FT && python -u tmlr_strengthen.py draws BCB -1 0
+export OUT_DIR=$GOUT/draws RESULT_TAG=_pinned NBOOT=20 FT_DIR=$FT && python -u tmlr_strengthen.py draws CC -1 0
+export OUT_DIR=$GOUT/draws RESULT_TAG=_pinned NBOOT=20 FT_DIR=$FT && python -u tmlr_strengthen.py draws SuperGPQA -1 0
+export OUT_DIR=$GOUT/draws RESULT_TAG=_pinned NBOOT=20 FT_DIR=$FT && python -u tmlr_strengthen.py draws BBEH -1 0
+export OUT_DIR=$GOUT/draws DRAW=0 RESULT_TAG=_pinned_d0 SEEDS=2 NBOOT=20 SAVE_BS=1 && python -u cost_generalization.py labels LCB
+export OUT_DIR=$GOUT/draws DRAW=0 RESULT_TAG=_pinned_d0 HOLD=groups NDRAW=4 NBOOT=20 SAVE_BS=1 && python -u onboard_compare.py LCB
+export OUT_DIR=$GOUT/drop RESULT_TAG=_pinned NBOOT=20 && python -u tmlr_strengthen.py drop LCB 0 1
+export OUT_DIR=$GOUT/textemb RESULT_TAG=_pinned NBOOT=20 && python -u tmlr_strengthen.py textemb LCB 0 1
+export OUT_DIR=$GOUT/bestest RESULT_TAG=_pinned && python -u best_estimators.py LCB 0 1
+export OUT_DIR=$GOUT/extraest RESULT_TAG=_pinned NBOOT=20 && python -u extra_estimators_draws.py LCB 0 1   # GPU
+export OUT_DIR=$GOUT/zrfaithful RESULT_TAG=_pinned NBOOT=20 && python -u zr_faithful_draws.py LCB 0 1   # GPU
+export OUT_DIR=$GOUT RESULT_TAG=_pinned NBOOT=20 && python -u tmlr_strengthen.py resplit LCB 0 1
+export DRAW=0 RESULT_TAG=_pinned_d0 NBOOT=20 OUT_DIR=$GOUT/item6/deploy && python -u tmlr_strengthen.py deploy LCB
+export DRAW=0 RESULT_TAG=_pinned_d0 NBOOT=20 OUT_DIR=$GOUT/item6/transfer && python -u cost_generalization.py fulltransfer LCB
+export DRAW=0 RESULT_TAG=_pinned_d0 NBOOT=20 OUT_DIR=$GOUT/item6/nonreason && python -u nonreason_compare.py LCB
+export DRAW=0 RESULT_TAG=_pinned_d0 NBOOT=20 OUT_DIR=$GOUT/item6/families && python -u newfamily_eval.py LCB,Omni,MMLU-Pro
+export DRAW=0 RESULT_TAG=_pinned_d0 NBOOT=20 OUT_DIR=$GOUT/mixed2 && python -u mixed_pool.py
+export DRAW=0 RESULT_TAG=_pinned_d0 NBOOT=20 OUT_DIR=$GOUT/mixllmmixed && python -u mixllm_mixed.py   # GPU
+export OUT_DIR=$GOUT/nrest RESULT_TAG=_pinned NBOOT=20 && python -u nonreason_estimators.py LCB 0 1
+export OUT_DIR=$GOUT/prefilldraws RESULT_TAG=_pinned NBOOT=20 && python -u prefill_draws.py Omni q06b 0 1
+export OUT_DIR=$GOUT/prefilldraws RESULT_TAG=_pinned NBOOT=20 && python -u prefill_draws.py Omni phi4mini 0 1
+export OUT_DIR=$GOUT/prefillscale RESULT_TAG=_pinned NBOOT=20 && python -u prefill_draws.py LCB q14b 0 1
+export OUT_DIR=$GOUT/draws/labels_samen DRAW=0 RESULT_TAG=_pinned_d0 SEEDS=2 NBOOT=20 SAVE_BS=1 SAME_N_MEDIAN=1 && python -u cost_generalization.py labels LCB
