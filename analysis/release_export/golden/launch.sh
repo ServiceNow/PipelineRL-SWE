@@ -12,7 +12,7 @@ while IFS= read -r c; do
   [[ $phase == ${PHASE:-1} ]] || continue; [[ -n ${ONLY:-} && " $ONLY " != *" $i "* ]] && continue
   g=0; m=0; [[ $c == *"# GPU"* ]] && { g=1; m=40; }
   c=${c%%   # GPU}; c=${c//python /$PY }; c="${c%% && *} && mkdir -p \"\${OUT_DIR:-.}\" && ${c#* && }"
-  printf '%s\n' "$ENV && cd $SRC/analysis && ( $c ) > $OUT/logs/$i.log 2>&1; echo EXIT \$? >> $OUT/logs/$i.log" > "$OUT/cmds/$i.sh"
+  printf '%s\n' "$ENV && cd $SRC/${WD:-analysis} && ( $c ) > $OUT/logs/$i.log 2>&1; echo EXIT \$? >> $OUT/logs/$i.log" > "$OUT/cmds/$i.sh"
   [[ ${SUBMIT:-0} == 1 ]] || { echo "[dry] gold_${TAG}_$i g=$g: ${c:0:120}"; continue; }
   echo -n "gold_${TAG}_$i "
   make -C /home/toolkit/PipelineRL-SWE job JOB_NAME="gold_${TAG}_$i" ENV=pipeline-rl CONDA_EXE=/opt/conda/bin/conda SNAPSHOT=0 GPU=$g GPU_MEM=$m \

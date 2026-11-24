@@ -1,1 +1,1 @@
-export OUT_DIR=$GOUT/figures && python -u ../experiments/figures.py --out $OUT_DIR
+export OUT_DIR=$GOUT/figures && python -u experiments/figures.py --out $OUT_DIR
