@@ -21,8 +21,9 @@ export DRAW=0 RESULT_TAG=_pinned_d0 NBOOT=20 OUT_DIR=$GOUT/item6/nonreason && py
 export DRAW=0 RESULT_TAG=_pinned_d0 NBOOT=20 OUT_DIR=$GOUT/item6/families && python -u newfamily_eval.py LCB,Omni,MMLU-Pro
 export DRAW=0 RESULT_TAG=_pinned_d0 NBOOT=20 OUT_DIR=$GOUT/mixed2 && python -u mixed_pool.py
 export DRAW=0 RESULT_TAG=_pinned_d0 NBOOT=20 OUT_DIR=$GOUT/mixllmmixed && python -u mixllm_mixed.py   # GPU
-export OUT_DIR=$GOUT/nrest RESULT_TAG=_pinned NBOOT=20 && python -u nonreason_estimators.py LCB 0 1
 export OUT_DIR=$GOUT/prefilldraws RESULT_TAG=_pinned NBOOT=20 && python -u prefill_draws.py Omni q06b 0 1
 export OUT_DIR=$GOUT/prefilldraws RESULT_TAG=_pinned NBOOT=20 && python -u prefill_draws.py Omni phi4mini 0 1
 export OUT_DIR=$GOUT/prefillscale RESULT_TAG=_pinned NBOOT=20 && python -u prefill_draws.py LCB q14b 0 1
 export OUT_DIR=$GOUT/draws/labels_samen DRAW=0 RESULT_TAG=_pinned_d0 SEEDS=2 NBOOT=20 SAVE_BS=1 SAME_N_MEDIAN=1 && python -u cost_generalization.py labels LCB
+wait
+export OUT_DIR=$GOUT/nrest RESULT_TAG=_pinned NBOOT=20 && python -u nonreason_estimators.py LCB 0 1

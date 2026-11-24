@@ -10,7 +10,7 @@ export FT=/mnt/llmd/results/exps/aristides/release_check_20261123/golden_ft
 PY=/home/toolkit/.conda/envs/pipeline-rl/bin/python3
 mkdir -p "$GOUT/logs"; cd "$REPO/analysis"; i=0
 while IFS= read -r c; do
-  i=$((i + 1))
+  i=$((i + 1)); [[ $c == wait ]] && { wait; continue; }   # a "wait" line: later commands read earlier outputs
   if [[ ${GPU:-0} == 1 ]]; then [[ $c == *"# GPU"* ]] || continue; else [[ $c == *"# GPU"* ]] && continue; fi
   c=${c%%   # GPU}; c=${c//python /$PY }
   c="${c%% && *} && mkdir -p \"\${OUT_DIR:-.}\" && ${c#* && }"
