@@ -40,7 +40,7 @@ def main():
     ap.add_argument("--rename", nargs="*", default=[]); a = ap.parse_args()
     ren = dict(r.split("=", 1) for r in a.rename)
     B, C = Path(a.base), Path(a.cand)
-    files = sorted(p.relative_to(B) for p in B.rglob("*") if p.is_file() and "logs" not in p.parts)
+    files = sorted(p.relative_to(B) for p in B.rglob("*") if p.is_file() and "logs" not in p.parts and "cmds" not in p.parts)
     bad = 0
     for rel in files:
         c = C / ren.get(str(rel), str(rel))
@@ -51,7 +51,7 @@ def main():
         if other or (num and max(num) > a.tol):
             bad += 1
             print(f"DIFF {rel}: {len(d)} values, max |diff| {max(num) if num else 0:.3g}", *[f"\n   {p}: {x}" for p, x in d[:5]])
-    extra = sorted(p.relative_to(C) for p in C.rglob("*") if p.is_file() and "logs" not in p.parts)
+    extra = sorted(p.relative_to(C) for p in C.rglob("*") if p.is_file() and "logs" not in p.parts and "cmds" not in p.parts)
     extra = [p for p in extra if str(p) not in {ren.get(str(r), str(r)) for r in files}]
     for p in extra:
         print("EXTRA", p)
